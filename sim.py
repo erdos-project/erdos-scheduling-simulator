@@ -2,6 +2,7 @@ from copy import deepcopy
 
 
 class Operator:
+    """Holder of operator-related data."""
     def __init__(self,
                  unique_id,
                  children,
@@ -10,10 +11,9 @@ class Operator:
                  relative_deadline=False,
                  needs_gpu=False,
                  name=None):
-        #         print ("initialized operator {}".format(unique_id))
+        # print ("initialized operator {}".format(unique_id))
         self.name = name
         self.children = children
-        self.log = []
         self.unique_id = unique_id
         self.time_required = time_required
         self.is_join = is_join
@@ -34,6 +34,7 @@ class Lattice:
         for op in operators:
             self.children_dir[op.unique_id] = op.children
         # should prolly sort the operators
+
     def __deepcopy__(self, memo):
         return Lattice(deepcopy(self.operators, memo))
 
@@ -44,10 +45,11 @@ class Lattice:
         return self.children_dir[operator]
 
     def add_next(self, event, new_event_queue, curr_time):
-        '''
-            Adds new events to queue if necessary when an Event completes
-            The times are a bit weird cause this effectively gets called at the end of the curr_time slice/beginning of the next slice
-        '''
+        """Adds new events to queue if necessary when an Event completes.
+
+        The times are a bit weird cause this effectively gets called at the end
+        of the curr_time slice/beginning of the next slice
+        """
         children = self.get_children(event.operator)
         for c in children:
             c = self.get_op(c)
@@ -67,14 +69,11 @@ class Lattice:
                 Event(event_id, c.unique_id, curr_time + 1, deadline=d))
 
     def get_op(self, op):
-        '''
-            Assumes that the operators are in sorted and consecutive order
-        '''
+        """Assumes that the operators are in sorted and consecutive order."""
         out = self.operators[op]
         if out.unique_id != op:
-            print(
-                "ERROR: lattice not properly ordered [{} returned instead of {}]"
-                .format(out.unique_id, op))
+            print("ERROR: lattice not ordered [{} returned instead of {}]".
+                  format(out.unique_id, op))
         return out
 
 
@@ -175,14 +174,11 @@ class Worker:
 
 
 class WorkerPool:
-    '''
-        Holds a list of workers which automatically log seen events
-    '''
+    """Holds a list of workers which automatically log seen events."""
     def __init__(self, workers):
+        print("ERROR: Init method does not consider GPUs")
         self.workers_gpu = []
         self.workers_no_gpu = []
-        self.count = len(workers)
-
         self.add_workers(workers)
 
     def __repr__(self):
@@ -194,7 +190,8 @@ class WorkerPool:
     def add_worker(self, w):
         for v in self.workers():
             if v.unique_id == w.unique_id:
-                print("ERROR: worker not unique [{}]".format(w.unique_id))
+                print("ERROR: worker already added to the pool [{}]".format(
+                    w.unique_id))
                 return
 
         if w.gpus < 1:

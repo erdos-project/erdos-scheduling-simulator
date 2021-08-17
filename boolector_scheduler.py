@@ -14,23 +14,25 @@ def scheduler(requires_gpu: bool,
               GPUS: int,
               CPUS: int,
               bits: int = 8):
-
     s = Boolector()
     s.Set_opt(pyboolector.BTOR_OPT_MODEL_GEN, True)
 
     bvsort = s.BitVecSort(bits)
 
-    times = [s.Var(bvsort, f't{i}')
-             for i in range(0, num_tasks)]  #Time when execution starts
-    placements = [s.Var(bvsort, f'p{i}')
-                  for i in range(0, num_tasks)]  # placement on CPU or GPU
+    # Time when task execution starts.
+    start_times = [s.Var(bvsort, f't{i}') for i in range(0, num_tasks)]
+    # Task placement on CPU or GPU.
+    placements = [s.Var(bvsort, f'p{i}') for i in range(0, num_tasks)]
     release_times = [s.Const(num, bits) for num in release_times]
     deadlines = [s.Const(num, bits) for num in deadlines]
     expected_execution = [s.Const(num, bits) for num in expected_execution]
 
-    for t, r, e, d in zip(times, release_times, expected_execution, deadlines):
-        s.Assert(t < d - e)  # finish before deadline
-        s.Assert(t > r)  # start at or after release
+    for t, r, e, d in zip(start_times, release_times, expected_execution,
+                          deadlines):
+        # Finish before deadline.
+        s.Assert(t < d - e)
+        # Start at or after release time.
+        s.Assert(t > r)
 
     CPUS = s.Const(CPUS, bits)
     GPUS = s.Const(GPUS, bits)
@@ -44,18 +46,18 @@ def scheduler(requires_gpu: bool,
 
     for row_i in range(len(dependency_matrix)):
         for col_j in range(len(dependency_matrix[0])):
-            disjoint = [
-                (times[row_i] + expected_execution[row_i]) < times[col_j],
-                times[col_j] + expected_execution[col_j] < times[row_i]
-            ]
+            disjoint = [(start_times[row_i] + expected_execution[row_i]) <
+                        start_times[col_j],
+                        start_times[col_j] + expected_execution[col_j] <
+                        start_times[row_i]]
             if dependency_matrix[row_i][col_j]:
-                s.Assert(disjoint[0]
-                         )  # dependent jobs need to finish before the next one
+                # Dependent tasks need to finish before the next one.
+                s.Assert(disjoint[0])
             if row_i != col_j:
+                # Cannot overlap if on the same hardware.
                 s.Assert(
                     s.Implies(placements[row_i] == placements[col_j],
-                              s.Or(disjoint[0], disjoint[1]))
-                )  # cannot overlap if on the same hardware
+                              s.Or(disjoint[0], disjoint[1])))
     for i, pin in enumerate(pinned):
         if pin:
             s.Assert(placement[i] == s.Constant(pin, bits))
@@ -65,7 +67,7 @@ def scheduler(requires_gpu: bool,
     schedulable = s.Sat()
     if schedulable == s.SAT:
         ass_p, ass_t = [int(p.assignment, 2) for p in placements
-                        ], [int(t.assignment, 2) for t in times]
+                        ], [int(t.assignment, 2) for t in start_times]
         print(ass_p, ass_t)
         l = list(zip(ass_p, ass_t))
         l.sort()
