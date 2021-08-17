@@ -57,6 +57,7 @@ class Lattice:
         if out.unique_id != op:
             print ("ERROR: lattice not properly ordered [{} returned instead of {}]".format(out.unique_id,op))
         return out
+    
 class Event:
     def __init__(self,  unique_id, operator , arrival_time, actual_runtime = None, deadline=None, needs_gpu = False):
         self.unique_id = unique_id
@@ -93,7 +94,6 @@ class Event:
         if self.deadline and self.deadline < self.finish_time:
             print("WARNING: DEADLINE MISSED [D:{}; F:{}]".format(self.deadline,self.finish_time))
 
-
 class Worker: 
     def __init__(self, unique_id, gpus=1):
         self.unique_id = unique_id
@@ -105,7 +105,9 @@ class Worker:
         return gpu_str + "Worker {} -- log: {}; curr_task: {}".format(self.unique_id, self.history, self.current_event)
     def do_job(self, task, lattice,time):
         if self.current_event != None:
-            print("ERROR: Worker is still busy")
+            print(f"ERROR: Worker {self.unique_id} is still busy")
+        if task.needs_gpu and self.gpus < 1: 
+            print (f"ERROR: Worker {self.unique_id} doesn't have GPU but event {task.unique_id} needs it")
         self.history.append(task)
         self.current_event = task
         task.start(lattice,time)
@@ -116,6 +118,19 @@ class Worker:
         for e in self.history:
             out += "\n  {}".format(e)
         return "[{}\n]".format(out)
+    def gpu_guarded_do_job(self, event_queue, lattice, time):
+        if self.gpus < 1: # if there's no GPU don't allocate and keep looking
+            for i, event in enumerate(event_queue):
+                if not event.needs_gpu:
+                    self.do_job(event_queue.pop(i),lattice,time)
+                    break
+        else: # if there's a GPU just take the next job
+            self.do_job(event_queue.pop(0),lattice,time)
+    def exact_match_do_job(self, event_queue, lattice, time):
+        for i, event in enumerate(event_queue):
+            if event.needs_gpu == (self.gpus > 0):
+                self.do_job(event_queue.pop(i) , lattice, time)
+                break
             
         
 class WorkerPool:
@@ -171,19 +186,24 @@ def simulate(schedule,task_set,worker_pool,lattice,timeout,v=0):
             print ("Activate: {}".format(task))
             event_queue.append(task)
         schedule(time,event_queue,lattice,worker_pool,timeout)
-        
-        
-def fifo_schedule(time,event_queue,lattice,worker_pool,timeout):
+
+def fifo_schedule(time,event_queue,lattice,worker_pool,timeout,gpu_exact_match=False):
+    '''
+        Keeps separate pools for GPU and not GPU
+    '''
     new_event_queue = []
 #     print (event_queue)
     for worker in worker_pool.workers():
         if worker.current_event == None and event_queue:
-            worker.do_job(event_queue.pop(0),lattice,time)
+            if gpu_exact_match:
+                worker.exact_match_do_job(event_queue,lattice,time)
+            else: 
+                worker.gpu_guarded_do_job(event_queue, lattice, time)
         if worker.current_event: 
             worker.current_event.step()
             if worker.current_event.time_remaining == 0:
                 worker.current_event.finish(new_event_queue,lattice,time)
-                print("finished event: {}".format(worker.current_event))
+                print("Finished event: {}".format(worker.current_event))
                 worker.current_event = None
     event_queue.extend(new_event_queue)
 
@@ -197,7 +217,7 @@ def edf_schedule(time,event_queue,lattice,worker_pool,timeout):
             worker.current_event.step()
             if worker.current_event.time_remaining == 0:
                 worker.current_event.finish(new_event_queue,lattice,time)
-                print("finished event: {}".format(worker.current_event))
+                print("Finished event: {}".format(worker.current_event))
                 worker.current_event = None
     event_queue.extend(new_event_queue)
     event_queue.sort(key=lambda x: x.deadline if x.deadline else timeout)
@@ -211,7 +231,7 @@ def llf_schedule(time,event_queue,lattice,worker_pool,timeout):
             worker.current_event.step()
             if worker.current_event.time_remaining == 0:
                 worker.current_event.finish(new_event_queue,lattice,time)
-                print("finished event: {}".format(worker.current_event))
+                print("Finished event: {}".format(worker.current_event))
                 worker.current_event = None
     event_queue.extend(new_event_queue)
     event_queue.sort(key=lambda x: x.deadline - x.time_remaining if x.deadline else timeout)
