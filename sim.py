@@ -1,6 +1,9 @@
+
+from copy import deepcopy
 class Operator:
-    def __init__(self,unique_id,children,time_required,is_join=False, relative_deadline=False):
+    def __init__(self,unique_id,children,time_required,is_join=False, relative_deadline=False, needs_gpu = False, name = None):
 #         print ("initialized operator {}".format(unique_id))
+        self.name = name
         self.children = children
         self.log = []
         self.unique_id = unique_id
@@ -8,6 +11,9 @@ class Operator:
         self.is_join = is_join
         self.paused_job = None
         self.relative_deadline = relative_deadline
+        self.needs_gpu = needs_gpu 
+    def __deepcopy__(self,memo):
+        return Operator(self.unique_id, deepcopy(self.children,memo), self.time_required, self.is_join, self.relative_deadline, self.needs_gpu, self.name)
         
 class Lattice:
     def __init__(self, operators):
@@ -16,6 +22,8 @@ class Lattice:
         for op in operators:
             self.children_dir[op.unique_id] = op.children 
         # should prolly sort the operators 
+    def __deepcopy__(self,memo):
+        return Lattice(deepcopy(self.operators,memo))
     def __repr__(self):
         return "Lattice {}".format(self.children_dir.__repr__())            
     def get_children(self,operator):
@@ -50,7 +58,7 @@ class Lattice:
             print ("ERROR: lattice not properly ordered [{} returned instead of {}]".format(out.unique_id,op))
         return out
 class Event:
-    def __init__(self,  unique_id, operator , arrival_time, deadline=None):
+    def __init__(self,  unique_id, operator , arrival_time, actual_runtime = None, deadline=None, needs_gpu = False):
         self.unique_id = unique_id
         self.operator = operator
         self.arrival_time = arrival_time
@@ -58,16 +66,25 @@ class Event:
         self.start_time = None
         self.finish_time = None
         self.deadline = deadline
+        self.needs_gpu = needs_gpu
+        self.actual_runtime = actual_runtime
+        
     def __repr__(self):
         return "<Event {}; Running Op {}; Available at Time {}; Executed {} to {}; Deadline: {}>".format(self.unique_id,self.operator, self.arrival_time, self.start_time, self.finish_time, self.deadline)
+    
     def start(self,lattice,time):
-        self.time_remaining = lattice.get_op(self.operator).time_required
+        if self.actual_runtime: 
+            self.time_remaining = self.actual_runtime
+        else: 
+            self.time_remaining = lattice.get_op(self.operator).time_required
         self.start_time = time 
+        
     def step(self):
         if self.time_remaining < 1:
             print("ERROR: already finished event; {} left".format(self.time_remaining))
         self.time_remaining -= 1
         return self.time_remaining
+    
     def finish(self,new_event_queue,lattice,time):
         if self.time_remaining != 0:
             print("ERROR: try to finish but not done; {} left".format(self.time_remaining))
@@ -75,8 +92,6 @@ class Event:
         self.finish_time = time + 1 # cause you technically am using up the current time slice
         if self.deadline and self.deadline < self.finish_time:
             print("WARNING: DEADLINE MISSED [D:{}; F:{}]".format(self.deadline,self.finish_time))
-        
-        
 
 
 class Worker: 
@@ -84,8 +99,10 @@ class Worker:
         self.unique_id = unique_id
         self.history = []
         self.current_event = None
+        self.gpus = gpus
     def __repr__(self):
-        return "Worker {}: {}".format(self.unique_id, self.history)
+        gpu_str = ("GPU " if self.gpus > 0 else "CPU ")
+        return gpu_str + "Worker {} -- log: {}; curr_task: {}".format(self.unique_id, self.history, self.current_event)
     def do_job(self, task, lattice,time):
         if self.current_event != None:
             print("ERROR: Worker is still busy")
@@ -102,31 +119,44 @@ class Worker:
             
         
 class WorkerPool:
+    '''
+        Holds a list of workers which automatically log seen events
+    '''
     def __init__(self, workers):
-        self.workers = workers
+        self.workers_gpu = []
+        self.workers_no_gpu = []
         self.count = len(workers)
+
+        self.add_workers(workers)
+        
     def __repr__(self):
         output = ""
-        for w in self.workers:
+        for w in self.workers():
             output += "\n{}".format(w)
         return "Worker Pool: " + output
     def add_worker(self,w):
-        for v in self.workers:
+        for v in self.workers():
             if v.unique_id == w.unique_id:
                 print ("ERROR: worker not unique [{}]".format(w.unique_id))
                 return 
-        self.workers.append(w)
+        
+        if w.gpus < 1: 
+            self.workers_no_gpu.append(w)
+        else: 
+            self.workers_gpu.append(w)
     def add_workers(self,ws):
         for w in ws:
             self.add_worker(w)
     def reset(self):
-        for w in self.workers:
+        for w in self.workers():
             w.reset()
     def history(self):
         output = ""
-        for w in self.workers:
+        for w in self.workers():
             output += "\nWorker{}: {}".format(w.unique_id, w.get_history())
         return "Worker Pool History: " + output
+    def workers(self):
+        return self.workers_gpu + self.workers_no_gpu
         
 def simulate(schedule,task_set,worker_pool,lattice,timeout,v=0):
     if not task_set:
@@ -141,10 +171,12 @@ def simulate(schedule,task_set,worker_pool,lattice,timeout,v=0):
             print ("Activate: {}".format(task))
             event_queue.append(task)
         schedule(time,event_queue,lattice,worker_pool,timeout)
+        
+        
 def fifo_schedule(time,event_queue,lattice,worker_pool,timeout):
     new_event_queue = []
 #     print (event_queue)
-    for worker in worker_pool.workers:
+    for worker in worker_pool.workers():
         if worker.current_event == None and event_queue:
             worker.do_job(event_queue.pop(0),lattice,time)
         if worker.current_event: 
@@ -158,7 +190,7 @@ def fifo_schedule(time,event_queue,lattice,worker_pool,timeout):
 def edf_schedule(time,event_queue,lattice,worker_pool,timeout):
     new_event_queue = []
 #     print (event_queue)
-    for worker in worker_pool.workers:
+    for worker in worker_pool.workers():
         if worker.current_event == None and event_queue:
             worker.do_job(event_queue.pop(0),lattice,time)
         if worker.current_event: 
@@ -172,7 +204,7 @@ def edf_schedule(time,event_queue,lattice,worker_pool,timeout):
 def llf_schedule(time,event_queue,lattice,worker_pool,timeout):
     new_event_queue = []
 #     print (event_queue)
-    for worker in worker_pool.workers:
+    for worker in worker_pool.workers():
         if worker.current_event == None and event_queue:
             worker.do_job(event_queue.pop(0),lattice,time)
         if worker.current_event: 
