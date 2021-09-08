@@ -44,12 +44,12 @@ class Task:
                 self.operator_id).estimated_runtime
         self.start_time = time
 
-    def step(self) -> int:
+    def step(self, step_size=1) -> int:
         """Steps the task for 1 time unit (ms)."""
-        assert self.time_remaining > 0, (
+        assert self.time_remaining - step_size >= 0, (
             "ERROR: already finished task; {} left".format(
                 self.time_remaining))
-        self.time_remaining -= 1
+        self.time_remaining -= step_size
         return self.time_remaining
 
     def finish(self, new_task_queue: List, lattice, time: int):
@@ -59,7 +59,7 @@ class Task:
                 self.time_remaining))
         lattice.add_next(self, new_task_queue, time)
         # Cause the task is using up the current time slice.
-        self.finish_time = time + 1
+        self.finish_time = time 
         if self.deadline and self.deadline < self.finish_time:
             print("WARNING: DEADLINE MISSED [D:{}; F:{}]".format(
                 self.deadline, self.finish_time))

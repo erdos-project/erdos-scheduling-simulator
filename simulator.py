@@ -75,7 +75,8 @@ class Simulator:
             return
         self.tasks_list.sort(key=(lambda e: e.release_time))
         task_queue = []
-        for time in range(timeout):
+        time = 0
+        while time < timeout :
             if v > 0 and time % 100 == 0:
                 print("step: {}".format(time))
             if v > 1:
@@ -103,6 +104,9 @@ class Simulator:
                 self.worker_pool.num_gpus,
                 self.worker_pool.num_cpus
             )
+
+            
+            # place jobs task on worker
             task_queue = []
             for i,(p,a) in enumerate(zip (placement, assignment)):
                 _,t = runnable[i]
@@ -113,19 +117,33 @@ class Simulator:
                 else: 
                     task_queue.append(t)
 
-
+            # determine step_size as next release event or time remaining
+            step_size, step_size_rel = None, None
+            if len(self.worker_pool.get_running_tasks()) > 0:
+                step_size = min ([t.time_remaining for _, t in self.worker_pool.get_running_tasks()])
+            
+            if self.worker_pool.has_free_worker() and len(self.tasks_list)>0:
+                step_size_rel =  self.tasks_list[0].release_time - time 
+                if step_size == None:
+                    step_size = step_size_rel 
+                else:
+                    step_size = min (step_size, step_size_rel)   
+            if step_size_rel == None and step_size == None:
+                step_size = 1      
+            # import pdb; pdb.set_trace()
 
             # finally advance the workers and time
             new_task_queue = []
             for worker in self.worker_pool.workers():
                 if worker.current_task:
-                    worker.current_task.step()
+                    worker.current_task.step(step_size=step_size)
                     if worker.current_task.time_remaining == 0:
                         worker.current_task.finish(new_task_queue,
-                                                   self.lattice, time)
+                                                   self.lattice, time+step_size)
                         print("Finished task: {}".format(worker.current_task))
                         worker.current_task = None
             task_queue.extend(new_task_queue)  # add newly spawned tasks
+            time += step_size
 
     def show_running_tasks(self):
         for worker in self.worker_pool.workers():

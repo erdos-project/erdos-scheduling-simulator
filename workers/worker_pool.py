@@ -46,8 +46,12 @@ class WorkerPool:
 
     def workers(self) -> List[Worker]:
         return self.workers_gpu + self.workers_no_gpu
+
     def get_running_tasks(self):
         return [(w.unique_id, w.current_task) for w in self.workers_gpu if w.current_task] + [(w.unique_id, w.current_task) for w in self.workers_no_gpu if w.current_task]
+
     def get_worker(self,i):
         assert i < self.count and i >= 0, "No such worker {i}"
         return self.workers_gpu[i] if i < self.num_gpus else self.workers_no_gpu[i-self.num_gpus]
+    def has_free_worker(self) -> bool:
+        return self.count > len(self.get_running_tasks())
