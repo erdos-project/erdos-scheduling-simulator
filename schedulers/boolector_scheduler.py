@@ -67,7 +67,7 @@ class BoolectorScheduler(ILPScheduler):
 
         for i, pin in enumerate(pinned_tasks):
             if pin:
-                s.Assert(placement[i] == s.Constant(pin, bits))
+                s.Assert(placements[i] == s.Constant(pin, bits))
         #s.Simplify()
         #s.Dump('smt2', 'tmp.smt')
 

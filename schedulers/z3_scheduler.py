@@ -48,7 +48,7 @@ class Z3Scheduler(ILPScheduler):
 
         for i, pin in enumerate(pinned_tasks):
             if pin:
-                s.add(placement[i] == IntVal(pin))
+                s.add(placements[i] == IntVal(pin))
 
         schedulable = s.check()
         print(schedulable)

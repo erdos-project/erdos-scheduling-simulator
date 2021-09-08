@@ -54,8 +54,21 @@ class Simulator:
         self.current_time = 0
         self.current_tasks = []
 
-    def schedule(self, time: int, task_queue, timeout: int):
+    def schedule(self, needs_gpu: List[bool], 
+            release_times: List[int], 
+            absolute_deadlines: List[int], 
+            expected_runtimes: List[int],
+            dependency_matrix,
+            pinned_tasks: List[int], 
+            running_tasks: List[int], # indicates the worker it's running on None otherwise
+            num_tasks: int, 
+            num_gpus: int,
+            num_cpus: int
+            ):
         raise NotImplementedError
+
+    # def schedule(self, time: int, task_queue, timeout: int):
+    #     raise NotImplementedError
 
     def simulate(self, timeout: int, v=0):
         if not self.tasks_list:
@@ -74,7 +87,34 @@ class Simulator:
                 print("Activate: {}".format(task))
                 task_queue.append(task)
             # second determine where to place tasks
-            self.schedule(time, task_queue, timeout)
+            # self.schedule(time, task_queue, timeout)
+            running_tasks = self.worker_pool.get_running_tasks()
+            runnable = running_tasks + [(None,t)for t in task_queue]
+            # print (runnable)
+            placement, assignment = self.schedule( 
+                [ t.needs_gpu for _, t in runnable ], 
+                [ t.release_time - time if t.release_time != None else None for _,t in runnable ], 
+                [ t.deadline - time if t.deadline != None else None for _, t in runnable ], 
+                [ t.time_remaining for _, t in runnable ],
+                None, # dependencies
+                [ None for _,t in runnable ], #pinned 
+                [ worker for worker,_ in runnable ], # indicates the worker it's running on None otherwise
+                len(runnable), 
+                self.worker_pool.num_gpus,
+                self.worker_pool.num_cpus
+            )
+            task_queue = []
+            for i,(p,a) in enumerate(zip (placement, assignment)):
+                _,t = runnable[i]
+                if a == 0: 
+                    w = self.worker_pool.get_worker(p)
+                    if w.current_task == None or w.current_task.unique_id != t.unique_id:
+                        w.do_job(t,self.lattice, time)
+                else: 
+                    task_queue.append(t)
+
+
+
             # finally advance the workers and time
             new_task_queue = []
             for worker in self.worker_pool.workers():
@@ -96,45 +136,139 @@ class Simulator:
         return self.worker_pool.history()
 
 
+# class FifoSimulator(Simulator):
+#     def __init__(self,
+#                  num_cpus: int,
+#                  num_gpus: int,
+#                  tasks_list: List[Task],
+#                  lattice: Lattice,
+#                  gpu_exact_match: bool = False):
+#         super().__init__(num_cpus, num_gpus, tasks_list, lattice)
+#         self.gpu_exact_match = gpu_exact_match
+    
+#     def schedule(self, time: int, task_queue, timeout: int):
+#         for worker in self.worker_pool.workers():
+#             if worker.current_task == None and task_queue:
+#                 if self.gpu_exact_match:
+#                     worker.exact_match_do_job(task_queue, self.lattice, time)
+#                 else:
+#                     worker.gpu_guarded_do_job(task_queue, self.lattice, time)
+
+
+# class LlfSimulator(Simulator):
+#     def __init__(self, num_cpus: int, num_gpus: int, tasks_list: List[Task],
+#                  lattice: Lattice):
+#         super().__init__(num_cpus, num_gpus, tasks_list, lattice)
+
+#     def schedule(self, time: int, task_queue, timeout: int):
+#         task_queue.sort(key=lambda x: x.deadline - x.time_remaining
+#                         if x.deadline else timeout)
+#         for worker in self.worker_pool.workers():
+#             if worker.current_task == None and task_queue:
+#                 worker.do_job(task_queue.pop(0), self.lattice, time)
+
+
+# class EdfSimulator(Simulator):
+#     def __init__(self, num_cpus: int, num_gpus: int, tasks_list: List[Task],
+#                  lattice: Lattice):
+#         super().__init__(num_cpus, num_gpus, tasks_list, lattice)
+
+#     def schedule(self, time: int, task_queue, timeout: int):
+#         task_queue.sort(key=lambda x: x.deadline if x.deadline else timeout)
+#         for worker in self.worker_pool.workers():
+#             if worker.current_task == None and task_queue:
+#                 worker.do_job(task_queue.pop(0), self.lattice, time)
+
+
+class EdfSimulator(Simulator):   
+    def __init__(self, num_cpus: int, num_gpus: int, tasks_list: List[Task],
+                 lattice: Lattice, preemptive:bool = False):
+        super().__init__(num_cpus, num_gpus, tasks_list, lattice)
+        self.preemptive = preemptive
+    def schedule(self, needs_gpu: List[bool], 
+            release_times: List[int], 
+            absolute_deadlines: List[int], 
+            expected_runtimes: List[int],
+            dependency_matrix,
+            pinned_tasks: List[int], 
+            running_tasks: List[int], # indicates the worker it's running on None otherwise
+            num_tasks: int, 
+            num_gpus: int,
+            num_cpus: int
+            ):
+
+        
+        gpu_pool = list(range(num_gpus))
+        cpu_pool = list(range(num_gpus,num_cpus+num_gpus)) #cpus indexed after gpus
+        placements = [None]*num_tasks
+        assignment = [None]*num_tasks
+        priority = [absolute_deadlines.index(e) for e in sorted(absolute_deadlines)]
+        
+        if not self.preemptive: 
+            # check and place running tasks first
+            placements = running_tasks
+            assignment = [ 0 if (t != None) else None for t in running_tasks]
+            gpu_pool = [i for i in gpu_pool if i not in running_tasks]
+            cpu_pool = [i for i in cpu_pool if i not in running_tasks]
+            # print (assignment, running_tasks)
+            # print (gpu_count, cpu_count)
+        for index in priority: 
+            if needs_gpu[index]:
+                if len(gpu_pool) > 0 and running_tasks[index]==None:
+                    placements[index] = gpu_pool.pop(0)
+                    assignment[index] =  0
+            else:
+                if len(cpu_pool) > 0 and running_tasks[index]==None:
+                    placements[index] = cpu_pool.pop(0)
+                    assignment[index] = 0
+            if len(gpu_pool) + len(cpu_pool) == 0: 
+                break
+        
+        return placements, assignment
+
+
 class FifoSimulator(Simulator):
     def __init__(self,
-                 num_cpus: int,
-                 num_gpus: int,
-                 tasks_list: List[Task],
-                 lattice: Lattice,
-                 gpu_exact_match: bool = False):
+                num_cpus: int,
+                num_gpus: int,
+                tasks_list: List[Task],
+                lattice: Lattice,
+                gpu_exact_match: bool = False):
         super().__init__(num_cpus, num_gpus, tasks_list, lattice)
         self.gpu_exact_match = gpu_exact_match
 
-    def schedule(self, time: int, task_queue, timeout: int):
-        for worker in self.worker_pool.workers():
-            if worker.current_task == None and task_queue:
-                if self.gpu_exact_match:
-                    worker.exact_match_do_job(task_queue, self.lattice, time)
-                else:
-                    worker.gpu_guarded_do_job(task_queue, self.lattice, time)
+    def schedule(self, needs_gpu: List[bool], 
+            release_times: List[int], 
+            absolute_deadlines: List[int], 
+            expected_runtimes: List[int],
+            dependency_matrix,
+            pinned_tasks: List[int], 
+            running_tasks: List[int], # indicates the worker it's running on None otherwise
+            num_tasks: int, 
+            num_gpus: int,
+            num_cpus: int
+            ):
 
-
-class LlfSimulator(Simulator):
-    def __init__(self, num_cpus: int, num_gpus: int, tasks_list: List[Task],
-                 lattice: Lattice):
-        super().__init__(num_cpus, num_gpus, tasks_list, lattice)
-
-    def schedule(self, time: int, task_queue, timeout: int):
-        task_queue.sort(key=lambda x: x.deadline - x.time_remaining
-                        if x.deadline else timeout)
-        for worker in self.worker_pool.workers():
-            if worker.current_task == None and task_queue:
-                worker.do_job(task_queue.pop(0), self.lattice, time)
-
-
-class EdfSimulator(Simulator):
-    def __init__(self, num_cpus: int, num_gpus: int, tasks_list: List[Task],
-                 lattice: Lattice):
-        super().__init__(num_cpus, num_gpus, tasks_list, lattice)
-
-    def schedule(self, time: int, task_queue, timeout: int):
-        task_queue.sort(key=lambda x: x.deadline if x.deadline else timeout)
-        for worker in self.worker_pool.workers():
-            if worker.current_task == None and task_queue:
-                worker.do_job(task_queue.pop(0), self.lattice, time)
+        
+        gpu_pool = list(range(num_gpus))
+        cpu_pool = list(range(num_gpus,num_cpus+num_gpus)) #cpus indexed after gpus
+        placements = running_tasks
+        assignment = [ 0 if (t != None) else None for t in running_tasks]
+        gpu_pool = [i for i in gpu_pool if i not in running_tasks]
+        cpu_pool = [i for i in cpu_pool if i not in running_tasks]
+        
+        for i,gpu in enumerate (needs_gpu):
+            if gpu:
+                if len(gpu_pool) > 0 and running_tasks[i] == None:
+                    w_idx = gpu_pool.pop(0)
+                    placements[i]= w_idx
+                    assignment[i] = 0
+            else:
+                if len(cpu_pool) > 0 and running_tasks[i] == None:
+                    w_idx = cpu_pool.pop(0)
+                    placements[i]= w_idx
+                    assignment[i] = 0
+            if len(gpu_pool) + len(cpu_pool) ==0:
+                break
+        
+        return placements, assignment
