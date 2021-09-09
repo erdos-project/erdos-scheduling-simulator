@@ -11,7 +11,7 @@ class Lattice:
         self.children_dir = {}
         for op in operators:
             self.children_dir[op.unique_id] = op.children_op_ids
-        # should prolly sort the operators
+    
 
     def __deepcopy__(self, memo):
         return Lattice(deepcopy(self.operators, memo))
