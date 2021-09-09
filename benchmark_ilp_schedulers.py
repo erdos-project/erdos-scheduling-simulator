@@ -1,10 +1,5 @@
 from absl import app, flags
 
-<<<<<<< HEAD
-=======
-import time
-
->>>>>>> 552dd6926e71584b8cca057456c861028e601f6e
 from schedulers.boolector_scheduler import BoolectorScheduler
 from schedulers.ilp_scheduler import ILPScheduler
 from schedulers.z3_scheduler import Z3Scheduler

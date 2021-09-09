@@ -60,7 +60,8 @@ class Simulator:
             placement, assignment = self.schedule(
                 [t.needs_gpu for _, t in runnable],
                 [
-                    t.release_time - time if t.release_time is not None else None
+                    t.release_time -
+                    time if t.release_time is not None else None
                     for _, t in runnable
                 ],
                 [
@@ -168,7 +169,9 @@ class EdfSimulator(Simulator):
         if not self.preemptive:
             # check and place running tasks first
             placements = running_tasks
-            assignment = [0 if (t is not None) else None for t in running_tasks]
+            assignment = [
+                0 if (t is not None) else None for t in running_tasks
+            ]
             gpu_pool = [i for i in gpu_pool if i not in running_tasks]
             cpu_pool = [i for i in cpu_pool if i not in running_tasks]
             # print (assignment, running_tasks)
