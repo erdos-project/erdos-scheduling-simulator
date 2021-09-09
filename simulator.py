@@ -79,7 +79,7 @@ class Simulator:
         while time < timeout :
             if v > 0 and time % 100 == 0:
                 print("step: {}".format(time))
-            if v > 1:
+            if True or v > 1:
                 print("step: {}".format(time))
             # first determine if there's new tasks to be made visible
             while len(self.tasks_list
@@ -129,7 +129,10 @@ class Simulator:
                 else:
                     step_size = min (step_size, step_size_rel)   
             if step_size_rel == None and step_size == None:
-                step_size = 1      
+                if len(self.worker_pool.get_running_tasks()) == 0 and len(self.tasks_list) == 0:
+                    step_size = timeout - time
+                else: 
+                    step_size = 1      
             # import pdb; pdb.set_trace()
 
             # finally advance the workers and time
@@ -152,51 +155,6 @@ class Simulator:
 
     def history(self):
         return self.worker_pool.history()
-
-
-# class FifoSimulator(Simulator):
-#     def __init__(self,
-#                  num_cpus: int,
-#                  num_gpus: int,
-#                  tasks_list: List[Task],
-#                  lattice: Lattice,
-#                  gpu_exact_match: bool = False):
-#         super().__init__(num_cpus, num_gpus, tasks_list, lattice)
-#         self.gpu_exact_match = gpu_exact_match
-    
-#     def schedule(self, time: int, task_queue, timeout: int):
-#         for worker in self.worker_pool.workers():
-#             if worker.current_task == None and task_queue:
-#                 if self.gpu_exact_match:
-#                     worker.exact_match_do_job(task_queue, self.lattice, time)
-#                 else:
-#                     worker.gpu_guarded_do_job(task_queue, self.lattice, time)
-
-
-# class LlfSimulator(Simulator):
-#     def __init__(self, num_cpus: int, num_gpus: int, tasks_list: List[Task],
-#                  lattice: Lattice):
-#         super().__init__(num_cpus, num_gpus, tasks_list, lattice)
-
-#     def schedule(self, time: int, task_queue, timeout: int):
-#         task_queue.sort(key=lambda x: x.deadline - x.time_remaining
-#                         if x.deadline else timeout)
-#         for worker in self.worker_pool.workers():
-#             if worker.current_task == None and task_queue:
-#                 worker.do_job(task_queue.pop(0), self.lattice, time)
-
-
-# class EdfSimulator(Simulator):
-#     def __init__(self, num_cpus: int, num_gpus: int, tasks_list: List[Task],
-#                  lattice: Lattice):
-#         super().__init__(num_cpus, num_gpus, tasks_list, lattice)
-
-#     def schedule(self, time: int, task_queue, timeout: int):
-#         task_queue.sort(key=lambda x: x.deadline if x.deadline else timeout)
-#         for worker in self.worker_pool.workers():
-#             if worker.current_task == None and task_queue:
-#                 worker.do_job(task_queue.pop(0), self.lattice, time)
-
 
 class EdfSimulator(Simulator):   
     def __init__(self, num_cpus: int, num_gpus: int, tasks_list: List[Task],
