@@ -22,11 +22,11 @@ class Worker:
             self.unique_id, self.history, self.current_task)
 
     def do_job(self, task: Task, lattice: Lattice, time: int):
-        assert self.current_task == None, (
+        assert self.current_task is None, (
             f"ERROR: Worker {self.unique_id} is still busy")
         assert not task.needs_gpu or self.num_gpus > 0, (
-            f"ERROR: Worker {self.unique_id} doesn't have GPU but task {task.unique_id} needs it"
-        )
+            f"ERROR: Worker {self.unique_id} doesn't have GPU but task"
+            " {task.unique_id} needs it")
         self.history.append(task)
         self.current_task = task
         task.start(lattice, time)

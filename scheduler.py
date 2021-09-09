@@ -1,4 +1,4 @@
-from simulator import *
+from simulator import EdfSimulator, FifoSimulator
 from workers.worker import Worker
 from workers.worker_pool import WorkerPool
 from workload.lattice import Lattice
@@ -38,9 +38,9 @@ for i in range(10):
     e.step()
 e.finish(task_queue, lat, 2)
 print(e, task_queue)
-# (<Task 1; Running Op 0; Available at Time 0; Executed 0 to 3; Deadline: None>,
-# [<Task 1; Running Op 1; Available at Time 3; Executed None to None; Deadline: None>,
-#  <Task 1; Running Op 2; Available at Time 3; Executed None to None; Deadline: None>])
+# (<Task 1; Op 0; Released at Time 0; Executed 0 to 3; Deadline: None>,
+# [<Task 1; Op 1; Released at Time 3; Executed None to None; Deadline: None>,
+#  <Task 1; Op 2; Released at Time 3; Executed None to None; Deadline: None>])
 
 print("=" * 50)
 print("Test worker pool")
@@ -49,8 +49,8 @@ w = Worker(1)
 w.do_job(Task(7, 4, 2), lat, 2)
 print(w)
 # GPU Worker 1 --
-#   log: [<Task 7; Running Op 4; Available at Time 2; Executed 2 to None; Deadline: None>];
-#   curr_task: <Task 7; Running Op 4; Available at Time 2; Executed 2 to None; Deadline: None>
+#   log: [<Task 7; Op 4; Released at 2; Executed 2 to None; Deadline: None>];
+#   cur_task: <Task 7; Op 4; Released at 2; Executed 2 to None; Deadline: None>
 
 # In[5]:
 

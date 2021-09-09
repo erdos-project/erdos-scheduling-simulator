@@ -1,6 +1,8 @@
 from absl import app, flags
 
-from schedulers.boolector_scheduler import BolectorScheduler
+import time
+
+from schedulers.boolector_scheduler import BoolectorScheduler
 from schedulers.ilp_scheduler import ILPScheduler
 from schedulers.z3_scheduler import Z3Scheduler
 
@@ -31,7 +33,8 @@ def do_run(scheduler: ILPScheduler,
     # True if task i must finish before task j starts
     dependency_matrix = [[False for i in range(0, num_tasks)]
                          for j in range(0, num_tasks)]
-    # Hardware index if a task is pinned to that resource (or already running there).
+    # Hardware index if a task is pinned to that resource (or already running
+    # there).
     pinned_tasks = [None] * num_tasks
 
     dependency_matrix[0][1] = True
@@ -63,8 +66,6 @@ def main(args):
         scheduler = Z3Scheduler()
     else:
         raise ValueError('Unexpected --scheduler value {FLAGS.scheduler}')
-    num_gpus = 2
-    num_cpus = 10
     for i in range(1, 11, 1):
         multiplier = 5 * i
         horizon = 50 * multiplier
