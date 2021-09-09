@@ -1,4 +1,3 @@
-
 from typing import List
 
 from z3 import Int, Solver, Implies, Or, IntVal, unsat
