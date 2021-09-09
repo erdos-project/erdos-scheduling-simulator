@@ -29,9 +29,10 @@ class Task:
         self.runtime = runtime
 
     def __repr__(self):
-        return "<Task {}; Running Op {}; Available at Time {}; Executed {} to {}; Deadline: {}>".format(
-            self.unique_id, self.operator_id, self.release_time,
-            self.start_time, self.finish_time, self.deadline)
+        return ("<Task {}; Running Op {}; Available at Time {};"
+                " Executed {} to {}; Deadline: {}>".format(
+                        self.unique_id, self.operator_id, self.release_time,
+                        self.start_time, self.finish_time, self.deadline))
 
     def start(self, lattice, time: int):
         """Starts executing the task at the given time."""

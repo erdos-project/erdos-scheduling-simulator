@@ -12,7 +12,8 @@ class Simulator:
         """
         Args:
             tasks_list: List of Tasks.
-            lattice: Default one would just have operators not connected to each other
+            lattice: Default one would just have
+                operators not connected to each other
         """
         self.tasks_list = tasks_list.copy()
         self.worker_pool = WorkerPool(num_cpus, num_gpus)
@@ -83,7 +84,8 @@ class Simulator:
                 _, t = runnable[i]
                 if a == 0:
                     w = self.worker_pool.get_worker(p)
-                    if w.current_task is None or w.current_task.unique_id != t.unique_id:
+                    if (w.current_task is None
+                            or w.current_task.unique_id != t.unique_id):
                         w.do_job(t, self.lattice, time)
                 else:
                     task_queue.append(t)
