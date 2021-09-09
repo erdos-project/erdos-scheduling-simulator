@@ -1,4 +1,4 @@
-from simulator import EdfSimulator, FifoSimulator
+from simulator import FifoSimulator, EdfSimulator
 from workers.worker import Worker
 from workers.worker_pool import WorkerPool
 from workload.lattice import Lattice
