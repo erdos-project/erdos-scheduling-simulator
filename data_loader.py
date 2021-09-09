@@ -90,7 +90,8 @@ class TaskDataLoader:
         return self.data
 
     def get_data_as_binned(self):
-        # prolly use this to build dependency matrix; for now online computed cause it's expensive
+        # Use this to build dependency matrix; for now online computed
+        # cause it's expensive
         return [[
             entry for entry in self.data if entry['args']['timestamp'] == ts
         ] for ts in self.ids]

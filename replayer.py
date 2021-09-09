@@ -1,7 +1,7 @@
 from absl import app, flags
 
-from simulator import FifoSimulator
 from data_loader import TaskDataLoader
+from simulator import FifoSimulator
 
 FLAGS = flags.FLAGS
 
@@ -37,7 +37,7 @@ def main(args):
                       tasks.get_lattice(),
                       gpu_exact_match=True)
     print(
-        f"Task GPU requirement: {[e.needs_gpu for e in tasks.get_task_list()[0:100]]}"
+        f"Task GPU requirement: {[e.needs_gpu for e in tasks.get_task_list()]}"
     )
 
     print("=" * 20)
