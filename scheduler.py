@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 from simulator import FifoSimulator, EdfSimulator
-=======
-from simulator import EdfSimulator, FifoSimulator
->>>>>>> 552dd6926e71584b8cca057456c861028e601f6e
 from workers.worker import Worker
 from workers.worker_pool import WorkerPool
 from workload.lattice import Lattice
