@@ -44,7 +44,7 @@ class Simulator:
         while time < timeout:
             if v > 0 and time % 100 == 0:
                 print("step: {}".format(time))
-            if True or v > 1:
+            if v > 1:
                 print("step: {}".format(time))
             # first determine if there's new tasks to be made visible
             while len(self.tasks_list
@@ -60,16 +60,16 @@ class Simulator:
             placement, assignment = self.schedule(
                 [t.needs_gpu for _, t in runnable],
                 [
-                    t.release_time - time if t.release_time != None else None
+                    t.release_time - time if t.release_time is not None else None
                     for _, t in runnable
                 ],
                 [
-                    t.deadline - time if t.deadline != None else None
+                    t.deadline - time if t.deadline is not None else None
                     for _, t in runnable
                 ],
                 [t.time_remaining for _, t in runnable],
                 None,  # dependencies
-                [None for _, t in runnable],  #pinned 
+                [None for _, t in runnable],  # pinned
                 [worker for worker, _ in runnable
                  ],  # indicates the worker it's running on None otherwise
                 len(runnable),
@@ -82,7 +82,7 @@ class Simulator:
                 _, t = runnable[i]
                 if a == 0:
                     w = self.worker_pool.get_worker(p)
-                    if w.current_task == None or w.current_task.unique_id != t.unique_id:
+                    if w.current_task is None or w.current_task.unique_id != t.unique_id:
                         w.do_job(t, self.lattice, time)
                 else:
                     task_queue.append(t)
@@ -97,11 +97,11 @@ class Simulator:
 
             if self.worker_pool.has_free_worker() and len(self.tasks_list) > 0:
                 step_size_rel = self.tasks_list[0].release_time - time
-                if step_size == None:
+                if step_size is None:
                     step_size = step_size_rel
                 else:
                     step_size = min(step_size, step_size_rel)
-            if step_size_rel == None and step_size == None:
+            if step_size_rel is None and step_size is None:
                 if len(self.worker_pool.get_running_tasks()) == 0 and len(
                         self.tasks_list) == 0:
                     step_size = timeout - time
@@ -158,7 +158,7 @@ class EdfSimulator(Simulator):
 
         gpu_pool = list(range(num_gpus))
         cpu_pool = list(range(num_gpus,
-                              num_cpus + num_gpus))  #cpus indexed after gpus
+                              num_cpus + num_gpus))  # cpus indexed after gpus
         placements = [None] * num_tasks
         assignment = [None] * num_tasks
         priority = [
@@ -168,18 +168,18 @@ class EdfSimulator(Simulator):
         if not self.preemptive:
             # check and place running tasks first
             placements = running_tasks
-            assignment = [0 if (t != None) else None for t in running_tasks]
+            assignment = [0 if (t is not None) else None for t in running_tasks]
             gpu_pool = [i for i in gpu_pool if i not in running_tasks]
             cpu_pool = [i for i in cpu_pool if i not in running_tasks]
             # print (assignment, running_tasks)
             # print (gpu_count, cpu_count)
         for index in priority:
             if needs_gpu[index]:
-                if len(gpu_pool) > 0 and running_tasks[index] == None:
+                if len(gpu_pool) > 0 and running_tasks[index] is None:
                     placements[index] = gpu_pool.pop(0)
                     assignment[index] = 0
             else:
-                if len(cpu_pool) > 0 and running_tasks[index] == None:
+                if len(cpu_pool) > 0 and running_tasks[index] is None:
                     placements[index] = cpu_pool.pop(0)
                     assignment[index] = 0
             if len(gpu_pool) + len(cpu_pool) == 0:
@@ -214,20 +214,20 @@ class FifoSimulator(Simulator):
 
         gpu_pool = list(range(num_gpus))
         cpu_pool = list(range(num_gpus,
-                              num_cpus + num_gpus))  #cpus indexed after gpus
+                              num_cpus + num_gpus))  # cpus indexed after gpus
         placements = running_tasks
-        assignment = [0 if (t != None) else None for t in running_tasks]
+        assignment = [0 if (t is not None) else None for t in running_tasks]
         gpu_pool = [i for i in gpu_pool if i not in running_tasks]
         cpu_pool = [i for i in cpu_pool if i not in running_tasks]
 
         for i, gpu in enumerate(needs_gpu):
             if gpu:
-                if len(gpu_pool) > 0 and running_tasks[i] == None:
+                if len(gpu_pool) > 0 and running_tasks[i] is None:
                     w_idx = gpu_pool.pop(0)
                     placements[i] = w_idx
                     assignment[i] = 0
             else:
-                if len(cpu_pool) > 0 and running_tasks[i] == None:
+                if len(cpu_pool) > 0 and running_tasks[i] is None:
                     w_idx = cpu_pool.pop(0)
                     placements[i] = w_idx
                     assignment[i] = 0

@@ -25,7 +25,7 @@ class Lattice:
         """Adds new tasks to queue if necessary when an Task completes.
 
         The times are a bit weird cause this effectively gets called at the end
-        of the curr_time slice/beginning of the next slice. 
+        of the curr_time slice/beginning of the next slice.
         We assume the tasks are made available immediately
         """
         children = self.get_children(task.operator_id)

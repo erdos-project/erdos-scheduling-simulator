@@ -1,8 +1,7 @@
-import time
 
 from typing import List
 
-from z3 import *
+from z3 import Int, Solver, Implies, Or, IntVal, unsat
 
 from schedulers.ilp_scheduler import ILPScheduler
 
@@ -13,7 +12,7 @@ class Z3Scheduler(ILPScheduler):
                  dependency_matrix, pinned_tasks: List[int], num_tasks: int,
                  num_gpus: int, num_cpus: int):
         times = [Int(f't{i}')
-                 for i in range(0, num_tasks)]  #Time when execution starts
+                 for i in range(0, num_tasks)]  # Time when execution starts
         placements = [Int(f'p{i}')
                       for i in range(0, num_tasks)]  # placement on CPU or GPU
         s = Solver()

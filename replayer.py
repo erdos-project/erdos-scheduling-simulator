@@ -1,6 +1,6 @@
 from absl import app, flags
 
-from simulator import *
+from simulator import FifoSimulator
 from data_loader import TaskDataLoader
 
 FLAGS = flags.FLAGS

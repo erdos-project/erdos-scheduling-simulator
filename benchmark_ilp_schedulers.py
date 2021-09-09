@@ -1,8 +1,10 @@
 from absl import app, flags
 
-from schedulers.boolector_scheduler import BolectorScheduler
+from schedulers.boolector_scheduler import BoolectorScheduler
 from schedulers.ilp_scheduler import ILPScheduler
 from schedulers.z3_scheduler import Z3Scheduler
+
+import time
 
 FLAGS = flags.FLAGS
 
@@ -63,8 +65,8 @@ def main(args):
         scheduler = Z3Scheduler()
     else:
         raise ValueError('Unexpected --scheduler value {FLAGS.scheduler}')
-    num_gpus = 2
-    num_cpus = 10
+    # num_gpus = 2
+    # num_cpus = 10
     for i in range(1, 11, 1):
         multiplier = 5 * i
         horizon = 50 * multiplier

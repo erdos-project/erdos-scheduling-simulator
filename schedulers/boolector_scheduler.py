@@ -1,8 +1,7 @@
-import time
 from typing import List
 
 import pyboolector
-from pyboolector import Boolector, BoolectorException
+from pyboolector import Boolector
 
 from schedulers.ilp_scheduler import ILPScheduler
 
@@ -68,15 +67,15 @@ class BoolectorScheduler(ILPScheduler):
         for i, pin in enumerate(pinned_tasks):
             if pin:
                 s.Assert(placements[i] == s.Constant(pin, bits))
-        #s.Simplify()
-        #s.Dump('smt2', 'tmp.smt')
+        # s.Simplify()
+        # s.Dump('smt2', 'tmp.smt')
 
         schedulable = s.Sat()
         if schedulable == s.SAT:
             ass_p, ass_t = [int(p.assignment, 2) for p in placements
                             ], [int(t.assignment, 2) for t in start_times]
             print(ass_p, ass_t)
-            l = list(zip(ass_p, ass_t))
-            l.sort()
-            return l
+            l_out = list(zip(ass_p, ass_t))
+            l_out.sort()
+            return l_out
         return None
