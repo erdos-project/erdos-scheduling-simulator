@@ -59,7 +59,7 @@ class Task:
                 self.time_remaining))
         lattice.add_next(self, new_task_queue, time)
         # Cause the task is using up the current time slice.
-        self.finish_time = time 
+        self.finish_time = time
         if self.deadline and self.deadline < self.finish_time:
             print("WARNING: DEADLINE MISSED [D:{}; F:{}]".format(
                 self.deadline, self.finish_time))

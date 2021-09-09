@@ -11,7 +11,6 @@ class Lattice:
         self.children_dir = {}
         for op in operators:
             self.children_dir[op.unique_id] = op.children_op_ids
-    
 
     def __deepcopy__(self, memo):
         return Lattice(deepcopy(self.operators, memo))
@@ -41,11 +40,11 @@ class Lattice:
                     task_id = min(task.unique_id, c.paused_job.unique_id)
                     c.paused_job = None
             if c.relative_deadline:
-                d = c.relative_deadline + curr_time 
+                d = c.relative_deadline + curr_time
             else:
                 d = None
             new_task_queue.append(
-                Task(task_id, c.unique_id, curr_time , deadline=d))
+                Task(task_id, c.unique_id, curr_time, deadline=d))
 
     def get_op(self, operator_id: int) -> Operator:
         """Assumes that the operators are in sorted and consecutive order."""
