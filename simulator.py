@@ -16,8 +16,6 @@ class EventType(Enum):
     END = 4
 
 
-
-
 class Event:
     def __init__(self, type: EventType, time, task=None, sched_actions=None):
         self.type = type
@@ -30,8 +28,10 @@ class Event:
 
     def __repr__(self):
         return str(self.type.name)
-    def __lt__(self,other):
-        return (self.time,self.type.value) < (other.time, other.type.value)
+
+    def __lt__(self, other):
+        return (self.time, self.type.value) < (other.time, other.type.value)
+
 
 class Simulator:
     def __init__(self,
@@ -102,17 +102,16 @@ class Simulator:
                 print("Activate: {}".format(event.task))
 
                 # schedule
-                if self.am_scheduling: 
-                    print ("doublesched")
-                    
+                if self.am_scheduling:
+                    print("WARNING: Double Schedule")
+
                 else:
-                    running_tasks = self.worker_pool.get_running_tasks()
-                    runnable = running_tasks + [(None, t) for t in self.pending]
-                    sched_actions, sched_time = self.run_scheduler(runnable)
+
+                    sched_actions, sched_time = self.run_scheduler()
                     new_events = [
                         Event(EventType.SCHEDULERFINISHED,
-                            self.time + sched_time,
-                            sched_actions=sched_actions)
+                              self.time + sched_time,
+                              sched_actions=sched_actions)
                     ]
                     event_queue.extend(new_events)
                     self.am_scheduling = True
@@ -129,20 +128,17 @@ class Simulator:
 
                 # schedule
                 if self.am_scheduling:
-                    print ("double schedule")
-                    
+                    print("WARNING: Double Schedule")
+
                 else:
-                    running_tasks = self.worker_pool.get_running_tasks()
-                    runnable = running_tasks + [(None, t) for t in self.pending]
-                    sched_actions, sched_time = self.run_scheduler(runnable)
+                    sched_actions, sched_time = self.run_scheduler()
                     new_events = [
                         Event(EventType.SCHEDULERFINISHED,
-                            self.time + sched_time,
-                            sched_actions=sched_actions)
+                              self.time + sched_time,
+                              sched_actions=sched_actions)
                     ]
                     event_queue.extend(new_events)
                     self.am_scheduling = True
-                
 
             if event.type == EventType.SCHEDULERFINISHED:
                 # place tasks
@@ -173,8 +169,9 @@ class Simulator:
                     worker.current_task = None
         return new_task_queue
 
-    def run_scheduler(self, runnable):
-
+    def run_scheduler(self):
+        running_tasks = self.worker_pool.get_running_tasks()
+        runnable = running_tasks + [(None, t) for t in self.pending]
         start_time = time.time()
         placement, assignment = self.schedule(
             [t.needs_gpu for _, t in runnable],
