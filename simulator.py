@@ -10,10 +10,12 @@ from enum import Enum
 
 
 class EventType(Enum):
-    TASKRELEASE = 1
-    TASKFINISHED = 2
-    SCHEDULERFINISHED = 3
+    SCHEDULERFINISHED = 1
+    TASKRELEASE = 2
+    TASKFINISHED = 3
     END = 4
+
+
 
 
 class Event:
@@ -28,7 +30,8 @@ class Event:
 
     def __repr__(self):
         return str(self.type.name)
-
+    def __lt__(self,other):
+        return (self.time,self.type.value) < (other.time, other.type.value)
 
 class Simulator:
     def __init__(self,
@@ -51,6 +54,7 @@ class Simulator:
         self.time = 0
         self.pending = []
         self.instant_scheduling = instant_scheduling
+        self.am_scheduling = False
 
     def schedule(
             self,
@@ -82,7 +86,7 @@ class Simulator:
         # implement as a heap
         while True:
 
-            event_queue.sort(key=(lambda e: e.time))
+            event_queue.sort()
             # import pdb; pdb.set_trace()
             # check what happens if there are
             # concurrent events (ordering of event.type)
@@ -98,15 +102,20 @@ class Simulator:
                 print("Activate: {}".format(event.task))
 
                 # schedule
-                running_tasks = self.worker_pool.get_running_tasks()
-                runnable = running_tasks + [(None, t) for t in self.pending]
-                sched_actions, sched_time = self.run_scheduler(runnable)
-                new_events = [
-                    Event(EventType.SCHEDULERFINISHED,
-                          self.time + sched_time,
-                          sched_actions=sched_actions)
-                ]
-                event_queue.extend(new_events)
+                if self.am_scheduling: 
+                    print ("doublesched")
+                    
+                else:
+                    running_tasks = self.worker_pool.get_running_tasks()
+                    runnable = running_tasks + [(None, t) for t in self.pending]
+                    sched_actions, sched_time = self.run_scheduler(runnable)
+                    new_events = [
+                        Event(EventType.SCHEDULERFINISHED,
+                            self.time + sched_time,
+                            sched_actions=sched_actions)
+                    ]
+                    event_queue.extend(new_events)
+                    self.am_scheduling = True
 
             if event.type == EventType.TASKFINISHED:
 
@@ -119,15 +128,21 @@ class Simulator:
                 event_queue.extend(new_event_queue)
 
                 # schedule
-                running_tasks = self.worker_pool.get_running_tasks()
-                runnable = running_tasks + [(None, t) for t in self.pending]
-                sched_actions, sched_time = self.run_scheduler(runnable)
-                new_events = [
-                    Event(EventType.SCHEDULERFINISHED,
-                          self.time + sched_time,
-                          sched_actions=sched_actions)
-                ]
-                event_queue.extend(new_events)
+                if self.am_scheduling:
+                    print ("double schedule")
+                    
+                else:
+                    running_tasks = self.worker_pool.get_running_tasks()
+                    runnable = running_tasks + [(None, t) for t in self.pending]
+                    sched_actions, sched_time = self.run_scheduler(runnable)
+                    new_events = [
+                        Event(EventType.SCHEDULERFINISHED,
+                            self.time + sched_time,
+                            sched_actions=sched_actions)
+                    ]
+                    event_queue.extend(new_events)
+                    self.am_scheduling = True
+                
 
             if event.type == EventType.SCHEDULERFINISHED:
                 # place tasks
@@ -138,6 +153,7 @@ class Simulator:
                           task=t) for t in task_finished
                 ]
                 event_queue.extend(task_finished)
+                self.am_scheduling = False
 
     def advance_clock(self, step_size):
 
