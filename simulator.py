@@ -22,9 +22,9 @@ class Event:
         self.time = time
         self.task = task
         self.sched_actions = sched_actions
-        assert (self.type != EventType.TASKRELEASE or self.task != None)
+        assert (self.type != EventType.TASKRELEASE or self.task is not None)
         assert (self.type != EventType.SCHEDULERFINISHED
-                or self.sched_actions != None)
+                or self.sched_actions is not None)
 
     def __repr__(self):
         return str(self.type.name)
@@ -84,7 +84,8 @@ class Simulator:
 
             event_queue.sort(key=(lambda e: e.time))
             # import pdb; pdb.set_trace()
-            # check what happens if there are concurrent events (ordering of event.type)
+            # check what happens if there are
+            # concurrent events (ordering of event.type)
             assert (len(event_queue) != 0), "No Event Queue"
             event = event_queue.pop(0)
             self.advance_clock(event.time - self.time)
@@ -211,8 +212,8 @@ class Simulator:
             filter(lambda t: t.unique_id not in added_tasks_id, self.pending))
         return added_tasks
 
-    def old_sim(self, timeout, v=0):
-
+    def old_sim(self, tasks_list, timeout, v=0):
+        task_queue = tasks_list
         while self.time < timeout:
             if v > 0 and self.time % 100 == 0:
                 print("step: {}".format(self.time))
