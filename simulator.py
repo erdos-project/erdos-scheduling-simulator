@@ -10,6 +10,7 @@ from enum import Enum
 
 
 class EventType(Enum):
+    SCHEDULERSTART = 0
     SCHEDULERFINISHED = 1
     TASKRELEASE = 2
     TASKFINISHED = 3
@@ -54,7 +55,8 @@ class Simulator:
         self.time = 0
         self.pending = []
         self.instant_scheduling = instant_scheduling
-        self.am_scheduling = False
+        self.is_scheduling = False
+        self.double_scheduled = False
 
     def schedule(
             self,
@@ -72,6 +74,21 @@ class Simulator:
         raise NotImplementedError
 
     def simulate(self, timeout: int, v=0):
+        def profile_scheduler():
+            # schedule
+            if self.is_scheduling:
+                print("WARNING: Double Schedule")
+
+            else:
+                sched_actions, sched_time = self.run_scheduler()
+                new_events = [
+                    Event(EventType.SCHEDULERFINISHED,
+                            self.time + sched_time,
+                            sched_actions=sched_actions)
+                ]
+                event_queue.extend(new_events)
+                self.is_scheduling = True
+
         if not self.tasks_list:
             return
         self.tasks_list.sort(key=(lambda e: e.release_time))
@@ -101,21 +118,6 @@ class Simulator:
                 self.pending.append(event.task)
                 print("Activate: {}".format(event.task))
 
-                # schedule
-                if self.am_scheduling:
-                    print("WARNING: Double Schedule")
-
-                else:
-
-                    sched_actions, sched_time = self.run_scheduler()
-                    new_events = [
-                        Event(EventType.SCHEDULERFINISHED,
-                              self.time + sched_time,
-                              sched_actions=sched_actions)
-                    ]
-                    event_queue.extend(new_events)
-                    self.am_scheduling = True
-
             if event.type == EventType.TASKFINISHED:
 
                 # add new tasks
@@ -126,19 +128,20 @@ class Simulator:
                 ]
                 event_queue.extend(new_event_queue)
 
-                # schedule
-                if self.am_scheduling:
-                    print("WARNING: Double Schedule")
+            if (event.type == EventType.TASKRELEASE
+                or event.type == EventType.TASKFINISHED):
+                # next time step trigger scheduling
+                if not self.is_scheduling:
+                    event_queue.append(
+                    Event(EventType.SCHEDULERSTART,
+                            self.time + 1)
+                    )
+                else: 
+                    self.double_scheduled = True
+            if event.type == EventType.SCHEDULERSTART:
+                profile_scheduler()
 
-                else:
-                    sched_actions, sched_time = self.run_scheduler()
-                    new_events = [
-                        Event(EventType.SCHEDULERFINISHED,
-                              self.time + sched_time,
-                              sched_actions=sched_actions)
-                    ]
-                    event_queue.extend(new_events)
-                    self.am_scheduling = True
+
 
             if event.type == EventType.SCHEDULERFINISHED:
                 # place tasks
@@ -149,7 +152,14 @@ class Simulator:
                           task=t) for t in task_finished
                 ]
                 event_queue.extend(task_finished)
-                self.am_scheduling = False
+                self.is_scheduling = False
+                if self.double_scheduled:
+                    event_queue.append(
+                    Event(EventType.SCHEDULERSTART,
+                            self.time + 1)
+                    )
+                    # allows the updates in the time cycle to 
+                    # take effect before running scheduler again
 
     def advance_clock(self, step_size):
 
