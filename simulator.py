@@ -83,8 +83,8 @@ class Simulator:
                 sched_actions, sched_time = self.run_scheduler()
                 new_events = [
                     Event(EventType.SCHEDULERFINISHED,
-                            self.time + sched_time,
-                            sched_actions=sched_actions)
+                          self.time + sched_time,
+                          sched_actions=sched_actions)
                 ]
                 event_queue.extend(new_events)
                 self.is_scheduling = True
@@ -129,19 +129,15 @@ class Simulator:
                 event_queue.extend(new_event_queue)
 
             if (event.type == EventType.TASKRELEASE
-                or event.type == EventType.TASKFINISHED):
+                    or event.type == EventType.TASKFINISHED):
                 # next time step trigger scheduling
                 if not self.is_scheduling:
                     event_queue.append(
-                    Event(EventType.SCHEDULERSTART,
-                            self.time + 1)
-                    )
-                else: 
+                        Event(EventType.SCHEDULERSTART, self.time + 1))
+                else:
                     self.double_scheduled = True
             if event.type == EventType.SCHEDULERSTART:
                 profile_scheduler()
-
-
 
             if event.type == EventType.SCHEDULERFINISHED:
                 # place tasks
@@ -155,10 +151,8 @@ class Simulator:
                 self.is_scheduling = False
                 if self.double_scheduled:
                     event_queue.append(
-                    Event(EventType.SCHEDULERSTART,
-                            self.time + 1)
-                    )
-                    # allows the updates in the time cycle to 
+                        Event(EventType.SCHEDULERSTART, self.time + 1))
+                    # allows the updates in the time cycle to
                     # take effect before running scheduler again
 
     def advance_clock(self, step_size):
