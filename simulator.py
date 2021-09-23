@@ -1,5 +1,5 @@
 from copy import deepcopy
-from typing import List
+from typing import List, Tuple
 import time
 import math
 
@@ -18,7 +18,7 @@ class EventType(Enum):
 
 
 class Event:
-    def __init__(self, type: EventType, time, task=None, sched_actions=None):
+    def __init__(self, type: EventType, time, task: Task=None, sched_actions : List[Tuple[int,int]]=None):
         self.type = type
         self.time = time
         self.task = task
