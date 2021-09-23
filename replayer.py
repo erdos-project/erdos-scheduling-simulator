@@ -50,7 +50,7 @@ def main(args):
     s.simulate(steps)
 
     print("=" * 20)
-    print(f"Tasks pending: {s.tasks_list}")
+    print(f"Tasks pending: {s.pending}")
     print(f"Tasks running: {s.show_running_tasks()}")
 
 
