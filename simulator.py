@@ -18,7 +18,11 @@ class EventType(Enum):
 
 
 class Event:
-    def __init__(self, type: EventType, time, task: Task=None, sched_actions : List[Tuple[int,int]]=None):
+    def __init__(self,
+                 type: EventType,
+                 time,
+                 task: Task = None,
+                 sched_actions: List[Tuple[int, int]] = None):
         self.type = type
         self.time = time
         self.task = task
