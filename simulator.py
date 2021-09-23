@@ -55,6 +55,15 @@ class Workload(object):
         self.dependency_matrix = dependency_matrix
         self.pinned_tasks = pinned_tasks
 
+    # IMO, the workload should be a wrapper around a list of Task. 
+    # Each Task has a release time, an absolute deadline, runtime, 
+    # and exposes needs_gpu and get_dependencies methods. We don't 
+    # have to do this change in this PR, but we should do it in a future PR.
+
+    # I'm suggesting this change to make the code a bit more modular, and to 
+    # reduce the error-prone assumptions we're making (e.g., tasks have sequentially 
+    # increasing ids, which we use to access lists, etc.,).
+
 
 class Resources(object):
     def __init__(
@@ -69,6 +78,11 @@ class Resources(object):
         self.num_gpus = num_gpus
         self.num_cpus = num_cpus
 
+    # IMO, this should be a Dict of TaskIds. Moreover, the Resources class should expose 
+    # start_task(task: Task) and end_task(task_id: TaskId) methods, which can do any necessary 
+    # booking (e.g., update running tasks, updated the available number of GPUs, yada yada).
+
+    # Moreover, the Resource class might expose get_num_available_resource(resource: ResourceType).
 
 class Simulator:
     def __init__(self,
@@ -93,6 +107,10 @@ class Simulator:
         self.instant_scheduling = instant_scheduling
         self.is_scheduling = False
         self.double_scheduled = False
+    # num_cpu and num_gpu not used
+    # IMO, the Simulator should receive a List[Task], which in our case 
+    # are actually jobs that release tasks, Resources, and instant_scheduling.
+    # It's unclear why the simulator needs to receive a Lattice.
 
     def schedule(self, workload: Workload, resources: Resources):
         raise NotImplementedError
@@ -185,6 +203,10 @@ class Simulator:
         for worker in self.worker_pool.workers():
             if worker.current_task:
                 worker.current_task.step(step_size=step_size)
+    # IMO, this should go into the task_end method I mentioned in a comment above. 
+    # We still need to do some reconciling between workers and resources. 
+    # We might want to merge the Resources and Worker classes so that 
+    # we only have one class that describes and manages a clump of related resources.
 
     def task_finish(self):
         new_task_queue = []
