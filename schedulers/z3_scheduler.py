@@ -9,7 +9,7 @@ class Z3Scheduler(ILPScheduler):
     def schedule(self, needs_gpu: List[bool], release_times: List[int],
                  absolute_deadlines: List[int], expected_runtimes: List[int],
                  dependency_matrix, pinned_tasks: List[int], num_tasks: int,
-                 num_gpus: int, num_cpus: int):
+                 num_gpus: int, num_cpus: int, bits = None):
         times = [Int(f't{i}')
                  for i in range(0, num_tasks)]  # Time when execution starts
         placements = [Int(f'p{i}')

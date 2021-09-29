@@ -8,8 +8,8 @@ import time
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_integer('num_gpus', 2, 'Number of GPUs available.')
-flags.DEFINE_integer('num_cpus', 10, 'Number of CPUs available.')
+flags.DEFINE_integer('NUM_GPUS', 2, 'Number of GPUs available.')
+flags.DEFINE_integer('NUM_CPUS', 10, 'Number of CPUs available.')
 flags.DEFINE_integer('task_runtime', 15, 'Estimated task runtime.')
 flags.DEFINE_enum('scheduler', 'bolector', ['bolector', 'z3'],
                   'Sets which ILP scheduler to use')
@@ -70,7 +70,7 @@ def main(args):
         multiplier = 5 * i
         horizon = 50 * multiplier
         num_tasks = 5 * multiplier
-        run_time = scheduler.do_run(num_tasks, FLAGS.task_runtime, horizon,
+        run_time = do_run(scheduler, num_tasks, FLAGS.task_runtime, horizon,
                                     FLAGS.NUM_GPUS, FLAGS.NUM_CPUS)
         print(run_time)
 
