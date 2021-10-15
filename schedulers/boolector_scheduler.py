@@ -17,7 +17,10 @@ class BoolectorScheduler(ILPScheduler):
                   num_tasks: int,
                   num_gpus: int,
                   num_cpus: int,
-                  bits: int = 8):
+                  bits: int = 8, 
+                  optimize = False, 
+                  dump = False, 
+                  outpath = None):
         s = Boolector()
 
         s.Set_opt(pyboolector.BTOR_OPT_MODEL_GEN, True)

@@ -13,7 +13,7 @@ class GurobiScheduler(ILPScheduler):
                  dependency_matrix, pinned_tasks: List[int], num_tasks: int,
                  num_gpus: int, num_cpus: int, bits = None, optimize=False,
                  dump=False, outpath = None):
-        M = 100
+        M = 10000000
         def MySum(lst):
             return functools.reduce(lambda a, b: a + b, lst, 0)
         # import pdb; pdb.set_trace()
