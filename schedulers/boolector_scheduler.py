@@ -7,7 +7,7 @@ from schedulers.ilp_scheduler import ILPScheduler
 
 
 class BoolectorScheduler(ILPScheduler):
-    def scheduler(self,
+    def schedule(self,
                   needs_gpu: List[bool],
                   release_times: List[int],
                   absolute_deadlines: List[int],

@@ -9,14 +9,21 @@ class Z3Scheduler(ILPScheduler):
     def schedule(self, needs_gpu: List[bool], release_times: List[int],
                  absolute_deadlines: List[int], expected_runtimes: List[int],
                  dependency_matrix, pinned_tasks: List[int], num_tasks: int,
-                 num_gpus: int, num_cpus: int, bits = None):
+                 num_gpus: int, num_cpus: int, bits = None, optimize=False,
+                 dump=False, outpath = None):
+        def MySum(lst):
+            return functools.reduce(lambda a, b: a + b, lst, 0)
         times = [Int(f't{i}')
                  for i in range(0, num_tasks)]  # Time when execution starts
         placements = [Int(f'p{i}')
                       for i in range(0, num_tasks)]  # placement on CPU or GPU
-        s = Solver()
-        for t, r, e, d in zip(times, release_times, expected_runtimes,
-                              absolute_deadlines):
+        if optimize:
+            print ("We are Optimizing")
+            s = Optimize()
+        else:
+            s = Solver() 
+        for t, r, e, d, c in zip(times, release_times, expected_runtimes,
+                              absolute_deadlines, costs):
             # Finish before deadline.
             s.add(t + e < d)
             # Start at or after release time.
@@ -48,7 +55,19 @@ class Z3Scheduler(ILPScheduler):
             if pin:
                 s.add(placements[i] == IntVal(pin))
 
+        if optimize:
+            result = s.maximize(MySum(costs))
+        if dump:
+            assert outpath is not None
+            # import IPython; IPython.embed()
+            with open (outpath,"w") as outfile:
+                outfile.write(s.sexpr())
+                if not optimize: 
+                    outfile.write("(check-sat)")
+
         schedulable = s.check()
+        if optimize: 
+            print(s.lower(result))
         print(schedulable)
         if schedulable != unsat:
             return [s.model()[p]
