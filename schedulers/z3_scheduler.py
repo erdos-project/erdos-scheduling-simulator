@@ -1,6 +1,7 @@
 from typing import List
 
-from z3 import Int, Solver, Implies, Or, IntVal, unsat
+import functools
+from z3 import Int, Solver, Implies, Or, IntVal, unsat, Optimize
 
 from schedulers.ilp_scheduler import ILPScheduler
 
@@ -15,6 +16,7 @@ class Z3Scheduler(ILPScheduler):
             return functools.reduce(lambda a, b: a + b, lst, 0)
         times = [Int(f't{i}')
                  for i in range(0, num_tasks)]  # Time when execution starts
+        costs = [Int(f'c{i}')for i in range(0, num_tasks)]  # Costs of gap
         placements = [Int(f'p{i}')
                       for i in range(0, num_tasks)]  # placement on CPU or GPU
         if optimize:
