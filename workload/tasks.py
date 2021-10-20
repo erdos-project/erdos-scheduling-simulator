@@ -12,7 +12,7 @@ class TaskState(Enum):
     RELEASED = 1   # The Task has been released, and is waiting to be run.
     RUNNING = 2    # The Task has begun execution, and is currently running.
     PAUSED = 3     # The Task had begun execution but is currently paused.
-    PREEMPTED = 4  # The Task has been preempted before completing.
+    EVICTED = 4    # The Task has been evicted before completing.
     COMPLETED = 5  # The Task has successfully completed.
 
 
@@ -41,7 +41,7 @@ class Task(object):
         remaining_time (`float`): The time remaining to finish the completion
             of the task.
         completion_time (`float`): The time at which the task completed / was
-            preempted (only available if state is either PREEMPTED / COMPLETED,
+            preempted (only available if state is either EVICTED / COMPLETED,
             -1 otherwise)
     """
     def __init__(self, name: str, job: Job, resource_requirement: Resources,
@@ -107,7 +107,7 @@ class Task(object):
         if self._remaining_time == 0:
             self._state = TaskState.COMPLETED
         else:
-            self._state = TaskState.PREEMPTED
+            self._state = TaskState.EVICTED
         # TODO (Sukrit): We should notify the `Job` of the completion of this
         # particular task, so it can release new tasks to the scheduler.
 
