@@ -53,7 +53,7 @@ class Task(object):
         self._release_time = release_time
         self._expected_runtime = runtime
         self._deadline = deadline
-        self._id = uuid.uuid1()
+        self._id = uuid.uuid4()
 
         # The data required for managing the execution of a particular task.
         self._start_time, self._completion_time = -1, -1

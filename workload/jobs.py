@@ -17,7 +17,7 @@ class Job(object):
     """
     def __init__(self, name: str):
         self._name = name
-        self._id = uuid.uuid1()
+        self._id = uuid.uuid4()
 
     @property
     def name(self):
