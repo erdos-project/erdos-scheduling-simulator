@@ -9,11 +9,12 @@ Paused = namedtuple("Paused", "pause_time, restart_time")
 
 class TaskState(Enum):
     """Represents the different states that a Task can potentially be in."""
-    RELEASED = 1   # The Task has been released, and is waiting to be run.
-    RUNNING = 2    # The Task has begun execution, and is currently running.
-    PAUSED = 3     # The Task had begun execution but is currently paused.
-    EVICTED = 4    # The Task has been evicted before completing.
-    COMPLETED = 5  # The Task has successfully completed.
+    VIRTUAL = 1    # The Task is expected to be generated in the future.
+    RELEASED = 2   # The Task has been released, and is waiting to be run.
+    RUNNING = 3    # The Task has begun execution, and is currently running.
+    PAUSED = 4     # The Task had begun execution but is currently paused.
+    EVICTED = 5    # The Task has been evicted before completing.
+    COMPLETED = 6  # The Task has successfully completed.
 
 
 class Task(object):
