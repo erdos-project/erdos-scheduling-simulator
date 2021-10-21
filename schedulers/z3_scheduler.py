@@ -6,7 +6,9 @@ from z3 import Int, Solver, Implies, Or, IntVal, unsat, Optimize
 from schedulers.ilp_scheduler import ILPScheduler
 
 import networkx as nx
-import pickle
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
 class Z3Scheduler(ILPScheduler):
     def schedule(self, needs_gpu: List[bool], release_times: List[int],
@@ -22,7 +24,7 @@ class Z3Scheduler(ILPScheduler):
         # e.g. call add_relation(G, 'ub_a', '<', ['a', -5]) to add constraint (a < 5)
         def add_relation(G, new_node, relation, node_lst, weight_lst=None):
             if weight_lst is None: 
-                weight_lst = [1 if relation in ['<', '<=', '>', '>=', '=' else None] * len(node_lst)
+                weight_lst = [1 if relation in ['<', '<=', '>', '>=', '='] else None] * len(node_lst)
             G.add_node(new_node, typ=relation)
             for n, w in zip(node_lst, weight_lst):
                 G.add_node(n)
@@ -117,8 +119,9 @@ class Z3Scheduler(ILPScheduler):
                 if not optimize: 
                     outfile.write("(check-sat)")
         if dump_nx:
-            with open(outpath+'.pkl', 'w') as outfile:
-                pickle.dump(G, outfile)
+            nx.write_gpickle(G, outpath+'.pkl')
+            plt.savefig(outpath+".png")
+            # import pdb; pdb.set_trace()
 
         schedulable = s.check()
         if optimize: 

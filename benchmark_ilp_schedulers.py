@@ -18,6 +18,7 @@ flags.DEFINE_enum('scheduler', 'boolector', ['boolector', 'z3', 'gurobi'],
 flags.DEFINE_bool('opt', False, 'False --> feasibility only; True --> maximize slack')
 flags.DEFINE_bool('dump', False, 'writes smtlib2 to outpath')
 flags.DEFINE_string('outpath', "out", "path for output")
+flags.DEFINE_bool('dump_nx', False, 'dumps networkx object')
 
 
 def do_run(scheduler: ILPScheduler,
@@ -28,7 +29,8 @@ def do_run(scheduler: ILPScheduler,
            num_cpus: int = 10,
            optimize: bool = True, 
            dump: bool = False,
-           outpath: str = None):
+           outpath: str = None,
+           dump_nx: bool = False):
     
     print(f"Running for {num_tasks} task over horizon of {horizon}")
     # True if a task requires a GPU.
@@ -51,6 +53,7 @@ def do_run(scheduler: ILPScheduler,
 
     if outpath is not None:
         smtpath = outpath + f"{'opt' if optimize else 'feas'}.smt"
+    else: smtpath = None
     start = time.time() # NB: the time cost includes writing the file to disk
     out = scheduler.schedule(needs_gpu,
                              release_times,
@@ -64,7 +67,8 @@ def do_run(scheduler: ILPScheduler,
                              bits=13, 
                              optimize=optimize,
                              dump = dump,
-                            #  outpath = smtpath
+                             outpath = smtpath,
+                             dump_nx = dump_nx
                              )
     end = time.time()
     print(end - start)
@@ -99,7 +103,8 @@ def main(args):
     else:
         raise ValueError('Unexpected --scheduler value {FLAGS.scheduler}')
     runtimes = []
-    for i in range(1, 11, 1):
+#   for i in range(1, 11, 1):
+    for i in range(1, 2, 1):
         multiplier = 5 * i
         horizon = 50 * multiplier
         num_tasks = 5 * multiplier
@@ -109,7 +114,7 @@ def main(args):
         # import pdb; pdb.set_trace()
         run_time = do_run(scheduler, num_tasks, FLAGS.task_runtime, horizon,
                                     FLAGS.NUM_GPUS, FLAGS.NUM_CPUS, optimize = FLAGS.opt,
-                                    dump = FLAGS.dump, outpath = outpath)
+                                    dump = FLAGS.dump, outpath = outpath, dump_nx = FLAGS.dump_nx)
 
         print(run_time)
         runtimes.append((num_tasks,run_time))
