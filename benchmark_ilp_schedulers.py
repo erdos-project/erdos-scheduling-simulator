@@ -20,6 +20,7 @@ flags.DEFINE_bool('dump', False, 'writes smtlib2 to outpath')
 flags.DEFINE_string('outpath', "out", "path for output")
 flags.DEFINE_bool('dump_nx', False, 'dumps networkx object')
 
+mini_run=False
 
 def do_run(scheduler: ILPScheduler,
            num_tasks: int = 5,
@@ -47,7 +48,6 @@ def do_run(scheduler: ILPScheduler,
     # Hardware index if a task is pinned to that resource (or already running
     # there).
     pinned_tasks = [None] * num_tasks
-    mini_run=False
     if not mini_run:
         dependency_matrix[0][1] = True
         needs_gpu[3] = False
@@ -105,18 +105,17 @@ def main(args):
         raise ValueError('Unexpected --scheduler value {FLAGS.scheduler}')
     runtimes = []
     for i in range(1, 11, 1):
-    # for i in range(1, 2, 1):
         multiplier = 5 * i
         horizon = 50 * multiplier
         num_tasks = 5 * multiplier
         outpath = (FLAGS.outpath + f"/tasks={num_tasks}_horizon={horizon}_ngpu={FLAGS.NUM_GPUS}_ncpu={FLAGS.NUM_CPUS}/" if FLAGS.dump else None)
         if outpath is not None and not Path(outpath).is_dir():
             Path(outpath).mkdir()
-        mini_run = False
         if mini_run:
-            run_time = do_run(scheduler, 1, 20, 10,
-                                        1, 1, optimize = FLAGS.opt,
+            run_time = do_run(scheduler, 3, 10, 20,
+                                        2, 1, optimize = FLAGS.opt,
                                         dump = FLAGS.dump, outpath = outpath, dump_nx = FLAGS.dump_nx)
+            break
 
         
         run_time = do_run(scheduler, num_tasks, FLAGS.task_runtime, horizon,
