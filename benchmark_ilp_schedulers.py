@@ -47,9 +47,10 @@ def do_run(scheduler: ILPScheduler,
     # Hardware index if a task is pinned to that resource (or already running
     # there).
     pinned_tasks = [None] * num_tasks
-
-    dependency_matrix[0][1] = True
-    needs_gpu[3] = False
+    mini_run=False
+    if not mini_run:
+        dependency_matrix[0][1] = True
+        needs_gpu[3] = False
 
     if outpath is not None:
         smtpath = outpath + f"{'opt' if optimize else 'feas'}.smt"
@@ -103,15 +104,21 @@ def main(args):
     else:
         raise ValueError('Unexpected --scheduler value {FLAGS.scheduler}')
     runtimes = []
-#   for i in range(1, 11, 1):
-    for i in range(1, 2, 1):
+    for i in range(1, 11, 1):
+    # for i in range(1, 2, 1):
         multiplier = 5 * i
         horizon = 50 * multiplier
         num_tasks = 5 * multiplier
         outpath = (FLAGS.outpath + f"/tasks={num_tasks}_horizon={horizon}_ngpu={FLAGS.NUM_GPUS}_ncpu={FLAGS.NUM_CPUS}/" if FLAGS.dump else None)
         if outpath is not None and not Path(outpath).is_dir():
             Path(outpath).mkdir()
-        # import pdb; pdb.set_trace()
+        mini_run = False
+        if mini_run:
+            run_time = do_run(scheduler, 1, 20, 10,
+                                        1, 1, optimize = FLAGS.opt,
+                                        dump = FLAGS.dump, outpath = outpath, dump_nx = FLAGS.dump_nx)
+
+        
         run_time = do_run(scheduler, num_tasks, FLAGS.task_runtime, horizon,
                                     FLAGS.NUM_GPUS, FLAGS.NUM_CPUS, optimize = FLAGS.opt,
                                     dump = FLAGS.dump, outpath = outpath, dump_nx = FLAGS.dump_nx)

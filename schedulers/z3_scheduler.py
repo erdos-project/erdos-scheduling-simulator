@@ -7,7 +7,7 @@ from schedulers.ilp_scheduler import ILPScheduler
 
 import networkx as nx
 import matplotlib
-matplotlib.use("Agg")
+# matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 class Z3Scheduler(ILPScheduler):
@@ -52,6 +52,7 @@ class Z3Scheduler(ILPScheduler):
             s.add(t + e < d)
             # Start at or after release time.
             s.add(r <= t)
+            s.add(c == d - e - t)
 
             if dump_nx:
                 # Finish before deadline.
@@ -120,7 +121,7 @@ class Z3Scheduler(ILPScheduler):
                     outfile.write("(check-sat)")
         if dump_nx:
             nx.write_gpickle(G, outpath+'.pkl')
-            plt.savefig(outpath+".png")
+            nx.drawing.nx_agraph.write_dot(G,"tmp.dot")
             # import pdb; pdb.set_trace()
 
         schedulable = s.check()
