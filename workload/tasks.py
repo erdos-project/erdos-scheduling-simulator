@@ -2,7 +2,8 @@ import uuid
 from enum import Enum
 from jobs import Job
 from resources import Resources
-from collections import namedtuple
+from collections import namedtuple, defaultdict
+from typing import Mapping, Sequence, Optional
 
 Paused = namedtuple("Paused", "pause_time, restart_time")
 
@@ -46,20 +47,32 @@ class Task(object):
             -1 otherwise)
     """
     def __init__(self, name: str, job: Job, resource_requirement: Resources,
-                 release_time: float, runtime: float, deadline: float):
+                 runtime: float, deadline: float):
         self._name = name
         self._creating_job = job
         self._resource_reqs = resource_requirement
-        self._release_time = release_time
         self._expected_runtime = runtime
         self._deadline = deadline
         self._id = uuid.uuid4()
 
+        # The timestamps maintained for each state of the task.
+        self._release_time = -1     # (VIRTUAL -> RELEASED)
+        self._start_time = -1       # (RELEASED -> RUNNING)
+        self._completion_time = -1  # (RUNNING -> EVICTED / COMPLETED)
+        self._paused_times = []     # (RUNNING -> PAUSED)
+
         # The data required for managing the execution of a particular task.
-        self._start_time, self._completion_time = -1, -1
         self._remaining_time = runtime
+        self._state = TaskState.VIRTUAL
+
+    def release(self, time: float):
+        """Release the task and transition away from the virtual state.
+
+        Args:
+            time (`float`): The simulation time at which to release the task.
+        """
+        self._release_time = time
         self._state = TaskState.RELEASED
-        self._paused_times = []  # A list of tuples of the type Paused.
 
     def start(self, time: float):
         """Begins the execution of the task at the given simulator time.
@@ -136,6 +149,9 @@ class Task(object):
     def repr(self):
         return str(self)
 
+    def __hash__(self):
+        return hash(self.id)
+
     @property
     def name(self):
         return self._name
@@ -189,5 +205,48 @@ class TaskGraph(object):
     A `TaskGraph` is a runtime entity that constantly evolves as more tasks
     are released by the `JobGraph` and added to the given `TaskGraph`.
     """
-    def __init__(self):
-        pass
+    def __init__(self, tasks: Optional[Mapping[Task, Sequence[Task]]] = None):
+        self._task_graph = defaultdict(list) if tasks is None else tasks
+
+    def add_task(self, task: Task, children: Optional[Sequence[Task]] = None):
+        """Adds the task to the graph along with the given children.
+
+        Args:
+            task (`Task`): The task to be added to the graph.
+            children (`Sequence[Task]`): The children of the task, if any.
+        """
+        _children = [] if children is None else children
+
+        # Add the parent task with the given children.
+        if task in self._task_graph:
+            print("The task {task} is already in the graph. Skipping.",
+                  format(task=task))
+        else:
+            self._task_graph[task].extend(_children)
+
+        # Add all the children tasks with an empty children list.
+        for child in _children:
+            self._task_graph[child].extend([])
+
+    def add_child(self, task: Task, child: Task):
+        """Adds a child to the `Task` in the task graph.
+
+        Args:
+            task (`Task`): The task, to which the child needs to be added.
+            child (`Task`): The child task to be added.
+        """
+        self._task_graph[task].append(child)
+        self._task_graph[child].extend([])
+
+    def find(self, task_id: uuid.UUID):
+        """Finds the task with the given ID.
+
+        Use this method to retrieve the instance of the task from the graph,
+        and query / change its parameters.
+
+        Args:
+            task_id (`uuid.UUID`): Find a task with the given ID.
+        """
+        for task in self._task_graph:
+            if task.id == task_id:
+                return task
