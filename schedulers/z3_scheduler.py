@@ -40,8 +40,8 @@ class Z3Scheduler(ILPScheduler):
 
         if dump_nx:
             G = nx.Graph()
-            G.add_nodes_from([f't{i}' for i in range(num_tasks)])
-            G.add_nodes_from([f'p{i}' for i in range(num_tasks)])
+            G.add_nodes_from([f't{i}' for i in range(num_tasks)], rel=None, b=None)
+            G.add_nodes_from([f'p{i}' for i in range(num_tasks)], rel=None, b=None)
             
         if optimize:
             print ("We are Optimizing")
@@ -58,9 +58,9 @@ class Z3Scheduler(ILPScheduler):
 
             if dump_nx:
                 # Finish before deadline.
-                add_relation(G, f'ub_t{i}', {'rel':'<', 'num':d-e}, [f't{i}'])
+                add_relation(G, f'ub_t{i}', {'rel':'<', 'b':d-e}, [f't{i}'])
                 # Start at or after release time.
-                add_relation(G, f'lb_t{i}', {'rel':'>=', 'num':r}, [f't{i}'])
+                add_relation(G, f'lb_t{i}', {'rel':'>=', 'b':r}, [f't{i}'])
 
         for i, (p, gpu) in enumerate(zip(placements, needs_gpu)):
             if gpu:
@@ -72,8 +72,8 @@ class Z3Scheduler(ILPScheduler):
             if dump_nx:
                 ub = num_gpus + num_cpus if gpu else num_cpus
                 lb = num_cpus if gpu else 0
-                add_relation(G, f'ub_p{i}', {'rel':'<=', 'num':ub}, [f'p{i}'])
-                add_relation(G, f'lb_p{i}', {'rel':'>', 'num':lb}, [f'p{i}'])
+                add_relation(G, f'ub_p{i}', {'rel':'<=', 'b':ub}, [f'p{i}'])
+                add_relation(G, f'lb_p{i}', {'rel':'>', 'b':lb}, [f'p{i}'])
 
 
         for row_i in range(len(dependency_matrix)):
@@ -87,7 +87,7 @@ class Z3Scheduler(ILPScheduler):
                         disjoint[0]
                     )  # dependent jobs need to finish before the next one
                     if dump_nx:
-                        n = (f'dep_{row_i}_{col_j}', {'rel':'<', 'num':-expected_runtimes[row_i]})
+                        n = (f'dep_{row_i}_{col_j}', {'rel':'<', 'b':-expected_runtimes[row_i]})
                         add_relation(G, *n, [f't{row_i}', f't{col_j}'], [1,-1,1])
                 if row_i != col_j: # and row_i < col_j ?
                     s.add(
@@ -95,27 +95,27 @@ class Z3Scheduler(ILPScheduler):
                                 Or(disjoint))
                     )  # cannot overlap if on the same hardware
                     if dump_nx:
-                        neq    = (f'eq_{row_i}_{col_j}', {'rel':'!='})
+                        neq    = (f'eq_{row_i}_{col_j}', {'rel':'!=', 'b':None})
                         add_relation(G, *neq   , [f'p{row_i}', f'p{col_j}'])
-                        dep_ij = (f'dep_{row_i}_{col_j}', {'rel':'<', 'num':-expected_runtimes[row_i]})
+                        dep_ij = (f'dep_{row_i}_{col_j}', {'rel':'<', 'b':-expected_runtimes[row_i]})
                         add_relation(G, *dep_ij, [f't{row_i}', f't{col_j}'], [1,-1])
-                        dep_ji = (f'dep_{col_j}_{row_i}', {'rel':'<', 'num':-expected_runtimes[col_j]})
+                        dep_ji = (f'dep_{col_j}_{row_i}', {'rel':'<', 'b':-expected_runtimes[col_j]})
                         add_relation(G, *dep_ji, [f't{col_j}', f't{row_i}'], [1,-1])
-                        or_dep = (f'or_dep_{row_i}_{col_j}', {'rel':'or'})
+                        or_dep = (f'or_dep_{row_i}_{col_j}', {'rel':'or', 'b':None})
                         add_relation(G, *or_dep, [dep_ij[0], dep_ji[0]])
-                        disjoint = (f'dj_{row_i}_{col_j}', {'rel':'or'})
+                        disjoint = (f'dj_{row_i}_{col_j}', {'rel':'or', 'b':None})
                         add_relation(G, *disjoint, [neq[0], or_dep[0]])
 
         for i, pin in enumerate(pinned_tasks):
             if pin:
                 s.add(placements[i] == IntVal(pin))
                 if dump_nx:
-                    add_relation(G, f'pin_{i}', {'rel':'==', 'num':pin}, [f'p{i}'])
+                    add_relation(G, f'pin_{i}', {'rel':'==', 'b':pin}, [f'p{i}'])
 
         if optimize:
             result = s.maximize(MySum(costs))
             if dump_nx:
-                add_relation(G, 'obj', {'rel':'max'}, [f't{i}' for i in range(num_tasks)], [-1] * num_tasks)
+                add_relation(G, 'obj', {'rel':'max', 'b':'None'}, [f't{i}' for i in range(num_tasks)], [-1] * num_tasks)
         if dump:
             assert outpath is not None
             # import IPython; IPython.embed()
@@ -126,7 +126,7 @@ class Z3Scheduler(ILPScheduler):
         if dump_nx:
             nx.write_gpickle(G, outpath+'.pkl')
             nx.drawing.nx_agraph.write_dot(G, outpath+'.dot')
-            # import pdb; pdb.set_trace()
+            import pdb; pdb.set_trace()
 
         schedulable = s.check()
         if optimize: 
