@@ -1,9 +1,9 @@
 import uuid
 from enum import Enum
-from jobs import Job
-from resources import Resources
 from collections import namedtuple, defaultdict
 from typing import Mapping, Sequence, Optional
+
+from workload import Job, Resources
 
 Paused = namedtuple("Paused", "pause_time, restart_time")
 
