@@ -1,8 +1,9 @@
 from copy import deepcopy
-from typing import List, Tuple
+from typing import List, Tuple, Type
 import time
 import math
 
+from schedulers import BaseScheduler
 from workers.worker_pool import WorkerPool
 from workload.lattice import Lattice
 from workload.task import Task
@@ -76,7 +77,9 @@ class Simulator:
                  num_gpus: int,
                  tasks_list: List[Task],
                  lattice: Lattice,
-                 instant_scheduling=False):
+                 scheduler: Type[BaseScheduler],
+                 instant_scheduling=False,
+                 ):
         """
         Args:
             tasks_list: List of Tasks.
@@ -93,9 +96,7 @@ class Simulator:
         self.instant_scheduling = instant_scheduling
         self.is_scheduling = False
         self.double_scheduled = False
-
-    def schedule(self, workload: Workload, resources: Resources):
-        raise NotImplementedError
+        self._scheduler = scheduler
 
     def simulate(self, timeout: int, v=0):
         def profile_scheduler():
@@ -222,7 +223,7 @@ class Simulator:
             self.worker_pool.num_gpus,
             self.worker_pool.num_cpus)
         start_time = time.time()
-        placement, assignment = self.schedule(workload, resources)
+        placement, assignment = self._scheduler.schedule(workload, resources)
         end_time = time.time()
         task_queue = []
         schedule_actions = []  # for now just indicates what should be added
@@ -263,97 +264,3 @@ class Simulator:
 
     def history(self):
         return self.worker_pool.history()
-
-
-class EdfSimulator(Simulator):
-    def __init__(self,
-                 num_cpus: int,
-                 num_gpus: int,
-                 tasks_list: List[Task],
-                 lattice: Lattice,
-                 preemptive: bool = False):
-        super().__init__(num_cpus, num_gpus, tasks_list, lattice)
-        self.preemptive = preemptive
-
-    def schedule(self, workload, resources):
-
-        needs_gpu = workload.needs_gpu
-        absolute_deadlines = workload.absolute_deadlines
-        running_tasks = resources.running_tasks
-        num_tasks = resources.num_tasks
-        num_gpus = resources.num_gpus
-        num_cpus = resources.num_cpus
-
-        gpu_pool = list(range(num_gpus))
-        cpu_pool = list(range(num_gpus,
-                              num_cpus + num_gpus))  # cpus indexed after gpus
-        placements = [None] * num_tasks
-        assignment = [None] * num_tasks
-        priority = [
-            absolute_deadlines.index(e) for e in sorted(absolute_deadlines)
-        ]
-
-        if not self.preemptive:
-            # check and place running tasks first
-            placements = running_tasks
-            assignment = [
-                0 if (t is not None) else None for t in running_tasks
-            ]
-            gpu_pool = [i for i in gpu_pool if i not in running_tasks]
-            cpu_pool = [i for i in cpu_pool if i not in running_tasks]
-            # print (assignment, running_tasks)
-            # print (gpu_count, cpu_count)
-        for index in priority:
-            if needs_gpu[index]:
-                if len(gpu_pool) > 0 and running_tasks[index] is None:
-                    placements[index] = gpu_pool.pop(0)
-                    assignment[index] = 0
-            else:
-                if len(cpu_pool) > 0 and running_tasks[index] is None:
-                    placements[index] = cpu_pool.pop(0)
-                    assignment[index] = 0
-            if len(gpu_pool) + len(cpu_pool) == 0:
-                break
-
-        return placements, assignment
-
-
-class FifoSimulator(Simulator):
-    def __init__(self,
-                 num_cpus: int,
-                 num_gpus: int,
-                 tasks_list: List[Task],
-                 lattice: Lattice,
-                 gpu_exact_match: bool = False):
-        super().__init__(num_cpus, num_gpus, tasks_list, lattice)
-        self.gpu_exact_match = gpu_exact_match
-
-    def schedule(self, workload, resources):
-        num_gpus = resources.num_gpus
-        num_cpus = resources.num_cpus
-        running_tasks = resources.running_tasks
-        needs_gpu = workload.needs_gpu
-
-        gpu_pool = list(range(num_gpus))
-        cpu_pool = list(range(num_gpus,
-                              num_cpus + num_gpus))  # cpus indexed after gpus
-        placements = running_tasks
-        assignment = [0 if (t is not None) else None for t in running_tasks]
-        gpu_pool = [i for i in gpu_pool if i not in running_tasks]
-        cpu_pool = [i for i in cpu_pool if i not in running_tasks]
-
-        for i, gpu in enumerate(needs_gpu):
-            if gpu:
-                if len(gpu_pool) > 0 and running_tasks[i] is None:
-                    w_idx = gpu_pool.pop(0)
-                    placements[i] = w_idx
-                    assignment[i] = 0
-            else:
-                if len(cpu_pool) > 0 and running_tasks[i] is None:
-                    w_idx = cpu_pool.pop(0)
-                    placements[i] = w_idx
-                    assignment[i] = 0
-            if len(gpu_pool) + len(cpu_pool) == 0:
-                break
-
-        return placements, assignment
