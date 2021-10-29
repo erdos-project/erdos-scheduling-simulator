@@ -262,6 +262,18 @@ class TaskGraph(object):
             if task.id == task_id:
                 return task
 
+    def get_released_tasks(self) -> Sequence[Task]:
+        """Retrieves the set of tasks that are available to run.
+
+        Returns:
+            A list of tasks that can be run (are in RELEASED state).
+        """
+        released_tasks = []
+        for task in self._task_graph:
+            if task.state == TaskState.RELEASED:
+                released_tasks.append(task)
+        return released_tasks
+
     def clean(self):
         """Cleans the `TaskGraph` of tasks that have finished completion.
 
