@@ -142,6 +142,17 @@ class Task(object):
         """
         self._deadline = new_deadline
 
+    def is_complete(self) -> bool:
+        """Check if the task has finished its execution.
+
+        To return True, the task must be in either EVICTED / COMPLETED state.
+
+        Returns:
+            `True` if the task has finished, `False` otherwise.
+        """
+        return (self.state == TaskState.EVICTED or
+                self.state == TaskState.COMPLETED)
+
     def __str__(self):
         return "Task(name={}, id={}, job={})".format(
                 self.name, self.id, self.job)
@@ -250,3 +261,30 @@ class TaskGraph(object):
         for task in self._task_graph:
             if task.id == task_id:
                 return task
+
+    def clean(self):
+        """Cleans the `TaskGraph` of tasks that have finished completion.
+
+        This is supposed to be called at regular intervals by the simulator so
+        we don't end up a huge graph of finished tasks.
+
+        We only clean up the tasks whose children have finished execution.
+        """
+        tasks_to_clean = []
+        for task, children in self._task_graph:
+            # Has this task finished execution?
+            if task.is_complete():
+                # Check if all children have finished execution too.
+                can_be_cleaned = True
+                for child in children:
+                    if not child.is_completed():
+                        can_be_cleaned = False
+                        break
+
+                # If the task can be cleaned, add the entry to be removed.
+                if can_be_cleaned:
+                    tasks_to_clean.append(task)
+
+        # Clean all the tasks.
+        for task in tasks_to_clean:
+            del self._task_graph[task]
