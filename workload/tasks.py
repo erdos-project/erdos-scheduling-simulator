@@ -239,6 +239,18 @@ class TaskGraph(object):
         for child in _children:
             self._task_graph[child].extend([])
 
+    def notify_task_completion(self, task: Task) -> Sequence[Task]:
+        """Notify the completion of the task.
+
+        The caller must set the type of the task completion before invoking
+        this method to ensure that the proper dependencies are unlocked.
+
+        Returns:
+            The set of tasks released by the completion of this task.
+        """
+        raise NotImplementedError("The notification of the completion of tasks\
+            to the task graph has not been implemented yet.")
+
     def add_child(self, task: Task, child: Task):
         """Adds a child to the `Task` in the task graph.
 
@@ -262,7 +274,7 @@ class TaskGraph(object):
             if task.id == task_id:
                 return task
 
-    def get_released_tasks(self) -> Sequence[Task]:
+    def get_all_released_tasks(self) -> Sequence[Task]:
         """Retrieves the set of tasks that are available to run.
 
         Returns:
