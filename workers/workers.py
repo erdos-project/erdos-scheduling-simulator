@@ -1,5 +1,5 @@
 import uuid
-from workload.resources import Resources
+from workload import Resources, Task
 from typing import Optional, Sequence
 
 
@@ -20,6 +20,14 @@ class Worker(object):
         self._id = uuid.uuid4()
         self._resources = resources
         self._num_threads = num_threads
+
+    def place_task(self, task: Task):
+        """Places the task on this `Worker`.
+
+        Args:
+            task (`Task`): The task to be placed in this `WorkerPool`.
+        """
+        raise NotImplementedError("Cannot place tasks right now.")
 
     @property
     def name(self):
@@ -77,6 +85,16 @@ class WorkerPool(object):
                         exists.".format(worker.id))
             else:
                 self._workers[worker.id] = worker
+
+    def place_task(self, task: Task):
+        """Places the task on this `WorkerPool`.
+
+        The `WorkerPool` is in charge of executing the task across its workers.
+
+        Args:
+            task (`Task`): The task to be placed in this `WorkerPool`.
+        """
+        raise NotImplementedError("Cannot place tasks right now.")
 
     @property
     def name(self):
