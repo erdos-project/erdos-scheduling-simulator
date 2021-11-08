@@ -21,6 +21,7 @@ class Worker(object):
         self._id = uuid.uuid4()
         self._resources = resources
         self._num_threads = num_threads
+        self._placed_tasks = {}  # Tasks along with their execution status.
 
     def place_task(self, task: Task):
         """Places the task on this `Worker`.
@@ -41,6 +42,17 @@ class Worker(object):
             `True` if the task can be placed, `False` otherwise.
         """
         raise NotImplementedError("Cannot place tasks right now.")
+
+    def get_placed_tasks(self) -> Sequence[Task]:
+        """Retrieves the `Task` that is currently placed on this `Worker`.
+
+        Returns:
+            A sequence of `Task`s that are currently placed on this `Worker`.
+        """
+        placed_tasks = []
+        for task, _ in self._placed_tasks:
+            placed_tasks.append(task)
+        return placed_tasks
 
     @property
     def name(self):
@@ -135,6 +147,17 @@ class WorkerPool(object):
             raise ValueError("The task ({}) could not be placed.".format(task))
         else:
             self._workers[placement].place_task(task)
+
+    def get_placed_tasks(self) -> Sequence[Task]:
+        """Retrieves the `Task`s that are currently placed on this `WorkerPool`.
+
+        Returns:
+            A sequence of `Task`s that are currently placed on this `Worker`.
+        """
+        placed_tasks = []
+        for _, _worker in self._workers:
+            placed_tasks.extend(_worker.get_placed_tasks())
+        return placed_tasks
 
     @property
     def name(self):
