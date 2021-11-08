@@ -127,13 +127,12 @@ class Resources(object):
                 resource_quantity += _quantity
         return resource_quantity
 
-    def allocate(self, resource: str, task_id: str, quantity: int = 1):
+    def allocate(self, resource: Resource, quantity: int = 1):
         """Allocates the given quantity of the specified resource for a
         particular task.
 
         Args:
-            resource (`str`): The resource to be allocated.
-            task_id  (`str`): The ID of the Task to assign the Resource to.
+            resource (`Resource`): The resource to be allocated.
             quantity (`int`): The amount of the resource to be allocated
                 (default = 1).
 
@@ -164,20 +163,20 @@ class Resources(object):
             if remaining_quantity == 0:
                 break
 
-    def allocate_multiple(self, resource_vector: Mapping[str, int]):
+    def allocate_multiple(self, resources: 'Resources'):
         """Allocates multiple resources together according to their specified
         quantity.
 
         Args:
-            resource_vector (`Mapping[str, int]`): A mapping of the resource
-                type to the required quantity.
+            resources (`Resources`): A representation of the `Resources` to be
+                allocated.
 
         Raises:
             `ValueError` if more than the available quantity of any resource
             is requested.
         """
         # Check that all the resources can be allocated.
-        for resource, quantity in resource_vector:
+        for resource, quantity in resources._resource_vector:
             available_quantity = self.get_available_quantity(resource)
             if quantity > available_quantity:
                 raise ValueError("Trying to allocate more than the available \
@@ -185,7 +184,7 @@ class Resources(object):
                             resource, quantity, available_quantity))
 
         # Allocate all the resources together.
-        for resource, quantity in resource_vector:
+        for resource, quantity in resources._resource_vector:
             self.allocate(resource, quantity)
 
     def __str__(self):

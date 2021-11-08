@@ -26,10 +26,14 @@ class Worker(object):
     def place_task(self, task: Task):
         """Places the task on this `Worker`.
 
+        The caller must check that the `Worker` can accomodate this task by
+        invoking `can_accomodate_task`.
+
         Args:
             task (`Task`): The task to be placed in this `WorkerPool`.
         """
-        raise NotImplementedError("Cannot place tasks right now.")
+        self._resources.allocate_multiple(task.resource_requirements)
+        self._placed_tasks[task] = task.state
 
     def can_accomodate_task(self, task: Task) -> bool:
         """Checks if this `Worker` can accomodate the given `Task` based on
@@ -41,7 +45,7 @@ class Worker(object):
         Returns:
             `True` if the task can be placed, `False` otherwise.
         """
-        raise NotImplementedError("Cannot place tasks right now.")
+        return self._resources > task.resource_requirements
 
     def get_placed_tasks(self) -> Sequence[Task]:
         """Retrieves the `Task` that is currently placed on this `Worker`.
