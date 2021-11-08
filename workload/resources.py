@@ -1,13 +1,28 @@
 import uuid
-from typing import Mapping, Optional, Sequence
+from collections import defaultdict
+from functools import total_ordering
+from typing import Mapping, Optional
 
 
 class Resource(object):
     """A `Resource` object is used to represent a particular resource in the
     system, and contains metadata about if its available or allocated to a
     particular task.
+
+    Args:
+        name (`str`): The name of the resource.
+        id (`uuid`): The ID of the resource.
     """
     def __init__(self, name: str, _id: Optional[str] = None):
+        """Initialize a Resource.
+
+        Args:
+            name (`str`): The name of the resource.
+            id (`Optional[str]`): The ID of the resource. Use `any` to
+                represent a general resource of the given name.
+        """
+        if _id is not None and _id != 'any':
+            raise ValueError("The acceptable values of _id are None / 'any'")
         self._name = name
         self._id = uuid.uuid4() if _id is None else _id
         self._assigned = None
@@ -19,40 +34,6 @@ class Resource(object):
             task_id (`str`): The task ID to assign this Resource to.
         """
         self._assigned = task_id
-
-    def is_of_type(self, resource_str: str) -> bool:
-        """Checks if the resource is of the given type.
-
-        The resource_str is a representation of the Resource consisting of the
-        'name:id', with the id being possibly empty, representing any resource
-        of the type 'name'.
-
-        Args:
-            resource_str (`str`): A representation of the Resource.
-
-        Returns:
-           A boolean representing whether this Resource is of the particular
-           type.
-        """
-        resource_split = resource_str.split(':', 1)
-        if len(resource_split) == 1:
-            if resource_split[0] == self.name:
-                return True
-        else:
-            _name, _id = resource_split
-            if _name == self.name and _id == self.id:
-                return True
-        return False
-
-    def get_type(self) -> str:
-        """Retrieve a textual representation of the Resource.
-
-        The representation is of the form 'name:uuid'.
-
-        Returns:
-            A textual representation of the Resource.
-        """
-        return '{}:{}'.format(self.name, self.id)
 
     @property
     def name(self):
@@ -74,7 +55,29 @@ class Resource(object):
     def __repr__(self):
         return str(self)
 
+    def __hash__(self):
+        return hash(self.get_type())
 
+    def __eq__(self, other: 'Resource'):
+        """Checks if the current resource is equal to the other.
+
+        To be equivalent, the Resources must have the same name and IDs, or
+        one or both of them must have the 'any' ID.
+
+        Args:
+            other (`Resource`): The other resource to compare to.
+
+        Returns:
+           A boolean representing whether this Resource is of the particular
+           type.
+        """
+        if self.name == other.name:
+            if self.id == 'any' or other.id == 'any' or self.id == other.id:
+                return True
+        return False
+
+
+@total_ordering
 class Resources(object):
     """A `Resources` object is used to represent the availability / request of
     a particular set of resources. It can be used by a `Worker` or a
@@ -87,63 +90,41 @@ class Resources(object):
     fulfilled.
 
     Args:
-        resource_vector (Mapping[str, int]): A mapping from an arbitrary set of
-            resources to their quantities.
+        resource_vector (Mapping[Resource, int]): A mapping from an arbitrary
+            set of resources to their quantities.
     """
-    def __init__(self, resource_vector: Optional[Sequence[Resource]]):
-        self._resource_vector = [] if resource_vector is None else\
-                resource_vector
+    def __init__(self, resource_vector: Optional[Mapping[Resource, int]]):
+        self._resource_vector = defaultdict(int) if resource_vector is None\
+                else resource_vector
 
-    def is_subset(self, other: 'Resources') -> bool:
-        """Checks if the given `Resources` are a subset of the current
-        `Resources`.
-
-        This method can be used to ascertain if the other set of resources
-        can be allocated from the current set of resources.
-
-        Args:
-            other (`Resources`): The set of resources to check if they are a
-                subset of the current set.
-
-        Returns:
-            `True` if other is a subset of self, `False` otherwise.
-        """
-        for resource in other._resource_vector:
-            if self.get_available_quantity(resource.get_type()) > 1:
-                pass
-            else:
-                return False
-        return True
-
-    def add_resource(self, resource_name: str, quantity: Optional[int] = 1):
+    def add_resource(self, resource: Resource, quantity: Optional[int] = 1):
         """Add the given quantity of the specified resource.
 
         Args:
-            resource_name (`str`): The type of the resource to be added.
+            resource (`Resource`): The type of the resource to be added.
             quantity (`int`) [default = 1]: The number of the resources to be
                 added.
         """
-        self._resource_vector.extend([Resource(name=resource_name)
-                                      for _ in range(quantity)])
+        self._resource_vector[resource] += quantity
 
-    def get_available_quantity(self, resource: str) -> int:
+    def get_available_quantity(self, resource: Resource) -> int:
         """Provides the quantity of the available resources of the given type.
 
-        If the resource is of type 'name:uuid', then the quantity of that
-        specific resource is returned. Otherwise, a sum of all the quantities
-        of a resource of type 'name' is returned.
+        If the resource has a specific `id`, then the quantity of that resource
+        is returned. Otherwise, a sum of all the quantities of resources with
+        the `name` are returned.
 
         Args:
-            resource (`str`): The resource to retrieve the available quantity
-                of.
+            resource (`Resource`): The resource to retrieve the available
+                quantity of.
 
         Returns:
             The available quantity of the given resource.
         """
         resource_quantity = 0
-        for _resource in self._resource_vector:
-            if _resource.is_of_type(resource):
-                resource_quantity += 1
+        for _resource, _quantity in self._resource_vector.items():
+            if _resource == resource:
+                resource_quantity += _quantity
         return resource_quantity
 
     def allocate(self, resource: str, task_id: str, quantity: int = 1):
@@ -168,13 +149,19 @@ class Resources(object):
 
         # Go over the list of resources and allocate the required number of
         # resources of the given type.
-        allocated_quantity = 0
+        remaining_quantity = quantity
         for _resource in self._resource_vector:
-            if _resource.is_of_type(resource):
-                _resource.assign(task_id)
-                allocated_quantity += 1
+            if _resource == resource:
+                _quantity = self._resource_vector[_resource]
+                if _quantity >= remaining_quantity:
+                    self._resource_vector[_resource] = (_quantity -
+                                                        remaining_quantity)
+                    break
+                else:
+                    self._resource_vector[_resource] = 0
+                remaining_quantity -= _quantity
 
-            if allocated_quantity == quantity:
+            if remaining_quantity == 0:
                 break
 
     def allocate_multiple(self, resource_vector: Mapping[str, int]):
@@ -206,3 +193,24 @@ class Resources(object):
 
     def repr(self):
         return str(self)
+
+    def __gt__(self, other: 'Resources') -> bool:
+        """Checks if the given `Resources` are a subset of the current
+        `Resources`.
+
+        This method can be used to ascertain if the other set of resources
+        can be allocated from the current set of resources.
+
+        Args:
+            other (`Resources`): The set of resources to check if they are a
+                subset of the current set.
+
+        Returns:
+            `True` if other is a subset of self, `False` otherwise.
+        """
+        for resource, quantity in other._resource_vector:
+            if self.get_available_quantity(resource) >= quantity:
+                pass
+            else:
+                return False
+        return True
