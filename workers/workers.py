@@ -1,6 +1,7 @@
 import uuid
 from workload import Resources, Task
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Type
+from scheduler import BaseScheduler
 
 
 class Worker(object):
@@ -26,6 +27,18 @@ class Worker(object):
 
         Args:
             task (`Task`): The task to be placed in this `WorkerPool`.
+        """
+        raise NotImplementedError("Cannot place tasks right now.")
+
+    def can_accomodate_task(self, task: Task) -> bool:
+        """Checks if this `Worker` can accomodate the given `Task` based on
+        its resource availability.
+
+        Args:
+            task (`Task`): The task to be placed on this `Worker`.
+
+        Returns:
+            `True` if the task can be placed, `False` otherwise.
         """
         raise NotImplementedError("Cannot place tasks right now.")
 
@@ -62,15 +75,18 @@ class WorkerPool(object):
     must be abstracted into a WorkerPool before it can be used by the
     Scheduler.
 
+    However, to schedule a task across its `Worker`s, developers can provide
+    a `Scheduler` instance that is in charge of scheduling the placed task.
+
     Args:
         name (`str`): A name assigned to this WorkerPool.
         id (`UUID`): The ID of the particular WorkerPool.
     """
-    def __init__(self, name: str, workers: Optional[Sequence[Worker]]):
+    def __init__(self, name: str, workers: Optional[Sequence[Worker]],
+                 scheduler: Optional[Type[BaseScheduler]]):
         self._name = name
-        self._workers = {}
-        for worker in workers:
-            self._workers[worker.id] = worker
+        self._workers = {worker.id: worker for worker in workers}
+        self._scheduler = scheduler
         self._id = uuid.uuid4()
 
     def add_workers(self, workers: Sequence[Worker]):
@@ -89,12 +105,36 @@ class WorkerPool(object):
     def place_task(self, task: Task):
         """Places the task on this `WorkerPool`.
 
-        The `WorkerPool` is in charge of executing the task across its workers.
+        The caller must ensure that the `WorkerPool` has enough resources to
+        execute this task before invoking this method. Further, the
+        `WorkerPool` is in charge of executing the task across its workers.
 
         Args:
             task (`Task`): The task to be placed in this `WorkerPool`.
+
+        Raises:
+            `ValueError` if the task could not be placed due to insufficient
+            resources.
         """
-        raise NotImplementedError("Cannot place tasks right now.")
+        placement = None
+        if self._scheduler is not None:
+            # If a scheduler was provided, get a task placement from it.
+            _, placement = self._scheduler.schedule(
+                                [task],  # Only this task is available.
+                                None,    # No task graph.
+                                self._workers)
+        else:
+            # If there was no scheduler, find the first worker that can
+            # accomodate the task given its resource requirements.
+            for _id, _worker in self._workers:
+                if _worker.can_accomodate_task(task):
+                    placement = _id
+                    break
+
+        if placement is None:
+            raise ValueError("The task ({}) could not be placed.".format(task))
+        else:
+            self._workers[placement].place_task(task)
 
     @property
     def name(self):
