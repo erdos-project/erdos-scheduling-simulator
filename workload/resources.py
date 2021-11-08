@@ -7,9 +7,9 @@ class Resource(object):
     system, and contains metadata about if its available or allocated to a
     particular task.
     """
-    def __init__(self, name: str):
+    def __init__(self, name: str, _id: Optional[str] = None):
         self._name = name
-        self._id = uuid.uuid4()
+        self._id = uuid.uuid4() if _id is None else _id
         self._assigned = None
 
     def assign(self, task_id: str):
@@ -93,6 +93,27 @@ class Resources(object):
     def __init__(self, resource_vector: Optional[Sequence[Resource]]):
         self._resource_vector = [] if resource_vector is None else\
                 resource_vector
+
+    def is_subset(self, other: 'Resources') -> bool:
+        """Checks if the given `Resources` are a subset of the current
+        `Resources`.
+
+        This method can be used to ascertain if the other set of resources
+        can be allocated from the current set of resources.
+
+        Args:
+            other (`Resources`): The set of resources to check if they are a
+                subset of the current set.
+
+        Returns:
+            `True` if other is a subset of self, `False` otherwise.
+        """
+        for resource in other._resource_vector:
+            if self.get_available_quantity(resource.get_type()) > 1:
+                pass
+            else:
+                return False
+        return True
 
     def add_resource(self, resource_name: str, quantity: Optional[int] = 1):
         """Add the given quantity of the specified resource.
