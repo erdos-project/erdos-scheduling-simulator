@@ -260,6 +260,7 @@ class Simulator(object):
         """
         scheduler_runtime, task_placement = self._scheduler.schedule(
                 self._available_tasks, task_graph, self._worker_pools)
+        placement_time = event.time + scheduler_runtime
 
         # Place the task on the assigned worker pool, and reset the available
         # events to the tasks that could not be placed.
@@ -270,8 +271,11 @@ class Simulator(object):
                 available_tasks.append(task)
             else:
                 worker_pool = self._worker_pools[placement]
+                # Initialize the task at the given placement time, and place
+                # it on the WorkerPool.
+                task.start(placement_time)
                 worker_pool.place_task(task)
         self._available_tasks = available_tasks
 
         return Event(event_type=EventType.SCHEDULER_FINISHED,
-                     time=scheduler_runtime)
+                     time=placement_time)

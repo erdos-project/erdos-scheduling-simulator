@@ -135,10 +135,12 @@ class WorkerPool(object):
         placement = None
         if self._scheduler is not None:
             # If a scheduler was provided, get a task placement from it.
-            _, placement = self._scheduler.schedule(
-                                [task],  # Only this task is available.
-                                None,    # No task graph.
-                                self._workers)
+            runtime, placement = self._scheduler.schedule(
+                                        [task],  # Only this task is available.
+                                        None,    # No task graph.
+                                        self._workers)
+            # Add the runtime to the task start time.
+            task._start_time += runtime
         else:
             # If there was no scheduler, find the first worker that can
             # accomodate the task given its resource requirements.
