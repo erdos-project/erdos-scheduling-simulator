@@ -58,6 +58,16 @@ class Worker(object):
             placed_tasks.append(task)
         return placed_tasks
 
+    def step(self, current_time: float, step_size: float = 1.0):
+        """Steps all the tasks of this `Worker` by the given `step_size`.
+
+        Args:
+            current_time (`float`): The current time of the simulator loop.
+            step_size (`float`): The amount of time for which to step the
+                tasks.
+        """
+        raise NotImplementedError("step() has not been implemented yet.")
+
     @property
     def name(self):
         return self._name
@@ -164,6 +174,16 @@ class WorkerPool(object):
         for _, _worker in self._workers:
             placed_tasks.extend(_worker.get_placed_tasks())
         return placed_tasks
+
+    def step(self, current_time: float, step_size: float = 1.0):
+        """Steps all the tasks of this `WorkerPool` by the given `step_size`.
+
+        Args:
+            current_time (`float`): The current time of the simulator loop.
+            step_size (`float`): The amount of time for which to step the
+                workers.
+        """
+        raise NotImplementedError("step() has not been implemented yet.")
 
     @property
     def name(self):

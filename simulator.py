@@ -210,9 +210,9 @@ class Simulator(object):
             step_size (`float`) [default=1.0]: The amount by which to advance
                 the clock.
         """
-        self._simulator_time += step_size
         for worker_pool in self._worker_pools:
-            worker_pool.step(step_size)
+            worker_pool.step(self._simulator_time, step_size)
+        self._simulator_time += step_size
 
     def __get_next_scheduler_event(self, event: Event) -> Event:
         """Computes the next event when the scheduler should run.

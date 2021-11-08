@@ -83,10 +83,11 @@ class Task(object):
         self._start_time = time
         self._state = TaskState.RUNNING
 
-    def step(self, step_size: float = 1):
+    def step(self, current_time: float, step_size: float = 1):
         """Steps the task for the given `step_size` (default 1 time step).
 
         Args:
+            current_time (`float`): The current time of the simulator loop.
             step_size (`float`): The amount of time for which to step the task.
         """
         raise NotImplementedError("step() has not been implemented yet.")
