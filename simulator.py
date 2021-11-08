@@ -119,7 +119,8 @@ class Simulator(object):
                  loop_timeout: float = float('inf'),
                  scheduler_frequency: float = -1.0,
                  ):
-        self._worker_pools = worker_pools
+        self._worker_pools = {worker_pool.id: worker_pool for worker_pool in
+                              worker_pools}
         self._scheduler = scheduler
         self._job_graph = job_graph
         self._simulator_time = 0
@@ -245,16 +246,32 @@ class Simulator(object):
         return Event(event_type=EventType.SCHEDULER_START,
                      time=scheduler_start_time)
 
-    def __run_scheduler(self, event: Event) -> Event:
+    def __run_scheduler(self, event: Event, task_graph: TaskGraph) -> Event:
         """Run the scheduler.
 
         Args:
             event (`Event`): The event at which the scheduler was invoked.
+            task_graph (`TaskGraph`): A graph of tasks that are currently
+                available to execute, along with potential future tasks that
+                could be released.
 
         Returns:
             An `Event` signifying the end of the scheduler invocation.
         """
-        scheduler_runtime = event.time + 1.0
-        # TODO (Sukrit): Invoke the scheduler with the available tasks.
+        scheduler_runtime, task_placement = self._scheduler.schedule(
+                self._available_tasks, task_graph, self._worker_pools)
+
+        # Place the task on the assigned worker pool, and reset the available
+        # events to the tasks that could not be placed.
+        # TODO (Sukrit): Should these tasks be moved to a PAUSED state?
+        available_tasks = []
+        for task, placement in task_placement:
+            if placement is None:
+                available_tasks.append(task)
+            else:
+                worker_pool = self._worker_pools[placement]
+                worker_pool.place_task(task)
+        self._available_tasks = available_tasks
+
         return Event(event_type=EventType.SCHEDULER_FINISHED,
                      time=scheduler_runtime)
