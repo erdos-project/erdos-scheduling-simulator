@@ -75,15 +75,18 @@ class Task(object):
         self._release_time = time
         self._state = TaskState.RELEASED
 
-    def start(self, time: float):
+    def start(self, time: float, variance: Optional[float] = 0.0):
         """Begins the execution of the task at the given simulator time.
 
         Args:
             time (`float`): The simulation time at which to begin the task.
+            variance (`Optional[float]`): The percentage variation to add to
+                the runtime of the task.
         """
         self._start_time = time
         self._last_step_time = time
         self._state = TaskState.RUNNING
+        self._remaining_time += (self._remaining_time * variance / 100.0)
 
     def step(self, current_time: float, step_size: float = 1):
         """Steps the task for the given `step_size` (default 1 time step).
