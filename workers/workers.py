@@ -66,7 +66,9 @@ class Worker(object):
             step_size (`float`): The amount of time for which to step the
                 tasks.
         """
-        raise NotImplementedError("step() has not been implemented yet.")
+        # Invoke the step() method on all the tasks.
+        for task in self._placed_tasks:
+            task.step(current_time, step_size)
 
     @property
     def name(self):
@@ -183,7 +185,9 @@ class WorkerPool(object):
             step_size (`float`): The amount of time for which to step the
                 workers.
         """
-        raise NotImplementedError("step() has not been implemented yet.")
+        # Invoke the step() method on all the workers.
+        for _, worker in self._workers.items():
+            worker.step(current_time, step_size)
 
     @property
     def name(self):

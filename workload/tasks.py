@@ -63,6 +63,7 @@ class Task(object):
 
         # The data required for managing the execution of a particular task.
         self._remaining_time = runtime
+        self._last_step_time = -1  # Time when this task was stepped through.
         self._state = TaskState.VIRTUAL
 
     def release(self, time: float):
@@ -81,6 +82,7 @@ class Task(object):
             time (`float`): The simulation time at which to begin the task.
         """
         self._start_time = time
+        self._last_step_time = time
         self._state = TaskState.RUNNING
 
     def step(self, current_time: float, step_size: float = 1):
@@ -90,7 +92,17 @@ class Task(object):
             current_time (`float`): The current time of the simulator loop.
             step_size (`float`): The amount of time for which to step the task.
         """
-        raise NotImplementedError("step() has not been implemented yet.")
+        if self.state != TaskState.RUNNING or self.start_time > current_time:
+            # We cannot step a Task that's not supposed to be running.
+            return
+
+        # Task can be run, step through the task's execution.
+        execution_time = current_time + step_size - self._last_step_time
+        self._last_step_time = current_time + step_size
+        if self._remaining_time - execution_time <= 0:
+            self.finish(current_time + step_size)
+        else:
+            self._remaining_time -= execution_time
 
     def pause(self, time: float):
         """Pauses the execution of the task at the given simulation time.
@@ -108,6 +120,7 @@ class Task(object):
             time (`float`): The simulation time at which to restart the task.
         """
         self._paused_times[-1]._replace(restart_time=time)
+        self._last_step_time = time
         self._state = TaskState.RUNNING
 
     def finish(self, time: float):
