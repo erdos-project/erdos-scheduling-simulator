@@ -51,7 +51,7 @@ def test_non_equivalence_of_same_type():
     cpu_resource_2 = Resource(name="CPU")
     assert cpu_resource_1 != cpu_resource_2,\
         "Two resources with same name but different IDs are equivalent."
-        
+
 
 def test_non_task_assignment():
     """ Test that a Resource starts without being an assigned task. """
