@@ -88,24 +88,29 @@ class Task(object):
         self._state = TaskState.RUNNING
         self._remaining_time += (self._remaining_time * variance / 100.0)
 
-    def step(self, current_time: float, step_size: float = 1):
+    def step(self, current_time: float, step_size: float = 1) -> bool:
         """Steps the task for the given `step_size` (default 1 time step).
 
         Args:
             current_time (`float`): The current time of the simulator loop.
             step_size (`float`): The amount of time for which to step the task.
+
+        Returns:
+            `True` if the task has finished execution, `False` otherwise.
         """
         if self.state != TaskState.RUNNING or self.start_time > current_time:
             # We cannot step a Task that's not supposed to be running.
-            return
+            return False
 
         # Task can be run, step through the task's execution.
         execution_time = current_time + step_size - self._last_step_time
         self._last_step_time = current_time + step_size
         if self._remaining_time - execution_time <= 0:
             self.finish(current_time + step_size)
+            return True
         else:
             self._remaining_time -= execution_time
+            return False
 
     def pause(self, time: float):
         """Pauses the execution of the task at the given simulation time.

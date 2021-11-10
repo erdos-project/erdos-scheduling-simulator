@@ -58,17 +58,26 @@ class Worker(object):
             placed_tasks.append(task)
         return placed_tasks
 
-    def step(self, current_time: float, step_size: float = 1.0):
+    def step(self, current_time: float, step_size: float = 1.0) -> \
+            Sequence[Task]:
         """Steps all the tasks of this `Worker` by the given `step_size`.
 
         Args:
             current_time (`float`): The current time of the simulator loop.
             step_size (`float`): The amount of time for which to step the
                 tasks.
+
+        Returns:
+            A set of tasks that have been completed.
         """
+        completed_tasks = []
         # Invoke the step() method on all the tasks.
         for task in self._placed_tasks:
-            task.step(current_time, step_size)
+            if task.step(current_time, step_size):
+                completed_tasks.append(task)
+                # Resave the task as now completed / evicted.
+                self._placed_tasks[task] = task.state
+        return completed_tasks
 
     @property
     def name(self):
@@ -177,17 +186,23 @@ class WorkerPool(object):
             placed_tasks.extend(_worker.get_placed_tasks())
         return placed_tasks
 
-    def step(self, current_time: float, step_size: float = 1.0):
+    def step(self, current_time: float, step_size: float = 1.0) ->\
+            Sequence[Task]:
         """Steps all the tasks of this `WorkerPool` by the given `step_size`.
 
         Args:
             current_time (`float`): The current time of the simulator loop.
             step_size (`float`): The amount of time for which to step the
                 workers.
+
+        Returns:
+            The set of tasks that have finished execution.
         """
+        completed_tasks = []
         # Invoke the step() method on all the workers.
         for _, worker in self._workers.items():
-            worker.step(current_time, step_size)
+            completed_tasks.extend(worker.step(current_time, step_size))
+        return completed_tasks
 
     @property
     def name(self):
