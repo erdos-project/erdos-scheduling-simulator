@@ -80,3 +80,16 @@ def test_successful_task_assignment():
     cpu_resource_2 = Resource(name="CPU")
     cpu_resource_2.assign(test_uuid)
     assert cpu_resource_2.is_assigned, "The Resource was not assigned."
+
+
+def test_resource_hash_equivalence():
+    """ Test that two similar Resources have similar hash values. """
+    cpu_resource_1 = Resource(name="CPU")
+    cpu_resource_2 = Resource(name="CPU", _id="any")
+    cpu_resource_3 = Resource(name="CPU", _id="any")
+
+    assert hash(cpu_resource_1) != hash(cpu_resource_2),\
+        "The hash values of different Resources are not similar."
+
+    assert hash(cpu_resource_2) == hash(cpu_resource_3),\
+        "The hash values of similar Resources are not similar."

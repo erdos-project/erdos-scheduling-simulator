@@ -98,9 +98,13 @@ class Resources(object):
         resource_vector (Mapping[Resource, int]): A mapping from an arbitrary
             set of resources to their quantities.
     """
-    def __init__(self, resource_vector: Optional[Mapping[Resource, int]]):
+    def __init__(self,
+                 resource_vector: Optional[Mapping[Resource, int]] = None):
         self._resource_vector = defaultdict(int) if resource_vector is None\
                 else resource_vector
+        if not all(map(lambda x: type(x) == Resource, self._resource_vector)):
+            raise ValueError("The keys for the resource vector\
+                              should be of type 'Resource'")
 
     def add_resource(self, resource: Resource, quantity: Optional[int] = 1):
         """Add the given quantity of the specified resource.
@@ -110,6 +114,9 @@ class Resources(object):
             quantity (`int`) [default = 1]: The number of the resources to be
                 added.
         """
+        if type(resource) != Resource:
+            raise ValueError("Invalid type for resource: {}".
+                             format(type(resource)))
         self._resource_vector[resource] += quantity
 
     def get_available_quantity(self, resource: Resource) -> int:
@@ -181,7 +188,7 @@ class Resources(object):
             is requested.
         """
         # Check that all the resources can be allocated.
-        for resource, quantity in resources._resource_vector:
+        for resource, quantity in resources._resource_vector.items():
             available_quantity = self.get_available_quantity(resource)
             if quantity > available_quantity:
                 raise ValueError("Trying to allocate more than the available \
@@ -189,11 +196,14 @@ class Resources(object):
                             resource, quantity, available_quantity))
 
         # Allocate all the resources together.
-        for resource, quantity in resources._resource_vector:
+        for resource, quantity in resources._resource_vector.items():
             self.allocate(resource, quantity)
 
     def __str__(self):
         return "Resources({})".format(self._resource_vector)
+
+    def __len__(self):
+        return len(self._resource_vector)
 
     def repr(self):
         return str(self)
