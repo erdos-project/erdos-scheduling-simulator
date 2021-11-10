@@ -1,7 +1,7 @@
 import uuid
 from collections import defaultdict
 from functools import total_ordering
-from typing import Mapping, Optional
+from typing import Mapping, Optional, Union
 
 
 class Resource(object):
@@ -27,13 +27,17 @@ class Resource(object):
         self._id = uuid.uuid4() if _id is None else _id
         self._assigned = None
 
-    def assign(self, task_id: str):
+    def assign(self, task_id: Union[uuid.UUID, str]):
         """Assign this Resource instance to the given task_id.
 
         Args:
             task_id (`str`): The task ID to assign this Resource to.
+
+        Raises:
+            ValueError if an ill-formed Task ID is passed.
         """
-        self._assigned = task_id
+        self._assigned = task_id if type(task_id) == uuid.UUID else\
+            uuid.UUID(task_id)
 
     @property
     def name(self):
@@ -45,18 +49,18 @@ class Resource(object):
 
     @property
     def is_assigned(self):
-        return self._assigned is None
+        return self._assigned is not None
 
     def __str__(self):
         return 'Resource(name={}, id={}, assigned={})'.format(self.name,
                                                               self.id,
-                                                              self._assigned)
+                                                              self.is_assigned)
 
     def __repr__(self):
         return str(self)
 
     def __hash__(self):
-        return hash(self.get_type())
+        return hash((self.name, self.id))
 
     def __eq__(self, other: 'Resource'):
         """Checks if the current resource is equal to the other.
@@ -72,7 +76,8 @@ class Resource(object):
            type.
         """
         if self.name == other.name:
-            if self.id == 'any' or other.id == 'any' or self.id == other.id:
+            if self.id == 'any' or other.id == 'any' or \
+                    uuid.UUID(self.id) == uuid.UUID(other.id):
                 return True
         return False
 
