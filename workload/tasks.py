@@ -82,11 +82,17 @@ class Task(object):
             time (`float`): The simulation time at which to begin the task.
             variance (`Optional[float]`): The percentage variation to add to
                 the runtime of the task.
+
+        Raises:
+            `ValueError` if Task is not in `RELEASED`/`PAUSED` state yet.
         """
+        if self.state not in (TaskState.RELEASED, TaskState.PAUSED):
+            raise ValueError("Only RELEASED or PAUSED tasks can be started.")
         self._start_time = time
         self._last_step_time = time
         self._state = TaskState.RUNNING
-        self._remaining_time += (self._remaining_time * variance / 100.0)
+        self.update_remaining_time(max(0, self._remaining_time +
+                                   (self._remaining_time * variance / 100.0)))
 
     def step(self, current_time: float, step_size: float = 1) -> bool:
         """Steps the task for the given `step_size` (default 1 time step).
@@ -98,7 +104,8 @@ class Task(object):
         Returns:
             `True` if the task has finished execution, `False` otherwise.
         """
-        if self.state != TaskState.RUNNING or self.start_time > current_time:
+        if (self.state != TaskState.RUNNING or
+           self.start_time > current_time + step_size):
             # We cannot step a Task that's not supposed to be running.
             return False
 
@@ -106,6 +113,7 @@ class Task(object):
         execution_time = current_time + step_size - self._last_step_time
         self._last_step_time = current_time + step_size
         if self._remaining_time - execution_time <= 0:
+            self._remaining_time = 0
             self.finish(current_time + step_size)
             return True
         else:
@@ -117,7 +125,12 @@ class Task(object):
 
         Args:
             time (`float`): The simulation time at which to pause the task.
+
+        Raises:
+            `ValueError` if task is not RUNNING.
         """
+        if self.state != TaskState.RUNNING:
+            raise ValueError("Task is not RUNNING right now.")
         self._paused_times.append(Paused(time, -1))
         self._state = TaskState.PAUSED
 
@@ -126,7 +139,12 @@ class Task(object):
 
         Args:
             time (`float`): The simulation time at which to restart the task.
+
+        Raises:
+            `ValueError` if task is not PAUSED.
         """
+        if self.state != TaskState.PAUSED:
+            raise ValueError("Task is not PAUSED right now.")
         self._paused_times[-1]._replace(restart_time=time)
         self._last_step_time = time
         self._state = TaskState.RUNNING
@@ -147,20 +165,32 @@ class Task(object):
         # TODO (Sukrit): We should notify the `Job` of the completion of this
         # particular task, so it can release new tasks to the scheduler.
 
-    def update_runtime(self, new_runtime: float):
-        """Updates the runtime of the task to simulate any runtime
+    def update_remaining_time(self, time: float):
+        """Updates the remaining time of the task to simulate any runtime
         variabilities.
 
         Args:
-            new_runtime (`float`): The new runtime to update the task with.
+            time (`float`): The new remaining time to update the task with.
+
+        Raises:
+            `ValueError` if the task is COMPLETED / EVICTED, or time < 0.
         """
-        self._expected_runtime = new_runtime
+        if self.is_complete():
+            raise ValueError("The remaining time of COMPLETED/EVICTED\
+                    tasks cannot be updated.")
+        if time < 0:
+            raise ValueError("Trying to set a negative value for\
+                    remaining time.")
+        self._remaining_time = time
 
     def update_deadline(self, new_deadline: float):
         """Updates the deadline of the task to simulate any dynamic deadlines.
 
         Args:
             new_deadline (`float`): The new deadline to update the task with.
+
+        Raises:
+            `ValueError` if the new_deadline < 0.
         """
         self._deadline = new_deadline
 
