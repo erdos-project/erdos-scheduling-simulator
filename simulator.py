@@ -129,6 +129,7 @@ class Simulator(object):
 
         # Internal data.
         self._last_scheduler_start_time = 0
+        self._last_task_placement = []
         self._available_tasks = []
 
         # Initialize the event queue, and add a SIMULATOR_START / SIMULATOR_END
@@ -196,6 +197,24 @@ class Simulator(object):
                       self._simulator_time))
                 self._event_queue.add_event(self.__run_scheduler(event))
             elif event.event_type == EventType.SCHEDULER_FINISHED:
+                # Place the task on the assigned worker pool, and reset the
+                # available events to the tasks that could not be placed.
+                # TODO (Sukrit): Should these tasks be moved to a PAUSED state?
+                available_tasks = []
+                for task, placement in self._last_task_placement:
+                    if placement is None:
+                        available_tasks.append(task)
+                    else:
+                        worker_pool = self._worker_pools[placement]
+                        # Initialize the task at the given placement time, and
+                        # place it on the WorkerPool.
+                        task.start(event.time)
+                        worker_pool.place_task(task)
+
+                # Reset the available tasks and the last task placement.
+                self._available_tasks = available_tasks
+                self._last_task_placement = []
+
                 # The scheduler has finished its execution, insert an event
                 # for the next invocation of the scheduler.
                 self._event_queue.add_event(
@@ -270,21 +289,7 @@ class Simulator(object):
         scheduler_runtime, task_placement = self._scheduler.schedule(
                 self._available_tasks, task_graph, self._worker_pools)
         placement_time = event.time + scheduler_runtime
-
-        # Place the task on the assigned worker pool, and reset the available
-        # events to the tasks that could not be placed.
-        # TODO (Sukrit): Should these tasks be moved to a PAUSED state?
-        available_tasks = []
-        for task, placement in task_placement:
-            if placement is None:
-                available_tasks.append(task)
-            else:
-                worker_pool = self._worker_pools[placement]
-                # Initialize the task at the given placement time, and place
-                # it on the WorkerPool.
-                task.start(placement_time)
-                worker_pool.place_task(task)
-        self._available_tasks = available_tasks
+        self._last_task_placement = task_placement
 
         return Event(event_type=EventType.SCHEDULER_FINISHED,
                      time=placement_time)
