@@ -1,9 +1,9 @@
 import uuid
 from enum import Enum
-from jobs import Job
-from resources import Resources
 from collections import namedtuple, defaultdict
 from typing import Mapping, Sequence, Optional
+
+from workload import Job, Resources
 
 Paused = namedtuple("Paused", "pause_time, restart_time")
 
@@ -63,6 +63,7 @@ class Task(object):
 
         # The data required for managing the execution of a particular task.
         self._remaining_time = runtime
+        self._last_step_time = -1  # Time when this task was stepped through.
         self._state = TaskState.VIRTUAL
 
     def release(self, time: float):
@@ -74,29 +75,62 @@ class Task(object):
         self._release_time = time
         self._state = TaskState.RELEASED
 
-    def start(self, time: float):
+    def start(self, time: float, variance: Optional[float] = 0.0):
         """Begins the execution of the task at the given simulator time.
 
         Args:
             time (`float`): The simulation time at which to begin the task.
-        """
-        self._start_time = time
-        self._state = TaskState.RUNNING
+            variance (`Optional[float]`): The percentage variation to add to
+                the runtime of the task.
 
-    def step(self, step_size: float = 1):
+        Raises:
+            `ValueError` if Task is not in `RELEASED`/`PAUSED` state yet.
+        """
+        if self.state not in (TaskState.RELEASED, TaskState.PAUSED):
+            raise ValueError("Only RELEASED or PAUSED tasks can be started.")
+        self._start_time = time
+        self._last_step_time = time
+        self._state = TaskState.RUNNING
+        self.update_remaining_time(max(0, self._remaining_time +
+                                   (self._remaining_time * variance / 100.0)))
+
+    def step(self, current_time: float, step_size: float = 1) -> bool:
         """Steps the task for the given `step_size` (default 1 time step).
 
         Args:
+            current_time (`float`): The current time of the simulator loop.
             step_size (`float`): The amount of time for which to step the task.
+
+        Returns:
+            `True` if the task has finished execution, `False` otherwise.
         """
-        raise NotImplementedError("step() has not been implemented yet.")
+        if (self.state != TaskState.RUNNING or
+           self.start_time > current_time + step_size):
+            # We cannot step a Task that's not supposed to be running.
+            return False
+
+        # Task can be run, step through the task's execution.
+        execution_time = current_time + step_size - self._last_step_time
+        self._last_step_time = current_time + step_size
+        if self._remaining_time - execution_time <= 0:
+            self._remaining_time = 0
+            self.finish(current_time + step_size)
+            return True
+        else:
+            self._remaining_time -= execution_time
+            return False
 
     def pause(self, time: float):
         """Pauses the execution of the task at the given simulation time.
 
         Args:
             time (`float`): The simulation time at which to pause the task.
+
+        Raises:
+            `ValueError` if task is not RUNNING.
         """
+        if self.state != TaskState.RUNNING:
+            raise ValueError("Task is not RUNNING right now.")
         self._paused_times.append(Paused(time, -1))
         self._state = TaskState.PAUSED
 
@@ -105,8 +139,14 @@ class Task(object):
 
         Args:
             time (`float`): The simulation time at which to restart the task.
+
+        Raises:
+            `ValueError` if task is not PAUSED.
         """
+        if self.state != TaskState.PAUSED:
+            raise ValueError("Task is not PAUSED right now.")
         self._paused_times[-1]._replace(restart_time=time)
+        self._last_step_time = time
         self._state = TaskState.RUNNING
 
     def finish(self, time: float):
@@ -125,22 +165,45 @@ class Task(object):
         # TODO (Sukrit): We should notify the `Job` of the completion of this
         # particular task, so it can release new tasks to the scheduler.
 
-    def update_runtime(self, new_runtime: float):
-        """Updates the runtime of the task to simulate any runtime
+    def update_remaining_time(self, time: float):
+        """Updates the remaining time of the task to simulate any runtime
         variabilities.
 
         Args:
-            new_runtime (`float`): The new runtime to update the task with.
+            time (`float`): The new remaining time to update the task with.
+
+        Raises:
+            `ValueError` if the task is COMPLETED / EVICTED, or time < 0.
         """
-        self._expected_runtime = new_runtime
+        if self.is_complete():
+            raise ValueError("The remaining time of COMPLETED/EVICTED\
+                    tasks cannot be updated.")
+        if time < 0:
+            raise ValueError("Trying to set a negative value for\
+                    remaining time.")
+        self._remaining_time = time
 
     def update_deadline(self, new_deadline: float):
         """Updates the deadline of the task to simulate any dynamic deadlines.
 
         Args:
             new_deadline (`float`): The new deadline to update the task with.
+
+        Raises:
+            `ValueError` if the new_deadline < 0.
         """
         self._deadline = new_deadline
+
+    def is_complete(self) -> bool:
+        """Check if the task has finished its execution.
+
+        To return True, the task must be in either EVICTED / COMPLETED state.
+
+        Returns:
+            `True` if the task has finished, `False` otherwise.
+        """
+        return (self.state == TaskState.EVICTED or
+                self.state == TaskState.COMPLETED)
 
     def __str__(self):
         return "Task(name={}, id={}, job={})".format(
@@ -228,6 +291,18 @@ class TaskGraph(object):
         for child in _children:
             self._task_graph[child].extend([])
 
+    def notify_task_completion(self, task: Task) -> Sequence[Task]:
+        """Notify the completion of the task.
+
+        The caller must set the type of the task completion before invoking
+        this method to ensure that the proper dependencies are unlocked.
+
+        Returns:
+            The set of tasks released by the completion of this task.
+        """
+        raise NotImplementedError("The notification of the completion of tasks\
+            to the task graph has not been implemented yet.")
+
     def add_child(self, task: Task, child: Task):
         """Adds a child to the `Task` in the task graph.
 
@@ -250,3 +325,42 @@ class TaskGraph(object):
         for task in self._task_graph:
             if task.id == task_id:
                 return task
+
+    def get_all_released_tasks(self) -> Sequence[Task]:
+        """Retrieves the set of tasks that are available to run.
+
+        Returns:
+            A list of tasks that can be run (are in RELEASED state).
+        """
+        released_tasks = []
+        for task in self._task_graph:
+            if task.state == TaskState.RELEASED:
+                released_tasks.append(task)
+        return released_tasks
+
+    def clean(self):
+        """Cleans the `TaskGraph` of tasks that have finished completion.
+
+        This is supposed to be called at regular intervals by the simulator so
+        we don't end up a huge graph of finished tasks.
+
+        We only clean up the tasks whose children have finished execution.
+        """
+        tasks_to_clean = []
+        for task, children in self._task_graph:
+            # Has this task finished execution?
+            if task.is_complete():
+                # Check if all children have finished execution too.
+                can_be_cleaned = True
+                for child in children:
+                    if not child.is_completed():
+                        can_be_cleaned = False
+                        break
+
+                # If the task can be cleaned, add the entry to be removed.
+                if can_be_cleaned:
+                    tasks_to_clean.append(task)
+
+        # Clean all the tasks.
+        for task in tasks_to_clean:
+            del self._task_graph[task]

@@ -25,7 +25,10 @@ class Job(object):
 
     @property
     def id(self):
-        return self._id
+        return str(self._id)
+
+    def __eq__(self, other):
+        return self._id == other._id
 
     def __str__(self):
         return "Job(name={}, id={})".format(self.name, self.id)
@@ -47,7 +50,7 @@ class JobGraph(object):
     def __init__(self, jobs: Optional[Mapping[Job, Sequence[Job]]] = None):
         self._job_graph = defaultdict(list) if jobs is None else jobs
 
-    def add_job(self, job: Job, children: Optional[Sequence[Job]]):
+    def add_job(self, job: Job, children: Optional[Sequence[Job]] = []):
         """Adds the job to the graph along with the given children.
 
         Args:
@@ -58,8 +61,11 @@ class JobGraph(object):
             print("The job {job} is already in the graph. Skipping.".
                   format(job=job))
         else:
-            _children = [] if children is None else children
-            self._job_graph[job].extend(_children)
+            self._job_graph[job].extend(children)
+
+            # Add the children into the graph too so the length is correct.
+            for child in children:
+                self._job_graph[child].extend([])
 
     def add_child(self, job: Job, child: Job):
         """Adds a child to a `Job` in the job graph.
@@ -67,8 +73,14 @@ class JobGraph(object):
         Args:
             job (`Job`): The job, to which the child needs to be added.
             child (`Job`): The child job to be added.
+
+        Raises:
+            ValueError if the `job` is not in the graph already.
         """
+        if job not in self._job_graph:
+            raise ValueError("{} not in job graph.".format(job))
         self._job_graph[job].append(child)
+        self._job_graph[child].extend([])
 
     def get_children(self, job: Job) -> Sequence[Job]:
         """Retrieves the children jobs of the given job.
@@ -83,6 +95,9 @@ class JobGraph(object):
             raise ValueError("No job with the ID: {} exists in the graph".
                              format(job.id))
         return self._job_graph[job]
+
+    def __len__(self):
+        return len(self._job_graph)
 
     def __str__(self):
         return "JobGraph({})".format(self._job_graph)
