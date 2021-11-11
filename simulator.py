@@ -80,6 +80,7 @@ class EventQueue(object):
         """
         heapq.heappush(self._event_queue, event)
 
+
     def next(self) -> Event:
         """Retrieve the next event from the queue.
 
