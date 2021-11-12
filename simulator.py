@@ -80,7 +80,6 @@ class EventQueue(object):
         """
         heapq.heappush(self._event_queue, event)
 
-
     def next(self) -> Event:
         """Retrieve the next event from the queue.
 
@@ -155,7 +154,7 @@ class Simulator(object):
         # At the beginning, this should consist of all the sensor tasks that
         # we expect to run during the execution of the workload, along with
         # their expected release times.
-        for task in task_graph.get_all_released_tasks():
+        for task in task_graph.get_released_tasks():
             self._event_queue.add_event(
                     Event(event_type=EventType.TASK_RELEASE,
                           time=task.release_time, task=task)
@@ -182,7 +181,8 @@ class Simulator(object):
                 self._available_tasks.append(event.task)
             elif event.event_type == EventType.TASK_FINISHED:
                 # The given task has finished execution, unlock dependencies.
-                new_tasks = task_graph.notify_task_completion(event.task)
+                new_tasks = task_graph.notify_task_completion(event.task,
+                                                              event.time)
 
                 # Add events corresponding to the dependencies.
                 for task in new_tasks:

@@ -1,6 +1,6 @@
 import pytest
 
-from workload import Job, Resource, TaskState, Task
+from workload import Job, Resource, TaskState, Task, TaskGraph
 
 
 def __create_default_task(job=Job(name="Perception"),
@@ -161,3 +161,130 @@ def test_fail_step_non_running():
     default_task.pause(4.0)
     assert not default_task.step(5.0),\
         "Task should not be completed from a PAUSED state."
+
+
+def test_empty_task_graph_construction():
+    """ Test that an empty TaskGraph is constructed correctly. """
+    task_graph = TaskGraph()
+    assert len(task_graph) == 0, "Incorrect length of the TaskGraph."
+
+
+def test_task_graph_construction_from_mapping():
+    """ Test that a TaskGraph is correctly initialized from a Mapping. """
+    task_graph = TaskGraph(tasks={__create_default_task(): []})
+    assert len(task_graph) == 1, "Incorrect length of the TaskGraph."
+
+
+def test_task_addition_to_task_graph():
+    """ Test addition of Tasks to the graph. """
+    default_task = __create_default_task(job=Job(name="Perception"))
+    child_task = __create_default_task(job=Job(name="Planning"))
+    task_graph = TaskGraph()
+    assert len(task_graph) == 0, "Incorrect length of the TaskGraph."
+    task_graph.add_task(default_task, [child_task])
+    assert len(task_graph) == 2, "Incorrect length of the TaskGraph."
+
+
+def test_addition_of_child_to_task():
+    """ Test addition of children to a Task. """
+    default_task = __create_default_task(job=Job(name="Perception"))
+    child_task = __create_default_task(job=Job(name="Planning"))
+    task_graph = TaskGraph()
+    assert len(task_graph) == 0, "Incorrect length of the TaskGraph."
+    task_graph.add_task(default_task)
+    assert len(task_graph) == 1, "Incorrect length of the TaskGraph."
+    task_graph.add_child(default_task, child_task)
+    assert len(task_graph) == 2, "Incorrect length of the TaskGraph."
+
+
+def test_retrieval_of_children():
+    """ Test that the correct set of children are retrieved. """
+    default_task = __create_default_task(job=Job(name="Perception"))
+    child_task = __create_default_task(job=Job(name="Planning"))
+    task_graph = TaskGraph()
+    task_graph.add_task(default_task, [child_task])
+    children = task_graph.get_children(default_task)
+    assert len(children) == 1, "Incorrect length of the children retrieved."
+    assert id(children[0]) == id(child_task), "Incorrect child returned."
+
+
+def test_get_released_tasks():
+    """ Test that the correct set of released tasks are returned. """
+    default_task = __create_default_task(job=Job(name="Perception"))
+    child_task = __create_default_task(job=Job(name="Planning"))
+    task_graph = TaskGraph()
+    task_graph.add_task(default_task, [child_task])
+    assert len(task_graph.get_released_tasks()) == 0,\
+        "Incorrect length of released tasks returned."
+    default_task.release(2.0)
+    assert len(task_graph.get_released_tasks()) == 1,\
+        "Incorrect length of released tasks returned."
+    child_task.release(3.0)
+    assert len(task_graph.get_released_tasks()) == 2,\
+        "Incorrect length of released tasks returned."
+    default_task.finish(4.0)
+    assert len(task_graph.get_released_tasks()) == 1,\
+        "Incorrect length of released tasks returned."
+
+
+def test_retrieval_of_parents():
+    """ Test that the correct set of parents are retrieved. """
+    default_task = __create_default_task(job=Job(name="Perception"))
+    child_task = __create_default_task(job=Job(name="Planning"))
+    task_graph = TaskGraph()
+    task_graph.add_task(default_task, [child_task])
+    parents = task_graph.get_parents(child_task)
+    assert len(parents) == 1, "Incorrect length of the parents retrieved."
+    assert id(parents[0]) == id(default_task), "Incorrect parent returned."
+
+
+def test_task_completion_notification():
+    """ Test that the completion of a task ensures release of children. """
+    perception_task = __create_default_task(job=Job(name="Perception"))
+    prediction_task = __create_default_task(job=Job(name="Prediction"))
+    planning_task = __create_default_task(job=Job(name="Planning"))
+    task_graph = TaskGraph()
+    task_graph.add_task(perception_task, [planning_task])
+    task_graph.add_task(prediction_task, [planning_task])
+
+    released_tasks = task_graph.get_released_tasks()
+    assert len(released_tasks) == 0,\
+        "Incorrect length of released tasks returned."
+
+    perception_task.release(2.0)
+    released_tasks = task_graph.get_released_tasks()
+    assert len(released_tasks) == 1,\
+        "Incorrect length of released tasks returned."
+    assert released_tasks[0] == perception_task,\
+        "Incorrect task released."
+
+    prediction_task.release(2.0)
+    released_tasks = task_graph.get_released_tasks()
+    assert len(released_tasks) == 2,\
+        "Incorrect length of released tasks returned."
+    assert released_tasks[0] == perception_task,\
+        "Incorrect task released."
+    assert released_tasks[1] == prediction_task,\
+        "Incorrect task released."
+
+    # Run and finish the execution of Perception.
+    perception_task.start(3.0)
+    perception_task.update_remaining_time(0)
+    task_graph.notify_task_completion(perception_task, 4.0)
+    released_tasks = task_graph.get_released_tasks()
+    assert perception_task.is_complete(), "Task was not completed."
+    assert len(released_tasks) == 1,\
+        "Incorrect length of released tasks returned."
+    assert released_tasks[0] == prediction_task,\
+        "Incorrect task released."
+
+    # Run and finish the execution of Prediction.
+    prediction_task.start(3.0)
+    prediction_task.update_remaining_time(0)
+    task_graph.notify_task_completion(prediction_task, 4.0)
+    released_tasks = task_graph.get_released_tasks()
+    assert prediction_task.is_complete(), "Task was not completed."
+    assert len(released_tasks) == 1,\
+        "Incorrect length of released tasks returned."
+    assert released_tasks[0] == planning_task,\
+        "Incorrect task released."

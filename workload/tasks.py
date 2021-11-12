@@ -215,13 +215,16 @@ class Task(object):
     def __hash__(self):
         return hash(self.id)
 
+    def __eq__(self, other):
+        return uuid.UUID(self.id) == uuid.UUID(other.id)
+
     @property
     def name(self):
         return self._name
 
     @property
     def id(self):
-        return self._id
+        return str(self._id)
 
     @property
     def resource_requirements(self):
@@ -268,18 +271,22 @@ class TaskGraph(object):
     A `TaskGraph` is a runtime entity that constantly evolves as more tasks
     are released by the `JobGraph` and added to the given `TaskGraph`.
     """
-    def __init__(self, tasks: Optional[Mapping[Task, Sequence[Task]]] = None):
-        self._task_graph = defaultdict(list) if tasks is None else tasks
+    def __init__(self, tasks: Optional[Mapping[Task, Sequence[Task]]] = {}):
+        self._task_graph = defaultdict(list)
+        self.__parent_task_graph = defaultdict(list)
+        for task, children in tasks.items():
+            self._task_graph[task].extend(children)
+            for child in children:
+                self._task_graph[child].extend([])
+                self.__parent_task_graph[child].append(task)
 
-    def add_task(self, task: Task, children: Optional[Sequence[Task]] = None):
+    def add_task(self, task: Task, _children: Optional[Sequence[Task]] = []):
         """Adds the task to the graph along with the given children.
 
         Args:
             task (`Task`): The task to be added to the graph.
             children (`Sequence[Task]`): The children of the task, if any.
         """
-        _children = [] if children is None else children
-
         # Add the parent task with the given children.
         if task in self._task_graph:
             print("The task {task} is already in the graph. Skipping.",
@@ -290,18 +297,33 @@ class TaskGraph(object):
         # Add all the children tasks with an empty children list.
         for child in _children:
             self._task_graph[child].extend([])
+            self.__parent_task_graph[child].append(task)
 
-    def notify_task_completion(self, task: Task) -> Sequence[Task]:
+    def notify_task_completion(self, task: Task, finish_time: float) ->\
+            Sequence[Task]:
         """Notify the completion of the task.
 
         The caller must set the type of the task completion before invoking
         this method to ensure that the proper dependencies are unlocked.
 
+        Args:
+            task (`Task`): The task that has finished execution.
+            finish_time (`float`): The time at which the task finished.
+
         Returns:
             The set of tasks released by the completion of this task.
         """
-        raise NotImplementedError("The notification of the completion of tasks\
-            to the task graph has not been implemented yet.")
+        # Invoke finish on the task to change the state of the task.
+        task.finish(finish_time)
+
+        # Release any tasks that can be unlocked by the completion.
+        released_tasks = []
+        for child in self.get_children(task):
+            if all(map(lambda task: task.is_complete(),
+                       self.get_parents(child))):
+                child.release(finish_time)
+                released_tasks.append(child)
+        return released_tasks
 
     def add_child(self, task: Task, child: Task):
         """Adds a child to the `Task` in the task graph.
@@ -312,8 +334,9 @@ class TaskGraph(object):
         """
         self._task_graph[task].append(child)
         self._task_graph[child].extend([])
+        self.__parent_task_graph[child].append(task)
 
-    def find(self, task_id: uuid.UUID):
+    def find(self, task_id: uuid.UUID) -> Optional[Task]:
         """Finds the task with the given ID.
 
         Use this method to retrieve the instance of the task from the graph,
@@ -321,12 +344,44 @@ class TaskGraph(object):
 
         Args:
             task_id (`uuid.UUID`): Find a task with the given ID.
+
+        Returns:
+            A `Task` with the given UUID, and None if no such task is found.
         """
         for task in self._task_graph:
             if task.id == task_id:
                 return task
+        return None
 
-    def get_all_released_tasks(self) -> Sequence[Task]:
+    def get_children(self, task: Task) -> Sequence[Task]:
+        """Retrieves the children of the given task.
+
+        Args:
+            task (`Task`): The task to retrieve the children of.
+
+        Returns:
+            The children of the given task.
+        """
+        if task not in self._task_graph:
+            return []
+        else:
+            return self._task_graph[task]
+
+    def get_parents(self, task: Task) -> Sequence[Task]:
+        """Retrieves the parents of the given task.
+
+        Args:
+            task (`Task`): The task to retrieve the parent of.
+
+        Returns:
+            The parents of the given task.
+        """
+        if task not in self._task_graph:
+            return []
+        else:
+            return self.__parent_task_graph[task]
+
+    def get_released_tasks(self) -> Sequence[Task]:
         """Retrieves the set of tasks that are available to run.
 
         Returns:
@@ -361,6 +416,12 @@ class TaskGraph(object):
                 if can_be_cleaned:
                     tasks_to_clean.append(task)
 
-        # Clean all the tasks.
+        # Remove the task from the parent graph of all its children, and then
+        # remove the task from the graph itself.
         for task in tasks_to_clean:
+            for child in self.get_children(task):
+                self.__parent_task_graph[child].remove(task)
             del self._task_graph[task]
+
+    def __len__(self):
+        return len(self._task_graph)
