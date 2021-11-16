@@ -99,9 +99,10 @@ class Resources(object):
             set of resources to their quantities.
     """
     def __init__(self,
-                 resource_vector: Optional[Mapping[Resource, int]] = None):
-        self._resource_vector = defaultdict(int) if resource_vector is None\
-                else resource_vector
+                 resource_vector: Optional[Mapping[Resource, int]] = {}):
+        self._resource_vector = defaultdict(int)
+        for resource, quantity in resource_vector.items():
+            self._resource_vector[resource] = quantity
         if not all(map(lambda x: type(x) == Resource, self._resource_vector)):
             raise ValueError("The keys for the resource vector\
                               should be of type 'Resource'")
@@ -222,7 +223,7 @@ class Resources(object):
         Returns:
             `True` if other is a subset of self, `False` otherwise.
         """
-        for resource, quantity in other._resource_vector:
+        for resource, quantity in other._resource_vector.items():
             if self.get_available_quantity(resource) >= quantity:
                 pass
             else:

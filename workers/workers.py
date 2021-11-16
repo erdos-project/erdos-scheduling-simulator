@@ -1,7 +1,7 @@
 import uuid
 from workload import Resources, Task
 from typing import Optional, Sequence, Type
-from scheduler import BaseScheduler
+from schedulers import BaseScheduler
 
 
 class Worker(object):
@@ -54,7 +54,7 @@ class Worker(object):
             A sequence of `Task`s that are currently placed on this `Worker`.
         """
         placed_tasks = []
-        for task, _ in self._placed_tasks:
+        for task, _ in self._placed_tasks.items():
             placed_tasks.append(task)
         return placed_tasks
 
@@ -85,7 +85,7 @@ class Worker(object):
 
     @property
     def id(self):
-        return self._id
+        return str(self._id)
 
     @property
     def resources(self):
@@ -119,8 +119,8 @@ class WorkerPool(object):
         name (`str`): A name assigned to this WorkerPool.
         id (`UUID`): The ID of the particular WorkerPool.
     """
-    def __init__(self, name: str, workers: Optional[Sequence[Worker]],
-                 scheduler: Optional[Type[BaseScheduler]]):
+    def __init__(self, name: str, workers: Optional[Sequence[Worker]] = [],
+                 scheduler: Optional[Type[BaseScheduler]] = None):
         self._name = name
         self._workers = {worker.id: worker for worker in workers}
         self._scheduler = scheduler
@@ -165,7 +165,7 @@ class WorkerPool(object):
         else:
             # If there was no scheduler, find the first worker that can
             # accomodate the task given its resource requirements.
-            for _id, _worker in self._workers:
+            for _id, _worker in self._workers.items():
                 if _worker.can_accomodate_task(task):
                     placement = _id
                     break
@@ -182,7 +182,7 @@ class WorkerPool(object):
             A sequence of `Task`s that are currently placed on this `Worker`.
         """
         placed_tasks = []
-        for _, _worker in self._workers:
+        for _, _worker in self._workers.items():
             placed_tasks.extend(_worker.get_placed_tasks())
         return placed_tasks
 
@@ -210,7 +210,7 @@ class WorkerPool(object):
 
     @property
     def id(self):
-        return self._id
+        return str(self._id)
 
     @property
     def workers(self):

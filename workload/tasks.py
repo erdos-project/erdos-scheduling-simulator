@@ -31,7 +31,7 @@ class Task(object):
         name (`str`): The name of the computation (typically the callback of
             the ERDOS operator.
         job (`Job`): The job that created this particular task.
-        resource_requirement (`Resources`): The set of resources required by
+        resource_requirements (`Resources`): The set of resources required by
             this task.
         release_time (`float`): The time at which the task was released by the
             job.
@@ -46,11 +46,11 @@ class Task(object):
             preempted (only available if state is either EVICTED / COMPLETED,
             -1 otherwise)
     """
-    def __init__(self, name: str, job: Job, resource_requirement: Resources,
+    def __init__(self, name: str, job: Job, resource_requirements: Resources,
                  runtime: float, deadline: float):
         self._name = name
         self._creating_job = job
-        self._resource_reqs = resource_requirement
+        self._resource_reqs = resource_requirements
         self._expected_runtime = runtime
         self._deadline = deadline
         self._id = uuid.uuid4()

@@ -1,14 +1,18 @@
 import pytest
 
-from workload import Job, Resource, TaskState, Task, TaskGraph
+from workload import Job, Resource, Resources, TaskState, Task, TaskGraph
 
 
-def __create_default_task(job=Job(name="Perception"),
-                          resource_requirement=Resource(name="CPU"),
-                          runtime=1.0, deadline=10.0):
+def __create_default_task(
+        job=Job(name="Perception"),
+        resource_requirements=Resources(
+                        resource_vector={Resource(name="CPU", _id="any"): 1}),
+        runtime=1.0,
+        deadline=10.0,
+):
     """ Helper function to create a default task. """
     return Task(name="{}_Task".format(job.name), job=job,
-                resource_requirement=resource_requirement,
+                resource_requirements=resource_requirements,
                 runtime=runtime, deadline=deadline)
 
 
