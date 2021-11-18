@@ -1,6 +1,7 @@
 import uuid
-from workload import Resources, Task
 from typing import Optional, Sequence, Type
+
+from workload import Resources, Task
 from schedulers import BaseScheduler
 
 

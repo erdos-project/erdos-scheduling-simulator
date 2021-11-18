@@ -47,8 +47,14 @@ class JobGraph(object):
     A `JobGraph` is a static entity that defines the relationship between the
     different `Job`s of the application.
     """
-    def __init__(self, jobs: Optional[Mapping[Job, Sequence[Job]]] = None):
-        self._job_graph = defaultdict(list) if jobs is None else jobs
+    def __init__(self, jobs: Optional[Mapping[Job, Sequence[Job]]] = {}):
+        self._job_graph = defaultdict(list)
+        self.__parent_job_graph = defaultdict(list)
+        for job, children in jobs.items():
+            self._job_graph[job].extend(children)
+            for child in children:
+                self._job_graph[child].extend([])
+                self.__parent_job_graph[child].append(job)
 
     def add_job(self, job: Job, children: Optional[Sequence[Job]] = []):
         """Adds the job to the graph along with the given children.
@@ -57,15 +63,12 @@ class JobGraph(object):
             job (`Job`): The job to be added to the graph.
             children (`Sequence[Job]`): The children of this job, if any.
         """
-        if job in self._job_graph:
-            print("The job {job} is already in the graph. Skipping.".
-                  format(job=job))
-        else:
-            self._job_graph[job].extend(children)
+        self._job_graph[job].extend(children)
 
-            # Add the children into the graph too so the length is correct.
-            for child in children:
-                self._job_graph[child].extend([])
+        # Add the children into the graph too so the length is correct.
+        for child in children:
+            self._job_graph[child].extend([])
+            self.__parent_job_graph[child].append(job)
 
     def add_child(self, job: Job, child: Job):
         """Adds a child to a `Job` in the job graph.
@@ -81,6 +84,7 @@ class JobGraph(object):
             raise ValueError("{} not in job graph.".format(job))
         self._job_graph[job].append(child)
         self._job_graph[child].extend([])
+        self.__parent_job_graph[child].append(job)
 
     def get_children(self, job: Job) -> Sequence[Job]:
         """Retrieves the children jobs of the given job.
@@ -95,6 +99,20 @@ class JobGraph(object):
             raise ValueError("No job with the ID: {} exists in the graph".
                              format(job.id))
         return self._job_graph[job]
+
+    def get_parents(self, job: Job) -> Sequence[Job]:
+        """Retrieves the parents of the given Job.
+
+        Args:
+            job (`Job`): The job to retrieve the parents of.
+
+        Returns:
+            The parents of the given job.
+        """
+        if job not in self._job_graph:
+            return []
+        else:
+            return self.__parent_job_graph[job]
 
     def __len__(self):
         return len(self._job_graph)

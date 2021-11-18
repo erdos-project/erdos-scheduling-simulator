@@ -47,12 +47,14 @@ class Task(object):
             -1 otherwise)
     """
     def __init__(self, name: str, job: Job, resource_requirements: Resources,
-                 runtime: float, deadline: float):
+                 runtime: float, deadline: float,
+                 timestamp: Sequence[int] = []):
         self._name = name
         self._creating_job = job
         self._resource_reqs = resource_requirements
         self._expected_runtime = runtime
         self._deadline = deadline
+        self._timestamp = timestamp
         self._id = uuid.uuid4()
 
         # The timestamps maintained for each state of the task.
@@ -206,8 +208,8 @@ class Task(object):
                 self.state == TaskState.COMPLETED)
 
     def __str__(self):
-        return "Task(name={}, id={}, job={})".format(
-                self.name, self.id, self.job)
+        return "Task(name={}, id={}, job={}, timestamp={})".format(
+                self.name, self.id, self.job, self.timestamp)
 
     def repr(self):
         return str(self)
@@ -262,6 +264,10 @@ class Task(object):
     def completion_time(self):
         return self._completion_time
 
+    @property
+    def timestamp(self):
+        return self._timestamp
+
 
 class TaskGraph(object):
     """A `TaskGraph` represents a directed graph of task dependencies that
@@ -287,12 +293,7 @@ class TaskGraph(object):
             task (`Task`): The task to be added to the graph.
             children (`Sequence[Task]`): The children of the task, if any.
         """
-        # Add the parent task with the given children.
-        if task in self._task_graph:
-            print("The task {task} is already in the graph. Skipping.",
-                  format(task=task))
-        else:
-            self._task_graph[task].extend(_children)
+        self._task_graph[task].extend(_children)
 
         # Add all the children tasks with an empty children list.
         for child in _children:
@@ -371,7 +372,7 @@ class TaskGraph(object):
         """Retrieves the parents of the given task.
 
         Args:
-            task (`Task`): The task to retrieve the parent of.
+            task (`Task`): The task to retrieve the parents of.
 
         Returns:
             The parents of the given task.

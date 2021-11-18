@@ -55,6 +55,16 @@ def test_successful_retrieval_of_children():
     assert children_job_1[0] == job_2, "Incorrect child returned."
 
 
+def test_successful_retrieval_of_parents():
+    """ Test that the correct parents are returned by the JobGraph. """
+    job_graph = JobGraph()
+    job_1, job_2 = Job(name="Perception"), Job(name="Planning")
+    job_graph.add_job(job_1, [job_2])
+    parents_job_2 = job_graph.get_parents(job_2)
+    assert len(parents_job_2) == 1, "Incorrect number of parents."
+    assert parents_job_2[0] == job_1, "Incorrect parent returned."
+
+
 def test_failed_retrieval_of_children():
     """ Test that retrieving children of a non-existent job fails. """
     job_graph = JobGraph()

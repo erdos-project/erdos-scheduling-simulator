@@ -9,11 +9,12 @@ def __create_default_task(
                         resource_vector={Resource(name="CPU", _id="any"): 1}),
         runtime=1.0,
         deadline=10.0,
+        timestamp=[0],
 ):
     """ Helper function to create a default task. """
     return Task(name="{}_Task".format(job.name), job=job,
                 resource_requirements=resource_requirements,
-                runtime=runtime, deadline=deadline)
+                runtime=runtime, deadline=deadline, timestamp=timestamp)
 
 
 def test_successful_task_creation():
