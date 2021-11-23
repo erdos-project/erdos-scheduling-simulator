@@ -1,7 +1,7 @@
 import uuid
 from typing import Optional, Sequence, Type
 
-from workload import Resources, Task
+from workload import Resources, Task, TaskState
 from schedulers import BaseScheduler
 
 
@@ -22,7 +22,7 @@ class Worker(object):
         self._id = uuid.uuid4()
         self._resources = resources
         self._num_threads = num_threads
-        self._placed_tasks = {}  # Tasks along with their execution status.
+        self._placed_tasks = {}  # Mapping[Task, TaskState]
 
     def place_task(self, task: Task):
         """Places the task on this `Worker`.
@@ -31,10 +31,29 @@ class Worker(object):
         invoking `can_accomodate_task`.
 
         Args:
-            task (`Task`): The task to be placed in this `WorkerPool`.
+            task (`Task`): The task to be placed on this `Worker`.
         """
-        self._resources.allocate_multiple(task.resource_requirements)
+        self._resources.allocate_multiple(task.resource_requirements, task)
         self._placed_tasks[task] = task.state
+
+    def preempt_task(self, task: Task):
+        """Preempts the given `Task` and frees the resources.
+
+        Args:
+            task (`Task`): The task to be preempted from this `Worker`.
+
+        Raises:
+            `ValueError` if the task was not placed on this worker, or is not
+            paused by the caller.
+        """
+        if task not in self._placed_tasks:
+            raise ValueError("The task was not placed on this Worker.")
+        if task.state != TaskState.PAUSED:
+            raise ValueError("The task is not in PAUSED state.")
+
+        # Deallocate the resources and remove the placed task.
+        self._resources.deallocate(task)
+        del self._placed_tasks[task]
 
     def can_accomodate_task(self, task: Task) -> bool:
         """Checks if this `Worker` can accomodate the given `Task` based on
@@ -126,6 +145,7 @@ class WorkerPool(object):
         self._workers = {worker.id: worker for worker in workers}
         self._scheduler = scheduler
         self._id = uuid.uuid4()
+        self._placed_tasks = {}  # Mapping[Task, str] from task to worker ID.
 
     def add_workers(self, workers: Sequence[Worker]):
         """Adds the given set of `Worker`s to this `WorkerPool`.
@@ -175,6 +195,22 @@ class WorkerPool(object):
             raise ValueError("The task ({}) could not be placed.".format(task))
         else:
             self._workers[placement].place_task(task)
+            self._placed_tasks[task] = placement
+
+    def preempt_task(self, task: Task):
+        """Preempts the given `Task` and frees the resources.
+
+        Args:
+            task (`Task`): The task to be preempted from this `WorkerPool`.
+
+        Raises:
+            `ValueError` if the task was not placed on this pool, or is not
+            paused by the caller.
+        """
+        # Find the worker where the task was placed, preempt it from there,
+        # and remove it from this worker pool's placed tasks.
+        self._workers[self._placed_tasks[task]].preempt_task(task)
+        del self._placed_tasks[task]
 
     def get_placed_tasks(self) -> Sequence[Task]:
         """Retrieves the `Task`s that are currently placed on this `WorkerPool`.
@@ -182,10 +218,7 @@ class WorkerPool(object):
         Returns:
             A sequence of `Task`s that are currently placed on this `Worker`.
         """
-        placed_tasks = []
-        for _, _worker in self._workers.items():
-            placed_tasks.extend(_worker.get_placed_tasks())
-        return placed_tasks
+        return list(self._placed_tasks.keys())
 
     def step(self, current_time: float, step_size: float = 1.0) ->\
             Sequence[Task]:

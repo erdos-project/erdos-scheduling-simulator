@@ -106,6 +106,7 @@ class Resources(object):
         if not all(map(lambda x: type(x) == Resource, self._resource_vector)):
             raise ValueError("The keys for the resource vector\
                               should be of type 'Resource'")
+        self._current_allocations = defaultdict(list)
 
     def add_resource(self, resource: Resource, quantity: Optional[int] = 1):
         """Add the given quantity of the specified resource.
@@ -140,12 +141,13 @@ class Resources(object):
                 resource_quantity += _quantity
         return resource_quantity
 
-    def allocate(self, resource: Resource, quantity: int = 1):
+    def allocate(self, resource: Resource, task: 'Task', quantity: int = 1):
         """Allocates the given quantity of the specified resource for a
         particular task.
 
         Args:
             resource (`Resource`): The resource to be allocated.
+            task (`Task`): The task to which the resources are allocated.
             quantity (`int`): The amount of the resource to be allocated
                 (default = 1).
 
@@ -168,21 +170,26 @@ class Resources(object):
                 if _quantity >= remaining_quantity:
                     self._resource_vector[_resource] = (_quantity -
                                                         remaining_quantity)
+                    self._current_allocations[task].append(
+                            (_resource, remaining_quantity))
                     break
                 else:
                     self._resource_vector[_resource] = 0
+                    self._current_allocations[task].append(
+                            (_resource, _quantity))
                 remaining_quantity -= _quantity
 
             if remaining_quantity == 0:
                 break
 
-    def allocate_multiple(self, resources: 'Resources'):
+    def allocate_multiple(self, resources: 'Resources', task: 'Task'):
         """Allocates multiple resources together according to their specified
         quantity.
 
         Args:
             resources (`Resources`): A representation of the `Resources` to be
                 allocated.
+            task (`Task`): The task to which the resources are allocated.
 
         Raises:
             `ValueError` if more than the available quantity of any resource
@@ -198,7 +205,26 @@ class Resources(object):
 
         # Allocate all the resources together.
         for resource, quantity in resources._resource_vector.items():
-            self.allocate(resource, quantity)
+            self.allocate(resource, task, quantity)
+
+    def deallocate(self, task: 'Task'):
+        """Deallocates the resources assigned to the particular `task`.
+
+        Args:
+            task (`Task`): The task whose assigned resources need to be
+                deallocated.
+
+        Raises:
+            `ValueError` if the `task` was not allocated from this set of
+            Resources.
+        """
+        if task not in self._current_allocations:
+            raise ValueError("The task was not allocated from this Resources.")
+
+        for resource, quantity in self._current_allocations[task]:
+            self._resource_vector[resource] += quantity
+
+        del self._current_allocations[task]
 
     def __str__(self):
         return "Resources({})".format(self._resource_vector)

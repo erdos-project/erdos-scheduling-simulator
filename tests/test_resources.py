@@ -3,6 +3,8 @@ import pytest
 
 from workload import Resource, Resources
 
+from tests.test_tasks import __create_default_task
+
 
 def test_resource_construction():
     """ Test that the Resource is constructed with the correct name and ID. """
@@ -161,7 +163,7 @@ def test_allocation_of_resources():
     resources = Resources({cpu_resource_any: 10})
     assert resources.get_available_quantity(cpu_resource_any) == 10,\
         "Incorrect quantity of the CPU resource."
-    resources.allocate(cpu_resource_any, 5)
+    resources.allocate(cpu_resource_any, __create_default_task(), 5)
     assert resources.get_available_quantity(cpu_resource_any) == 5,\
         "Incorrect quantity of the CPU resource."
 
@@ -171,7 +173,7 @@ def test_failed_allocation_of_resources():
     cpu_resource_any = Resource(name="CPU", _id="any")
     resources = Resources({cpu_resource_any: 10})
     with pytest.raises(ValueError):
-        resources.allocate(cpu_resource_any, 20)
+        resources.allocate(cpu_resource_any, __create_default_task(), 20)
 
 
 def test_allocation_of_resources_complex():
@@ -182,7 +184,7 @@ def test_allocation_of_resources_complex():
     resources = Resources({cpu_resource_1: 5, cpu_resource_2: 5})
     assert resources.get_available_quantity(cpu_resource_any) == 10,\
         "Incorrect quantity of the CPU resource."
-    resources.allocate(cpu_resource_any, 6)
+    resources.allocate(cpu_resource_any, __create_default_task(), 6)
     assert resources.get_available_quantity(cpu_resource_any) == 4,\
         "Incorrect quantity of the CPU resource."
     assert (resources.get_available_quantity(cpu_resource_1) == 0 or
@@ -207,9 +209,82 @@ def test_allocation_of_multiple_resources():
         "Incorrect quantity of the CPU resource."
 
     resources.allocate_multiple(Resources({cpu_resource_any: 5,
-                                           gpu_resource_any: 5}))
+                                           gpu_resource_any: 5}),
+                                __create_default_task())
 
     assert resources.get_available_quantity(cpu_resource_any) == 5,\
         "Incorrect quantity of the CPU resource."
     assert resources.get_available_quantity(gpu_resource_any) == 5,\
         "Incorrect quantity of the CPU resource."
+
+
+def test_correct_maintenance_of_allocated_resources():
+    """ Test that Resources correctly maintains the current allocations. """
+    cpu_resource_1 = Resource(name="CPU")
+    cpu_resource_2 = Resource(name="CPU")
+    gpu_resource_1 = Resource(name="GPU")
+    resources = Resources({cpu_resource_1: 5,
+                           cpu_resource_2: 5,
+                           gpu_resource_1: 10})
+
+    cpu_resource_any = Resource(name="CPU", _id="any")
+    gpu_resource_any = Resource(name="GPU", _id="any")
+
+    task = __create_default_task()
+    resources.allocate(cpu_resource_any, task, 8)
+    resources.allocate(gpu_resource_any, task, 5)
+
+    assert resources.get_available_quantity(cpu_resource_any) == 2,\
+        "Incorrect quantity of the CPU resource."
+    assert resources.get_available_quantity(cpu_resource_1) == 0,\
+        "Incorrect quantity of the CPU resource."
+    assert resources.get_available_quantity(cpu_resource_2) == 2,\
+        "Incorrect quantity of the CPU resource."
+    assert resources.get_available_quantity(gpu_resource_1) == 5,\
+        "Incorrect quantity of the GPU resource."
+
+    assert len(resources._current_allocations) == 1,\
+        "Incorrect number of allocations."
+    assert len(resources._current_allocations[task]) == 3,\
+        "Incorrect current allocations for task."
+    assert resources._current_allocations[task][0] == (cpu_resource_1, 5),\
+        "Incorrect allocation of the CPU resource to task."
+    assert resources._current_allocations[task][1] == (cpu_resource_2, 3),\
+        "Incorrect allocation of the CPU resource to task."
+    assert resources._current_allocations[task][2] == (gpu_resource_1, 5),\
+        "Incorrect allocation of the GPU resource to task."
+
+
+def test_deallocation_of_resources():
+    """ Test that Resources are correctly deallocated. """
+    cpu_resource_1 = Resource(name="CPU")
+    cpu_resource_2 = Resource(name="CPU")
+    gpu_resource_1 = Resource(name="GPU")
+    resources = Resources({cpu_resource_1: 5,
+                           cpu_resource_2: 5,
+                           gpu_resource_1: 10})
+
+    cpu_resource_any = Resource(name="CPU", _id="any")
+    gpu_resource_any = Resource(name="GPU", _id="any")
+
+    task = __create_default_task()
+    resources.allocate(cpu_resource_any, task, 8)
+    resources.allocate(gpu_resource_any, task, 5)
+
+    assert len(resources._current_allocations) == 1,\
+        "Incorrect number of allocations."
+    assert len(resources._current_allocations[task]) == 3,\
+        "Incorrect current allocations for task."
+
+    # Deallocate the resources for the given task.
+    resources.deallocate(task)
+    assert len(resources._current_allocations) == 0,\
+        "Incorrect number of allocations."
+
+    # Check that the Resource quantities are the same.
+    assert resources.get_available_quantity(cpu_resource_1) == 5,\
+        "Incorrect quantity of the CPU resource."
+    assert resources.get_available_quantity(cpu_resource_2) == 5,\
+        "Incorrect quantity of the CPU resource."
+    assert resources.get_available_quantity(gpu_resource_1) == 10,\
+        "Incorrect quantity of the GPU resource."

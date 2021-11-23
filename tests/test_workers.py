@@ -68,6 +68,61 @@ def test_worker_place_task():
         "Incorrect number of GPU resources available."
 
 
+def test_worker_preempt_task_failed():
+    """ Test that preempting a non-placed Task raises an error. """
+    worker = Worker(name="Worker_1",
+                    resources=Resources({
+                                Resource(name="CPU"): 1,
+                                Resource(name="GPU"): 1}),
+                    num_threads=2)
+    task = __create_default_task(resource_requirements=Resources(
+        resource_vector={Resource(name="CPU", _id="any"): 1,
+                         Resource(name="GPU", _id="any"): 1, }))
+
+    # Ensure failure.
+    with pytest.raises(ValueError):
+        worker.preempt_task(task)
+
+
+def test_worker_preempt_task_success():
+    """ Test that preempting a Task correctly maintains the Resources. """
+    worker = Worker(name="Worker_1",
+                    resources=Resources({
+                                Resource(name="CPU"): 1,
+                                Resource(name="GPU"): 1}),
+                    num_threads=2)
+    task = __create_default_task(resource_requirements=Resources(
+        resource_vector={Resource(name="CPU", _id="any"): 1,
+                         Resource(name="GPU", _id="any"): 1, }))
+
+    # Place the task.
+    worker.place_task(task)
+    assert len(worker.get_placed_tasks()) == 1,\
+        "Incorrect number of placed tasks."
+    assert worker.resources.get_available_quantity(
+            Resource(name="CPU", _id="any")) == 0,\
+        "Incorrect number of CPU resources available."
+    assert worker.resources.get_available_quantity(
+            Resource(name="GPU", _id="any")) == 0,\
+        "Incorrect number of GPU resources available."
+
+    # Run the task.
+    task.release(1.0)
+    task.start(2.0)
+    task.pause(3.0)
+
+    # Preempt the task and ensure correct resources.
+    worker.preempt_task(task)
+    assert len(worker.get_placed_tasks()) == 0,\
+        "Incorrect number of placed tasks."
+    assert worker.resources.get_available_quantity(
+            Resource(name="CPU", _id="any")) == 1,\
+        "Incorrect number of CPU resources available."
+    assert worker.resources.get_available_quantity(
+            Resource(name="GPU", _id="any")) == 1,\
+        "Incorrect number of GPU resources available."
+
+
 def test_worker_step_tasks():
     """ Test that a Worker correctly steps all of its tasks. """
     worker = Worker(name="Worker_1",
