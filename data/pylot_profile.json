@@ -1,6 +1,4 @@
-[{"name": "center_camera_operator.release_data", "pid": "center_camera_operator", "tid": 1, "ts": 1625637636138946, "dur": 39, "ph": "X", "args": {"timestamp": "[]"}},
-{"name": "traffic_light_camera_operator.release_data", "pid": "traffic_light_camera_operator", "tid": 1, "ts": 1625637636139832, "dur": 27, "ph": "X", "args": {"timestamp": "[]"}},
-{"name": "gnss_operator.process_gnss", "pid": "gnss_operator", "tid": 1, "ts": 1625637640148378, "dur": 1484, "ph": "X", "args": {"timestamp": "[6861]"}},
+[{"name": "gnss_operator.process_gnss", "pid": "gnss_operator", "tid": 1, "ts": 1625637640148378, "dur": 1484, "ph": "X", "args": {"timestamp": "[6861]"}},
 {"name": "front_center_lidar_operator.process_point_clouds", "pid": "front_center_lidar_operator", "tid": 1, "ts": 1625637640165367, "dur": 3647, "ph": "X", "args": {"timestamp": "[6861]"}},
 {"name": "imu_operator.process_imu", "pid": "imu_operator", "tid": 1, "ts": 1625637640191366, "dur": 1474, "ph": "X", "args": {"timestamp": "[6861]"}},
 {"name": "localization_operator.on_watermark", "pid": "localization_operator", "tid": 1, "ts": 1625637640197333, "dur": 1030, "ph": "X", "args": {"timestamp": "[6861]"}},

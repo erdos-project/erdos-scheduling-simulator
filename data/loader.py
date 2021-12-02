@@ -2,10 +2,12 @@ import json
 from random import choice
 from operator import attrgetter
 from collections import defaultdict
-from typing import Sequence, Mapping, Tuple
+from typing import Sequence, Mapping, Tuple, Optional
 
+import absl
 import pydot
 
+import utils
 from workload import Job, Task, Resource, Resources, JobGraph, TaskGraph
 
 
@@ -17,8 +19,18 @@ class DataLoader(object):
         profile_path (`str`): The path to the JSON profile path from Pylot.
         resource_path (`str`): The path to the JSON file of task resource
             requirements.
+        _flags (`absl.flags`): The flags used to initialize the app, if any.
     """
-    def __init__(self, graph_path: str, profile_path: str, resource_path: str):
+    def __init__(self, graph_path: str, profile_path: str, resource_path: str,
+                 _flags: Optional['absl.flags'] = None):
+        # Set up the logger.
+        if _flags:
+            self._logger = utils.setup_logging(name=self.__class__.__name__,
+                                               log_file=_flags.log_file_name,
+                                               log_level=_flags.log_level)
+        else:
+            self._logger = utils.setup_logging(name=self.__class__.__name__)
+
         # Read the data from the profile path.
         with open(profile_path, 'r') as f:
             profile_data = json.load(f)
@@ -35,9 +47,13 @@ class DataLoader(object):
 
         # Create the Jobs from the profile path.
         self._jobs = DataLoader._DataLoader__create_jobs(profile_data)
+        self._logger.debug("Loaded {} Jobs from {}".format(len(self._jobs),
+                                                           profile_path))
 
         # Read the DOT file and ensure that we have jobs for all the nodes.
         job_dot_graph = pydot.graph_from_dot_file(graph_path)[0]
+        self._logger.debug("The DOT graph has {} Jobs".
+                           format(len(job_dot_graph.get_nodes())))
         if len(self._jobs) != len(job_dot_graph.get_nodes()):
             raise ValueError("Mismatch between the Jobs from the DOT graph\
                     and the JSON profile.")
@@ -64,6 +80,8 @@ class DataLoader(object):
                                                 profile_data,
                                                 self._jobs,
                                                 self._resource_requirements)
+        self._logger.debug("Loaded {} Tasks from {}".format(len(self._tasks),
+                                                            profile_path))
         self._task_graph = DataLoader._DataLoader__create_task_graph(
                 self._tasks, self._job_graph)
 
@@ -215,11 +233,10 @@ class DataLoader(object):
                             lambda parent_task: (parent_task.timestamp ==
                                                  task.timestamp),
                             grouped_tasks[parent_job.name]))
-                    assert (len(parent_task_same_timestamp) == 0 or
-                            len(parent_task_same_timestamp) == 1),\
-                        "Incorrect number of parent tasks for {} (length={})".\
-                        format(task, len(parent_task_same_timestamp))
 
+                    # There can be multiple different tasks for the message
+                    # and watermark callbacks from the parent Job, and we add
+                    # a dependency on all of them here.
                     for parent_task in parent_task_same_timestamp:
                         task_graph[parent_task].append(task)
 

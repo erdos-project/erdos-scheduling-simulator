@@ -3,6 +3,10 @@ from collections import defaultdict
 from functools import total_ordering
 from typing import Mapping, Optional, Union
 
+import absl
+
+import utils
+
 
 class Resource(object):
     """A `Resource` object is used to represent a particular resource in the
@@ -97,9 +101,20 @@ class Resources(object):
     Args:
         resource_vector (Mapping[Resource, int]): A mapping from an arbitrary
             set of resources to their quantities.
+        _flags (`Optional[absl.flags]`): The flags with which the app was
+            initiated, if any.
     """
     def __init__(self,
-                 resource_vector: Optional[Mapping[Resource, int]] = {}):
+                 resource_vector: Optional[Mapping[Resource, int]] = {},
+                 _flags: Optional['absl.flags'] = None):
+        # Set up the logger.
+        if _flags:
+            self._logger = utils.setup_logging(name=self.__class__.__name__,
+                                               log_file=_flags.log_file_name,
+                                               log_level=_flags.log_level)
+        else:
+            self._logger = utils.setup_logging(name=self.__class__.__name__)
+
         self._resource_vector = defaultdict(int)
         for resource, quantity in resource_vector.items():
             self._resource_vector[resource] = quantity
@@ -120,6 +135,8 @@ class Resources(object):
             raise ValueError("Invalid type for resource: {}".
                              format(type(resource)))
         self._resource_vector[resource] += quantity
+        self._logger.debug("Added {} [quantity={}] to {}".
+                           format(resource, quantity, self))
 
     def get_available_quantity(self, resource: Resource) -> int:
         """Provides the quantity of the available resources of the given type.
@@ -155,6 +172,8 @@ class Resources(object):
             `ValueError` if more than the available quantity of the resource is
             requested.
         """
+        self._logger.debug("Trying to allocate {} of {} from {}".
+                           format(quantity, resource, self))
         available_quantity = self.get_available_quantity(resource)
         if available_quantity < quantity:
             raise ValueError("Trying to allocate more than available units of \
@@ -168,12 +187,17 @@ class Resources(object):
             if _resource == resource:
                 _quantity = self._resource_vector[_resource]
                 if _quantity >= remaining_quantity:
+                    self._logger.debug("Allocated {} [quantity={}] from {}".
+                                       format(_resource, remaining_quantity,
+                                              self))
                     self._resource_vector[_resource] = (_quantity -
                                                         remaining_quantity)
                     self._current_allocations[task].append(
                             (_resource, remaining_quantity))
                     break
                 else:
+                    self._logger.debug("Allocated {} [quantity={}] from {}".
+                                       format(_resource, _quantity, self))
                     self._resource_vector[_resource] = 0
                     self._current_allocations[task].append(
                             (_resource, _quantity))
@@ -205,6 +229,8 @@ class Resources(object):
 
         # Allocate all the resources together.
         for resource, quantity in resources._resource_vector.items():
+            self._logger.debug("Allocating {} of {} from {} to {}".
+                               format(quantity, resource, self, task))
             self.allocate(resource, task, quantity)
 
     def deallocate(self, task: 'Task'):

@@ -28,7 +28,7 @@
     },
 
     {
-        "name": "faster-rcnn.on_msg_camera_stream",
+        "name": "faster_rcnn.on_msg_camera_stream",
         "resource_requirements": [{
             "CPU:any": 1,
             "GPU:any": 1

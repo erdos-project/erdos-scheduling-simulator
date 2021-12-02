@@ -1,6 +1,9 @@
 import uuid
 from typing import Optional, Sequence, Type
 
+import absl
+
+import utils
 from workload import Resources, Task, TaskState
 from schedulers import BaseScheduler
 
@@ -16,8 +19,19 @@ class Worker(object):
         resources (`Resource`): The set of `Resource`s owned by this worker.
         id (`UUID`): The ID of this particular Worker.
         num_threads (`int`): The number of threads in this Worker.
+        _flags (`Optional[absl.flags]`): The flags with which the app was
+            initiated, if any.
     """
-    def __init__(self, name: str, resources: Resources, num_threads: int):
+    def __init__(self, name: str, resources: Resources, num_threads: int,
+                 _flags: Optional['absl.flags'] = None):
+        # Set up the logger.
+        if _flags:
+            self._logger = utils.setup_logging(name=self.__class__.__name__,
+                                               log_file=_flags.log_file_name,
+                                               log_level=_flags.log_level)
+        else:
+            self._logger = utils.setup_logging(name=self.__class__.__name__)
+
         self._name = name
         self._id = uuid.uuid4()
         self._resources = resources
@@ -35,6 +49,7 @@ class Worker(object):
         """
         self._resources.allocate_multiple(task.resource_requirements, task)
         self._placed_tasks[task] = task.state
+        self._logger.debug("Placed {} on {}".format(task, self))
 
     def preempt_task(self, task: Task):
         """Preempts the given `Task` and frees the resources.
@@ -93,7 +108,12 @@ class Worker(object):
         completed_tasks = []
         # Invoke the step() method on all the tasks.
         for task in self._placed_tasks:
+            self._logger.debug("Stepping through the execution of {} for {}\
+                               steps from time {}.".format(task, step_size,
+                                                           current_time))
             if task.step(current_time, step_size):
+                self._logger.debug("{} finished execution on {}.".
+                                   format(task, self))
                 completed_tasks.append(task)
                 # Resave the task as now completed / evicted.
                 self._placed_tasks[task] = task.state
@@ -138,9 +158,25 @@ class WorkerPool(object):
     Args:
         name (`str`): A name assigned to this WorkerPool.
         id (`UUID`): The ID of the particular WorkerPool.
+        workers (`Optional[Sequence[Worker]]`): The set of workers assigned to
+            this WorkerPool, if any.
+        scheduler (`Optional[Type[BaseScheduler]]`): The second-level scheduler
+            implementation that schedules tasks assigned to this WorkerPool
+            across its Workers.
+        _flags (`Optional[absl.flags]`): The flags with which the app was
+            initiated, if any.
     """
     def __init__(self, name: str, workers: Optional[Sequence[Worker]] = [],
-                 scheduler: Optional[Type[BaseScheduler]] = None):
+                 scheduler: Optional[Type[BaseScheduler]] = None,
+                 _flags: Optional['absl.flags'] = None):
+        # Set up the logger.
+        if _flags:
+            self._logger = utils.setup_logging(name=self.__class__.__name__,
+                                               log_file=_flags.log_file_name,
+                                               log_level=_flags.log_level)
+        else:
+            self._logger = utils.setup_logging(name=self.__class__.__name__)
+
         self._name = name
         self._workers = {worker.id: worker for worker in workers}
         self._scheduler = scheduler
@@ -155,9 +191,10 @@ class WorkerPool(object):
         """
         for worker in workers:
             if worker.id in self._workers:
-                print("Skipping adding Worker with ID: {} because it already\
-                        exists.".format(worker.id))
+                self._logger.info("Skipping addition of {} since it already\
+                                  exists in {}".format(worker, self))
             else:
+                self._logger.debug("Adding {} to {}".format(worker, self))
                 self._workers[worker.id] = worker
 
     def place_task(self, task: Task):
@@ -235,6 +272,9 @@ class WorkerPool(object):
         completed_tasks = []
         # Invoke the step() method on all the workers.
         for _, worker in self._workers.items():
+            self._logger.debug("Stepping through the execution of {} for {}\
+                               steps from time {}".format(worker, step_size,
+                                                          current_time))
             completed_tasks.extend(worker.step(current_time, step_size))
         return completed_tasks
 

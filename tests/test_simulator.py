@@ -109,27 +109,36 @@ def test_simulator_construction():
 
 def test_failed_construction_of_scheduler_start_event():
     """ Test if a non SCHEDULER_FINISHED event raises an error or not. """
+    worker_pool = __create_default_worker_pool()
+    simulator = Simulator(worker_pools=[worker_pool],
+                          scheduler=MockScheduler(runtime=1.0, placement=None),
+                          job_graph=None)
     with pytest.raises(ValueError):
-        Simulator._Simulator__get_next_scheduler_event(
+        simulator._Simulator__get_next_scheduler_event(
                 event=Event(event_type=EventType.SCHEDULER_START, time=3.0),
                 scheduler_frequency=-1.0, last_scheduler_start_time=2.0)
 
 
 def test_construction_of_scheduler_start_event():
     """ Test the correct construction of a SCHEDULER_START event. """
-    simulator_start_event = Simulator._Simulator__get_next_scheduler_event(
+    worker_pool = __create_default_worker_pool()
+    simulator = Simulator(worker_pools=[worker_pool],
+                          scheduler=MockScheduler(runtime=1.0, placement=None),
+                          job_graph=None)
+
+    simulator_start_event = simulator._Simulator__get_next_scheduler_event(
             event=Event(event_type=EventType.SCHEDULER_FINISHED, time=3.0),
             scheduler_frequency=-1.0, last_scheduler_start_time=1.0)
     assert simulator_start_event.time == 4.0,\
         "Incorrect start time for Scheduler."
 
-    simulator_start_event = Simulator._Simulator__get_next_scheduler_event(
+    simulator_start_event = simulator._Simulator__get_next_scheduler_event(
             event=Event(event_type=EventType.SCHEDULER_FINISHED, time=3.0),
             scheduler_frequency=5.0, last_scheduler_start_time=1.0)
     assert simulator_start_event.time == 6.0,\
         "Incorrect start time for Scheduler."
 
-    simulator_start_event = Simulator._Simulator__get_next_scheduler_event(
+    simulator_start_event = simulator._Simulator__get_next_scheduler_event(
             event=Event(event_type=EventType.SCHEDULER_FINISHED, time=7.0),
             scheduler_frequency=5.0, last_scheduler_start_time=1.0)
     assert simulator_start_event.time == 8.0,\

@@ -3,6 +3,9 @@ from enum import Enum
 from collections import namedtuple, defaultdict
 from typing import Mapping, Sequence, Optional
 
+import absl
+
+import utils
 from workload import Job, Resources
 
 Paused = namedtuple("Paused", "pause_time, restart_time")
@@ -45,10 +48,21 @@ class Task(object):
         completion_time (`float`): The time at which the task completed / was
             preempted (only available if state is either EVICTED / COMPLETED,
             -1 otherwise)
+        _flags (`Optional[absl.flags]`): The flags with which the app was
+            initiated, if any.
     """
     def __init__(self, name: str, job: Job, resource_requirements: Resources,
                  runtime: float, deadline: float,
-                 timestamp: Sequence[int] = []):
+                 timestamp: Sequence[int] = [],
+                 _flags: Optional['absl.flags'] = None):
+        # Set up the logger.
+        if _flags:
+            self._logger = utils.setup_logging(name=self.__class__.__name__,
+                                               log_file=_flags.log_file_name,
+                                               log_level=_flags.log_level)
+        else:
+            self._logger = utils.setup_logging(name=self.__class__.__name__)
+
         self._name = name
         self._creating_job = job
         self._resource_reqs = resource_requirements
@@ -74,6 +88,8 @@ class Task(object):
         Args:
             time (`float`): The simulation time at which to release the task.
         """
+        self._logger.debug("Transitioning {} to {}".format(self,
+                                                           TaskState.RELEASED))
         self._release_time = time
         self._state = TaskState.RELEASED
 
@@ -90,11 +106,16 @@ class Task(object):
         """
         if self.state not in (TaskState.RELEASED, TaskState.PAUSED):
             raise ValueError("Only RELEASED or PAUSED tasks can be started.")
+
+        remaining_time = max(0, self._remaining_time +
+                             (self._remaining_time * variance / 100.0))
+        self._logger.debug("Transitioning {} to {} at time {}\
+                           with the remaining time {}".format(self,
+                           TaskState.RUNNING, time, remaining_time))
         self._start_time = time
         self._last_step_time = time
         self._state = TaskState.RUNNING
-        self.update_remaining_time(max(0, self._remaining_time +
-                                   (self._remaining_time * variance / 100.0)))
+        self.update_remaining_time(remaining_time)
 
     def step(self, current_time: float, step_size: float = 1) -> bool:
         """Steps the task for the given `step_size` (default 1 time step).
@@ -109,6 +130,10 @@ class Task(object):
         if (self.state != TaskState.RUNNING or
            self.start_time > current_time + step_size):
             # We cannot step a Task that's not supposed to be running.
+            self._logger.warning("Cannot step {} with start time {} at time {}\
+                               since it's either not RUNNING or isn't supposed\
+                               to start yet.".format(self, self.start_time,
+                                                     self.state))
             return False
 
         # Task can be run, step through the task's execution.
@@ -120,6 +145,9 @@ class Task(object):
             return True
         else:
             self._remaining_time -= execution_time
+            self._logger.debug("Stepped {} for {} steps.\
+                               Remaining execution time: {}".
+                               format(self, step_size, self._remaining_time))
             return False
 
     def pause(self, time: float):
@@ -133,6 +161,8 @@ class Task(object):
         """
         if self.state != TaskState.RUNNING:
             raise ValueError("Task is not RUNNING right now.")
+        self._logger.debug("Transitioning {} to {} at time {}".
+                           format(self, TaskState.PAUSED, time))
         self._paused_times.append(Paused(time, -1))
         self._state = TaskState.PAUSED
 
@@ -147,6 +177,10 @@ class Task(object):
         """
         if self.state != TaskState.PAUSED:
             raise ValueError("Task is not PAUSED right now.")
+        self._logger.debug("Transitioning {} which was PAUSED at {} to {} at\
+                           time {}".format(self,
+                                           self._paused_times[-1].pause_time,
+                                           TaskState.RUNNING, time))
         self._paused_times[-1]._replace(restart_time=time)
         self._last_step_time = time
         self._state = TaskState.RUNNING
@@ -164,6 +198,8 @@ class Task(object):
             self._state = TaskState.COMPLETED
         else:
             self._state = TaskState.EVICTED
+        self._logger.debug("Finished execution of {} at time {}".
+                           format(self, time))
         # TODO (Sukrit): We should notify the `Job` of the completion of this
         # particular task, so it can release new tasks to the scheduler.
 
@@ -208,8 +244,8 @@ class Task(object):
                 self.state == TaskState.COMPLETED)
 
     def __str__(self):
-        return "Task(name={}, id={}, job={}, timestamp={})".format(
-                self.name, self.id, self.job, self.timestamp)
+        return "Task(name={}, id={}, job={}, timestamp={}, state={})".format(
+                self.name, self.id, self.job, self.timestamp, self.state)
 
     def repr(self):
         return str(self)
