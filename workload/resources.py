@@ -1,7 +1,8 @@
 import uuid
+from copy import copy
 from collections import defaultdict
 from functools import total_ordering
-from typing import Mapping, Optional, Union
+from typing import Mapping, Optional
 
 import absl
 
@@ -29,19 +30,6 @@ class Resource(object):
             raise ValueError("The acceptable values of _id are None / 'any'")
         self._name = name
         self._id = uuid.uuid4() if _id is None else _id
-        self._assigned = None
-
-    def assign(self, task_id: Union[uuid.UUID, str]):
-        """Assign this Resource instance to the given task_id.
-
-        Args:
-            task_id (`str`): The task ID to assign this Resource to.
-
-        Raises:
-            ValueError if an ill-formed Task ID is passed.
-        """
-        self._assigned = task_id if type(task_id) == uuid.UUID else\
-            uuid.UUID(task_id)
 
     @property
     def name(self):
@@ -51,20 +39,33 @@ class Resource(object):
     def id(self):
         return str(self._id)
 
-    @property
-    def is_assigned(self):
-        return self._assigned is not None
-
     def __str__(self):
-        return 'Resource(name={}, id={}, assigned={})'.format(self.name,
-                                                              self.id,
-                                                              self.is_assigned)
+        return 'Resource(name={}, id={})'.format(self.name, self.id)
 
     def __repr__(self):
         return str(self)
 
     def __hash__(self):
         return hash((self.name, self.id))
+
+    def __copy__(self):
+        """Copies self and returns a new instance of Resources that shares
+        the same reference to the UUID that backs the original instance."""
+        cls = self.__class__
+        instance = cls.__new__(cls)
+        cls.__init__(instance, name=self.name)
+        instance._id = self._id
+        return instance
+
+    def __deepcopy__(self, memo):
+        """Deepcopies self and returns a new instance of Resources that has a
+        new instance of the UUID with the same value as the original."""
+        cls = self.__class__
+        instance = cls.__new__(cls)
+        cls.__init__(instance, name=self.name)
+        instance._id = uuid.UUID(self.id)
+        memo[id(self)] = instance
+        return instance
 
     def __eq__(self, other: 'Resource'):
         """Checks if the current resource is equal to the other.
@@ -117,7 +118,7 @@ class Resources(object):
 
         self._resource_vector = defaultdict(int)
         for resource, quantity in resource_vector.items():
-            self._resource_vector[resource] = quantity
+            self._resource_vector[copy(resource)] = quantity
         if not all(map(lambda x: type(x) == Resource, self._resource_vector)):
             raise ValueError("The keys for the resource vector\
                               should be of type 'Resource'")
@@ -257,6 +258,42 @@ class Resources(object):
 
     def __len__(self):
         return len(self._resource_vector)
+
+    def __copy__(self) -> 'Resources':
+        """Copies self, and returns a new instance with a copy of the original
+        Resource availabilities.
+
+        This method keeps the current allocations of Resources in self in the
+        new instance.
+        """
+        cls = self.__class__
+        instance = cls.__new__(cls)
+        cls.__init__(instance, self._resource_vector)
+
+        # Copy over the allocations.
+        for task, allocations in self._current_allocations.items():
+            instance._current_allocations[task].extend(copy(allocations))
+
+        return instance
+
+    def __deepcopy__(self, memo):
+        """Copies self, and returns a new instance with a copy of the original
+        Resource availabilities.
+
+        This method removes the current allocation of Resources in self in the
+        new instance.
+        """
+        cls = self.__class__
+        instance = cls.__new__(cls)
+        cls.__init__(instance, self._resource_vector)
+
+        # Undo the allocations.
+        for allocations in self._current_allocations.values():
+            for resource, quantity in allocations:
+                instance.add_resource(resource, quantity)
+
+        memo[id(self)] = instance
+        return instance
 
     def repr(self):
         return str(self)

@@ -1,4 +1,5 @@
 import uuid
+from copy import copy, deepcopy
 from typing import Optional, Sequence, Type
 
 import absl
@@ -118,6 +119,43 @@ class Worker(object):
                 # Resave the task as now completed / evicted.
                 self._placed_tasks[task] = task.state
         return completed_tasks
+
+    def __copy__(self):
+        """ A copy of the Worker uses the same ID, and copies the resource
+        allocations of self.
+
+        This is used by the schedulers to try scheduling decisions on a version
+        of the current state of the Worker without affecting the state of the
+        original Worker.
+        """
+        cls = self.__class__
+        instance = cls.__new__(cls)
+        cls.__init__(instance, name=self.name, resources=copy(self.resources),
+                     num_threads=self.num_threads)
+        instance._id = uuid.UUID(self.id)
+
+        # Copy the placed tasks.
+        for task, state in self._placed_tasks.items():
+            instance._placed_tasks[task] = state
+
+        return instance
+
+    def __deepcopy__(self, memo):
+        """ A deepcopy of the Worker uses the same ID, and resets the resources
+        to the initial state, thus undoing the effects of task placement.
+
+        This is used by the schedulers to try scheduling decisions on the
+        original state of the Worker without affecting the state of the
+        original Worker.
+        """
+        cls = self.__class__
+        instance = cls.__new__(cls)
+        cls.__init__(instance, name=self.name,
+                     resources=deepcopy(self.resources),
+                     num_threads=self.num_threads)
+        instance._id = uuid.UUID(self.id)
+        memo[id(self)] = instance
+        return instance
 
     @property
     def name(self):
@@ -278,6 +316,19 @@ class WorkerPool(object):
             completed_tasks.extend(worker.step(current_time, step_size))
         return completed_tasks
 
+    def can_accomodate_task(self, task: Task) -> bool:
+        """Checks if any of the `Worker`s of this `WorkerPool` can accomodate
+        the given `Task` based on its resource availability.
+
+        Args:
+            task (`Task`): The task to be placed on this `WorkerPool`.
+
+        Returns:
+            `True` if the task can be placed, `False` otherwise.
+        """
+        return any(worker.can_accomodate_task(task)
+                   for worker in self._workers.values())
+
     @property
     def name(self):
         return self._name
@@ -288,10 +339,53 @@ class WorkerPool(object):
 
     @property
     def workers(self):
-        return self._workers
+        return list(self._workers.values())
 
     def __str__(self):
         return "WorkerPool(name={}, id={})".format(self.name, self.id)
 
     def __repr__(self):
         return str(self)
+
+    def __copy__(self):
+        """ A copy of the WorkerPool uses the same ID, and copies the state of
+        the Workers, along with their current resource usage and placed tasks.
+
+        This is used by the schedulers to try scheduling decisions on a version
+        of the current state of the WorkerPool without affecting the state of
+        the original WorkerPool.
+        """
+        cls = self.__class__
+        instance = cls.__new__(cls)
+        cls.__init__(instance,
+                     name=self.name,
+                     workers=[copy(w) for w in self._workers.values()],
+                     scheduler=copy(self._scheduler),
+                     )
+        instance._id = uuid.UUID(self.id)
+
+        # Copy the placed tasks.
+        for task, worker_id in self._placed_tasks.items():
+            instance._placed_tasks[task] = worker_id
+
+        return instance
+
+    def __deepcopy__(self, memo):
+        """ A deepcopy of the WorkerPool uses the same ID, and resets the
+        Workers to the initial state, thus undoing the effects of the task
+        placement.
+
+        This is used by the schedulers to try scheduling decisions on the
+        original state of the WorkerPool without affecting the state of the
+        original WorkerPool.
+        """
+        cls = self.__class__
+        instance = cls.__new__(cls)
+        cls.__init__(instance,
+                     name=self.name,
+                     workers=[deepcopy(w) for w in self._workers.values()],
+                     scheduler=copy(self._scheduler),
+                     )
+        instance._id = uuid.UUID(self.id)
+        memo[id(self)] = instance
+        return instance

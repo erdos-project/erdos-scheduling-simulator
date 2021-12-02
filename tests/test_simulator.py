@@ -14,7 +14,7 @@ class MockScheduler(BaseScheduler):
         self._runtime = runtime
         self._task_placement = placement
 
-    def schedule(self, available_tasks=None, task_graph=None,
+    def schedule(self, sim_time=None, released_tasks=None, task_graph=None,
                  worker_pools=None):
         return (self._runtime, self._task_placement)
 

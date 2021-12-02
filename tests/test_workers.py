@@ -1,3 +1,5 @@
+from copy import copy, deepcopy
+
 import pytest
 
 from workers import Worker, WorkerPool
@@ -66,6 +68,66 @@ def test_worker_place_task():
     assert worker.resources.get_available_quantity(
             Resource(name="GPU", _id="any")) == 0,\
         "Incorrect number of GPU resources available."
+
+
+def test_worker_copy():
+    """ Test that a copy of the Worker is created correctly. """
+    worker = Worker(name="Worker_1",
+                    resources=Resources({
+                                Resource(name="CPU"): 1,
+                                Resource(name="GPU"): 1}),
+                    num_threads=2)
+    task = __create_default_task(resource_requirements=Resources(
+        resource_vector={Resource(name="CPU", _id="any"): 1,
+                         Resource(name="GPU", _id="any"): 1, }))
+
+    # Place the task.
+    worker.place_task(task)
+    placed_tasks = worker.get_placed_tasks()
+
+    assert len(placed_tasks) == 1, "Incorrect number of placed tasks."
+    assert placed_tasks[0] == task, "Incorrect placed task."
+
+    # Copy the Worker
+    worker_copy = copy(worker)
+    assert len(worker_copy.get_placed_tasks()) == 1,\
+        "Incorrect number of placed tasks in the copy of the Worker."
+    assert worker_copy.resources.get_available_quantity(
+            Resource(name="CPU", _id="any")) == 0,\
+        "Incorrect number of CPU resources available on the copy of Worker."
+    assert worker_copy.resources.get_available_quantity(
+            Resource(name="GPU", _id="any")) == 0,\
+        "Incorrect number of GPU resources available on the copy of Worker."
+
+
+def test_worker_deepcopy():
+    """ Test that a deep copy of the Worker is created correctly. """
+    worker = Worker(name="Worker_1",
+                    resources=Resources({
+                                Resource(name="CPU"): 1,
+                                Resource(name="GPU"): 1}),
+                    num_threads=2)
+    task = __create_default_task(resource_requirements=Resources(
+        resource_vector={Resource(name="CPU", _id="any"): 1,
+                         Resource(name="GPU", _id="any"): 1, }))
+
+    # Place the task.
+    worker.place_task(task)
+    placed_tasks = worker.get_placed_tasks()
+
+    assert len(placed_tasks) == 1, "Incorrect number of placed tasks."
+    assert placed_tasks[0] == task, "Incorrect placed task."
+
+    # Copy the Worker
+    worker_copy = deepcopy(worker)
+    assert len(worker_copy.get_placed_tasks()) == 0,\
+        "Incorrect number of placed tasks in the copy of the Worker."
+    assert worker_copy.resources.get_available_quantity(
+            Resource(name="CPU", _id="any")) == 1,\
+        "Incorrect number of CPU resources available on the copy of Worker."
+    assert worker_copy.resources.get_available_quantity(
+            Resource(name="GPU", _id="any")) == 1,\
+        "Incorrect number of GPU resources available on the copy of Worker."
 
 
 def test_worker_preempt_task_failed():
@@ -304,3 +366,89 @@ def test_worker_pool_step():
     completed_tasks = worker_pool.step(7.0)
     assert len(completed_tasks) == 1, "Incorrect number of completed tasks."
     assert completed_tasks[0] == task_two, "Incorrect completed task."
+
+
+def test_copy_worker_pool():
+    # Initialize the Workers and the WorkerPool.
+    worker_one = Worker(name="Worker_1",
+                        resources=Resources({
+                            Resource(name="CPU"): 1,
+                            Resource(name="GPU"): 1}),
+                        num_threads=2,
+                        )
+    worker_two = Worker(name="Worker_2",
+                        resources=Resources({
+                            Resource(name="CPU"): 1,
+                            Resource(name="GPU"): 1}),
+                        num_threads=2,
+                        )
+    worker_pool = WorkerPool(name="WorkerPool_Test",
+                             workers=[worker_one, worker_two],
+                             )
+
+    # Place a task on the WorkerPool.
+    task_one = __create_default_task(
+            resource_requirements=Resources(
+                    resource_vector={Resource(name="CPU", _id="any"): 1}),
+            runtime=3.0,
+            )
+    worker_pool.place_task(task_one)
+
+    assert len(worker_pool.get_placed_tasks()) == 1,\
+        "Incorrect number of placed tasks."
+
+    # Copy the WorkerPool.
+    worker_pool_copy = copy(worker_pool)
+    assert len(worker_pool_copy.get_placed_tasks()) == 1,\
+        "Incorrect number of placed tasks."
+    assert len(worker_pool_copy.workers) == 2,\
+        "Incorrect number of workers."
+    assert worker_pool_copy.workers[0].resources.get_available_quantity(
+            Resource(name="CPU", _id="any")) == 0,\
+        "Incorrect number of available resources in Worker."
+    assert worker_pool_copy.workers[1].resources.get_available_quantity(
+            Resource(name="CPU", _id="any")) == 1,\
+        "Incorrect number of available resources in Worker."
+
+
+def test_deepcopy_worker_pool():
+    # Initialize the Workers and the WorkerPool.
+    worker_one = Worker(name="Worker_1",
+                        resources=Resources({
+                            Resource(name="CPU"): 1,
+                            Resource(name="GPU"): 1}),
+                        num_threads=2,
+                        )
+    worker_two = Worker(name="Worker_2",
+                        resources=Resources({
+                            Resource(name="CPU"): 1,
+                            Resource(name="GPU"): 1}),
+                        num_threads=2,
+                        )
+    worker_pool = WorkerPool(name="WorkerPool_Test",
+                             workers=[worker_one, worker_two],
+                             )
+
+    # Place a task on the WorkerPool.
+    task_one = __create_default_task(
+            resource_requirements=Resources(
+                    resource_vector={Resource(name="CPU", _id="any"): 1}),
+            runtime=3.0,
+            )
+    worker_pool.place_task(task_one)
+
+    assert len(worker_pool.get_placed_tasks()) == 1,\
+        "Incorrect number of placed tasks."
+
+    # Copy the WorkerPool.
+    worker_pool_copy = deepcopy(worker_pool)
+    assert len(worker_pool_copy.get_placed_tasks()) == 0,\
+        "Incorrect number of placed tasks."
+    assert len(worker_pool_copy.workers) == 2,\
+        "Incorrect number of workers."
+    assert worker_pool_copy.workers[0].resources.get_available_quantity(
+            Resource(name="CPU", _id="any")) == 1,\
+        "Incorrect number of available resources in Worker."
+    assert worker_pool_copy.workers[1].resources.get_available_quantity(
+            Resource(name="CPU", _id="any")) == 1,\
+        "Incorrect number of available resources in Worker."

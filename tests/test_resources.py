@@ -1,4 +1,6 @@
 import uuid
+from copy import copy, deepcopy
+
 import pytest
 
 from workload import Resource, Resources
@@ -55,35 +57,6 @@ def test_non_equivalence_of_same_type():
         "Two resources with same name but different IDs are equivalent."
 
 
-def test_non_task_assignment():
-    """ Test that a Resource starts without being an assigned task. """
-    cpu_resource = Resource(name="CPU")
-    assert not cpu_resource.is_assigned,\
-        "Resource is assigned without calling assign()"
-
-
-def test_failed_task_assignment():
-    """ Test that a Resource is assigned to a task correctly. """
-    with pytest.raises(ValueError):
-        cpu_resource = Resource(name="CPU")
-        cpu_resource.assign("random")
-
-
-def test_successful_task_assignment():
-    """ Test that a Resource is assigned to a task correctly. """
-    test_uuid = uuid.uuid4()
-
-    # Assign and check first Resource.
-    cpu_resource_1 = Resource(name="CPU")
-    cpu_resource_1.assign(str(test_uuid))
-    assert cpu_resource_1.is_assigned, "The Resource was not assigned."
-
-    # Assign and check second Resource.
-    cpu_resource_2 = Resource(name="CPU")
-    cpu_resource_2.assign(test_uuid)
-    assert cpu_resource_2.is_assigned, "The Resource was not assigned."
-
-
 def test_resource_hash_equivalence():
     """ Test that two similar Resources have similar hash values. """
     cpu_resource_1 = Resource(name="CPU")
@@ -95,6 +68,26 @@ def test_resource_hash_equivalence():
 
     assert hash(cpu_resource_2) == hash(cpu_resource_3),\
         "The hash values of similar Resources are not similar."
+
+
+def test_resource_copy():
+    """ Test that copying a Resource works correctly. """
+    cpu_resource = Resource(name="CPU")
+    cpu_resource_copy = copy(cpu_resource)
+    assert id(cpu_resource) != id(cpu_resource_copy),\
+        "The copy should not have the same ID as the original."
+    assert id(cpu_resource._id) == id(cpu_resource_copy._id),\
+        "The copy should have an identical ID for its identifier."
+
+
+def test_resource_deepcopy():
+    """ Test that deep copying a Resource works correctly. """
+    cpu_resource = Resource(name="CPU")
+    cpu_resource_copy = deepcopy(cpu_resource)
+    assert id(cpu_resource) != id(cpu_resource_copy),\
+        "The deepcopy should not have the same ID as the original."
+    assert id(cpu_resource._id) != id(cpu_resource_copy._id),\
+        "The deepcopy should not have an identical ID for its identifier."
 
 
 def test_empty_resources_construction():
@@ -287,4 +280,70 @@ def test_deallocation_of_resources():
     assert resources.get_available_quantity(cpu_resource_2) == 5,\
         "Incorrect quantity of the CPU resource."
     assert resources.get_available_quantity(gpu_resource_1) == 10,\
+        "Incorrect quantity of the GPU resource."
+
+
+def test_resources_copy():
+    """ Test that Resources are correctly copied. """
+    cpu_resource_1 = Resource(name="CPU")
+    cpu_resource_2 = Resource(name="CPU")
+    gpu_resource_1 = Resource(name="GPU")
+    resources = Resources({cpu_resource_1: 5,
+                           cpu_resource_2: 5,
+                           gpu_resource_1: 10})
+
+    cpu_resource_any = Resource(name="CPU", _id="any")
+    gpu_resource_any = Resource(name="GPU", _id="any")
+
+    task = __create_default_task()
+    resources.allocate(cpu_resource_any, task, 8)
+    resources.allocate(gpu_resource_any, task, 5)
+
+    assert len(resources._current_allocations) == 1,\
+        "Incorrect number of allocations."
+    assert len(resources._current_allocations[task]) == 3,\
+        "Incorrect current allocations for task."
+
+    # Copy the resources.
+    resources_copy = copy(resources)
+    assert len(resources_copy._current_allocations) == 1,\
+        "Incorrect number of allocations in the copied Resources."
+    assert len(resources_copy._current_allocations[task]) == 3,\
+        "Incorrect current allocations for task in the copied Resources."
+    assert resources_copy.get_available_quantity(cpu_resource_1) == 0,\
+        "Incorrect quantity of the CPU resource."
+    assert resources_copy.get_available_quantity(cpu_resource_2) == 2,\
+        "Incorrect quantity of the CPU resource."
+    assert resources_copy.get_available_quantity(gpu_resource_1) == 5,\
+        "Incorrect quantity of the GPU resource."
+
+
+def test_resources_deepcopy():
+    """ Test that Resources are correctly copied. """
+    cpu_resource_1 = Resource(name="CPU")
+    cpu_resource_2 = Resource(name="CPU")
+    gpu_resource_1 = Resource(name="GPU")
+    resources = Resources({cpu_resource_1: 5,
+                           cpu_resource_2: 5,
+                           gpu_resource_1: 10})
+
+    cpu_resource_any = Resource(name="CPU", _id="any")
+    gpu_resource_any = Resource(name="GPU", _id="any")
+
+    task = __create_default_task()
+    resources.allocate(cpu_resource_any, task, 8)
+    resources.allocate(gpu_resource_any, task, 5)
+
+    assert len(resources._current_allocations) == 1,\
+        "Incorrect number of allocations."
+    assert len(resources._current_allocations[task]) == 3,\
+        "Incorrect current allocations for task."
+
+    # Copy the resources.
+    resources_copy = deepcopy(resources)
+    assert resources_copy.get_available_quantity(cpu_resource_1) == 5,\
+        "Incorrect quantity of the CPU resource."
+    assert resources_copy.get_available_quantity(cpu_resource_2) == 5,\
+        "Incorrect quantity of the CPU resource."
+    assert resources_copy.get_available_quantity(gpu_resource_1) == 10,\
         "Incorrect quantity of the GPU resource."

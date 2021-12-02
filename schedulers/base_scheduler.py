@@ -4,7 +4,8 @@ from workload import Task, TaskGraph
 
 class BaseScheduler(object):
     def schedule(self,
-                 available_tasks: Sequence[Task],
+                 sim_time: float,
+                 released_tasks: Sequence[Task],
                  task_graph: TaskGraph,
                  worker_pools: 'Sequence[WorkerPool]',
                  ) -> (float, Sequence[Tuple[Task, str]]):
@@ -12,7 +13,8 @@ class BaseScheduler(object):
         scheduling of tasks.
 
         Args:
-            available_tasks (`Sequence[Task]`): The set of tasks available at
+            sim_time (`float`): The time at which the scheduler is invoked.
+            released_tasks (`Sequence[Task]`): The set of tasks released at
                 the invocation of the current run of the scheduler.
             task_graph (`TaskGraph`): The state of the TaskGraph at this
                 invocation including the future set of VIRTUAL tasks.

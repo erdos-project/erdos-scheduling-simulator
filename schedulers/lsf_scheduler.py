@@ -1,5 +1,5 @@
 import time
-from operator import attrgetter
+from functools import partial
 from copy import copy, deepcopy
 from typing import Sequence, Tuple
 
@@ -8,11 +8,12 @@ from workload import Task, TaskGraph
 from workers import WorkerPool
 
 
-class EDFScheduler(BaseScheduler):
-    """Implements the EDF scheduling algorithm for the Simulator.
+class LSFScheduler(BaseScheduler):
+    """Implements the Least Slack First (LSF) scheduling algorithm for the
+    Simulator.
 
     Args:
-        preemptive (`bool`): If `True`, the EDF scheduler can preempt the tasks
+        preemptive (`bool`): If `true`, the LSF scheduler can preempt the tasks
             that are currently running.
         runtime (`float`): The runtime to return to the simulator. If -1, the
             scheduler returns the actual runtime.
@@ -24,7 +25,7 @@ class EDFScheduler(BaseScheduler):
     def schedule(self, sim_time: float, released_tasks: Sequence[Task],
                  task_graph: TaskGraph, worker_pools: Sequence[WorkerPool])\
             -> (float, Sequence[Tuple[Task, str]]):
-        """Implements the BaseScheduler's schedule() method using the EDF
+        """Implements the BaseScheduler's schedule() method using the LSF
         algorithm for scheduling the given released_tasks across the
         worker_pools.
         """
@@ -47,18 +48,13 @@ class EDFScheduler(BaseScheduler):
             # Create a virtual WorkerPool set to try scheduling decisions on.
             schedulable_worker_pools = [copy(w) for w in worker_pools]
 
-        # Sort the tasks according to their deadlines, and place them on the
+        # Sort the tasks according to their slacks, and place them on the
         # worker pools.
         start_time = time.time()
         ordered_tasks = list(sorted(tasks_to_be_scheduled,
-                                    key=attrgetter('deadline')))
+                                    key=partial(self.slack, sim_time)))
 
         # Run the scheduling loop.
-        # TODO (Sukrit): This loop may require spurious migrations of tasks
-        # by preempting them from one pool, and assigning them to another.
-        # We should ensure that we check if the worker pool already has running
-        # tasks of lower priority, and only preempt the lowest priority one if
-        # need be.
         placements = []
         for task in ordered_tasks:
             is_task_placed = False
@@ -76,6 +72,18 @@ class EDFScheduler(BaseScheduler):
 
         return (end_time - start_time if self.runtime == -1 else self.runtime,
                 placements)
+
+    def slack(self, sim_time: float, task: Task) -> float:
+        """Defines the Slack used by the scheduler to order the events.
+
+        Args:
+            sim_time (`float`): The time at which the scheduler was invoked.
+            task (`Task`): The Task to calculate the slack of.
+
+        Returns:
+            A `float` value depicting the slack of the task.
+        """
+        return task.deadline - sim_time - task.remaining_time
 
     @property
     def preemptive(self):
