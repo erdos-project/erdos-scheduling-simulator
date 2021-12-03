@@ -37,3 +37,21 @@ def setup_logging(
     logger.propagate = False
     logger.setLevel(logging.DEBUG)
     return logger
+
+
+def setup_csv_logging(name: str, log_file: str) -> logging.Logger:
+    """Sets up the CSV logging for the module.
+
+    The CSV provides the data required to plot the performance characteristics
+    of the scheduler.
+
+    Args:
+        name (`str`): The name of the logger.
+        log_file (`str`): The path of the log file to log results to.
+
+    Returns:
+        A `logging.Logger` instance that logs the required information to the
+        given CSV file.
+    """
+    return setup_logging(name=name, fmt="%(message)s", date_fmt=None,
+                         log_file=log_file, log_level="debug")

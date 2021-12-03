@@ -8,6 +8,8 @@ FLAGS = flags.FLAGS
 # Define the flags.
 flags.DEFINE_string('log_file_name', None,
                     'Name of the file to log the results to.')
+flags.DEFINE_string('csv_file_name', None,
+                    'Nmae of the CSV file to log the results to.')
 flags.DEFINE_string('log_level', 'debug', 'Level of logging.')
 flags.DEFINE_string('graph_path', './data/pylot-complete-graph.dot',
                     'Path of the DOT file that contains the execution graph.')
