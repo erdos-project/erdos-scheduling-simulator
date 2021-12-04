@@ -14,9 +14,9 @@ def test_worker_construction():
                     resources=Resources({
                                 Resource(name="CPU"): 1,
                                 Resource(name="GPU"): 1}),
-                    num_threads=2)
+                    )
     assert worker.name == "Worker_1", "Incorrect name for Worker."
-    assert worker.num_threads == 2, "Incorrect number of threads for Worker."
+    assert len(worker.resources) == 2, "Incorrect number of Resources."
 
 
 def test_worker_task_accomodation():
@@ -25,7 +25,7 @@ def test_worker_task_accomodation():
                     resources=Resources({
                                 Resource(name="CPU"): 1,
                                 Resource(name="GPU"): 1}),
-                    num_threads=2)
+                    )
     task = __create_default_task(resource_requirements=Resources(
         resource_vector={Resource(name="CPU", _id="any"): 1}))
     assert worker.can_accomodate_task(task),\
@@ -38,7 +38,7 @@ def test_worker_task_accomodation_fail():
                     resources=Resources({
                                 Resource(name="CPU"): 1,
                                 Resource(name="GPU"): 1}),
-                    num_threads=2)
+                    )
     task = __create_default_task(resource_requirements=Resources(
         resource_vector={Resource(name="CPU", _id="any"): 2}))
     assert not worker.can_accomodate_task(task),\
@@ -51,7 +51,7 @@ def test_worker_place_task():
                     resources=Resources({
                                 Resource(name="CPU"): 1,
                                 Resource(name="GPU"): 1}),
-                    num_threads=2)
+                    )
     task = __create_default_task(resource_requirements=Resources(
         resource_vector={Resource(name="CPU", _id="any"): 1,
                          Resource(name="GPU", _id="any"): 1, }))
@@ -76,7 +76,7 @@ def test_worker_copy():
                     resources=Resources({
                                 Resource(name="CPU"): 1,
                                 Resource(name="GPU"): 1}),
-                    num_threads=2)
+                    )
     task = __create_default_task(resource_requirements=Resources(
         resource_vector={Resource(name="CPU", _id="any"): 1,
                          Resource(name="GPU", _id="any"): 1, }))
@@ -106,7 +106,7 @@ def test_worker_deepcopy():
                     resources=Resources({
                                 Resource(name="CPU"): 1,
                                 Resource(name="GPU"): 1}),
-                    num_threads=2)
+                    )
     task = __create_default_task(resource_requirements=Resources(
         resource_vector={Resource(name="CPU", _id="any"): 1,
                          Resource(name="GPU", _id="any"): 1, }))
@@ -136,7 +136,7 @@ def test_worker_preempt_task_failed():
                     resources=Resources({
                                 Resource(name="CPU"): 1,
                                 Resource(name="GPU"): 1}),
-                    num_threads=2)
+                    )
     task = __create_default_task(resource_requirements=Resources(
         resource_vector={Resource(name="CPU", _id="any"): 1,
                          Resource(name="GPU", _id="any"): 1, }))
@@ -152,7 +152,7 @@ def test_worker_preempt_task_success():
                     resources=Resources({
                                 Resource(name="CPU"): 1,
                                 Resource(name="GPU"): 1}),
-                    num_threads=2)
+                    )
     task = __create_default_task(resource_requirements=Resources(
         resource_vector={Resource(name="CPU", _id="any"): 1,
                          Resource(name="GPU", _id="any"): 1, }))
@@ -191,7 +191,7 @@ def test_worker_step_tasks():
                     resources=Resources({
                                 Resource(name="CPU"): 1,
                                 Resource(name="GPU"): 1}),
-                    num_threads=2)
+                    )
     task_one = __create_default_task(resource_requirements=Resources(
         resource_vector={Resource(name="CPU", _id="any"): 1, }, ),
         runtime=3.0)
@@ -225,7 +225,7 @@ def test_worker_pool_construction():
                     resources=Resources({
                                 Resource(name="CPU"): 1,
                                 Resource(name="GPU"): 1}),
-                    num_threads=2)
+                    )
     worker_pool = WorkerPool(name="WorkerPool_Test", workers=[worker])
     assert len(worker_pool.workers) == 1, "Incorrect numher of Workers."
 
@@ -236,7 +236,7 @@ def test_addition_of_workers():
                     resources=Resources({
                                 Resource(name="CPU"): 1,
                                 Resource(name="GPU"): 1}),
-                    num_threads=2)
+                    )
     worker_pool = WorkerPool(name="WorkerPool_Test", workers=[worker])
     assert len(worker_pool.workers) == 1, "Incorrect numher of Workers."
     worker_pool.add_workers([
@@ -244,7 +244,7 @@ def test_addition_of_workers():
                resources=Resources({
                             Resource(name="CPU"): 1,
                             Resource(name="GPU"): 1}),
-               num_threads=2),
+               ),
     ])
     assert len(worker_pool.workers) == 2, "Incorrect number of Workers."
 
@@ -256,13 +256,11 @@ def test_place_task_on_worker_pool():
                         resources=Resources({
                             Resource(name="CPU"): 1,
                             Resource(name="GPU"): 1}),
-                        num_threads=2,
                         )
     worker_two = Worker(name="Worker_2",
                         resources=Resources({
                             Resource(name="CPU"): 1,
                             Resource(name="GPU"): 1}),
-                        num_threads=2,
                         )
     worker_pool = WorkerPool(name="WorkerPool_Test",
                              workers=[worker_one, worker_two],
@@ -312,13 +310,11 @@ def test_worker_pool_step():
                         resources=Resources({
                             Resource(name="CPU"): 1,
                             Resource(name="GPU"): 1}),
-                        num_threads=2,
                         )
     worker_two = Worker(name="Worker_2",
                         resources=Resources({
                             Resource(name="CPU"): 1,
                             Resource(name="GPU"): 1}),
-                        num_threads=2,
                         )
     worker_pool = WorkerPool(name="WorkerPool_Test",
                              workers=[worker_one, worker_two],
@@ -374,13 +370,11 @@ def test_copy_worker_pool():
                         resources=Resources({
                             Resource(name="CPU"): 1,
                             Resource(name="GPU"): 1}),
-                        num_threads=2,
                         )
     worker_two = Worker(name="Worker_2",
                         resources=Resources({
                             Resource(name="CPU"): 1,
                             Resource(name="GPU"): 1}),
-                        num_threads=2,
                         )
     worker_pool = WorkerPool(name="WorkerPool_Test",
                              workers=[worker_one, worker_two],
@@ -417,13 +411,11 @@ def test_deepcopy_worker_pool():
                         resources=Resources({
                             Resource(name="CPU"): 1,
                             Resource(name="GPU"): 1}),
-                        num_threads=2,
                         )
     worker_two = Worker(name="Worker_2",
                         resources=Resources({
                             Resource(name="CPU"): 1,
                             Resource(name="GPU"): 1}),
-                        num_threads=2,
                         )
     worker_pool = WorkerPool(name="WorkerPool_Test",
                              workers=[worker_one, worker_two],

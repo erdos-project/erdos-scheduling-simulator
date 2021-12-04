@@ -28,13 +28,11 @@ def test_edf_scheduler_success():
     worker_one = Worker(name="Worker",
                         resources=Resources({
                             Resource(name="CPU"): 1}),
-                        num_threads=2,
                         )
     worker_pool_one = WorkerPool(name="WorkerPool_1", workers=[worker_one])
     worker_two = Worker(name="Worker",
                         resources=Resources({
                             Resource(name="GPU"): 1}),
-                        num_threads=2,
                         )
     worker_pool_two = WorkerPool(name="WorkerPool_2", workers=[worker_two])
 
@@ -73,7 +71,6 @@ def test_edf_scheduler_limited_resources():
                     resources=Resources({
                         Resource(name="CPU"): 1,
                         Resource(name="GPU"): 1}),
-                    num_threads=2,
                     )
     worker_pool = WorkerPool(name="WorkerPool", workers=[worker])
 
@@ -81,7 +78,7 @@ def test_edf_scheduler_limited_resources():
     _, placements = edf_scheduler.schedule(
                         1.0,
                         released_tasks=[task_lower_priority,
-                                         task_higher_priority],
+                                        task_higher_priority],
                         task_graph=task_graph,
                         worker_pools=[worker_pool],)
     assert len(placements) == 2, "Incorrect length of task placements."
@@ -113,7 +110,6 @@ def test_edf_scheduler_non_preemptive_higher_priority():
                     resources=Resources({
                         Resource(name="CPU"): 1,
                         Resource(name="GPU"): 1}),
-                    num_threads=2,
                     )
     worker_pool = WorkerPool(name="WorkerPool", workers=[worker])
 
@@ -161,7 +157,6 @@ def test_edf_scheduler_preemptive_higher_priority():
                     resources=Resources({
                         Resource(name="CPU"): 1,
                         Resource(name="GPU"): 1}),
-                    num_threads=2,
                     )
     worker_pool = WorkerPool(name="WorkerPool", workers=[worker])
 
@@ -218,13 +213,11 @@ def test_lsf_scheduler_success():
     worker_one = Worker(name="Worker",
                         resources=Resources({
                             Resource(name="CPU"): 1}),
-                        num_threads=2,
                         )
     worker_pool_one = WorkerPool(name="WorkerPool_1", workers=[worker_one])
     worker_two = Worker(name="Worker",
                         resources=Resources({
                             Resource(name="GPU"): 1}),
-                        num_threads=2,
                         )
     worker_pool_two = WorkerPool(name="WorkerPool_2", workers=[worker_two])
 
@@ -265,7 +258,6 @@ def test_lsf_scheduler_limited_resources():
                     resources=Resources({
                         Resource(name="CPU"): 1,
                         Resource(name="GPU"): 1}),
-                    num_threads=2,
                     )
     worker_pool = WorkerPool(name="WorkerPool", workers=[worker])
 
@@ -273,7 +265,7 @@ def test_lsf_scheduler_limited_resources():
     _, placements = lsf_scheduler.schedule(
                         50.0,
                         released_tasks=[task_lower_priority,
-                                         task_higher_priority],
+                                        task_higher_priority],
                         task_graph=task_graph,
                         worker_pools=[worker_pool],)
     assert len(placements) == 2, "Incorrect length of task placements."

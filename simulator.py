@@ -136,12 +136,12 @@ class Simulator(object):
                                                log_file=_flags.log_file_name,
                                                log_level=_flags.log_level)
             self._csv_logger = utils.setup_csv_logging(
-                                    name=self.___class__.__name__,
+                                    name=self.__class__.__name__,
                                     log_file=_flags.csv_file_name)
         else:
             self._logger = utils.setup_logging(name=self.__class__.__name__)
             self._csv_logger = utils.setup_csv_logging(
-                                    name=self.___class__.__name__,
+                                    name=self.__class__.__name__,
                                     log_file=None)
 
         self._worker_pools = {worker_pool.id: worker_pool for worker_pool in
@@ -271,7 +271,7 @@ class Simulator(object):
         elif event.event_type == EventType.SCHEDULER_START:
             # Log the required CSV information.
             currently_placed_tasks = []
-            for worker_pool in self._worker_pools:
+            for worker_pool in self._worker_pools.values():
                 currently_placed_tasks.extend(worker_pool.get_placed_tasks())
             self._csv_logger.debug(
                 "{sim_time},SCHEDULER_START,{released_tasks},{placed_tasks}".

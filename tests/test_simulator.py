@@ -36,7 +36,6 @@ def __create_default_worker_pool(
                 Worker(
                     name="Worker_{}".format(index),
                     resources=_resources,
-                    num_threads=2,
                 )
             )
     return WorkerPool(name="WorkerPool_Test", workers=workers)
@@ -231,14 +230,14 @@ def test_simulator_handle_event():
     assert return_value, "Incorrect return value for event type."
 
     # Test the TASK_RELEASE event.
-    assert len(simulator._available_tasks) == 0,\
+    assert len(simulator._released_tasks) == 0,\
         "Incorrect number of available tasks."
     return_value = simulator._Simulator__handle_event(
             event=Event(event_type=EventType.TASK_RELEASE, time=1.0,
                         task=__create_default_task()),
             task_graph=None)
     assert not return_value, "Incorrect return value for event type."
-    assert len(simulator._available_tasks) == 1,\
+    assert len(simulator._released_tasks) == 1,\
         "Incorrect number of available tasks."
 
     # Test the TASK_FINISHED event.
@@ -270,7 +269,7 @@ def test_simulator_handle_event():
     return_value = simulator._Simulator__handle_event(
             event=Event(event_type=EventType.SCHEDULER_FINISHED, time=6.0,),
             task_graph=None)
-    assert len(simulator._available_tasks) == 0,\
+    assert len(simulator._released_tasks) == 0,\
         "Incorrect length of available tasks."
     assert len(simulator._event_queue) == 6, "Incorrect length of EventQueue."
     assert planning_task.state == TaskState.RUNNING, "Wrong task state."

@@ -11,8 +11,8 @@ import utils
 from workload import Job, Task, Resource, Resources, JobGraph, TaskGraph
 
 
-class DataLoader(object):
-    """ Loads the data from Pylot traces.
+class TaskLoader(object):
+    """Loads the Task data from Pylot traces.
 
     Args:
         graph_path (`str`): The path to the DOT file representing the JobGraph.
@@ -46,7 +46,7 @@ class DataLoader(object):
             entry['ts'] = entry['ts'] - start_real_time
 
         # Create the Jobs from the profile path.
-        self._jobs = DataLoader._DataLoader__create_jobs(profile_data)
+        self._jobs = TaskLoader._TaskLoader__create_jobs(profile_data)
         self._logger.debug("Loaded {} Jobs from {}".format(len(self._jobs),
                                                            profile_path))
 
@@ -64,7 +64,7 @@ class DataLoader(object):
                         but not in JSON profile.".format(node_label))
 
         # Create the JobGraph from the jobs and the DOT representation.
-        self._job_graph = DataLoader._DataLoader__create_job_graph(
+        self._job_graph = TaskLoader._TaskLoader__create_job_graph(
                 self._jobs,
                 map(lambda edge: (edge.get_source(), edge.get_destination()),
                     job_dot_graph.get_edges())
@@ -73,16 +73,16 @@ class DataLoader(object):
         # Create the Resource requirements from the resource_path.
         with open(resource_path, 'r') as f:
             self._resource_requirements =\
-                    DataLoader._DataLoader__create_resources(json.load(f))
+                    TaskLoader._TaskLoader__create_resources(json.load(f))
 
         # Create the Tasks and the TaskGraph from the Jobs.
-        self._tasks = DataLoader._DataLoader__create_tasks(
+        self._tasks = TaskLoader._TaskLoader__create_tasks(
                                                 profile_data,
                                                 self._jobs,
                                                 self._resource_requirements)
         self._logger.debug("Loaded {} Tasks from {}".format(len(self._tasks),
                                                             profile_path))
-        self._task_graph = DataLoader._DataLoader__create_task_graph(
+        self._task_graph = TaskLoader._TaskLoader__create_task_graph(
                 self._tasks, self._job_graph)
 
     @staticmethod
@@ -196,7 +196,7 @@ class DataLoader(object):
 
         Args:
             tasks (`Sequence[Task]`): The set of `Task`s retrieved from the
-                JSON profile by the DataLoader.
+                JSON profile by the TaskLoader.
             job_graph (`JobGraph`): The topology of the graph as defined by
                 the DOT file.
 
@@ -243,33 +243,33 @@ class DataLoader(object):
         return TaskGraph(tasks=task_graph)
 
     def get_jobs(self) -> Sequence[Job]:
-        """Retrieve the set of `Job`s loaded by the DataLoader.
+        """Retrieve the set of `Job`s loaded by the TaskLoader.
 
         Returns:
-            The set of `Job`s loaded by the DataLoader.
+            The set of `Job`s loaded by the TaskLoader.
         """
         return self._jobs
 
     def get_job_graph(self) -> JobGraph:
-        """Retrieve the `JobGraph` constructed by the DataLoader.
+        """Retrieve the `JobGraph` constructed by the TaskLoader.
 
         Returns:
-            The `JobGraph` constructed by the DataLoader.
+            The `JobGraph` constructed by the TaskLoader.
         """
         return self._job_graph
 
     def get_tasks(self) -> Sequence[Task]:
-        """Retrieve the set of `Task`s loaded by the DataLoader.
+        """Retrieve the set of `Task`s loaded by the TaskLoader.
 
         Returns:
-            The set of `Task`s loaded by the DataLoader.
+            The set of `Task`s loaded by the TaskLoader.
         """
         return self._tasks
 
     def get_task_graph(self) -> TaskGraph:
-        """Retrieve the `TaskGraph` constructed by the DataLoader.
+        """Retrieve the `TaskGraph` constructed by the TaskLoader.
 
         Returns:
-            The `TaskGraph` constructed by the DataLoader.
+            The `TaskGraph` constructed by the TaskLoader.
         """
         return self._task_graph

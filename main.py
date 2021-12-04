@@ -1,7 +1,7 @@
 from absl import app, flags
 
 import utils
-from data import DataLoader
+from data import TaskLoader, WorkerLoader
 
 FLAGS = flags.FLAGS
 
@@ -17,6 +17,8 @@ flags.DEFINE_string('profile_path', './data/pylot_profile.json',
                     'Path of the JSON profile for the Pylot execution.')
 flags.DEFINE_string('resource_path', './data/pylot_resource_profile.json',
                     'Path of the Resource requirements for each Task.')
+flags.DEFINE_string('worker_profile_path', './data/worker_profile.json',
+                    'Path of the topology of Workers to schedule on.')
 # TODO (Sukrit): Define a flag for specifying schedulers on command line.
 
 
@@ -34,10 +36,16 @@ def main(args):
     logger.info("Resource File: %s", FLAGS.resource_path)
 
     # Load the data.
-    data = DataLoader(graph_path=FLAGS.graph_path,
-                      profile_path=FLAGS.profile_path,
-                      resource_path=FLAGS.resource_path,
-                      _flags=FLAGS)
+    tasks = TaskLoader(graph_path=FLAGS.graph_path,
+                       profile_path=FLAGS.profile_path,
+                       resource_path=FLAGS.resource_path,
+                       _flags=FLAGS)
+
+    # Load the worker topology.
+    # TODO (Sukrit): Define the possible scheduler implementations in the
+    # flags and pass the chosen scheduler to the WorkerLoader.
+    workers = WorkerLoader(worker_profile_path=FLAGS.worker_profile_path,
+                           _flags=FLAGS)
 
     # TODO (Sukrit): Create and run the Simulator based on the scheduler.
 

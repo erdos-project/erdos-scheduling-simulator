@@ -6,24 +6,22 @@ import absl
 
 import utils
 from workload import Resources, Task, TaskState
-from schedulers import BaseScheduler
 
 
 class Worker(object):
     """A `Worker` is a virtual abstraction over a single machine.
 
-    A `Worker` "owns" a certain set of `Resource`s, and contains a set of
-    runtime threads that together execute a set of `Task`s assigned to it.
+    A `Worker` "owns" a certain set of `Resource`s that execute a set of
+    `Task`s assigned to it.
 
     Args:
         name (`str`): A name assigned to the particular instance of the Worker.
         resources (`Resource`): The set of `Resource`s owned by this worker.
         id (`UUID`): The ID of this particular Worker.
-        num_threads (`int`): The number of threads in this Worker.
         _flags (`Optional[absl.flags]`): The flags with which the app was
             initiated, if any.
     """
-    def __init__(self, name: str, resources: Resources, num_threads: int,
+    def __init__(self, name: str, resources: Resources,
                  _flags: Optional['absl.flags'] = None):
         # Set up the logger.
         if _flags:
@@ -36,7 +34,6 @@ class Worker(object):
         self._name = name
         self._id = uuid.uuid4()
         self._resources = resources
-        self._num_threads = num_threads
         self._placed_tasks = {}  # Mapping[Task, TaskState]
 
     def place_task(self, task: Task):
@@ -130,8 +127,7 @@ class Worker(object):
         """
         cls = self.__class__
         instance = cls.__new__(cls)
-        cls.__init__(instance, name=self.name, resources=copy(self.resources),
-                     num_threads=self.num_threads)
+        cls.__init__(instance, name=self.name, resources=copy(self.resources))
         instance._id = uuid.UUID(self.id)
 
         # Copy the placed tasks.
@@ -151,8 +147,7 @@ class Worker(object):
         cls = self.__class__
         instance = cls.__new__(cls)
         cls.__init__(instance, name=self.name,
-                     resources=deepcopy(self.resources),
-                     num_threads=self.num_threads)
+                     resources=deepcopy(self.resources))
         instance._id = uuid.UUID(self.id)
         memo[id(self)] = instance
         return instance
@@ -169,13 +164,9 @@ class Worker(object):
     def resources(self):
         return self._resources
 
-    @property
-    def num_threads(self):
-        return self._num_threads
-
     def __str__(self):
-        return "Worker(name={}, id={}, resources={}, num_threads={})".format(
-                self.name, self.id, self.resources, self.num_threads)
+        return "Worker(name={}, id={}, resources={})".\
+               format(self.name, self.id, self.resources)
 
     def __repr__(self):
         return str(self)
@@ -205,7 +196,7 @@ class WorkerPool(object):
             initiated, if any.
     """
     def __init__(self, name: str, workers: Optional[Sequence[Worker]] = [],
-                 scheduler: Optional[Type[BaseScheduler]] = None,
+                 scheduler: Optional[Type['BaseScheduler']] = None,
                  _flags: Optional['absl.flags'] = None):
         # Set up the logger.
         if _flags:
@@ -346,6 +337,9 @@ class WorkerPool(object):
 
     def __repr__(self):
         return str(self)
+
+    def __len__(self):
+        return len(self._workers)
 
     def __copy__(self):
         """ A copy of the WorkerPool uses the same ID, and copies the state of
