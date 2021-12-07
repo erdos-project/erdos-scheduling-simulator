@@ -19,9 +19,12 @@ class TaskLoader(object):
         profile_path (`str`): The path to the JSON profile path from Pylot.
         resource_path (`str`): The path to the JSON file of task resource
             requirements.
+        max_num_tasks (`int`): The maximum number of tasks to load from the
+            JSON file.
         _flags (`absl.flags`): The flags used to initialize the app, if any.
     """
     def __init__(self, graph_path: str, profile_path: str, resource_path: str,
+                 max_num_tasks: int = float('inf'),
                  _flags: Optional['absl.flags'] = None):
         # Set up the logger.
         if _flags:
@@ -79,7 +82,8 @@ class TaskLoader(object):
         self._tasks = TaskLoader._TaskLoader__create_tasks(
                                                 profile_data,
                                                 self._jobs,
-                                                self._resource_requirements)
+                                                self._resource_requirements,
+                                                max_num_tasks)
         self._logger.debug("Loaded {} Tasks from {}".format(len(self._tasks),
                                                             profile_path))
         self._task_graph = TaskLoader._TaskLoader__create_task_graph(
@@ -156,7 +160,8 @@ class TaskLoader(object):
     @staticmethod
     def __create_tasks(json_entries: Sequence[Mapping[str, str]],
                        jobs: Mapping[str, Job],
-                       resources: Mapping[str, Sequence[Resources]])\
+                       resources: Mapping[str, Sequence[Resources]],
+                       max_num_tasks: float = float('inf'))\
             -> Sequence[Task]:
         """Creates a list of tasks from the given JSON entries.
 
@@ -167,12 +172,15 @@ class TaskLoader(object):
                 to a `Job` instance.
             resources (`Mapping[str, Sequence[Resources]]`): The set of
                 potential resources required by each task invocation.
+            max_num_tasks (`int`): The maximum number of tasks to load from the
+                JSON file.
 
         Returns:
             A `Sequence[Task]` with the task information retrieved from the
             `json_entries`.
         """
         tasks = []
+        num_tasks = 0
         for entry in json_entries:
             tasks.append(Task(name=entry['name'],
                               job=jobs[entry['pid']],
@@ -182,6 +190,9 @@ class TaskLoader(object):
                               deadline=None,  # TODO(Sukrit): Assign deadlines.
                               timestamp=[entry['args']['timestamp']],
                               ))
+            num_tasks += 1
+            if num_tasks >= max_num_tasks:
+                break
         return tasks
 
     @staticmethod
