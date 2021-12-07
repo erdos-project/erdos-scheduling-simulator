@@ -41,7 +41,7 @@ class WorkerLoader(object):
 
         # Create the sequence of WorkerPools from the JSON data.
         self._worker_pools = WorkerLoader._WorkerLoader__create_worker_pools(
-                worker_data, scheduler)
+                worker_data, scheduler, self._flags)
         self._logger.debug(
                 "Loaded {} worker pools from the JSON file located at: {}".
                 format(len(self._worker_pools), worker_profile_path))
@@ -89,6 +89,10 @@ class WorkerLoader(object):
                     )
         return constructed_worker_pools
 
-    @property
-    def worker_pools(self):
+    def get_worker_pools(self) -> Sequence[WorkerPool]:
+        """Retrieve the `WorkerPool`s loaded by the WorkerLoader.
+
+        Returns:
+            The `Sequence[WorkerPool]` loaded by the WorkerLoader.
+        """
         return self._worker_pools
