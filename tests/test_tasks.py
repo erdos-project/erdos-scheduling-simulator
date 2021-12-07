@@ -10,11 +10,20 @@ def __create_default_task(
         runtime=1.0,
         deadline=10.0,
         timestamp=[0],
+        release_time=-1,
+        start_time=-1,
+        completion_time=-1,
 ):
     """ Helper function to create a default task. """
-    return Task(name="{}_Task".format(job.name), job=job,
+    return Task(name="{}_Task".format(job.name),
+                job=job,
                 resource_requirements=resource_requirements,
-                runtime=runtime, deadline=deadline, timestamp=timestamp)
+                runtime=runtime,
+                deadline=deadline,
+                timestamp=timestamp,
+                release_time=release_time,
+                start_time=start_time,
+                completion_time=completion_time)
 
 
 def test_successful_task_creation():
@@ -28,6 +37,22 @@ def test_successful_task_release():
     """ Test that release() transitions the task to a RELEASED state. """
     default_task = __create_default_task()
     default_task.release(2.0)
+    assert default_task.release_time == 2.0, "Incorrect release time for Task."
+    assert default_task.state == TaskState.RELEASED,\
+        "Incorrect state for Task."
+
+
+def test_failed_task_release_without_release_time():
+    """ Test that a task release without release time fails. """
+    default_task = __create_default_task()
+    with pytest.raises(ValueError):
+        default_task.release()
+
+
+def test_successful_task_release_without_release_time():
+    """ Test that a task release without release time succeeds. """
+    default_task = __create_default_task(release_time=2.0)
+    default_task.release()
     assert default_task.release_time == 2.0, "Incorrect release time for Task."
     assert default_task.state == TaskState.RELEASED,\
         "Incorrect state for Task."

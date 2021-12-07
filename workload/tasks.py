@@ -54,6 +54,9 @@ class Task(object):
     def __init__(self, name: str, job: Job, resource_requirements: Resources,
                  runtime: float, deadline: float,
                  timestamp: Sequence[int] = [],
+                 release_time: Optional[float] = -1,
+                 start_time: Optional[float] = -1,
+                 completion_time: Optional[float] = -1,
                  _flags: Optional['absl.flags'] = None):
         # Set up the logger.
         if _flags:
@@ -72,32 +75,43 @@ class Task(object):
         self._id = uuid.uuid4()
 
         # The timestamps maintained for each state of the task.
-        self._release_time = -1     # (VIRTUAL -> RELEASED)
-        self._start_time = -1       # (RELEASED -> RUNNING)
-        self._completion_time = -1  # (RUNNING -> EVICTED / COMPLETED)
-        self._paused_times = []     # (RUNNING -> PAUSED)
+        # (VIRTUAL -> RELEASED)
+        self._release_time = release_time
+        # (RELEASED -> RUNNING)
+        self._start_time = start_time
+        # (RUNNING -> EVICTED / COMPLETED)
+        self._completion_time = completion_time
+        # (RUNNING -> PAUSED)
+        self._paused_times = []
 
         # The data required for managing the execution of a particular task.
         self._remaining_time = runtime
         self._last_step_time = -1  # Time when this task was stepped through.
         self._state = TaskState.VIRTUAL
 
-    def release(self, time: float):
+    def release(self, time: Optional[float] = None):
         """Release the task and transition away from the virtual state.
 
         Args:
-            time (`float`): The simulation time at which to release the task.
+            time (`Optional[float]`): The simulation time at which to release
+                the task. If None, should be specified at task construction.
         """
         self._logger.debug("Transitioning {} to {}".format(self,
                                                            TaskState.RELEASED))
-        self._release_time = time
+        if time is None and self._release_time == -1:
+            raise ValueError("Release time should be specified either while "
+                             "creating the Task or when releasing it.")
+        self._release_time = time if time is not None else self._release_time
         self._state = TaskState.RELEASED
 
-    def start(self, time: float, variance: Optional[float] = 0.0):
+    def start(self,
+              time: Optional[float] = None,
+              variance: Optional[float] = 0.0):
         """Begins the execution of the task at the given simulator time.
 
         Args:
-            time (`float`): The simulation time at which to begin the task.
+            time (`Optional[float]`): The simulation time at which to begin the
+                task. If None, should be specified at task construction.
             variance (`Optional[float]`): The percentage variation to add to
                 the runtime of the task.
 
@@ -106,13 +120,16 @@ class Task(object):
         """
         if self.state not in (TaskState.RELEASED, TaskState.PAUSED):
             raise ValueError("Only RELEASED or PAUSED tasks can be started.")
+        if time is None and self._start_time == -1:
+            raise ValueError("Start time should be specified either while\
+                             creating the Task or when starting it.")
 
         remaining_time = max(0, self._remaining_time +
                              (self._remaining_time * variance / 100.0))
         self._logger.debug("Transitioning {} to {} at time {}\
                            with the remaining time {}".format(self,
                            TaskState.RUNNING, time, remaining_time))
-        self._start_time = time
+        self._start_time = time if time is not None else self._start_time
         self._last_step_time = time
         self._state = TaskState.RUNNING
         self.update_remaining_time(remaining_time)
