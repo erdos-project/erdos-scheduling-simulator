@@ -120,8 +120,8 @@ class Resources(object):
         for resource, quantity in resource_vector.items():
             self._resource_vector[copy(resource)] = quantity
         if not all(map(lambda x: type(x) == Resource, self._resource_vector)):
-            raise ValueError("The keys for the resource vector\
-                              should be of type 'Resource'")
+            raise ValueError("The keys for the resource vector "
+                             "should be of type 'Resource'")
         self._current_allocations = defaultdict(list)
 
     def add_resource(self, resource: Resource, quantity: Optional[int] = 1):
@@ -177,9 +177,9 @@ class Resources(object):
                            format(quantity, resource, self))
         available_quantity = self.get_available_quantity(resource)
         if available_quantity < quantity:
-            raise ValueError("Trying to allocate more than available units of \
-                             {}: requested {}, available {}".format(resource,
-                             quantity, available_quantity))
+            raise ValueError("Trying to allocate more than available units of "
+                             "{}: requested {}, available {}".format(
+                                 resource, quantity, available_quantity))
 
         # Go over the list of resources and allocate the required number of
         # resources of the given type.
@@ -224,9 +224,10 @@ class Resources(object):
         for resource, quantity in resources._resource_vector.items():
             available_quantity = self.get_available_quantity(resource)
             if quantity > available_quantity:
-                raise ValueError("Trying to allocate more than the available \
-                        units of {}: requested {}, available {}".format(
-                            resource, quantity, available_quantity))
+                raise ValueError("Trying to allocate more than the available "
+                                 "units of {}: requested {}, available {}".
+                                 format(resource, quantity, available_quantity)
+                                 )
 
         # Allocate all the resources together.
         for resource, quantity in resources._resource_vector.items():

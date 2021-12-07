@@ -121,14 +121,14 @@ class Task(object):
         if self.state not in (TaskState.RELEASED, TaskState.PAUSED):
             raise ValueError("Only RELEASED or PAUSED tasks can be started.")
         if time is None and self._start_time == -1:
-            raise ValueError("Start time should be specified either while\
-                             creating the Task or when starting it.")
+            raise ValueError("Start time should be specified either while "
+                             "creating the Task or when starting it.")
 
         remaining_time = max(0, self._remaining_time +
                              (self._remaining_time * variance / 100.0))
-        self._logger.debug("Transitioning {} to {} at time {}\
-                           with the remaining time {}".format(self,
-                           TaskState.RUNNING, time, remaining_time))
+        self._logger.debug("Transitioning {} to {} at time {} "
+                           "with the remaining time {}".format(
+                               self, TaskState.RUNNING, time, remaining_time))
         self._start_time = time if time is not None else self._start_time
         self._last_step_time = time
         self._state = TaskState.RUNNING
@@ -147,10 +147,10 @@ class Task(object):
         if (self.state != TaskState.RUNNING or
            self.start_time > current_time + step_size):
             # We cannot step a Task that's not supposed to be running.
-            self._logger.warning("Cannot step {} with start time {} at time {}\
-                               since it's either not RUNNING or isn't supposed\
-                               to start yet.".format(self, self.start_time,
-                                                     self.state))
+            self._logger.warning("Cannot step {} with start time {} at time "
+                                 "{} since it's either not RUNNING or isn't "
+                                 "supposed to start yet.".format(
+                                     self, self.start_time, self.state))
             return False
 
         # Task can be run, step through the task's execution.
@@ -162,8 +162,8 @@ class Task(object):
             return True
         else:
             self._remaining_time -= execution_time
-            self._logger.debug("Stepped {} for {} steps.\
-                               Remaining execution time: {}".
+            self._logger.debug("Stepped {} for {} steps. "
+                               "Remaining execution time: {}".
                                format(self, step_size, self._remaining_time))
             return False
 
@@ -194,10 +194,10 @@ class Task(object):
         """
         if self.state != TaskState.PAUSED:
             raise ValueError("Task is not PAUSED right now.")
-        self._logger.debug("Transitioning {} which was PAUSED at {} to {} at\
-                           time {}".format(self,
-                                           self._paused_times[-1].pause_time,
-                                           TaskState.RUNNING, time))
+        self._logger.debug("Transitioning {} which was PAUSED at {} to {} at "
+                           "time {}".format(self,
+                                            self._paused_times[-1].pause_time,
+                                            TaskState.RUNNING, time))
         self._paused_times[-1]._replace(restart_time=time)
         self._last_step_time = time
         self._state = TaskState.RUNNING
@@ -231,11 +231,11 @@ class Task(object):
             `ValueError` if the task is COMPLETED / EVICTED, or time < 0.
         """
         if self.is_complete():
-            raise ValueError("The remaining time of COMPLETED/EVICTED\
-                    tasks cannot be updated.")
+            raise ValueError("The remaining time of COMPLETED/EVICTED "
+                             "tasks cannot be updated.")
         if time < 0:
-            raise ValueError("Trying to set a negative value for\
-                    remaining time.")
+            raise ValueError("Trying to set a negative value for "
+                             "remaining time.")
         self._remaining_time = time
 
     def update_deadline(self, new_deadline: float):

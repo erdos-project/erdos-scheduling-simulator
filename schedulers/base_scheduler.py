@@ -27,5 +27,5 @@ class BaseScheduler(object):
             `task_placement` is a sequence of tuples depicting the
             (Task, ID of the Worker Pool where the task should be placed).
         """
-        raise NotImplementedError("The `schedule()` method has not been \
-                implemented.")
+        raise NotImplementedError("The `schedule()` method has not been "
+                                  "implemented.")

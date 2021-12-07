@@ -106,9 +106,9 @@ class Worker(object):
         completed_tasks = []
         # Invoke the step() method on all the tasks.
         for task in self._placed_tasks:
-            self._logger.debug("Stepping through the execution of {} for {}\
-                               steps from time {}.".format(task, step_size,
-                                                           current_time))
+            self._logger.debug("Stepping through the execution of {} for {} "
+                               "steps from time {}.".format(
+                                   task, step_size, current_time))
             if task.step(current_time, step_size):
                 self._logger.debug("{} finished execution on {}.".
                                    format(task, self))
@@ -220,8 +220,8 @@ class WorkerPool(object):
         """
         for worker in workers:
             if worker.id in self._workers:
-                self._logger.info("Skipping addition of {} since it already\
-                                  exists in {}".format(worker, self))
+                self._logger.info("Skipping addition of {} since it already "
+                                  "exists in {}".format(worker, self))
             else:
                 self._logger.debug("Adding {} to {}".format(worker, self))
                 self._workers[worker.id] = worker
@@ -301,9 +301,9 @@ class WorkerPool(object):
         completed_tasks = []
         # Invoke the step() method on all the workers.
         for _, worker in self._workers.items():
-            self._logger.debug("Stepping through the execution of {} for {}\
-                               steps from time {}".format(worker, step_size,
-                                                          current_time))
+            self._logger.debug("Stepping through the execution of {} for {} "
+                               "steps from time {}".format(
+                                   worker, step_size, current_time))
             completed_tasks.extend(worker.step(current_time, step_size))
         return completed_tasks
 

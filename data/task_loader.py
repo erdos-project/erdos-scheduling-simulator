@@ -58,13 +58,13 @@ class TaskLoader(object):
         self._logger.debug("The DOT graph has {} Jobs".
                            format(len(job_dot_graph.get_nodes())))
         if len(self._jobs) != len(job_dot_graph.get_nodes()):
-            raise ValueError("Mismatch between the Jobs from the DOT graph\
-                    and the JSON profile.")
+            raise ValueError("Mismatch between the Jobs from the DOT graph "
+                             "and the JSON profile.")
         for node in job_dot_graph.get_nodes():
             node_label = node.get_label()
             if node_label not in self._jobs:
-                raise ValueError("{} found in DOT file,\
-                        but not in JSON profile.".format(node_label))
+                raise ValueError("{} found in DOT file, "
+                                 "but not in JSON profile.".format(node_label))
 
         # Create the JobGraph from the jobs and the DOT representation.
         self._job_graph = TaskLoader._TaskLoader__create_job_graph(
