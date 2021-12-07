@@ -53,5 +53,5 @@ def setup_csv_logging(name: str, log_file: str) -> logging.Logger:
         A `logging.Logger` instance that logs the required information to the
         given CSV file.
     """
-    return setup_logging(name=name, fmt="%(message)s", date_fmt=None,
+    return setup_logging(name=name + '_CSV', fmt="%(message)s", date_fmt=None,
                          log_file=log_file, log_level="debug")
