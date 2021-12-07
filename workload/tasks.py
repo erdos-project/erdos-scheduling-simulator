@@ -430,6 +430,26 @@ class TaskGraph(object):
                 released_tasks.append(task)
         return released_tasks
 
+    def release_tasks(self, time: float) -> Sequence[Task]:
+        """Releases the set of tasks that have no dependencies and are thus
+        available to run.
+
+        Args:
+            time (`float`): The simulation time at which to release the task.
+
+        Returns:
+            A list of tasks that can be run (are in RELEASED state).
+        """
+        tasks_to_be_released = []
+        for task in self._task_graph:
+            if len(self.__parent_task_graph[task]) == 0:
+                tasks_to_be_released.append(task)
+
+        # Release the tasks.
+        for task in tasks_to_be_released:
+            task.release(time)
+        return tasks_to_be_released
+
     def clean(self):
         """Cleans the `TaskGraph` of tasks that have finished completion.
 

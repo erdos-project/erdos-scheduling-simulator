@@ -232,6 +232,26 @@ def test_get_released_tasks():
         "Incorrect length of released tasks returned."
 
 
+def test_release_tasks():
+    """ Test that the correct tasks are released by the TaskGraph. """
+    perception_task = __create_default_task(job=Job(name="Perception"))
+    prediction_task = __create_default_task(job=Job(name="Prediction"))
+    planning_task = __create_default_task(job=Job(name="Planning"))
+    localization_task = __create_default_task(job=Job(name="Localization"))
+    task_graph = TaskGraph()
+    task_graph.add_task(perception_task, [prediction_task])
+    task_graph.add_task(prediction_task, [planning_task])
+    task_graph.add_task(localization_task)
+    assert len(task_graph.get_released_tasks()) == 0,\
+        "Incorrect length of released tasks returned."
+
+    # Release all available tasks.
+    released_tasks = task_graph.release_tasks(1.0)
+    assert len(released_tasks) == 2, "Incorrect number of released tasks."
+    assert released_tasks == [perception_task, localization_task],\
+        "Incorrect tasks released by the API."
+
+
 def test_retrieval_of_parents():
     """ Test that the correct set of parents are retrieved. """
     default_task = __create_default_task(job=Job(name="Perception"))
