@@ -103,6 +103,8 @@ class Worker(object):
         completed_tasks = []
         # Invoke the step() method on all the tasks.
         for task in self._placed_tasks:
+            if task.state != TaskState.RUNNING:
+                continue
             self._logger.debug("Stepping through the execution of {} for {} "
                                "steps from time {}.".format(
                                    task, step_size, current_time))
@@ -110,8 +112,10 @@ class Worker(object):
                 self._logger.debug("{} finished execution on {}.".
                                    format(task, self))
                 completed_tasks.append(task)
-                # Resave the task as now completed / evicted.
-                self._placed_tasks[task] = task.state
+
+        # Delete the completed tasks from the set of placed tasks.
+        for completed_task in completed_tasks:
+            del self._placed_tasks[completed_task]
         return completed_tasks
 
     def __copy__(self):
@@ -305,6 +309,10 @@ class WorkerPool(object):
                                "steps from time {}".format(
                                    worker, step_size, current_time))
             completed_tasks.extend(worker.step(current_time, step_size))
+
+        # Delete the completed tasks from the set of placed tasks.
+        for completed_task in completed_tasks:
+            del self._placed_tasks[completed_task]
         return completed_tasks
 
     def can_accomodate_task(self, task: Task) -> bool:
