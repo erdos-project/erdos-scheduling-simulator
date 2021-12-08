@@ -72,7 +72,7 @@ def test_create_tasks():
     assert tasks[0].name == "perception_operator.on_watermark",\
         "Incorrect name returned for the Task."
     assert tasks[0].runtime == 100, "Incorrect runtime returned for the Task."
-    assert tasks[0].timestamp == [1], "Incorrect timestamp for the Task."
+    assert tasks[0].timestamp == 1, "Incorrect timestamp for the Task."
     assert jobs["perception_operator"] == tasks[0].job,\
         "Incorrect Job returned for the Task."
 

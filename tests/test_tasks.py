@@ -320,6 +320,7 @@ def test_task_completion_notification():
     # Run and finish the execution of Perception.
     perception_task.start(3.0)
     perception_task.update_remaining_time(0)
+    perception_task.finish(4.0)
     task_graph.notify_task_completion(perception_task, 4.0)
     released_tasks = task_graph.get_released_tasks()
     assert perception_task.is_complete(), "Task was not completed."
@@ -331,6 +332,7 @@ def test_task_completion_notification():
     # Run and finish the execution of Prediction.
     prediction_task.start(3.0)
     prediction_task.update_remaining_time(0)
+    prediction_task.finish(4.0)
     task_graph.notify_task_completion(prediction_task, 4.0)
     released_tasks = task_graph.get_released_tasks()
     assert prediction_task.is_complete(), "Task was not completed."

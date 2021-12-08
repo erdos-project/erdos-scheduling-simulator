@@ -265,6 +265,7 @@ def test_simulator_handle_event():
     perception_task.release(2.0)
     perception_task.start(3.0)
     perception_task.update_remaining_time(0)
+    perception_task.finish(4.0)
 
     assert len(simulator._event_queue) == 2, "Incorrect length of EventQueue."
     return_value = simulator._Simulator__handle_event(
