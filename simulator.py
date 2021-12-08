@@ -157,6 +157,12 @@ class Simulator(object):
                                     name=self.__class__.__name__,
                                     log_file=None)
 
+        self._logger.info("The Worker Pools are: ")
+        for worker_pool in worker_pools:
+            self._logger.info("{}".format(worker_pool))
+            for worker in worker_pool.workers:
+                self._logger.info("\t{}".format(worker))
+
         self._worker_pools = {worker_pool.id: worker_pool for worker_pool in
                               worker_pools}
         self._scheduler = scheduler
