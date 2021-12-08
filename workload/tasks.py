@@ -266,25 +266,25 @@ class Task(object):
                     format(self.name, self.id, self.job,
                            self.timestamp, self.state))
         elif self.state == TaskState.RELEASED:
-            return ("Task(name={}, id={}, job={}, timestamp={},"
+            return ("Task(name={}, id={}, job={}, timestamp={}, "
                     "state={}, release_time={})".format(
                            self.name, self.id,
                            self.job, self.timestamp, self.state,
                            self.release_time))
         elif self.state == TaskState.RUNNING:
-            return ("Task(name={}, id={}, job={}, timestamp={},"
+            return ("Task(name={}, id={}, job={}, timestamp={}, "
                     "state={}, start_time={}, remaining_time={})".format(
                            self.name, self.id,
                            self.job, self.timestamp, self.state,
                            self.start_time, self.remaining_time))
         elif self.state == TaskState.PAUSED:
-            return ("Task(name={}, id={}, job={}, timestamp={},"
+            return ("Task(name={}, id={}, job={}, timestamp={}, "
                     "state={}, pause_time={}, remaining_time={})".format(
                            self.name, self.id,
                            self.job, self.timestamp, self.state,
                            self.pause_time, self.remaining_time))
         elif self.is_complete():
-            return ("Task(name={}, id={}, job={}, timestamp={},"
+            return ("Task(name={}, id={}, job={}, timestamp={}, "
                     "state={}, completion_time={})".format(
                            self.name, self.id,
                            self.job, self.timestamp, self.state,

@@ -1,5 +1,6 @@
 import heapq
 from enum import Enum
+from operator import attrgetter
 from typing import Type, Sequence, Optional
 
 import absl
@@ -215,8 +216,32 @@ class Simulator(object):
 
         # Run the simulator loop.
         while True:
-            if self.__handle_event(self._event_queue.next(), task_graph):
-                break
+            # If there are any running tasks, step through the execution of
+            # the Simulator until the closest remaining time.
+            running_tasks = []
+            for worker_pool in self._worker_pools.values():
+                running_tasks.extend(worker_pool.get_placed_tasks())
+
+            if len(running_tasks) > 0:
+                # There are running tasks, figure out the minimum remaining
+                # time across all the tasks.
+                min_task_remaining_time = min(map(attrgetter('remaining_time'),
+                                                  running_tasks))
+                time_until_next_event = (self._event_queue.peek().time -
+                                         self._simulator_time)
+
+                # If the minimum remaining time comes before the time until
+                # the next event in the queue, step all workers until the
+                # completion of that task, otherwise, handle the next event.
+                if min_task_remaining_time < time_until_next_event:
+                    self.__step(step_size=min_task_remaining_time)
+                else:
+                    if self.__handle_event(self._event_queue.next(),
+                                           task_graph):
+                        break
+            else:
+                if self.__handle_event(self._event_queue.next(), task_graph):
+                    break
 
     def __handle_event(self, event: Event, task_graph: TaskGraph) -> bool:
         """ Handles the next event from the EventQueue.
@@ -328,8 +353,18 @@ class Simulator(object):
                               "initiated at {}. Placing tasks.".format(
                                    self._simulator_time,
                                    self._last_scheduler_start_time))
+
+            # Log the required CSV information.
+            self._csv_logger.debug(
+                "{sim_time},SCHEDULER_FINISHED,{runtime},{placed_tasks}".
+                format(
+                       sim_time=event.time,
+                       runtime=event.time - self._last_scheduler_start_time,
+                       placed_tasks=len(list(filter(lambda p: p[1] is not None,
+                                                    self._last_task_placement)
+                                             ))))
+
             released_tasks = []
-            num_placed_tasks = 0
             for task, placement in self._last_task_placement:
                 if placement is None:
                     released_tasks.append(task)
@@ -356,15 +391,6 @@ class Simulator(object):
                     self._logger.info("[{}] Placed {} on {}".format(
                                             self._simulator_time, task,
                                             worker_pool))
-                    num_placed_tasks += 1
-
-            # Log the required CSV information.
-            self._csv_logger.debug(
-                "{sim_time},SCHEDULER_FINISHED,{runtime},{placed_tasks}".
-                format(
-                       sim_time=event.time,
-                       runtime=event.time - self._last_scheduler_start_time,
-                       placed_tasks=num_placed_tasks))
 
             # Reset the available tasks and the last task placement.
             self._released_tasks = released_tasks
@@ -392,6 +418,8 @@ class Simulator(object):
             step_size (`float`) [default=1.0]: The amount by which to advance
                 the clock.
         """
+        self._logger.info("[{}] Stepping for {} timesteps.".format(
+                            self._simulator_time, step_size))
         completed_tasks = []
         for worker_pool in self._worker_pools.values():
             completed_tasks.extend(worker_pool.step(self._simulator_time,
