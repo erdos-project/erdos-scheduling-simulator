@@ -437,7 +437,7 @@ class Simulator(object):
             raise ValueError("Incorrect event type passed.")
         scheduler_runtime, task_placement = self._scheduler.schedule(
                 event.time, self._released_tasks, task_graph,
-                self._worker_pools)
+                self._worker_pools.values())
         placement_time = event.time + scheduler_runtime
         self._last_task_placement = task_placement
 
