@@ -251,19 +251,23 @@ class Simulator(object):
             self._logger.debug("[{}] Added the task from {} to the released "
                                "tasks.".format(self._simulator_time, event))
             self._csv_logger.debug(
-                "{sim_time},TASK_RELEASE,{task_name}_{timestamp},{task_id}".
+                "{sim_time},TASK_RELEASE,{task_name},{timestamp},"
+                "{release_time},{task_id}".
                 format(
                        sim_time=event.time,
                        task_name=event.task.name,
                        timestamp=event.task.timestamp,
+                       release_time=event.task.release_time,
                        task_id=event.task.id))
         elif event.event_type == EventType.TASK_FINISHED:
             self._csv_logger.debug(
-                "{sim_time},TASK_FINISHED,{task_name}_{timestamp},{task_id}".
+                "{sim_time},TASK_FINISHED,{task_name},{timestamp},"
+                "{completion_time},{task_id}".
                 format(
                        sim_time=event.time,
                        task_name=event.task.name,
                        timestamp=event.task.timestamp,
+                       completion_time=event.task.completion_time,
                        task_id=event.task.id))
 
             # The given task has finished execution, unlock dependencies.
@@ -298,8 +302,13 @@ class Simulator(object):
             # Execute the scheduler, and insert an event notifying the
             # end of the scheduler into the loop.
             self._last_scheduler_start_time = event.time
-            self._logger.info("[{}] Running the scheduler".
-                              format(self._simulator_time)),
+            self._logger.info("[{}] Running the scheduler with {} released "
+                              "tasks and {} tasks already placed across {} "
+                              "worker pools.".format(
+                                  self._simulator_time,
+                                  len(self._released_tasks),
+                                  len(currently_placed_tasks),
+                                  len(self._worker_pools)))
             sched_finished_event = self.__run_scheduler(event, task_graph)
             self._event_queue.add_event(sched_finished_event)
             self._logger.debug("[{}] Added {} to the event queue.".
@@ -318,9 +327,21 @@ class Simulator(object):
             for task, placement in self._last_task_placement:
                 if placement is None:
                     released_tasks.append(task)
+                    self._csv_logger.debug("{sim_time},TASK_SKIP,{task_id}".
+                                           format(
+                                               sim_time=self._simulator_time,
+                                               task_id=task.id))
                     self._logger.debug("[{}] Failed to place {}".format(
                                             self._simulator_time, task))
                 else:
+                    self._csv_logger.debug(
+                            "{sim_time},TASK_PLACEMENT,{task_name},"
+                            "{timestamp},{task_id},{worker_id}".
+                            format(sim_time=self._simulator_time,
+                                   task_name=task.name,
+                                   timestamp=task.timestamp,
+                                   task_id=task.id,
+                                   worker_id=placement))
                     worker_pool = self._worker_pools[placement]
                     # Initialize the task at the given placement time, and
                     # place it on the WorkerPool.
