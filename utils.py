@@ -25,7 +25,7 @@ def setup_logging(
     if log_file is None:
         handler = logging.StreamHandler()
     else:
-        handler = logging.FileHandler(log_file)
+        handler = logging.FileHandler(log_file, mode='w')
 
     # Create the logger.
     formatter = logging.Formatter(fmt=fmt, datefmt=date_fmt)
