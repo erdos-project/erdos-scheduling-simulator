@@ -183,19 +183,19 @@ class Simulator(object):
                 available to execute, along with potential future tasks that
                 could be released.
         """
+        # Retrieve the set of released tasks from the graph.
+        # At the beginning, this should consist of all the sensor tasks
+        # that we expect to run during the execution of the workload, 
+        # along with their expected release times.
+        for task in task_graph.release_tasks():
+            event = Event(event_type=EventType.TASK_RELEASE,
+                          time=task.release_time, task=task)
+            self._event_queue.add_event(event)
+            self._logger.debug("Added {} for {} to the event queue.".
+                               format(event, task))
+
         # Run the simulator loop.
         while True:
-            # Retrieve the set of released tasks from the graph.
-            # At the beginning, this should consist of all the sensor tasks
-            # that we expect to run during the execution of the workload, 
-            # along with their expected release times.
-            for task in task_graph.release_tasks():
-                event = Event(event_type=EventType.TASK_RELEASE,
-                              time=task.release_time, task=task)
-                self._event_queue.add_event(event)
-                self._logger.debug("Added {} for {} to the event queue.".
-                                   format(event, task))
-
             if self.__handle_event(self._event_queue.next(), task_graph):
                 break
 
