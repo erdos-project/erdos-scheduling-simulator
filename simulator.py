@@ -234,10 +234,14 @@ class Simulator(object):
 
         if event.event_type == EventType.SIMULATOR_START:
             # Start of the simulator loop.
+            self._csv_logger.debug("{sim_time},SIMULATOR_START,0,0".format(
+                sim_time=self._simulator_time))
             self._logger.info("Starting the simulator loop at time {}".
                               format(event.time))
         elif event.event_type == EventType.SIMULATOR_END:
             # End of the simulator loop.
+            self._csv_logger.debug("{sim_time},SIMULATOR_END,0,0".format(
+                sim_time=self._simulator_time))
             self._logger.info("Ending the simulator loop at time {}".
                               format(event.time))
             return True

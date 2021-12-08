@@ -40,6 +40,7 @@ class Task(object):
         runtime (`float`): The expected runtime of this task.
         deadline (`float`): The deadline by which the task should complete.
         state (`TaskState`): Defines the state of the task.
+        timestamp (`int`): The timestamp for the Task (single dimension).
         start_time (`float`): The time at which the task was started (only
             available if state != TaskState.RELEASED, -1 otherwise)
         remaining_time (`float`): The time remaining to finish the completion
@@ -52,7 +53,7 @@ class Task(object):
     """
     def __init__(self, name: str, job: Job, resource_requirements: Resources,
                  runtime: float, deadline: float,
-                 timestamp: Sequence[int] = [],
+                 timestamp: int = None,
                  release_time: Optional[float] = -1,
                  start_time: Optional[float] = -1,
                  completion_time: Optional[float] = -1,

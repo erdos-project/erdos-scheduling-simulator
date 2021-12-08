@@ -203,7 +203,7 @@ class TaskLoader(object):
                                                   resources[entry['name']]),
                               runtime=entry['dur'],
                               deadline=None,  # TODO(Sukrit): Assign deadlines.
-                              timestamp=[entry['args']['timestamp']],
+                              timestamp=entry['args']['timestamp'],
                               release_time=entry['ts'],
                               _logger=logger,
                               ))
