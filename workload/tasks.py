@@ -154,12 +154,13 @@ class Task(object):
 
         # Task can be run, step through the task's execution.
         execution_time = current_time + step_size - self._last_step_time
-        self._last_step_time = current_time + step_size
         if self._remaining_time - execution_time <= 0:
+            self._last_step_time = current_time + self._remaining_time
             self._remaining_time = 0
-            self.finish(current_time + step_size)
+            self.finish(self._last_step_time)
             return True
         else:
+            self._last_step_time = current_time + step_size
             self._remaining_time -= execution_time
             self._logger.debug("Stepped {} for {} steps. "
                                "Remaining execution time: {}".
@@ -395,9 +396,14 @@ class TaskGraph(object):
 
         Returns:
             The set of tasks released by the completion of this task.
+
+        Raises:
+            `ValueError` if an incomplete task is passed.
         """
-        # Invoke finish on the task to change the state of the task.
-        task.finish(finish_time)
+        # Ensure that the task is actually complete.
+        if not task.is_complete():
+            raise ValueError("Cannot notify TaskGraph of an incomplete "
+                             "task: {}".format(task))
 
         # Release any tasks that can be unlocked by the completion.
         released_tasks = []
