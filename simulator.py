@@ -91,6 +91,14 @@ class EventQueue(object):
         """
         return heapq.heappop(self._event_queue)
 
+    def peek(self) -> Event:
+        """Peek at the next event in the queue without popping it.
+
+        Returns:
+            The next event in the queue ordered according to the release time.
+        """
+        return self._event_queue[0]
+
     def __len__(self) -> int:
         return len(self._event_queue)
 
