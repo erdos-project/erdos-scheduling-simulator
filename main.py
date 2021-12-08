@@ -23,8 +23,8 @@ flags.DEFINE_string('resource_path', './data/pylot_resource_profile.json',
                     'Path of the Resource requirements for each Task.')
 flags.DEFINE_string('worker_profile_path', './data/worker_profile.json',
                     'Path of the topology of Workers to schedule on.')
-flags.DEFINE_integer('max_num_tasks', None,
-                     'Maximum number of tasks to load from the JSON file.',
+flags.DEFINE_integer('max_timestamp', None,
+                     'Maximum timestamp of tasks to load from the JSON file.',
                      short_name="max")
 
 # Scheduler related flags.
@@ -50,12 +50,12 @@ def main(args):
     logger.info("Resource File: %s", FLAGS.resource_path)
 
     # Load the data.
-    max_num_tasks = FLAGS.max_num_tasks if FLAGS.max_num_tasks is not None\
+    max_timestamp = FLAGS.max_timestamp if FLAGS.max_timestamp is not None\
         else float('inf')
     task_loader = TaskLoader(graph_path=FLAGS.graph_path,
                              profile_path=FLAGS.profile_path,
                              resource_path=FLAGS.resource_path,
-                             max_num_tasks=max_num_tasks,
+                             max_timestamp=max_timestamp,
                              _flags=FLAGS)
 
     # Load the worker topology.
