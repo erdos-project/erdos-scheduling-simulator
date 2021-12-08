@@ -8,28 +8,31 @@ from schedulers import EDFScheduler, LSFScheduler
 FLAGS = flags.FLAGS
 
 # Define the flags.
-flags.DEFINE_string('log-file-name', None,
-                    'Name of the file to log the results to.')
-flags.DEFINE_string('csv-file-name', None,
-                    'Nmae of the CSV file to log the results to.')
-flags.DEFINE_string('log-level', 'debug', 'Level of logging.')
-flags.DEFINE_string('graph-path', './data/pylot-complete-graph.dot',
+flags.DEFINE_string('log_file_name', None,
+                    'Name of the file to log the results to.',
+                    short_name="log")
+flags.DEFINE_string('csv_file_name', None,
+                    'Name of the CSV file to log the results to.',
+                    short_name="csv")
+flags.DEFINE_string('log_level', 'debug', 'Level of logging.')
+flags.DEFINE_string('graph_path', './data/pylot-complete-graph.dot',
                     'Path of the DOT file that contains the execution graph.')
-flags.DEFINE_string('profile-path', './data/pylot_profile.json',
+flags.DEFINE_string('profile_path', './data/pylot_profile.json',
                     'Path of the JSON profile for the Pylot execution.')
-flags.DEFINE_string('resource-path', './data/pylot_resource_profile.json',
+flags.DEFINE_string('resource_path', './data/pylot_resource_profile.json',
                     'Path of the Resource requirements for each Task.')
-flags.DEFINE_string('worker-profile-path', './data/worker_profile.json',
+flags.DEFINE_string('worker_profile_path', './data/worker_profile.json',
                     'Path of the topology of Workers to schedule on.')
-flags.DEFINE_integer('max-num-tasks', None,
-                     'Maximum number of tasks to load from the JSON file.')
+flags.DEFINE_integer('max_num_tasks', None,
+                     'Maximum number of tasks to load from the JSON file.',
+                     short_name="max")
 
 # Scheduler related flags.
 flags.DEFINE_enum('scheduler', 'edf', ['edf', 'lsf'],
                   'The scheduler to use for this execution.')
 flags.DEFINE_bool('preemption', False,
                   'Enable preemption of running tasks in the scheduler.')
-flags.DEFINE_float('scheduler-runtime', -1.0,
+flags.DEFINE_float('scheduler_runtime', -1.0,
                    'The runtime to assign to each scheduler invocation.')
 
 
