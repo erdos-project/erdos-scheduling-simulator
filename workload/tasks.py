@@ -148,7 +148,7 @@ class Task(object):
             self._logger.warning("Cannot step {} with start time {} at time "
                                  "{} since it's either not RUNNING or isn't "
                                  "supposed to start yet.".format(
-                                     self, self.start_time, self.state))
+                                     self, self.start_time, current_time))
             return False
 
         # Task can be run, step through the task's execution.
