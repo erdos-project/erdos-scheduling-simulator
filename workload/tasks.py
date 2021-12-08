@@ -447,15 +447,21 @@ class TaskGraph(object):
                 released_tasks.append(task)
         return released_tasks
 
-    def release_tasks(self, time: float) -> Sequence[Task]:
+    def release_tasks(self, time: Optional[float] = None) -> Sequence[Task]:
         """Releases the set of tasks that have no dependencies and are thus
         available to run.
 
         Args:
-            time (`float`): The simulation time at which to release the task.
+            time (`Optional[float]`): The simulation time at which to release
+                the task. If None, the time should have been specified at task
+                construction time.
 
         Returns:
             A list of tasks that can be run (are in RELEASED state).
+
+        Raises:
+            `ValueError` if no `time` for release is passed, and the tasks
+            were not instantiated with a `release_time`.
         """
         tasks_to_be_released = []
         for task in self._task_graph:
