@@ -216,7 +216,7 @@ class Simulator(object):
         """
         self._logger.debug("Received {} from the event queue.".format(event))
         # Advance the clock until the occurrence of this event.
-        self.__step(step_size=self._simulator_time - event.time)
+        self.__step(step_size=event.time - self._simulator_time)
 
         if event.event_type == EventType.SIMULATOR_START:
             # Start of the simulator loop.
