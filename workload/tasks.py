@@ -260,8 +260,34 @@ class Task(object):
                 self.state == TaskState.COMPLETED)
 
     def __str__(self):
-        return "Task(name={}, id={}, job={}, timestamp={}, state={})".format(
-                self.name, self.id, self.job, self.timestamp, self.state)
+        if self.state == TaskState.VIRTUAL:
+            return ("Task(name={}, id={}, job={}, timestamp={}, state={})".
+                    format(self.name, self.id, self.job,
+                           self.timestamp, self.state))
+        elif self.state == TaskState.RELEASED:
+            return ("Task(name={}, id={}, job={}, timestamp={},"
+                    "state={}, release_time={})".format(
+                           self.name, self.id,
+                           self.job, self.timestamp, self.state,
+                           self.release_time))
+        elif self.state == TaskState.RUNNING:
+            return ("Task(name={}, id={}, job={}, timestamp={},"
+                    "state={}, start_time={}, remaining_time={})".format(
+                           self.name, self.id,
+                           self.job, self.timestamp, self.state,
+                           self.start_time, self.remaining_time))
+        elif self.state == TaskState.PAUSED:
+            return ("Task(name={}, id={}, job={}, timestamp={},"
+                    "state={}, pause_time={}, remaining_time={})".format(
+                           self.name, self.id,
+                           self.job, self.timestamp, self.state,
+                           self.pause_time, self.remaining_time))
+        elif self.is_complete():
+            return ("Task(name={}, id={}, job={}, timestamp={},"
+                    "state={}, completion_time={})".format(
+                           self.name, self.id,
+                           self.job, self.timestamp, self.state,
+                           self.completion_time))
 
     def repr(self):
         return str(self)
@@ -307,6 +333,10 @@ class Task(object):
     @property
     def start_time(self):
         return self._start_time
+
+    @property
+    def pause_time(self):
+        return self._paused_times[-1].pause_time
 
     @property
     def remaining_time(self):
