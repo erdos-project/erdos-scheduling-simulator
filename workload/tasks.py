@@ -459,7 +459,9 @@ class TaskGraph(object):
         """
         tasks_to_be_released = []
         for task in self._task_graph:
-            if len(self.__parent_task_graph[task]) == 0:
+            if len(self.__parent_task_graph[task]) == 0 or\
+               all(map(lambda task: task.is_complete(),
+                       self.__parent_task_graph[task])):
                 tasks_to_be_released.append(task)
 
         # Release the tasks.
