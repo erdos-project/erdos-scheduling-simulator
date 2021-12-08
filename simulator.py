@@ -177,13 +177,13 @@ class Simulator(object):
 
         sim_start_event = Event(event_type=EventType.SIMULATOR_START, time=0)
         self._event_queue.add_event(sim_start_event)
-        self._logger.debug("[{}] Added {} to the event queue.".
-                           format(self._simulator_time, sim_start_event))
+        self._logger.info("[{}] Added {} to the event queue.".
+                          format(self._simulator_time, sim_start_event))
 
         sched_start_event = Event(event_type=EventType.SCHEDULER_START, time=0)
         self._event_queue.add_event(sched_start_event)
-        self._logger.debug("[{}] Added {} to the event queue.".
-                           format(self._simulator_time, sched_start_event))
+        self._logger.info("[{}] Added {} to the event queue.".
+                          format(self._simulator_time, sched_start_event))
 
     def simulate(self, task_graph: TaskGraph):
         """Run the simulator loop.
@@ -204,8 +204,8 @@ class Simulator(object):
             event = Event(event_type=EventType.TASK_RELEASE,
                           time=task.release_time, task=task)
             self._event_queue.add_event(event)
-            self._logger.debug("[{}] Added {} for {} to the event queue.".
-                               format(self._simulator_time, event, task))
+            self._logger.info("[{}] Added {} for {} to the event queue.".
+                              format(self._simulator_time, event, task))
 
         # Run the simulator loop.
         while True:
@@ -227,8 +227,8 @@ class Simulator(object):
             `True` if the event is a SIMULATOR_END and the simulator loop
             should be stopped, `False` otherwise.
         """
-        self._logger.debug("[{}] Received {} from the event queue.".format(
-                            self._simulator_time, event))
+        self._logger.info("[{}] Received {} from the event queue.".format(
+                           self._simulator_time, event))
         # Advance the clock until the occurrence of this event.
         self.__step(step_size=event.time - self._simulator_time)
 
@@ -248,8 +248,8 @@ class Simulator(object):
         elif event.event_type == EventType.TASK_RELEASE:
             # Release a task for the scheduler.
             self._released_tasks.append(event.task)
-            self._logger.debug("[{}] Added the task from {} to the released "
-                               "tasks.".format(self._simulator_time, event))
+            self._logger.info("[{}] Added the task from {} to the released "
+                              "tasks.".format(self._simulator_time, event))
             self._csv_logger.debug(
                 "{sim_time},TASK_RELEASE,{task_name},{timestamp},"
                 "{release_time},{task_id}".
@@ -273,20 +273,20 @@ class Simulator(object):
             # The given task has finished execution, unlock dependencies.
             new_tasks = task_graph.notify_task_completion(event.task,
                                                           event.time)
-            self._logger.debug("[{}] Notified the task graph of the "
-                               "completion of {}, and received {} new tasks.".
-                               format(self._simulator_time, event.task,
-                                      len(new_tasks)))
+            self._logger.info("[{}] Notified the task graph of the "
+                              "completion of {}, and received {} new tasks.".
+                              format(self._simulator_time, event.task,
+                                     len(new_tasks)))
 
             # Add events corresponding to the dependencies.
             for index, task in enumerate(new_tasks, start=1):
                 event = Event(event_type=EventType.TASK_RELEASE,
                               time=task.release_time, task=task)
                 self._event_queue.add_event(event)
-                self._logger.debug("[{}] ({}/{}) Added {} for {} to the "
-                                   "event queue.".format(self._simulator_time,
-                                                         index, len(new_tasks),
-                                                         event, task))
+                self._logger.info("[{}] ({}/{}) Added {} for {} to the "
+                                  "event queue.".format(self._simulator_time,
+                                                        index, len(new_tasks),
+                                                        event, task))
         elif event.event_type == EventType.SCHEDULER_START:
             # Log the required CSV information.
             currently_placed_tasks = []
@@ -311,17 +311,17 @@ class Simulator(object):
                                   len(self._worker_pools)))
             sched_finished_event = self.__run_scheduler(event, task_graph)
             self._event_queue.add_event(sched_finished_event)
-            self._logger.debug("[{}] Added {} to the event queue.".
-                               format(self._simulator_time,
-                                      sched_finished_event))
+            self._logger.info("[{}] Added {} to the event queue.".
+                              format(self._simulator_time,
+                                     sched_finished_event))
         elif event.event_type == EventType.SCHEDULER_FINISHED:
             # Place the task on the assigned worker pool, and reset the
             # available events to the tasks that could not be placed.
             # TODO (Sukrit): Should these tasks be moved to a PAUSED state?
-            self._logger.debug("[{}] Finished executing the scheduler "
-                               "initiated at {}. Placing tasks.".format(
-                                    self._simulator_time,
-                                    self._last_scheduler_start_time))
+            self._logger.info("[{}] Finished executing the scheduler "
+                              "initiated at {}. Placing tasks.".format(
+                                   self._simulator_time,
+                                   self._last_scheduler_start_time))
             released_tasks = []
             num_placed_tasks = 0
             for task, placement in self._last_task_placement:
@@ -331,7 +331,7 @@ class Simulator(object):
                                            format(
                                                sim_time=self._simulator_time,
                                                task_id=task.id))
-                    self._logger.debug("[{}] Failed to place {}".format(
+                    self._logger.warning("[{}] Failed to place {}".format(
                                             self._simulator_time, task))
                 else:
                     self._csv_logger.debug(
@@ -347,7 +347,7 @@ class Simulator(object):
                     # place it on the WorkerPool.
                     task.start(event.time)
                     worker_pool.place_task(task)
-                    self._logger.debug("[{}] Placed {} on {}".format(
+                    self._logger.info("[{}] Placed {} on {}".format(
                                             self._simulator_time, task,
                                             worker_pool))
                     num_placed_tasks += 1
@@ -372,8 +372,8 @@ class Simulator(object):
                         self._loop_timeout,
                     )
             self._event_queue.add_event(next_sched_event)
-            self._logger.debug("[{}] Added {} to the event queue.".
-                               format(self._simulator_time, next_sched_event))
+            self._logger.info("[{}] Added {} to the event queue.".
+                              format(self._simulator_time, next_sched_event))
         else:
             self._logger.error("[{}] Retrieved event of unknown type: {}".
                                format(self._simulator_time, event))
@@ -397,9 +397,9 @@ class Simulator(object):
             task_finished_event = Event(event_type=EventType.TASK_FINISHED,
                                         time=self._simulator_time, task=task)
             self._event_queue.add_event(task_finished_event)
-            self._logger.debug("[{}] Added {} for the task {} to the event "
-                               "queue.".format(self._simulator_time,
-                                               task_finished_event, task))
+            self._logger.info("[{}] Added {} to the event queue.".
+                              format(self._simulator_time,
+                                     task_finished_event))
 
     def __get_next_scheduler_event(self,
                                    event: Event,
