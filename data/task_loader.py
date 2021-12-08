@@ -1,4 +1,5 @@
 import json
+import logging
 from random import choice
 from operator import attrgetter
 from collections import defaultdict
@@ -74,16 +75,24 @@ class TaskLoader(object):
                 )
 
         # Create the Resource requirements from the resource_path.
+        resource_logger = utils.setup_logging(name='Resources',
+                                              log_file=_flags.log_file_name,
+                                              log_level=_flags.log_level)
         with open(resource_path, 'r') as f:
             self._resource_requirements =\
-                    TaskLoader._TaskLoader__create_resources(json.load(f))
+                    TaskLoader._TaskLoader__create_resources(json.load(f),
+                                                             resource_logger)
 
         # Create the Tasks and the TaskGraph from the Jobs.
+        task_logger = utils.setup_logging(name='Task',
+                                          log_file=_flags.log_file_name,
+                                          log_level=_flags.log_level)
         self._tasks = TaskLoader._TaskLoader__create_tasks(
                                                 profile_data,
                                                 self._jobs,
                                                 self._resource_requirements,
-                                                max_timestamp)
+                                                max_timestamp,
+                                                task_logger)
         self._logger.debug("Loaded {} Tasks from {}".format(len(self._tasks),
                                                             profile_path))
         self._task_graph = TaskLoader._TaskLoader__create_task_graph(
@@ -131,13 +140,16 @@ class TaskLoader(object):
         return job_graph
 
     @staticmethod
-    def __create_resources(resource_requirements: Sequence[Mapping[str, str]])\
+    def __create_resources(resource_requirements: Sequence[Mapping[str, str]],
+                           logger: Optional[logging.Logger] = None)\
             -> Mapping[str, Sequence[Resources]]:
         """Retrieve the Resource requirements from the given JSON entries.
 
         Args:
             resource_requirements (`Sequence[Mapping[str, str]]`): The JSON
                 entries for the resource requirements of each task.
+            logger (`Optional[logging.Logger]`): The logger to use to log the
+                results of the execution.
 
         Returns:
             A Mapping of task name (`str`) to a sequence of Resources
@@ -153,7 +165,8 @@ class TaskLoader(object):
                     resource_vector[Resource(name=resource_name,
                                              _id=resource_id)] = quantity
                 potential_requirements.append(
-                        Resources(resource_vector=resource_vector))
+                        Resources(resource_vector=resource_vector,
+                                  _logger=logger))
             _requirements[entry['name']] = potential_requirements
         return _requirements
 
@@ -161,7 +174,8 @@ class TaskLoader(object):
     def __create_tasks(json_entries: Sequence[Mapping[str, str]],
                        jobs: Mapping[str, Job],
                        resources: Mapping[str, Sequence[Resources]],
-                       max_timestamp: float = float('inf'))\
+                       max_timestamp: float = float('inf'),
+                       logger: Optional[logging.Logger] = None)\
             -> Sequence[Task]:
         """Creates a list of tasks from the given JSON entries.
 
@@ -191,6 +205,7 @@ class TaskLoader(object):
                               deadline=None,  # TODO(Sukrit): Assign deadlines.
                               timestamp=[entry['args']['timestamp']],
                               release_time=entry['ts'],
+                              _logger=logger,
                               ))
         return tasks
 

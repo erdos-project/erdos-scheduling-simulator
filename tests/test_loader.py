@@ -55,6 +55,7 @@ def test_create_tasks():
                 "timestamp": 1,
             },
             "dur": 100,
+            "ts": 50,
         }
     ]
     jobs = {

@@ -1,9 +1,8 @@
 import uuid
+import logging
 from enum import Enum
 from collections import namedtuple, defaultdict
 from typing import Mapping, Sequence, Optional
-
-import absl
 
 import utils
 from workload import Job, Resources
@@ -48,8 +47,8 @@ class Task(object):
         completion_time (`float`): The time at which the task completed / was
             preempted (only available if state is either EVICTED / COMPLETED,
             -1 otherwise)
-        _flags (`Optional[absl.flags]`): The flags with which the app was
-            initiated, if any.
+        _logger(`Optional[logging.Logger]`): The logger to use to log the
+            results of the execution.
     """
     def __init__(self, name: str, job: Job, resource_requirements: Resources,
                  runtime: float, deadline: float,
@@ -57,14 +56,13 @@ class Task(object):
                  release_time: Optional[float] = -1,
                  start_time: Optional[float] = -1,
                  completion_time: Optional[float] = -1,
-                 _flags: Optional['absl.flags'] = None):
+                 _logger: Optional[logging.Logger] = None):
         # Set up the logger.
-        if _flags:
-            self._logger = utils.setup_logging(name=self.__class__.__name__,
-                                               log_file=_flags.log_file_name,
-                                               log_level=_flags.log_level)
+        if _logger:
+            self._logger = _logger
         else:
-            self._logger = utils.setup_logging(name=self.__class__.__name__)
+            self._logger = utils.setup_logging(name="{}_{}".format(name,
+                                                                   timestamp))
 
         self._name = name
         self._creating_job = job

@@ -1,8 +1,7 @@
 import uuid
+import logging
 from copy import copy, deepcopy
 from typing import Optional, Sequence, Type
-
-import absl
 
 import utils
 from workload import Resources, Task, TaskState
@@ -18,16 +17,14 @@ class Worker(object):
         name (`str`): A name assigned to the particular instance of the Worker.
         resources (`Resource`): The set of `Resource`s owned by this worker.
         id (`UUID`): The ID of this particular Worker.
-        _flags (`Optional[absl.flags]`): The flags with which the app was
-            initiated, if any.
+        _logger(`Optional[logging.Logger]`): The logger to use to log the
+            results of the execution.
     """
     def __init__(self, name: str, resources: Resources,
-                 _flags: Optional['absl.flags'] = None):
+                 _logger: Optional[logging.Logger] = None):
         # Set up the logger.
-        if _flags:
-            self._logger = utils.setup_logging(name=self.__class__.__name__,
-                                               log_file=_flags.log_file_name,
-                                               log_level=_flags.log_level)
+        if _logger:
+            self._logger = _logger
         else:
             self._logger = utils.setup_logging(name=self.__class__.__name__)
 
@@ -127,7 +124,10 @@ class Worker(object):
         """
         cls = self.__class__
         instance = cls.__new__(cls)
-        cls.__init__(instance, name=self.name, resources=copy(self.resources))
+        cls.__init__(instance,
+                     name=self.name,
+                     resources=copy(self.resources),
+                     _logger=self._logger)
         instance._id = uuid.UUID(self.id)
 
         # Copy the placed tasks.
@@ -146,8 +146,10 @@ class Worker(object):
         """
         cls = self.__class__
         instance = cls.__new__(cls)
-        cls.__init__(instance, name=self.name,
-                     resources=deepcopy(self.resources))
+        cls.__init__(instance,
+                     name=self.name,
+                     resources=deepcopy(self.resources),
+                     _logger=self._logger)
         instance._id = uuid.UUID(self.id)
         memo[id(self)] = instance
         return instance
@@ -192,17 +194,15 @@ class WorkerPool(object):
         scheduler (`Optional[Type[BaseScheduler]]`): The second-level scheduler
             implementation that schedules tasks assigned to this WorkerPool
             across its Workers.
-        _flags (`Optional[absl.flags]`): The flags with which the app was
+        _logger (`Optional[absl.flags]`): The flags with which the app was
             initiated, if any.
     """
     def __init__(self, name: str, workers: Optional[Sequence[Worker]] = [],
                  scheduler: Optional[Type['BaseScheduler']] = None,
-                 _flags: Optional['absl.flags'] = None):
+                 _logger: Optional[logging.Logger] = None):
         # Set up the logger.
-        if _flags:
-            self._logger = utils.setup_logging(name=self.__class__.__name__,
-                                               log_file=_flags.log_file_name,
-                                               log_level=_flags.log_level)
+        if _logger:
+            self._logger = _logger
         else:
             self._logger = utils.setup_logging(name=self.__class__.__name__)
 
@@ -355,6 +355,7 @@ class WorkerPool(object):
                      name=self.name,
                      workers=[copy(w) for w in self._workers.values()],
                      scheduler=copy(self._scheduler),
+                     _logger=self._logger,
                      )
         instance._id = uuid.UUID(self.id)
 
@@ -379,6 +380,7 @@ class WorkerPool(object):
                      name=self.name,
                      workers=[deepcopy(w) for w in self._workers.values()],
                      scheduler=copy(self._scheduler),
+                     _logger=self._logger,
                      )
         instance._id = uuid.UUID(self.id)
         memo[id(self)] = instance

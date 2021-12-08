@@ -1,10 +1,9 @@
 import uuid
+import logging
 from copy import copy
 from collections import defaultdict
 from functools import total_ordering
 from typing import Mapping, Optional
-
-import absl
 
 import utils
 
@@ -102,17 +101,15 @@ class Resources(object):
     Args:
         resource_vector (Mapping[Resource, int]): A mapping from an arbitrary
             set of resources to their quantities.
-        _flags (`Optional[absl.flags]`): The flags with which the app was
-            initiated, if any.
+        _logger (`Optional[logging.Logger]`): The logger to use to log the
+            results of the execution.
     """
     def __init__(self,
                  resource_vector: Optional[Mapping[Resource, int]] = {},
-                 _flags: Optional['absl.flags'] = None):
+                 _logger: Optional[logging.Logger] = None):
         # Set up the logger.
-        if _flags:
-            self._logger = utils.setup_logging(name=self.__class__.__name__,
-                                               log_file=_flags.log_file_name,
-                                               log_level=_flags.log_level)
+        if _logger:
+            self._logger = _logger
         else:
             self._logger = utils.setup_logging(name=self.__class__.__name__)
 
@@ -269,7 +266,7 @@ class Resources(object):
         """
         cls = self.__class__
         instance = cls.__new__(cls)
-        cls.__init__(instance, self._resource_vector)
+        cls.__init__(instance, self._resource_vector, self._logger)
 
         # Copy over the allocations.
         for task, allocations in self._current_allocations.items():
@@ -286,7 +283,7 @@ class Resources(object):
         """
         cls = self.__class__
         instance = cls.__new__(cls)
-        cls.__init__(instance, self._resource_vector)
+        cls.__init__(instance, self._resource_vector, self._logger)
 
         # Undo the allocations.
         for allocations in self._current_allocations.values():
