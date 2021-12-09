@@ -542,3 +542,12 @@ class TaskGraph(object):
 
     def __len__(self):
         return len(self._task_graph)
+
+    def __str__(self):
+        constructed_string = ""
+        for task, children in self._task_graph.items():
+            constructed_string += "{}_{}: {}\n".format(
+                task.name, task.timestamp,
+                list(map(lambda t: "{}_{}".format(t.name, t.timestamp),
+                         children)))
+        return constructed_string
