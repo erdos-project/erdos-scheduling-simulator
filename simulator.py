@@ -107,6 +107,14 @@ class EventQueue(object):
             return None
         return self._event_queue[0]
 
+    def reheapify(self):
+        """Reheapify the current queue.
+
+        This method should be used if any in-place changes have been made to
+        the events already inserted into the queue.
+        """
+        heapq.heapify(self._event_queue)
+
     def __len__(self) -> int:
         return len(self._event_queue)
 
@@ -179,6 +187,7 @@ class Simulator(object):
 
         # Internal data.
         self._last_scheduler_start_time = 0
+        self._next_scheduler_event = None
         self._last_task_placement = []
         self._released_tasks = []
         self._finished_tasks = 0
@@ -300,6 +309,13 @@ class Simulator(object):
                        timestamp=event.task.timestamp,
                        release_time=event.task.release_time,
                        task_id=event.task.id))
+
+            # If we are not in the midst of a scheduler invocation, and the
+            # next scheduler start event is too far, pull the time back, and
+            # re-heapify the event queue.
+            if self._next_scheduler_event:
+                self._next_scheduler_event._time = event.time + 1
+                self._event_queue.reheapify()
         elif event.event_type == EventType.TASK_FINISHED:
             self._finished_tasks += 1
             self._csv_logger.debug(
@@ -344,6 +360,7 @@ class Simulator(object):
             # Execute the scheduler, and insert an event notifying the
             # end of the scheduler into the loop.
             self._last_scheduler_start_time = event.time
+            self._next_scheduler_event = None
             self._logger.info("[{}] Running the scheduler with {} released "
                               "tasks and {} tasks already placed across {} "
                               "worker pools.".format(
@@ -366,14 +383,17 @@ class Simulator(object):
                                    self._last_scheduler_start_time))
 
             # Log the required CSV information.
+            num_placed = len(list(filter(lambda p: p[1] is not None,
+                                         self._last_task_placement)))
+            num_unplaced = len(self._last_task_placement) - num_placed
             self._csv_logger.debug(
-                "{sim_time},SCHEDULER_FINISHED,{runtime},{placed_tasks}".
+                "{sim_time},SCHEDULER_FINISHED,{runtime},"
+                "{placed_tasks},{unplaced_tasks}".
                 format(
                        sim_time=event.time,
                        runtime=event.time - self._last_scheduler_start_time,
-                       placed_tasks=len(list(filter(lambda p: p[1] is not None,
-                                                    self._last_task_placement)
-                                             ))))
+                       placed_tasks=num_placed,
+                       unplaced_tasks=num_unplaced))
 
             unplaced_tasks = []
             for task, placement in self._last_task_placement:
@@ -538,8 +558,10 @@ class Simulator(object):
                                         min(map(attrgetter('remaining_time'),
                                                 running_tasks))))
 
-        return Event(event_type=EventType.SCHEDULER_START,
+        self._next_scheduler_event = Event(
+                     event_type=EventType.SCHEDULER_START,
                      time=scheduler_start_time)
+        return self._next_scheduler_event
 
     def __run_scheduler(self, event: Event, task_graph: TaskGraph) -> Event:
         """Run the scheduler.
