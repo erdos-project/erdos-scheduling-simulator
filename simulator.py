@@ -191,6 +191,7 @@ class Simulator(object):
         self._last_task_placement = []
         self._released_tasks = []
         self._finished_tasks = 0
+        self._scheduler_delay = _flags.scheduler_delay if _flags else 1
 
         # Initialize the event queue, and add a SIMULATOR_START / SIMULATOR_END
         # task to signify the beginning and completion of the simulator loop.
@@ -311,10 +312,12 @@ class Simulator(object):
                        task_id=event.task.id))
 
             # If we are not in the midst of a scheduler invocation, and the
-            # next scheduler start event is too far, pull the time back, and
+            # next scheduler start event is too far, pull the time back to
+            # the current time offset by a scheduler invocation delay, and
             # re-heapify the event queue.
             if self._next_scheduler_event:
-                self._next_scheduler_event._time = event.time + 1
+                self._next_scheduler_event._time = (event.time +
+                                                    self._scheduler_delay)
                 self._event_queue.reheapify()
         elif event.event_type == EventType.TASK_FINISHED:
             self._finished_tasks += 1
@@ -399,10 +402,12 @@ class Simulator(object):
             for task, placement in self._last_task_placement:
                 if placement is None:
                     unplaced_tasks.append(task)
-                    self._csv_logger.debug("{sim_time},TASK_SKIP,{task_id}".
+                    self._csv_logger.debug("{sim_time},TASK_SKIP,{task_id},"
+                                           "{task_name}".
                                            format(
                                                sim_time=self._simulator_time,
-                                               task_id=task.id))
+                                               task_id=task.id,
+                                               task_name=task.name))
                     self._logger.warning("[{}] Failed to place {}".format(
                                             self._simulator_time, task))
                     self._logger.info("The Worker Pools are: ")
@@ -410,6 +415,11 @@ class Simulator(object):
                         self._logger.info("{}".format(worker_pool))
                         for worker in worker_pool.workers:
                             self._logger.info("\t{}".format(worker))
+                    print("The Worker Pools are: ")
+                    for worker_pool in self._worker_pools.values():
+                        print("{}".format(worker_pool))
+                        for worker in worker_pool.workers:
+                            print("\t{}".format(worker))
                 else:
                     self._csv_logger.debug(
                             "{sim_time},TASK_PLACEMENT,{task_name},"
@@ -546,18 +556,25 @@ class Simulator(object):
                                   self._simulator_time))
             return Event(event_type=EventType.SIMULATOR_END, time=loop_timeout)
 
-        # If the next event in the loop is too far away, run the scheduler at
-        # the next event time, instead of running it at a fixed frequency.
         next_event = self._event_queue.peek()
-        if next_event:
-            scheduler_start_time = max(scheduler_start_time,
-                                       next_event.time + 1)
-        elif len(running_tasks) > 0:
+        if len(running_tasks) > 0:
+            # If there are running tasks, and their completion is farther into
+            # the future than the scheduled start time, run the scheduler after
+            # the completion of the first task offset by a scheduler delay.
             scheduler_start_time = max(scheduler_start_time,
                                        (self._simulator_time +
                                         min(map(attrgetter('remaining_time'),
-                                                running_tasks))))
+                                                running_tasks)) +
+                                        self._scheduler_delay))
+        elif next_event:
+            # If there were no running tasks, and the next event in the loop
+            # is too far away, run the scheduler at the next event time offset
+            # by a scheduler delay, instead of running it at a fixed frequency.
+            scheduler_start_time = max(scheduler_start_time,
+                                       next_event.time + self._scheduler_delay)
 
+        # Save the scheduler event in case its start time needs to be pulled
+        # back by the arrival of a task.
         self._next_scheduler_event = Event(
                      event_type=EventType.SCHEDULER_START,
                      time=scheduler_start_time)

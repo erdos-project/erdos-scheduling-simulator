@@ -34,6 +34,9 @@ flags.DEFINE_bool('preemption', False,
                   'Enable preemption of running tasks in the scheduler.')
 flags.DEFINE_float('scheduler_runtime', -1.0,
                    'The runtime to assign to each scheduler invocation.')
+flags.DEFINE_float('scheduler_delay', 1.0,
+                   'The delay associated with invoking a scheduler after the '
+                   'release of a Task in the system.')
 
 
 def main(args):
@@ -59,8 +62,6 @@ def main(args):
                              _flags=FLAGS)
 
     # Load the worker topology.
-    # TODO (Sukrit): Define the possible scheduler implementations in the
-    # flags and pass the chosen scheduler to the WorkerLoader.
     worker_loader = WorkerLoader(worker_profile_path=FLAGS.worker_profile_path,
                                  _flags=FLAGS)
 
