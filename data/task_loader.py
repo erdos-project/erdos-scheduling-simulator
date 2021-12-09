@@ -44,9 +44,14 @@ class TaskLoader(object):
         # Fix the timestamp offsets from the beginning.
         start_real_time = int(profile_data[0]['ts'])
         start_sim_time = int(profile_data[0]['args']['timestamp'][1:-1])
+        sim_interval = 1
         for entry in profile_data:
             entry_sim_time = int(entry['args']['timestamp'][1:-1])
-            entry['args']['timestamp'] = entry_sim_time - start_sim_time
+            if sim_interval == 1 and entry_sim_time != start_sim_time:
+                sim_interval = (entry_sim_time - start_sim_time)
+            entry['args']['timestamp'] = int(
+                                          (entry_sim_time - start_sim_time) /
+                                          sim_interval)
             entry['ts'] = entry['ts'] - start_real_time
 
         # Create the Jobs from the profile path.
@@ -93,6 +98,8 @@ class TaskLoader(object):
                                                 self._resource_requirements,
                                                 max_timestamp,
                                                 task_logger)
+        for task in self._tasks:
+            self._logger.debug("Loaded Task from JSON: {}".format(task))
         self._logger.debug("Loaded {} Tasks from {}".format(len(self._tasks),
                                                             profile_path))
         self._task_graph = TaskLoader._TaskLoader__create_task_graph(
@@ -202,7 +209,7 @@ class TaskLoader(object):
                               resource_requirements=choice(
                                                   resources[entry['name']]),
                               runtime=entry['dur'],
-                              deadline=None,  # TODO(Sukrit): Assign deadlines.
+                              deadline=entry['dur'],  # TODO(Sukrit): Fix
                               timestamp=entry['args']['timestamp'],
                               release_time=entry['ts'],
                               _logger=logger,
