@@ -237,7 +237,7 @@ def test_simulator_handle_event():
     # Test the SIMULATOR_START event.
     return_value = simulator._Simulator__handle_event(
             event=Event(event_type=EventType.SIMULATOR_START, time=1.0),
-            task_graph=None)
+            task_graph=TaskGraph())
     assert not return_value, "Incorrect return value for event type."
 
     # Test the SIMULATOR_END event.
