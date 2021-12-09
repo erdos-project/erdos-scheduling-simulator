@@ -209,7 +209,8 @@ class TaskLoader(object):
                               resource_requirements=choice(
                                                   resources[entry['name']]),
                               runtime=entry['dur'],
-                              deadline=entry['dur'],  # TODO(Sukrit): Fix
+                              # TODO (Sukrit): Add a variance to the deadline.
+                              deadline=entry['ts'] + entry['dur'],
                               timestamp=entry['args']['timestamp'],
                               release_time=entry['ts'],
                               _logger=logger,
