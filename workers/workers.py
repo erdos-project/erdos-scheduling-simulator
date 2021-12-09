@@ -115,6 +115,7 @@ class Worker(object):
 
         # Delete the completed tasks from the set of placed tasks.
         for completed_task in completed_tasks:
+            self._resources.deallocate(completed_task)
             del self._placed_tasks[completed_task]
         return completed_tasks
 
