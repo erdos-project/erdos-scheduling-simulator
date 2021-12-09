@@ -163,6 +163,9 @@ class Simulator(object):
         self._logger.info("The Worker Pools are: ")
         for worker_pool in worker_pools:
             self._logger.info("{}".format(worker_pool))
+            self._csv_logger.info("0,WORKER_POOL,{name},{pool_id}".format(
+                                        name=worker_pool.name,
+                                        pool_id=worker_pool.id))
             for worker in worker_pool.workers:
                 self._logger.info("\t{}".format(worker))
 
