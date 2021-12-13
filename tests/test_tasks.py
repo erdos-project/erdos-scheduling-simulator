@@ -9,7 +9,7 @@ def __create_default_task(
                         resource_vector={Resource(name="CPU", _id="any"): 1}),
         runtime=1.0,
         deadline=10.0,
-        timestamp=[0],
+        timestamp=0,
         release_time=-1,
         start_time=-1,
         completion_time=-1,

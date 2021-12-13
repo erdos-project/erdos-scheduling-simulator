@@ -363,11 +363,11 @@ class TaskGraph(object):
     def __init__(self, tasks: Optional[Mapping[Task, Sequence[Task]]] = {}):
         self._task_graph = defaultdict(list)
         self.__parent_task_graph = defaultdict(list)
+        self._max_timestamp = float('-inf')
+
+        # Maintain the child and parent abstractions from the given taskset.
         for task, children in tasks.items():
-            self._task_graph[task].extend(children)
-            for child in children:
-                self._task_graph[child].extend([])
-                self.__parent_task_graph[child].append(task)
+            self.add_task(task, children)
 
     def add_task(self, task: Task, _children: Optional[Sequence[Task]] = []):
         """Adds the task to the graph along with the given children.
@@ -376,12 +376,15 @@ class TaskGraph(object):
             task (`Task`): The task to be added to the graph.
             children (`Sequence[Task]`): The children of the task, if any.
         """
-        self._task_graph[task].extend(_children)
-
-        # Add all the children tasks with an empty children list.
-        for child in _children:
-            self._task_graph[child].extend([])
-            self.__parent_task_graph[child].append(task)
+        if len(_children) == 0:
+            # If no children are provided, add just the task.
+            if task.timestamp > self._max_timestamp:
+                self._max_timestamp = task.timestamp
+            self._task_graph[task].extend([])
+        else:
+            # Add the children to the graph individually.
+            for child in _children:
+                self.add_child(task, child)
 
     def notify_task_completion(self, task: Task, finish_time: float) ->\
             Sequence[Task]:
@@ -421,6 +424,14 @@ class TaskGraph(object):
             task (`Task`): The task, to which the child needs to be added.
             child (`Task`): The child task to be added.
         """
+        # Maintain the maximum timestamp encountered in tasks.
+        if task.timestamp > self._max_timestamp:
+            self._max_timestamp = task.timestamp
+
+        if child.timestamp > self._max_timestamp:
+            self._max_timestamp = child.timestamp
+
+        # Maintian the child and parent connections for the task.
         self._task_graph[task].append(child)
         self._task_graph[child].extend([])
         self.__parent_task_graph[child].append(task)
