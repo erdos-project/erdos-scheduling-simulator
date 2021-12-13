@@ -340,3 +340,126 @@ def test_task_completion_notification():
         "Incorrect length of released tasks returned."
     assert released_tasks[0] == planning_task,\
         "Incorrect task released."
+
+
+def test_task_graph_index_success():
+    """ Test that indexing a TaskGraph works correctly. """
+    # Create the individual tasks.
+    perception_task_0 = __create_default_task(job=Job(name="Perception"),
+                                              timestamp=0)
+    perception_task_1 = __create_default_task(job=Job(name="Perception"),
+                                              timestamp=1)
+    prediction_task_0 = __create_default_task(job=Job(name="Prediction"),
+                                              timestamp=0)
+    prediction_task_1 = __create_default_task(job=Job(name="Prediction"),
+                                              timestamp=1)
+    planning_task_0 = __create_default_task(job=Job(name="Planning"),
+                                            timestamp=0)
+    planning_task_1 = __create_default_task(job=Job(name="Planning"),
+                                            timestamp=1)
+
+    # Create the TaskGraph.
+    task_graph = TaskGraph(tasks={
+            perception_task_0: [prediction_task_0, perception_task_1],
+            prediction_task_0: [planning_task_0, prediction_task_1],
+            planning_task_0: [planning_task_1],
+            perception_task_1: [prediction_task_1],
+            prediction_task_1: [planning_task_1],
+            planning_task_1: [],
+        })
+    assert len(task_graph) == 6, "Incorrect length of TaskGraph."
+    assert task_graph._max_timestamp == 1,\
+        "Incorrect maximum timestamp maintained in the TaskGraph."
+
+    # Slice the TaskGraph.
+    task_graph_slice = task_graph[0]
+    assert type(task_graph_slice) == TaskGraph,\
+        "Incorrect type of slice returned."
+    assert len(task_graph_slice) == 3, "Incorrect length of sliced TaskGraph."
+    assert task_graph_slice._max_timestamp == 0,\
+        "Incorrect maximum timestamp maintained in the sliced TaskGraph."
+
+
+def test_task_graph_index_failure():
+    """ Test that an invalid argument to indexing a TaskGraph fails. """
+    # Create the individual tasks.
+    perception_task_0 = __create_default_task(job=Job(name="Perception"),
+                                              timestamp=0)
+    perception_task_1 = __create_default_task(job=Job(name="Perception"),
+                                              timestamp=1)
+    prediction_task_0 = __create_default_task(job=Job(name="Prediction"),
+                                              timestamp=0)
+    prediction_task_1 = __create_default_task(job=Job(name="Prediction"),
+                                              timestamp=1)
+    planning_task_0 = __create_default_task(job=Job(name="Planning"),
+                                            timestamp=0)
+    planning_task_1 = __create_default_task(job=Job(name="Planning"),
+                                            timestamp=1)
+
+    # Create the TaskGraph.
+    task_graph = TaskGraph(tasks={
+            perception_task_0: [prediction_task_0, perception_task_1],
+            prediction_task_0: [planning_task_0, prediction_task_1],
+            planning_task_0: [planning_task_1],
+            perception_task_1: [prediction_task_1],
+            prediction_task_1: [planning_task_1],
+            planning_task_1: [],
+        })
+    assert len(task_graph) == 6, "Incorrect length of TaskGraph."
+    assert task_graph._max_timestamp == 1,\
+        "Incorrect maximum timestamp maintained in the TaskGraph."
+
+    # Slice the TaskGraph.
+    with pytest.raises(ValueError):
+        task_graph[5.0]
+
+
+def test_task_graph_slice_success():
+    """ Test that slicing a TaskGraph works correctly. """
+    # Create the individual tasks.
+    perception_task_0 = __create_default_task(job=Job(name="Perception"),
+                                              timestamp=0)
+    perception_task_1 = __create_default_task(job=Job(name="Perception"),
+                                              timestamp=1)
+    perception_task_2 = __create_default_task(job=Job(name="Perception"),
+                                              timestamp=2)
+    prediction_task_0 = __create_default_task(job=Job(name="Prediction"),
+                                              timestamp=0)
+    prediction_task_1 = __create_default_task(job=Job(name="Prediction"),
+                                              timestamp=1)
+    prediction_task_2 = __create_default_task(job=Job(name="Prediction"),
+                                              timestamp=2)
+    planning_task_0 = __create_default_task(job=Job(name="Planning"),
+                                            timestamp=0)
+    planning_task_1 = __create_default_task(job=Job(name="Planning"),
+                                            timestamp=1)
+    planning_task_2 = __create_default_task(job=Job(name="Planning"),
+                                            timestamp=2)
+
+    # Create the TaskGraph.
+    task_graph = TaskGraph(tasks={
+            perception_task_0: [prediction_task_0, perception_task_1],
+            prediction_task_0: [planning_task_0, prediction_task_1],
+            planning_task_0: [planning_task_1],
+            perception_task_1: [prediction_task_1, perception_task_2],
+            prediction_task_1: [planning_task_1, prediction_task_2],
+            planning_task_1: [planning_task_2],
+            perception_task_2: [prediction_task_2],
+            prediction_task_2: [planning_task_2],
+            planning_task_2: [],
+        })
+    assert len(task_graph) == 9, "Incorrect length of TaskGraph."
+    assert task_graph._max_timestamp == 2,\
+        "Incorrect maximum timestamp maintained in the TaskGraph."
+
+    # Slice the TaskGraph.
+    task_graph_slice = task_graph[:2]
+    assert type(task_graph_slice) == list,\
+        "Incorrect type of slice returned."
+    assert len(task_graph_slice) == 2, "Incorrect length of sliced TaskGraph."
+    assert len(task_graph_slice[0]) == 3, "Incorrect length of TaskGraph."
+    assert len(task_graph_slice[1]) == 3, "Incorrect length of TaskGraph."
+    assert task_graph_slice[0]._max_timestamp == 0,\
+        "Incorrect maximum timestamp maintained in the sliced TaskGraph."
+    assert task_graph_slice[1]._max_timestamp == 1,\
+        "Incorrect maximum timestamp maintained in the sliced TaskGraph."
