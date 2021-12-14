@@ -575,7 +575,7 @@ class TaskGraph(object):
             return TaskGraph(tasks=tasks)
         elif isinstance(slice_obj, slice):
             return [self[index] for index in
-                    range(*slice_obj.indices(self._max_timestamp))]
+                    range(*slice_obj.indices(self._max_timestamp + 1))]
         else:
             raise ValueError("Unexpected value while slicing: {}".
                              format(slice_obj))
