@@ -123,8 +123,7 @@ class Task(object):
             raise ValueError("Start time should be specified either while "
                              "creating the Task or when starting it.")
 
-        remaining_time = max(0, self._remaining_time +
-                             (self._remaining_time * variance / 100.0))
+        remaining_time = utils.fuzz_time(self._remaining_time, variance)
         self._logger.debug("Transitioning {} to {} at time {} "
                            "with the remaining time {}".format(
                                self, TaskState.RUNNING, time, remaining_time))

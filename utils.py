@@ -1,3 +1,4 @@
+import random
 import logging
 
 
@@ -55,3 +56,18 @@ def setup_csv_logging(name: str, log_file: str) -> logging.Logger:
     """
     return setup_logging(name=name + '_CSV', fmt="%(message)s", date_fmt=None,
                          log_file=log_file, log_level="debug")
+
+
+def fuzz_time(time: float, variance: float) -> float:
+    """Fuzz the given `time` according to the provided `variance`.
+
+    Args:
+        time (`float`): The time to fuzz.
+        variance (`float`): The % variance to fuzz `time` by.
+
+    Returns:
+        The fuzzed time according to the given variance.
+    """
+    return max(0,
+               random.uniform(time - (time * abs(variance) / 100.0),
+                              time + (time * abs(variance) / 100.0)))

@@ -23,9 +23,17 @@ flags.DEFINE_string('resource_path', './data/pylot_resource_profile.json',
                     'Path of the Resource requirements for each Task.')
 flags.DEFINE_string('worker_profile_path', './data/worker_profile.json',
                     'Path of the topology of Workers to schedule on.')
+
+# Task related flags.
 flags.DEFINE_integer('max_timestamp', None,
                      'Maximum timestamp of tasks to load from the JSON file.',
                      short_name="max")
+flags.DEFINE_float('deadline_variance', 0.0,
+                   'The % variance to allocate to the assigned deadline for '
+                   'each task.')
+flags.DEFINE_float('runtime_variance', 0.0,
+                   'The % variance to allocate to the assigned runtime for '
+                   'each task.')
 
 # Scheduler related flags.
 flags.DEFINE_enum('scheduler', 'edf', ['edf', 'lsf'],

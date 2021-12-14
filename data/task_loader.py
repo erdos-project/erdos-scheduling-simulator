@@ -97,7 +97,8 @@ class TaskLoader(object):
                                                 self._jobs,
                                                 self._resource_requirements,
                                                 max_timestamp,
-                                                task_logger)
+                                                task_logger,
+                                                _flags.deadline_variance)
         for task in self._tasks:
             self._logger.debug("Loaded Task from JSON: {}".format(task))
         self._logger.debug("Loaded {} Tasks from {}".format(len(self._tasks),
@@ -182,7 +183,8 @@ class TaskLoader(object):
                        jobs: Mapping[str, Job],
                        resources: Mapping[str, Sequence[Resources]],
                        max_timestamp: float = float('inf'),
-                       logger: Optional[logging.Logger] = None)\
+                       logger: Optional[logging.Logger] = None,
+                       deadline_variance: Optional[float] = 0.0)\
             -> Sequence[Task]:
         """Creates a list of tasks from the given JSON entries.
 
@@ -195,6 +197,10 @@ class TaskLoader(object):
                 potential resources required by each task invocation.
             max_timestamp (`int`): The maximum timestamp of tasks to load from
                 the JSON file.
+            logger (`Optional[logging.Logger]`): The logger to pass to each
+                Task to enable logging of its execution.
+            deadline_variance (`Optional[float]`): The % variance to add to
+                the assigned deadline for each task.
 
         Returns:
             A `Sequence[Task]` with the task information retrieved from the
@@ -204,13 +210,14 @@ class TaskLoader(object):
         for entry in json_entries:
             if entry['args']['timestamp'] > max_timestamp:
                 continue
+            deadline = utils.fuzz_time(entry['ts'] + entry['dur'],
+                                       deadline_variance)
             tasks.append(Task(name=entry['name'],
                               job=jobs[entry['pid']],
                               resource_requirements=choice(
                                                   resources[entry['name']]),
                               runtime=entry['dur'],
-                              # TODO (Sukrit): Add a variance to the deadline.
-                              deadline=entry['ts'] + entry['dur'],
+                              deadline=deadline,
                               timestamp=entry['args']['timestamp'],
                               release_time=entry['ts'],
                               _logger=logger,

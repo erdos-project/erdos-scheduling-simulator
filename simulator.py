@@ -192,6 +192,7 @@ class Simulator(object):
         self._released_tasks = []
         self._finished_tasks = 0
         self._scheduler_delay = _flags.scheduler_delay if _flags else 1
+        self._runtime_variance = _flags.runtime_variance if _flags else 0.0
 
         # Initialize the event queue, and add a SIMULATOR_START / SIMULATOR_END
         # task to signify the beginning and completion of the simulator loop.
@@ -432,7 +433,7 @@ class Simulator(object):
                     worker_pool = self._worker_pools[placement]
                     # Initialize the task at the given placement time, and
                     # place it on the WorkerPool.
-                    task.start(event.time)
+                    task.start(event.time, self._runtime_variance)
                     worker_pool.place_task(task)
                     self._logger.info("[{}] Placed {} on {}".format(
                                             self._simulator_time, task,
