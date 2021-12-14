@@ -4,6 +4,7 @@ from workload import Job, Resource, Resources, TaskState, Task, TaskGraph
 
 
 def __create_default_task(
+        name=None,
         job=Job(name="Perception"),
         resource_requirements=Resources(
                         resource_vector={Resource(name="CPU", _id="any"): 1}),
@@ -15,7 +16,7 @@ def __create_default_task(
         completion_time=-1,
 ):
     """ Helper function to create a default task. """
-    return Task(name="{}_Task".format(job.name),
+    return Task(name=name if name else "{}_Task".format(job.name),
                 job=job,
                 resource_requirements=resource_requirements,
                 runtime=runtime,
@@ -504,3 +505,52 @@ def test_is_source_task():
         "Planning Task is not a source task."
     assert not task_graph.is_source_task(planning_task_1),\
         "Planning Task is not a source task."
+
+
+def test_task_find():
+    # Create the individual tasks.
+    perception_task_0 = __create_default_task(name="Perception_Watermark",
+                                              job=Job(name="Perception"),
+                                              timestamp=0)
+    perception_task_1 = __create_default_task(name="Perception_Watermark",
+                                              job=Job(name="Perception"),
+                                              timestamp=1)
+    prediction_task_0 = __create_default_task(name="Prediction_Watermark",
+                                              job=Job(name="Prediction"),
+                                              timestamp=0)
+    prediction_task_1 = __create_default_task(name="Prediction_Watermark",
+                                              job=Job(name="Prediction"),
+                                              timestamp=1)
+    planning_task_0 = __create_default_task(name="Planning_Watermark",
+                                            job=Job(name="Planning"),
+                                            timestamp=0)
+    planning_task_1 = __create_default_task(name="Planning_Watermark",
+                                            job=Job(name="Planning"),
+                                            timestamp=1)
+
+    # Create the TaskGraph.
+    task_graph = TaskGraph(tasks={
+            perception_task_0: [prediction_task_0, perception_task_1],
+            prediction_task_0: [planning_task_0, prediction_task_1],
+            planning_task_0: [planning_task_1],
+            perception_task_1: [prediction_task_1],
+            prediction_task_1: [planning_task_1],
+            planning_task_1: [],
+        })
+
+    # Check that find works correctly.
+    perception_tasks = task_graph.find("Perception_Watermark")
+    prediction_tasks = task_graph.find("Prediction_Watermark")
+    planning_tasks = task_graph.find("Planning_Watermark")
+    assert len(perception_tasks) == 2,\
+        "Incorrect length of retrieved Perception tasks."
+    assert set(perception_tasks) == {perception_task_0, perception_task_1},\
+        "Incorrect tasks retrieved by the TaskGraph."
+    assert len(prediction_tasks) == 2,\
+        "Incorrect length of retrieved Perception tasks."
+    assert set(prediction_tasks) == {prediction_task_0, prediction_task_1},\
+        "Incorrect tasks retrieved by the TaskGraph."
+    assert len(planning_tasks) == 2,\
+        "Incorrect length of retrieved Perception tasks."
+    assert set(planning_tasks) == {planning_task_0, planning_task_1},\
+        "Incorrect tasks retrieved by the TaskGraph."

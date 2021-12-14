@@ -435,22 +435,20 @@ class TaskGraph(object):
         self._task_graph[child].extend([])
         self.__parent_task_graph[child].append(task)
 
-    def find(self, task_id: uuid.UUID) -> Optional[Task]:
-        """Finds the task with the given ID.
+    def find(self, task_name: str) -> Sequence[Task]:
+        """Find all the instances of a task with the given name.
 
-        Use this method to retrieve the instance of the task from the graph,
-        and query / change its parameters.
+        Use this method to retrieve the instances of a task from the graph,
+        and query / change their parameters.
 
         Args:
-            task_id (`uuid.UUID`): Find a task with the given ID.
+            task_name (`str`): Find a task with the given name.
 
         Returns:
-            A `Task` with the given UUID, and None if no such task is found.
+            A possibly empty `Sequence[Task]` with the given name.
         """
-        for task in self._task_graph:
-            if task.id == task_id:
-                return task
-        return None
+        return list(filter(lambda task: task.name == task_name,
+                           self._task_graph.keys()))
 
     def get_children(self, task: Task) -> Sequence[Task]:
         """Retrieves the children of the given task.
