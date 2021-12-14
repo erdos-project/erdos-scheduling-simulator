@@ -463,3 +463,44 @@ def test_task_graph_slice_success():
         "Incorrect maximum timestamp maintained in the sliced TaskGraph."
     assert task_graph_slice[1]._max_timestamp == 1,\
         "Incorrect maximum timestamp maintained in the sliced TaskGraph."
+
+
+def test_is_source_task():
+    """ Test that the is_source_task method works correctly. """
+    # Create the individual tasks.
+    perception_task_0 = __create_default_task(job=Job(name="Perception"),
+                                              timestamp=0)
+    perception_task_1 = __create_default_task(job=Job(name="Perception"),
+                                              timestamp=1)
+    prediction_task_0 = __create_default_task(job=Job(name="Prediction"),
+                                              timestamp=0)
+    prediction_task_1 = __create_default_task(job=Job(name="Prediction"),
+                                              timestamp=1)
+    planning_task_0 = __create_default_task(job=Job(name="Planning"),
+                                            timestamp=0)
+    planning_task_1 = __create_default_task(job=Job(name="Planning"),
+                                            timestamp=1)
+
+    # Create the TaskGraph.
+    task_graph = TaskGraph(tasks={
+            perception_task_0: [prediction_task_0, perception_task_1],
+            prediction_task_0: [planning_task_0, prediction_task_1],
+            planning_task_0: [planning_task_1],
+            perception_task_1: [prediction_task_1],
+            prediction_task_1: [planning_task_1],
+            planning_task_1: [],
+        })
+
+    # Check that the is_source_task works correctly.
+    assert task_graph.is_source_task(perception_task_0),\
+        "Perception Task is a source task."
+    assert task_graph.is_source_task(perception_task_1),\
+        "Perception Task is a source task."
+    assert not task_graph.is_source_task(prediction_task_0),\
+        "Prediction Task is not a source task."
+    assert not task_graph.is_source_task(prediction_task_1),\
+        "Prediction Task is not a source task."
+    assert not task_graph.is_source_task(planning_task_0),\
+        "Planning Task is not a source task."
+    assert not task_graph.is_source_task(planning_task_1),\
+        "Planning Task is not a source task."

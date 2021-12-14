@@ -580,6 +580,35 @@ class TaskGraph(object):
             raise ValueError("Unexpected value while slicing: {}".
                              format(slice_obj))
 
+    def is_source_task(self, task: Task) -> bool:
+        """Check if the given `task` is a source Task or not.
+
+        Args:
+            task (`Task`): The task to check.
+
+        Returns:
+            `True` if the task is a source task i.e. only has a dependency on
+            the same task of the previous timestamp, and `False` otherwise.
+        """
+        parents = self.__parent_task_graph[task]
+        return (len(parents) == 0 or
+                (len(parents) == 1 and
+                 parents[0].name == task.name and
+                 parents[0].timestamp == task.timestamp - 1))
+
+    def merge(self, task_graphs: Sequence['TaskGraph']) -> 'TaskGraph':
+        """Merge the given task_graphs after ordering them by timestamps.
+
+        Args:
+            task_graphs (`Sequence[TaskGraph]`): A sequence of task graphs to
+                be merged.
+
+        Returns:
+            The merged TaskGraph from the sequence ordered by timestamp.
+        """
+        raise NotImplementedError("Merging of Taskgraphs has not been "
+                                  "implemented yet.")
+
     def __len__(self):
         return len(self._task_graph)
 
