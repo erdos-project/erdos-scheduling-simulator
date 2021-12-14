@@ -129,7 +129,7 @@ def test_create_taskgraph():
     ]
 
     # Create a TaskGraph using the jobs and the list of tasks.
-    task_graph = TaskLoader._TaskLoader__create_task_graph(tasks, job_graph)
+    _, task_graph = TaskLoader._TaskLoader__create_task_graph(tasks, job_graph)
     assert len(task_graph) == len(tasks), "Incorrect length of TaskGraph."
 
     # Check the parent-child relationships.

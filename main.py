@@ -23,6 +23,8 @@ flags.DEFINE_string('resource_path', './data/pylot_resource_profile.json',
                     'Path of the Resource requirements for each Task.')
 flags.DEFINE_string('worker_profile_path', './data/worker_profile.json',
                     'Path of the topology of Workers to schedule on.')
+flags.DEFINE_bool('stats', False,
+                  'Print the statistics from the tasks loaded.')
 
 # Task related flags.
 flags.DEFINE_integer('max_timestamp', None,
@@ -68,6 +70,10 @@ def main(args):
                              resource_path=FLAGS.resource_path,
                              max_timestamp=max_timestamp,
                              _flags=FLAGS)
+    if FLAGS.stats:
+        # Log the statistics, and do not execute the Simulator.
+        task_loader.log_statistics()
+        return
 
     # Load the worker topology.
     worker_loader = WorkerLoader(worker_profile_path=FLAGS.worker_profile_path,

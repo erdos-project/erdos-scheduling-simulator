@@ -103,8 +103,9 @@ class TaskLoader(object):
             self._logger.debug("Loaded Task from JSON: {}".format(task))
         self._logger.debug("Loaded {} Tasks from {}".format(len(self._tasks),
                                                             profile_path))
-        self._task_graph = TaskLoader._TaskLoader__create_task_graph(
-                self._tasks, self._job_graph)
+        self._grouped_tasks, self._task_graph = TaskLoader.\
+            _TaskLoader__create_task_graph(self._tasks, self._job_graph)
+        self._logger.debug("Finished creating TaskGraph from loaded tasks.")
 
     @staticmethod
     def __create_jobs(json_entries: Sequence[Mapping[str, str]])\
@@ -280,7 +281,7 @@ class TaskLoader(object):
                     for parent_task in parent_task_same_timestamp:
                         task_graph[parent_task].append(task)
 
-        return TaskGraph(tasks=task_graph)
+        return grouped_tasks, TaskGraph(tasks=task_graph)
 
     def get_jobs(self) -> Sequence[Job]:
         """Retrieve the set of `Job`s loaded by the TaskLoader.
@@ -313,3 +314,23 @@ class TaskLoader(object):
             The `TaskGraph` constructed by the TaskLoader.
         """
         return self._task_graph
+
+    def log_statistics(self):
+        """Logs the statistics from the Tasks loaded by the TaskLoader. """
+        for job, tasks in self._grouped_tasks.items():
+            # Log the Job name.
+            self._logger.debug("Job: {}".format(job))
+
+            # Group the tasks by their names.
+            tasks_by_task_name = defaultdict(list)
+            for task in tasks:
+                tasks_by_task_name[task.name].append(task)
+
+            # For each group, log the required statistics.
+            for task_name, _tasks in tasks_by_task_name.items():
+                # Log the task name.
+                self._logger.debug("  Task: {}".format(task_name))
+
+                # Log stats about the runtime of the tasks.
+                runtimes = list(map(attrgetter('runtime'), _tasks))
+                utils.log_statistics(runtimes, self._logger)
