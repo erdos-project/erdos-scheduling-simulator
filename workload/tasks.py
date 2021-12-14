@@ -2,7 +2,7 @@ import uuid
 import logging
 from enum import Enum
 from collections import namedtuple, defaultdict
-from typing import Mapping, Sequence, Optional
+from typing import Mapping, Sequence, Optional, Union
 
 import utils
 from workload import Job, Resources
@@ -530,7 +530,7 @@ class TaskGraph(object):
         We only clean up the tasks whose children have finished execution.
         """
         tasks_to_clean = []
-        for task, children in self._task_graph:
+        for task, children in self._task_graph.items():
             # Has this task finished execution?
             if task.is_complete():
                 # Check if all children have finished execution too.
@@ -550,6 +550,36 @@ class TaskGraph(object):
             for child in self.get_children(task):
                 self.__parent_task_graph[child].remove(task)
             del self._task_graph[task]
+
+    def __getitem__(self, slice_obj) ->\
+            Union['TaskGraph', Sequence['TaskGraph']]:
+        """Retrieve a slice of the TaskGraph as specified by the `slice_obj`.
+
+        The `slice_obj` should specify the timestamps for which the slice is
+        required. In case a slice object is passed, this method returns a
+        `Sequence[TaskGraph]` of sliced TaskGraphs with the corresponding
+        timestamps.
+        """
+        if isinstance(slice_obj, int):
+            # Get the slice for a single timestamp.
+            tasks = {}
+            for task, children in self._task_graph.items():
+                if task.timestamp == slice_obj:
+                    # Maintain the task dependencies with the same timestamps.
+                    same_timestamp_children = []
+                    for child in children:
+                        if child.timestamp == slice_obj:
+                            same_timestamp_children.append(child)
+
+                    # Add the task to the representation.
+                    tasks[task] = same_timestamp_children
+            return TaskGraph(tasks=tasks)
+        elif isinstance(slice_obj, slice):
+            return [self[index] for index in
+                    range(*slice_obj.indices(self._max_timestamp))]
+        else:
+            raise ValueError("Unexpected value while slicing: {}".
+                             format(slice_obj))
 
     def __len__(self):
         return len(self._task_graph)
