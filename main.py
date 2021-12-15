@@ -36,6 +36,9 @@ flags.DEFINE_float('deadline_variance', 0.0,
 flags.DEFINE_float('runtime_variance', 0.0,
                    'The % variance to allocate to the assigned runtime for '
                    'each task.')
+flags.DEFINE_float('timestamp_difference', -1.0,
+                   'The difference to keep between the source Jobs of '
+                   'successive timestamps.')
 
 # Scheduler related flags.
 flags.DEFINE_enum('scheduler', 'edf', ['edf', 'lsf'],
@@ -70,6 +73,11 @@ def main(args):
                              resource_path=FLAGS.resource_path,
                              max_timestamp=max_timestamp,
                              _flags=FLAGS)
+
+    # Dilate the time if needed.
+    if FLAGS.timestamp_difference != -1.0:
+        task_loader.get_task_graph().dilate(FLAGS.timestamp_difference)
+
     if FLAGS.stats:
         # Log the statistics, and do not execute the Simulator.
         task_loader.log_statistics()

@@ -594,6 +594,62 @@ class TaskGraph(object):
                  parents[0].name == task.name and
                  parents[0].timestamp == task.timestamp - 1))
 
+    def get_source_tasks(self) -> Sequence[Task]:
+        """Retrieve the source tasks from this instance of a TaskGraph.
+
+        This method returns multiple instances of Tasks with different
+        timestamps.
+
+        Returns:
+            A `Sequence[Task]` of tasks that have no dependencies on any
+            tasks with the same timestamps.
+        """
+        return list(filter(self.is_source_task, self._task_graph.keys()))
+
+    def dilate(self, difference: float):
+        """Dilate the time between occurrence of events of successive
+        logical timestamps according to the given difference.
+
+        If the provided difference is greater than the time between the
+        occurrence of two events, the effect is a slowdown of the events.
+
+        If the provided difference is smaller than the time between the
+        occurrence of two events, the effect is a speedup of the events.
+
+        This method changes the `TaskGraph` in-place by modifying the release
+        time of the actual tasks.
+
+        Args:
+            difference (`float`): The time difference to keep between the
+                occurrence of two source Tasks of different timestamps.
+        """
+        for parent_graph, child_graph in zip(self[0:], self[1:]):
+            # Fix the offsets of the source tasks according to the release
+            # time of the parents.
+            child_source_tasks = child_graph.get_source_tasks()
+            offsets = []
+            for child_source_task in child_source_tasks:
+                parent_source_task = parent_graph.find(child_source_task.name)
+                assert len(parent_source_task) == 1,\
+                    "Expected a single parent for the task: {}".\
+                    format(child_source_task)
+                parent_source_task = parent_source_task[0]
+
+                # Calculate the offset and set the release time according to
+                # the parent task's release time and the provided difference.
+                offset = (child_source_task.release_time -
+                          (parent_source_task.release_time + difference))
+                offsets.append(offset)
+                child_source_task._release_time = (
+                        parent_source_task.release_time + difference)
+
+            # Calculate the average of the offsets of the source tasks and
+            # offset the remainder of the tasks by the average.
+            average_offset = sum(offsets) / len(offsets)
+            for task in child_graph._task_graph:
+                if not child_graph.is_source_task(task):
+                    task._release_time -= average_offset
+
     def merge(self, task_graphs: Sequence['TaskGraph']) -> 'TaskGraph':
         """Merge the given task_graphs after ordering them by timestamps.
 

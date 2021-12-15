@@ -507,6 +507,40 @@ def test_is_source_task():
         "Planning Task is not a source task."
 
 
+def test_get_source_tasks():
+    """ Test that the is_source_task method works correctly. """
+    # Create the individual tasks.
+    perception_task_0 = __create_default_task(job=Job(name="Perception"),
+                                              timestamp=0)
+    perception_task_1 = __create_default_task(job=Job(name="Perception"),
+                                              timestamp=1)
+    prediction_task_0 = __create_default_task(job=Job(name="Prediction"),
+                                              timestamp=0)
+    prediction_task_1 = __create_default_task(job=Job(name="Prediction"),
+                                              timestamp=1)
+    planning_task_0 = __create_default_task(job=Job(name="Planning"),
+                                            timestamp=0)
+    planning_task_1 = __create_default_task(job=Job(name="Planning"),
+                                            timestamp=1)
+
+    # Create the TaskGraph.
+    task_graph = TaskGraph(tasks={
+            perception_task_0: [prediction_task_0, perception_task_1],
+            prediction_task_0: [planning_task_0, prediction_task_1],
+            planning_task_0: [planning_task_1],
+            perception_task_1: [prediction_task_1],
+            prediction_task_1: [planning_task_1],
+            planning_task_1: [],
+        })
+
+    # Check that the get_source_tasks works correctly.
+    source_tasks = task_graph.get_source_tasks()
+    assert len(source_tasks) == 2,\
+        "Incorrect length of retrieved source tasks."
+    assert set(source_tasks) == {perception_task_0, perception_task_1},\
+        "Incorrect tasks retrieved by get_source_tasks()"
+
+
 def test_task_find():
     # Create the individual tasks.
     perception_task_0 = __create_default_task(name="Perception_Watermark",
@@ -554,3 +588,73 @@ def test_task_find():
         "Incorrect length of retrieved Perception tasks."
     assert set(planning_tasks) == {planning_task_0, planning_task_1},\
         "Incorrect tasks retrieved by the TaskGraph."
+
+
+def test_task_time_dilation():
+    # Create the individual tasks.
+    localization_task_0 = __create_default_task(name="Localization_Watermark",
+                                                job=Job(name="Localization"),
+                                                timestamp=0,
+                                                release_time=5.0)
+    localization_task_1 = __create_default_task(name="Localization_Watermark",
+                                                job=Job(name="Localization"),
+                                                timestamp=1,
+                                                release_time=120.0)
+    perception_task_0 = __create_default_task(name="Perception_Watermark",
+                                              job=Job(name="Perception"),
+                                              timestamp=0,
+                                              release_time=0.0)
+    perception_task_1 = __create_default_task(name="Perception_Watermark",
+                                              job=Job(name="Perception"),
+                                              timestamp=1,
+                                              release_time=100.0)
+    prediction_task_0 = __create_default_task(name="Prediction_Watermark",
+                                              job=Job(name="Prediction"),
+                                              timestamp=0,
+                                              release_time=10.0)
+    prediction_task_1 = __create_default_task(name="Prediction_Watermark",
+                                              job=Job(name="Prediction"),
+                                              timestamp=1,
+                                              release_time=150.0)
+    planning_task_0 = __create_default_task(name="Planning_Watermark",
+                                            job=Job(name="Planning"),
+                                            timestamp=0,
+                                            release_time=50.0)
+    planning_task_1 = __create_default_task(name="Planning_Watermark",
+                                            job=Job(name="Planning"),
+                                            timestamp=1,
+                                            release_time=190.0)
+
+    # Create the TaskGraph.
+    task_graph = TaskGraph(tasks={
+            # Timestamp = 0
+            localization_task_0: [prediction_task_0, localization_task_1],
+            perception_task_0: [prediction_task_0, perception_task_1],
+            prediction_task_0: [planning_task_0, prediction_task_1],
+            planning_task_0: [planning_task_1],
+
+            # Timestamp = 1
+            localization_task_1: [prediction_task_1],
+            perception_task_1: [prediction_task_1],
+            prediction_task_1: [planning_task_1],
+            planning_task_1: [],
+        })
+
+    # Check that time dilation works correctly.
+    task_graph.dilate(50.0)
+    assert localization_task_0.release_time == 5.0,\
+        "Incorrect release time for Localization task [timestamp=0]"
+    assert localization_task_1.release_time == 55.0,\
+        "Incorrect release time for Localization task [timestamp=1]"
+    assert perception_task_0.release_time == 0.0,\
+        "Incorrect release time for Perception task [timestamp=0]"
+    assert perception_task_1.release_time == 50.0,\
+        "Incorrect release time for Perception task [timestamp=1]"
+    assert prediction_task_0.release_time == 10.0,\
+        "Incorrect release time for Prediction task [timestamp=0]"
+    assert prediction_task_1.release_time == 92.5,\
+        "Incorrect release time for Prediction task [timestamp=1]"
+    assert planning_task_0.release_time == 50.0,\
+        "Incorrect release time for Planning task [timestamp=0]"
+    assert planning_task_1.release_time == 132.5,\
+        "Incorrect release time for Planning task [timestamp=1]"
