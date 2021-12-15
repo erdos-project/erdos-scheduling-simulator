@@ -47,6 +47,9 @@ class TaskLoader(object):
         sim_interval = 1
         for entry in profile_data:
             entry_sim_time = int(entry['args']['timestamp'][1:-1])
+            # Figure out the timestamp difference between subsequent timestamps
+            # in the profile data, and normalize it to integer timestamps with
+            # a difference of 1 starting from 0.
             if sim_interval == 1 and entry_sim_time != start_sim_time:
                 sim_interval = (entry_sim_time - start_sim_time)
             entry['args']['timestamp'] = int(
