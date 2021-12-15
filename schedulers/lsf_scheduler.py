@@ -51,8 +51,8 @@ class LSFScheduler(BaseScheduler):
         # Sort the tasks according to their slacks, and place them on the
         # worker pools.
         start_time = time.time()
-        ordered_tasks = list(sorted(tasks_to_be_scheduled,
-                                    key=partial(self.slack, sim_time)))
+        ordered_tasks = list(
+            sorted(tasks_to_be_scheduled, key=partial(self.slack, sim_time)))
 
         # Run the scheduling loop.
         placements = []

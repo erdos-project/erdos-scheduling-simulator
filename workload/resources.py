@@ -130,11 +130,11 @@ class Resources(object):
                 added.
         """
         if type(resource) != Resource:
-            raise ValueError("Invalid type for resource: {}".
-                             format(type(resource)))
+            raise ValueError("Invalid type for resource: {}".format(
+                type(resource)))
         self._resource_vector[resource] += quantity
-        self._logger.debug("Added {} [quantity={}] to {}".
-                           format(resource, quantity, self))
+        self._logger.debug("Added {} [quantity={}] to {}".format(
+            resource, quantity, self))
 
     def get_available_quantity(self, resource: Resource) -> int:
         """Provides the quantity of the available resources of the given type.
@@ -156,7 +156,11 @@ class Resources(object):
                 resource_quantity += _quantity
         return resource_quantity
 
-    def allocate(self, resource: Resource, task: 'Task', quantity: int = 1):
+    def allocate(
+            self,
+            resource: Resource,
+            task: 'Task',  # noqa: F821
+            quantity: int = 1):
         """Allocates the given quantity of the specified resource for a
         particular task.
 
@@ -170,8 +174,8 @@ class Resources(object):
             `ValueError` if more than the available quantity of the resource is
             requested.
         """
-        self._logger.debug("Trying to allocate {} of {} from {}".
-                           format(quantity, resource, self))
+        self._logger.debug("Trying to allocate {} of {} from {}".format(
+            quantity, resource, self))
         available_quantity = self.get_available_quantity(resource)
         if available_quantity < quantity:
             raise ValueError("Trying to allocate more than available units of "
@@ -185,26 +189,31 @@ class Resources(object):
             if _resource == resource:
                 _quantity = self._resource_vector[_resource]
                 if _quantity >= remaining_quantity:
-                    self._logger.debug("Allocated {} [quantity={}] from {}".
-                                       format(_resource, remaining_quantity,
-                                              self))
+                    self._logger.debug(
+                        "Allocated {} [quantity={}] from {}".format(
+                            _resource, remaining_quantity, self))
                     self._resource_vector[_resource] = (_quantity -
                                                         remaining_quantity)
                     self._current_allocations[task].append(
-                            (_resource, remaining_quantity))
+                        (_resource, remaining_quantity))
                     break
                 else:
-                    self._logger.debug("Allocated {} [quantity={}] from {}".
-                                       format(_resource, _quantity, self))
+                    self._logger.debug(
+                        "Allocated {} [quantity={}] from {}".format(
+                            _resource, _quantity, self))
                     self._resource_vector[_resource] = 0
                     self._current_allocations[task].append(
-                            (_resource, _quantity))
+                        (_resource, _quantity))
                 remaining_quantity -= _quantity
 
             if remaining_quantity == 0:
                 break
 
-    def allocate_multiple(self, resources: 'Resources', task: 'Task'):
+    def allocate_multiple(
+            self,
+            resources: 'Resources',
+            task: 'Task'  # noqa: F821
+    ):
         """Allocates multiple resources together according to their specified
         quantity.
 
@@ -221,18 +230,21 @@ class Resources(object):
         for resource, quantity in resources._resource_vector.items():
             available_quantity = self.get_available_quantity(resource)
             if quantity > available_quantity:
-                raise ValueError("Trying to allocate more than the available "
-                                 "units of {}: requested {}, available {}".
-                                 format(resource, quantity, available_quantity)
-                                 )
+                raise ValueError(
+                    "Trying to allocate more than the available "
+                    "units of {}: requested {}, available {}".format(
+                        resource, quantity, available_quantity))
 
         # Allocate all the resources together.
         for resource, quantity in resources._resource_vector.items():
-            self._logger.debug("Allocating {} of {} from {} to {}".
-                               format(quantity, resource, self, task))
+            self._logger.debug("Allocating {} of {} from {} to {}".format(
+                quantity, resource, self, task))
             self.allocate(resource, task, quantity)
 
-    def deallocate(self, task: 'Task'):
+    def deallocate(
+            self,
+            task: 'Task'  # noqa: F821
+    ):
         """Deallocates the resources assigned to the particular `task`.
 
         Args:

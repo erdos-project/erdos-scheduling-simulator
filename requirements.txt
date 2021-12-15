@@ -1,6 +1,5 @@
 absl-py
 pyboolector
 z3
-pytest
 pydot
 numpy

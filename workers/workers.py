@@ -20,7 +20,9 @@ class Worker(object):
         _logger(`Optional[logging.Logger]`): The logger to use to log the
             results of the execution.
     """
-    def __init__(self, name: str, resources: Resources,
+    def __init__(self,
+                 name: str,
+                 resources: Resources,
                  _logger: Optional[logging.Logger] = None):
         # Set up the logger.
         if _logger:
@@ -109,8 +111,8 @@ class Worker(object):
                                "steps from time {}.".format(
                                    task, step_size, current_time))
             if task.step(current_time, step_size):
-                self._logger.debug("{} finished execution on {}.".
-                                   format(task, self))
+                self._logger.debug("{} finished execution on {}.".format(
+                    task, self))
                 completed_tasks.append(task)
 
         # Delete the completed tasks from the set of placed tasks.
@@ -202,9 +204,12 @@ class WorkerPool(object):
         _logger (`Optional[absl.flags]`): The flags with which the app was
             initiated, if any.
     """
-    def __init__(self, name: str, workers: Optional[Sequence[Worker]] = [],
-                 scheduler: Optional[Type['BaseScheduler']] = None,
-                 _logger: Optional[logging.Logger] = None):
+    def __init__(
+            self,
+            name: str,
+            workers: Optional[Sequence[Worker]] = [],
+            scheduler: Optional[Type['BaseScheduler']] = None,  # noqa
+            _logger: Optional[logging.Logger] = None):
         # Set up the logger.
         if _logger:
             self._logger = _logger
@@ -249,9 +254,9 @@ class WorkerPool(object):
         if self._scheduler is not None:
             # If a scheduler was provided, get a task placement from it.
             runtime, placement = self._scheduler.schedule(
-                                        [task],  # Only this task is available.
-                                        None,    # No task graph.
-                                        self._workers)
+                [task],  # Only this task is available.
+                None,  # No task graph.
+                self._workers)
             # Add the runtime to the task start time.
             task._start_time += runtime
         else:
@@ -326,8 +331,9 @@ class WorkerPool(object):
         Returns:
             `True` if the task can be placed, `False` otherwise.
         """
-        return any(worker.can_accomodate_task(task)
-                   for worker in self._workers.values())
+        return any(
+            worker.can_accomodate_task(task)
+            for worker in self._workers.values())
 
     @property
     def name(self):
@@ -360,12 +366,13 @@ class WorkerPool(object):
         """
         cls = self.__class__
         instance = cls.__new__(cls)
-        cls.__init__(instance,
-                     name=self.name,
-                     workers=[copy(w) for w in self._workers.values()],
-                     scheduler=copy(self._scheduler),
-                     _logger=self._logger,
-                     )
+        cls.__init__(
+            instance,
+            name=self.name,
+            workers=[copy(w) for w in self._workers.values()],
+            scheduler=copy(self._scheduler),
+            _logger=self._logger,
+        )
         instance._id = uuid.UUID(self.id)
 
         # Copy the placed tasks.
@@ -385,12 +392,13 @@ class WorkerPool(object):
         """
         cls = self.__class__
         instance = cls.__new__(cls)
-        cls.__init__(instance,
-                     name=self.name,
-                     workers=[deepcopy(w) for w in self._workers.values()],
-                     scheduler=copy(self._scheduler),
-                     _logger=self._logger,
-                     )
+        cls.__init__(
+            instance,
+            name=self.name,
+            workers=[deepcopy(w) for w in self._workers.values()],
+            scheduler=copy(self._scheduler),
+            _logger=self._logger,
+        )
         instance._id = uuid.UUID(self.id)
         memo[id(self)] = instance
         return instance

@@ -7,10 +7,16 @@ from tests.test_tasks import __create_default_task
 def test_create_jobs():
     """ Tests the __create_jobs method of the TaskLoader. """
     jobs = TaskLoader._TaskLoader__create_jobs([
-                                    {"pid": "perception_operator"},
-                                    {"pid": "prediction_operator"},
-                                    {"pid": "planning_operator"},
-                                    ])
+        {
+            "pid": "perception_operator"
+        },
+        {
+            "pid": "prediction_operator"
+        },
+        {
+            "pid": "planning_operator"
+        },
+    ])
     assert len(jobs) == 3, "Incorrect number of Jobs returned."
     assert jobs["perception_operator"].name == "perception_operator",\
         "Incorrect Job returned."
@@ -19,22 +25,33 @@ def test_create_jobs():
 def test_create_resources():
     """ Tests the __create_resources method of the TaskLoader. """
     resources = TaskLoader._TaskLoader__create_resources([
-            {
-                "name": "perception_operator",
-                "resource_requirements": [{"CPU:any": 1}],
-            },
-            {
-                "name": "prediction_operator",
-                "resource_requirements": [{"CPU:any": 1, "GPU:any": 1}],
-            },
-            {
-                "name": "planning_operator",
-                "resource_requirements": [
-                                            {"CPU:any": 2},
-                                            {"CPU:any": 1, "GPU:any": 1},
-                                         ],
-            },
-        ])
+        {
+            "name": "perception_operator",
+            "resource_requirements": [{
+                "CPU:any": 1
+            }],
+        },
+        {
+            "name": "prediction_operator",
+            "resource_requirements": [{
+                "CPU:any": 1,
+                "GPU:any": 1
+            }],
+        },
+        {
+            "name":
+            "planning_operator",
+            "resource_requirements": [
+                {
+                    "CPU:any": 2
+                },
+                {
+                    "CPU:any": 1,
+                    "GPU:any": 1
+                },
+            ]
+        },
+    ])
 
     assert len(resources) == 3, "Incorrect number of Resources returned."
     assert len(resources['perception_operator']) == 1,\
@@ -47,17 +64,15 @@ def test_create_resources():
 
 def test_create_tasks():
     """ Tests the __create_tasks method of the TaskLoader. """
-    json_entries = [
-        {
-            "name": "perception_operator.on_watermark",
-            "pid": "perception_operator",
-            "args": {
-                "timestamp": 1,
-            },
-            "dur": 100,
-            "ts": 50,
-        }
-    ]
+    json_entries = [{
+        "name": "perception_operator.on_watermark",
+        "pid": "perception_operator",
+        "args": {
+            "timestamp": 1,
+        },
+        "dur": 100,
+        "ts": 50,
+    }]
     jobs = {
         "perception_operator": Job(name="perception_operator"),
     }
@@ -155,22 +170,19 @@ def test_create_taskgraph():
 def test_create_worker_pool():
     """ Tests the construction of the WorkerPool by the WorkerLoader. """
     # Create a test WorkerPool topology.
-    worker_pools = WorkerLoader._WorkerLoader__create_worker_pools([
-            {
-                "name": "WorkerPool_1_1",
-                "workers": [
-                    {
-                        "name": "Worker_1_1",
-                        "resources": [
-                            {
-                                "name": "CPU",
-                                "quantity": 5
-                            }
-                        ]
-                    }
-                ]
-            }
-        ], scheduler=None)
+    worker_pools = WorkerLoader._WorkerLoader__create_worker_pools(
+        [{
+            "name":
+            "WorkerPool_1_1",
+            "workers": [{
+                "name": "Worker_1_1",
+                "resources": [{
+                    "name": "CPU",
+                    "quantity": 5
+                }]
+            }]
+        }],
+        scheduler=None)
 
     assert len(worker_pools) == 1, "Incorrect number of WorkerPools returned."
     assert worker_pools[0].name == "WorkerPool_1_1",\

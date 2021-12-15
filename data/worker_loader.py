@@ -20,11 +20,10 @@ class WorkerLoader(object):
             scheduling the tasks across the Workers of a WorkerPool.
         _flags (`absl.flags`): The flags used to initialize the app, if any.
     """
-    def __init__(
-            self,
-            worker_profile_path: str,
-            scheduler: Optional[Type[BaseScheduler]] = None,
-            _flags: Optional['absl.flags'] = None):
+    def __init__(self,
+                 worker_profile_path: str,
+                 scheduler: Optional[Type[BaseScheduler]] = None,
+                 _flags: Optional['absl.flags'] = None):
         # Set up the logger.
         if _flags:
             self._logger = utils.setup_logging(name=self.__class__.__name__,
@@ -44,19 +43,18 @@ class WorkerLoader(object):
         worker_logger = utils.setup_logging(name="Worker",
                                             log_file=_flags.log_file_name,
                                             log_level=_flags.log_level)
-        worker_pool_logger = utils.setup_logging(
-                                            name="WorkerPool",
-                                            log_file=_flags.log_file_name,
-                                            log_level=_flags.log_level)
+        worker_pool_logger = utils.setup_logging(name="WorkerPool",
+                                                 log_file=_flags.log_file_name,
+                                                 log_level=_flags.log_level)
         resource_logger = utils.setup_logging(name="Resources",
                                               log_file=_flags.log_file_name,
                                               log_level=_flags.log_level)
         self._worker_pools = WorkerLoader._WorkerLoader__create_worker_pools(
-                worker_data, scheduler, worker_logger, worker_pool_logger,
-                resource_logger)
+            worker_data, scheduler, worker_logger, worker_pool_logger,
+            resource_logger)
         self._logger.debug(
-                "Loaded {} worker pools from the JSON file located at: {}".
-                format(len(self._worker_pools), worker_profile_path))
+            "Loaded {} worker pools from the JSON file located at: {}".format(
+                len(self._worker_pools), worker_profile_path))
 
     @staticmethod
     def __create_worker_pools(
@@ -94,19 +92,19 @@ class WorkerLoader(object):
                     name, quantity = resource['name'], resource['quantity']
                     resources[Resource(name=name)] = quantity
                 workers.append(
-                    Worker(name=worker['name'],
-                           resources=Resources(resource_vector=resources,
-                                               _logger=resource_logger),
-                           _logger=worker_logger,
-                           )
-                    )
+                    Worker(
+                        name=worker['name'],
+                        resources=Resources(resource_vector=resources,
+                                            _logger=resource_logger),
+                        _logger=worker_logger,
+                    ))
             constructed_worker_pools.append(
-                    WorkerPool(name=worker_pool['name'],
-                               workers=workers,
-                               scheduler=scheduler,
-                               _logger=worker_pool_logger,
-                               )
-                    )
+                WorkerPool(
+                    name=worker_pool['name'],
+                    workers=workers,
+                    scheduler=scheduler,
+                    _logger=worker_pool_logger,
+                ))
         return constructed_worker_pools
 
     def get_worker_pools(self) -> Sequence[WorkerPool]:

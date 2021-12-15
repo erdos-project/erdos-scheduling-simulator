@@ -12,9 +12,9 @@ def test_worker_construction():
     """ Test that a Worker can be constructed successfully. """
     worker = Worker(name="Worker_1",
                     resources=Resources({
-                                Resource(name="CPU"): 1,
-                                Resource(name="GPU"): 1}),
-                    )
+                        Resource(name="CPU"): 1,
+                        Resource(name="GPU"): 1
+                    }))
     assert worker.name == "Worker_1", "Incorrect name for Worker."
     assert len(worker.resources) == 2, "Incorrect number of Resources."
 
@@ -23,9 +23,9 @@ def test_worker_task_accomodation():
     """ Test if a Worker's can_accomodate_task works correctly. """
     worker = Worker(name="Worker_1",
                     resources=Resources({
-                                Resource(name="CPU"): 1,
-                                Resource(name="GPU"): 1}),
-                    )
+                        Resource(name="CPU"): 1,
+                        Resource(name="GPU"): 1
+                    }))
     task = __create_default_task(resource_requirements=Resources(
         resource_vector={Resource(name="CPU", _id="any"): 1}))
     assert worker.can_accomodate_task(task),\
@@ -36,9 +36,9 @@ def test_worker_task_accomodation_fail():
     """ Test that a Worker's can_accomodate_task works correctly. """
     worker = Worker(name="Worker_1",
                     resources=Resources({
-                                Resource(name="CPU"): 1,
-                                Resource(name="GPU"): 1}),
-                    )
+                        Resource(name="CPU"): 1,
+                        Resource(name="GPU"): 1
+                    }))
     task = __create_default_task(resource_requirements=Resources(
         resource_vector={Resource(name="CPU", _id="any"): 2}))
     assert not worker.can_accomodate_task(task),\
@@ -49,12 +49,14 @@ def test_worker_place_task():
     """ Test that placing a Task correctly accounts for Resources. """
     worker = Worker(name="Worker_1",
                     resources=Resources({
-                                Resource(name="CPU"): 1,
-                                Resource(name="GPU"): 1}),
-                    )
+                        Resource(name="CPU"): 1,
+                        Resource(name="GPU"): 1
+                    }))
     task = __create_default_task(resource_requirements=Resources(
-        resource_vector={Resource(name="CPU", _id="any"): 1,
-                         Resource(name="GPU", _id="any"): 1, }))
+        resource_vector={
+            Resource(name="CPU", _id="any"): 1,
+            Resource(name="GPU", _id="any"): 1
+        }))
 
     # Place the task.
     worker.place_task(task)
@@ -74,12 +76,14 @@ def test_worker_copy():
     """ Test that a copy of the Worker is created correctly. """
     worker = Worker(name="Worker_1",
                     resources=Resources({
-                                Resource(name="CPU"): 1,
-                                Resource(name="GPU"): 1}),
-                    )
+                        Resource(name="CPU"): 1,
+                        Resource(name="GPU"): 1
+                    }))
     task = __create_default_task(resource_requirements=Resources(
-        resource_vector={Resource(name="CPU", _id="any"): 1,
-                         Resource(name="GPU", _id="any"): 1, }))
+        resource_vector={
+            Resource(name="CPU", _id="any"): 1,
+            Resource(name="GPU", _id="any"): 1
+        }))
 
     # Place the task.
     worker.place_task(task)
@@ -104,12 +108,14 @@ def test_worker_deepcopy():
     """ Test that a deep copy of the Worker is created correctly. """
     worker = Worker(name="Worker_1",
                     resources=Resources({
-                                Resource(name="CPU"): 1,
-                                Resource(name="GPU"): 1}),
-                    )
+                        Resource(name="CPU"): 1,
+                        Resource(name="GPU"): 1
+                    }))
     task = __create_default_task(resource_requirements=Resources(
-        resource_vector={Resource(name="CPU", _id="any"): 1,
-                         Resource(name="GPU", _id="any"): 1, }))
+        resource_vector={
+            Resource(name="CPU", _id="any"): 1,
+            Resource(name="GPU", _id="any"): 1
+        }))
 
     # Place the task.
     worker.place_task(task)
@@ -134,12 +140,14 @@ def test_worker_preempt_task_failed():
     """ Test that preempting a non-placed Task raises an error. """
     worker = Worker(name="Worker_1",
                     resources=Resources({
-                                Resource(name="CPU"): 1,
-                                Resource(name="GPU"): 1}),
-                    )
+                        Resource(name="CPU"): 1,
+                        Resource(name="GPU"): 1
+                    }))
     task = __create_default_task(resource_requirements=Resources(
-        resource_vector={Resource(name="CPU", _id="any"): 1,
-                         Resource(name="GPU", _id="any"): 1, }))
+        resource_vector={
+            Resource(name="CPU", _id="any"): 1,
+            Resource(name="GPU", _id="any"): 1
+        }))
 
     # Ensure failure.
     with pytest.raises(ValueError):
@@ -150,12 +158,14 @@ def test_worker_preempt_task_success():
     """ Test that preempting a Task correctly maintains the Resources. """
     worker = Worker(name="Worker_1",
                     resources=Resources({
-                                Resource(name="CPU"): 1,
-                                Resource(name="GPU"): 1}),
-                    )
+                        Resource(name="CPU"): 1,
+                        Resource(name="GPU"): 1
+                    }))
     task = __create_default_task(resource_requirements=Resources(
-        resource_vector={Resource(name="CPU", _id="any"): 1,
-                         Resource(name="GPU", _id="any"): 1, }))
+        resource_vector={
+            Resource(name="CPU", _id="any"): 1,
+            Resource(name="GPU", _id="any"): 1
+        }))
 
     # Place the task.
     worker.place_task(task)
@@ -187,17 +197,19 @@ def test_worker_preempt_task_success():
 
 def test_worker_step_tasks():
     """ Test that a Worker correctly steps all of its tasks. """
-    worker = Worker(name="Worker_1",
-                    resources=Resources({
-                                Resource(name="CPU"): 1,
-                                Resource(name="GPU"): 1}),
-                    )
+    worker = Worker(
+        name="Worker_1",
+        resources=Resources({
+            Resource(name="CPU"): 1,
+            Resource(name="GPU"): 1
+        }),
+    )
     task_one = __create_default_task(resource_requirements=Resources(
-        resource_vector={Resource(name="CPU", _id="any"): 1, }, ),
-        runtime=3.0)
+        resource_vector={Resource(name="CPU", _id="any"): 1}),
+                                     runtime=3.0)
     task_two = __create_default_task(resource_requirements=Resources(
-        resource_vector={Resource(name="GPU", _id="any"): 1, }, ),
-        runtime=3.0)
+        resource_vector={Resource(name="GPU", _id="any"): 1}),
+                                     runtime=3.0)
 
     # Place the tasks.
     worker.place_task(task_one)
@@ -221,30 +233,36 @@ def test_worker_step_tasks():
 
 def test_worker_pool_construction():
     """ Test that a WorkerPool is correctly constructed. """
-    worker = Worker(name="Worker_1",
-                    resources=Resources({
-                                Resource(name="CPU"): 1,
-                                Resource(name="GPU"): 1}),
-                    )
+    worker = Worker(
+        name="Worker_1",
+        resources=Resources({
+            Resource(name="CPU"): 1,
+            Resource(name="GPU"): 1
+        }),
+    )
     worker_pool = WorkerPool(name="WorkerPool_Test", workers=[worker])
     assert len(worker_pool.workers) == 1, "Incorrect numher of Workers."
 
 
 def test_addition_of_workers():
     """ Test that Workers can be correctly added to the WorkerPool. """
-    worker = Worker(name="Worker_1",
-                    resources=Resources({
-                                Resource(name="CPU"): 1,
-                                Resource(name="GPU"): 1}),
-                    )
+    worker = Worker(
+        name="Worker_1",
+        resources=Resources({
+            Resource(name="CPU"): 1,
+            Resource(name="GPU"): 1
+        }),
+    )
     worker_pool = WorkerPool(name="WorkerPool_Test", workers=[worker])
     assert len(worker_pool.workers) == 1, "Incorrect numher of Workers."
     worker_pool.add_workers([
-        Worker(name="Worker_1",
-               resources=Resources({
-                            Resource(name="CPU"): 1,
-                            Resource(name="GPU"): 1}),
-               ),
+        Worker(
+            name="Worker_1",
+            resources=Resources({
+                Resource(name="CPU"): 1,
+                Resource(name="GPU"): 1
+            }),
+        ),
     ])
     assert len(worker_pool.workers) == 2, "Incorrect number of Workers."
 
@@ -252,19 +270,24 @@ def test_addition_of_workers():
 def test_place_task_on_worker_pool():
     """ Test the placement of tasks on a WorkerPool. """
     # Initialize the Workers and the WorkerPool.
-    worker_one = Worker(name="Worker_1",
-                        resources=Resources({
-                            Resource(name="CPU"): 1,
-                            Resource(name="GPU"): 1}),
-                        )
-    worker_two = Worker(name="Worker_2",
-                        resources=Resources({
-                            Resource(name="CPU"): 1,
-                            Resource(name="GPU"): 1}),
-                        )
-    worker_pool = WorkerPool(name="WorkerPool_Test",
-                             workers=[worker_one, worker_two],
-                             )
+    worker_one = Worker(
+        name="Worker_1",
+        resources=Resources({
+            Resource(name="CPU"): 1,
+            Resource(name="GPU"): 1
+        }),
+    )
+    worker_two = Worker(
+        name="Worker_2",
+        resources=Resources({
+            Resource(name="CPU"): 1,
+            Resource(name="GPU"): 1
+        }),
+    )
+    worker_pool = WorkerPool(
+        name="WorkerPool_Test",
+        workers=[worker_one, worker_two],
+    )
 
     # Place a task on the WorkerPool.
     task_one = __create_default_task(resource_requirements=Resources(
@@ -273,8 +296,8 @@ def test_place_task_on_worker_pool():
 
     assert len(worker_pool.get_placed_tasks()) == 1,\
         "Incorrect number of placed tasks."
-    assert (len(worker_one.get_placed_tasks()) == 1 and
-            len(worker_two.get_placed_tasks()) == 0), "Incorrect placement."
+    assert (len(worker_one.get_placed_tasks()) == 1 and len(
+        worker_two.get_placed_tasks()) == 0), "Incorrect placement."
 
     # Place another task on the WorkerPool.
     task_two = __create_default_task(resource_requirements=Resources(
@@ -283,8 +306,8 @@ def test_place_task_on_worker_pool():
 
     assert len(worker_pool.get_placed_tasks()) == 2,\
         "Incorrect number of placed tasks."
-    assert (len(worker_one.get_placed_tasks()) == 1 and
-            len(worker_two.get_placed_tasks()) == 1), "Incorrect placement."
+    assert (len(worker_one.get_placed_tasks()) == 1 and len(
+        worker_two.get_placed_tasks()) == 1), "Incorrect placement."
 
     # Fail to place a task on the WorkerPool.
     task_three = __create_default_task(resource_requirements=Resources(
@@ -299,33 +322,38 @@ def test_place_task_on_worker_pool():
 
     assert len(worker_pool.get_placed_tasks()) == 3,\
         "Incorrect number of placed tasks."
-    assert (len(worker_one.get_placed_tasks()) == 2 and
-            len(worker_two.get_placed_tasks()) == 1), "Incorrect placement."
+    assert (len(worker_one.get_placed_tasks()) == 2 and len(
+        worker_two.get_placed_tasks()) == 1), "Incorrect placement."
 
 
 def test_worker_pool_step():
     """ Tests that WorkerPool's step() correctly returns completed tasks. """
     # Initialize the Workers and the WorkerPool.
-    worker_one = Worker(name="Worker_1",
-                        resources=Resources({
-                            Resource(name="CPU"): 1,
-                            Resource(name="GPU"): 1}),
-                        )
-    worker_two = Worker(name="Worker_2",
-                        resources=Resources({
-                            Resource(name="CPU"): 1,
-                            Resource(name="GPU"): 1}),
-                        )
-    worker_pool = WorkerPool(name="WorkerPool_Test",
-                             workers=[worker_one, worker_two],
-                             )
+    worker_one = Worker(
+        name="Worker_1",
+        resources=Resources({
+            Resource(name="CPU"): 1,
+            Resource(name="GPU"): 1
+        }),
+    )
+    worker_two = Worker(
+        name="Worker_2",
+        resources=Resources({
+            Resource(name="CPU"): 1,
+            Resource(name="GPU"): 1
+        }),
+    )
+    worker_pool = WorkerPool(
+        name="WorkerPool_Test",
+        workers=[worker_one, worker_two],
+    )
 
     # Place a task on the WorkerPool.
     task_one = __create_default_task(
-            resource_requirements=Resources(
-                    resource_vector={Resource(name="CPU", _id="any"): 1}),
-            runtime=3.0,
-            )
+        resource_requirements=Resources(
+            resource_vector={Resource(name="CPU", _id="any"): 1}),
+        runtime=3.0,
+    )
     worker_pool.place_task(task_one)
 
     assert len(worker_pool.get_placed_tasks()) == 1,\
@@ -333,10 +361,10 @@ def test_worker_pool_step():
 
     # Place another task on the WorkerPool.
     task_two = __create_default_task(
-            resource_requirements=Resources(
-                    resource_vector={Resource(name="CPU", _id="any"): 1}),
-            runtime=5.0,
-            )
+        resource_requirements=Resources(
+            resource_vector={Resource(name="CPU", _id="any"): 1}),
+        runtime=5.0,
+    )
     worker_pool.place_task(task_two)
 
     assert len(worker_pool.get_placed_tasks()) == 2,\
@@ -366,26 +394,31 @@ def test_worker_pool_step():
 
 def test_copy_worker_pool():
     # Initialize the Workers and the WorkerPool.
-    worker_one = Worker(name="Worker_1",
-                        resources=Resources({
-                            Resource(name="CPU"): 1,
-                            Resource(name="GPU"): 1}),
-                        )
-    worker_two = Worker(name="Worker_2",
-                        resources=Resources({
-                            Resource(name="CPU"): 1,
-                            Resource(name="GPU"): 1}),
-                        )
-    worker_pool = WorkerPool(name="WorkerPool_Test",
-                             workers=[worker_one, worker_two],
-                             )
+    worker_one = Worker(
+        name="Worker_1",
+        resources=Resources({
+            Resource(name="CPU"): 1,
+            Resource(name="GPU"): 1
+        }),
+    )
+    worker_two = Worker(
+        name="Worker_2",
+        resources=Resources({
+            Resource(name="CPU"): 1,
+            Resource(name="GPU"): 1
+        }),
+    )
+    worker_pool = WorkerPool(
+        name="WorkerPool_Test",
+        workers=[worker_one, worker_two],
+    )
 
     # Place a task on the WorkerPool.
     task_one = __create_default_task(
-            resource_requirements=Resources(
-                    resource_vector={Resource(name="CPU", _id="any"): 1}),
-            runtime=3.0,
-            )
+        resource_requirements=Resources(
+            resource_vector={Resource(name="CPU", _id="any"): 1}),
+        runtime=3.0,
+    )
     worker_pool.place_task(task_one)
 
     assert len(worker_pool.get_placed_tasks()) == 1,\
@@ -407,26 +440,31 @@ def test_copy_worker_pool():
 
 def test_deepcopy_worker_pool():
     # Initialize the Workers and the WorkerPool.
-    worker_one = Worker(name="Worker_1",
-                        resources=Resources({
-                            Resource(name="CPU"): 1,
-                            Resource(name="GPU"): 1}),
-                        )
-    worker_two = Worker(name="Worker_2",
-                        resources=Resources({
-                            Resource(name="CPU"): 1,
-                            Resource(name="GPU"): 1}),
-                        )
-    worker_pool = WorkerPool(name="WorkerPool_Test",
-                             workers=[worker_one, worker_two],
-                             )
+    worker_one = Worker(
+        name="Worker_1",
+        resources=Resources({
+            Resource(name="CPU"): 1,
+            Resource(name="GPU"): 1
+        }),
+    )
+    worker_two = Worker(
+        name="Worker_2",
+        resources=Resources({
+            Resource(name="CPU"): 1,
+            Resource(name="GPU"): 1
+        }),
+    )
+    worker_pool = WorkerPool(
+        name="WorkerPool_Test",
+        workers=[worker_one, worker_two],
+    )
 
     # Place a task on the WorkerPool.
     task_one = __create_default_task(
-            resource_requirements=Resources(
-                    resource_vector={Resource(name="CPU", _id="any"): 1}),
-            runtime=3.0,
-            )
+        resource_requirements=Resources(
+            resource_vector={Resource(name="CPU", _id="any"): 1}),
+        runtime=3.0,
+    )
     worker_pool.place_task(task_one)
 
     assert len(worker_pool.get_placed_tasks()) == 1,\

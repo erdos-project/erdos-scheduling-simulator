@@ -4,16 +4,16 @@ from workload import Job, Resource, Resources, TaskState, Task, TaskGraph
 
 
 def __create_default_task(
-        name=None,
-        job=Job(name="Perception"),
-        resource_requirements=Resources(
-                        resource_vector={Resource(name="CPU", _id="any"): 1}),
-        runtime=1.0,
-        deadline=10.0,
-        timestamp=0,
-        release_time=-1,
-        start_time=-1,
-        completion_time=-1,
+    name=None,
+    job=Job(name="Perception"),
+    resource_requirements=Resources(
+        resource_vector={Resource(name="CPU", _id="any"): 1}),
+    runtime=1.0,
+    deadline=10.0,
+    timestamp=0,
+    release_time=-1,
+    start_time=-1,
+    completion_time=-1,
 ):
     """ Helper function to create a default task. """
     return Task(name=name if name else "{}_Task".format(job.name),
@@ -360,7 +360,8 @@ def test_task_graph_index_success():
                                             timestamp=1)
 
     # Create the TaskGraph.
-    task_graph = TaskGraph(tasks={
+    task_graph = TaskGraph(
+        tasks={
             perception_task_0: [prediction_task_0, perception_task_1],
             prediction_task_0: [planning_task_0, prediction_task_1],
             planning_task_0: [planning_task_1],
@@ -398,7 +399,8 @@ def test_task_graph_index_failure():
                                             timestamp=1)
 
     # Create the TaskGraph.
-    task_graph = TaskGraph(tasks={
+    task_graph = TaskGraph(
+        tasks={
             perception_task_0: [prediction_task_0, perception_task_1],
             prediction_task_0: [planning_task_0, prediction_task_1],
             planning_task_0: [planning_task_1],
@@ -438,7 +440,8 @@ def test_task_graph_slice_success():
                                             timestamp=2)
 
     # Create the TaskGraph.
-    task_graph = TaskGraph(tasks={
+    task_graph = TaskGraph(
+        tasks={
             perception_task_0: [prediction_task_0, perception_task_1],
             prediction_task_0: [planning_task_0, prediction_task_1],
             planning_task_0: [planning_task_1],
@@ -483,7 +486,8 @@ def test_is_source_task():
                                             timestamp=1)
 
     # Create the TaskGraph.
-    task_graph = TaskGraph(tasks={
+    task_graph = TaskGraph(
+        tasks={
             perception_task_0: [prediction_task_0, perception_task_1],
             prediction_task_0: [planning_task_0, prediction_task_1],
             planning_task_0: [planning_task_1],
@@ -524,7 +528,8 @@ def test_get_source_tasks():
                                             timestamp=1)
 
     # Create the TaskGraph.
-    task_graph = TaskGraph(tasks={
+    task_graph = TaskGraph(
+        tasks={
             perception_task_0: [prediction_task_0, perception_task_1],
             prediction_task_0: [planning_task_0, prediction_task_1],
             planning_task_0: [planning_task_1],
@@ -563,7 +568,8 @@ def test_task_find():
                                             timestamp=1)
 
     # Create the TaskGraph.
-    task_graph = TaskGraph(tasks={
+    task_graph = TaskGraph(
+        tasks={
             perception_task_0: [prediction_task_0, perception_task_1],
             prediction_task_0: [planning_task_0, prediction_task_1],
             planning_task_0: [planning_task_1],
@@ -626,7 +632,8 @@ def test_task_time_dilation():
                                             release_time=190.0)
 
     # Create the TaskGraph.
-    task_graph = TaskGraph(tasks={
+    task_graph = TaskGraph(
+        tasks={
             # Timestamp = 0
             localization_task_0: [prediction_task_0, localization_task_1],
             perception_task_0: [prediction_task_0, perception_task_1],

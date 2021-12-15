@@ -57,8 +57,11 @@ def setup_csv_logging(name: str, log_file: str) -> logging.Logger:
         A `logging.Logger` instance that logs the required information to the
         given CSV file.
     """
-    return setup_logging(name=name + '_CSV', fmt="%(message)s", date_fmt=None,
-                         log_file=log_file, log_level="debug")
+    return setup_logging(name=name + '_CSV',
+                         fmt="%(message)s",
+                         date_fmt=None,
+                         log_file=log_file,
+                         log_level="debug")
 
 
 def fuzz_time(time: float, variance: float) -> float:
@@ -71,12 +74,14 @@ def fuzz_time(time: float, variance: float) -> float:
     Returns:
         The fuzzed time according to the given variance.
     """
-    return max(0,
-               random.uniform(time - (time * abs(variance) / 100.0),
-                              time + (time * abs(variance) / 100.0)))
+    return max(
+        0,
+        random.uniform(time - (time * abs(variance) / 100.0),
+                       time + (time * abs(variance) / 100.0)))
 
 
-def log_statistics(data: Sequence[float], logger: logging.Logger,
+def log_statistics(data: Sequence[float],
+                   logger: logging.Logger,
                    offset: Optional[str] = "    "):
     """Logs the required statistics from the given data.
 

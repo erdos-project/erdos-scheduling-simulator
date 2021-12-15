@@ -50,8 +50,8 @@ class EDFScheduler(BaseScheduler):
         # Sort the tasks according to their deadlines, and place them on the
         # worker pools.
         start_time = time.time()
-        ordered_tasks = list(sorted(tasks_to_be_scheduled,
-                                    key=attrgetter('deadline')))
+        ordered_tasks = list(
+            sorted(tasks_to_be_scheduled, key=attrgetter('deadline')))
 
         # Run the scheduling loop.
         # TODO (Sukrit): This loop may require spurious migrations of tasks

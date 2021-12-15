@@ -24,7 +24,10 @@ class TaskLoader(object):
             JSON file.
         _flags (`absl.flags`): The flags used to initialize the app, if any.
     """
-    def __init__(self, graph_path: str, profile_path: str, resource_path: str,
+    def __init__(self,
+                 graph_path: str,
+                 profile_path: str,
+                 resource_path: str,
                  max_timestamp: int = float('inf'),
                  _flags: Optional['absl.flags'] = None):
         # Set up the logger.
@@ -53,19 +56,18 @@ class TaskLoader(object):
             if sim_interval == 1 and entry_sim_time != start_sim_time:
                 sim_interval = (entry_sim_time - start_sim_time)
             entry['args']['timestamp'] = int(
-                                          (entry_sim_time - start_sim_time) /
-                                          sim_interval)
+                (entry_sim_time - start_sim_time) / sim_interval)
             entry['ts'] = entry['ts'] - start_real_time
 
         # Create the Jobs from the profile path.
         self._jobs = TaskLoader._TaskLoader__create_jobs(profile_data)
-        self._logger.debug("Loaded {} Jobs from {}".format(len(self._jobs),
-                                                           profile_path))
+        self._logger.debug("Loaded {} Jobs from {}".format(
+            len(self._jobs), profile_path))
 
         # Read the DOT file and ensure that we have jobs for all the nodes.
         job_dot_graph = pydot.graph_from_dot_file(graph_path)[0]
-        self._logger.debug("The DOT graph has {} Jobs".
-                           format(len(job_dot_graph.get_nodes())))
+        self._logger.debug("The DOT graph has {} Jobs".format(
+            len(job_dot_graph.get_nodes())))
         if len(self._jobs) != len(job_dot_graph.get_nodes()):
             raise ValueError("Mismatch between the Jobs from the DOT graph "
                              "and the JSON profile.")
@@ -77,10 +79,9 @@ class TaskLoader(object):
 
         # Create the JobGraph from the jobs and the DOT representation.
         self._job_graph = TaskLoader._TaskLoader__create_job_graph(
-                self._jobs,
-                map(lambda edge: (edge.get_source(), edge.get_destination()),
-                    job_dot_graph.get_edges())
-                )
+            self._jobs,
+            map(lambda edge: (edge.get_source(), edge.get_destination()),
+                job_dot_graph.get_edges()))
 
         # Create the Resource requirements from the resource_path.
         resource_logger = utils.setup_logging(name='Resources',
@@ -96,16 +97,12 @@ class TaskLoader(object):
                                           log_file=_flags.log_file_name,
                                           log_level=_flags.log_level)
         self._tasks = TaskLoader._TaskLoader__create_tasks(
-                                                profile_data,
-                                                self._jobs,
-                                                self._resource_requirements,
-                                                max_timestamp,
-                                                task_logger,
-                                                _flags.deadline_variance)
+            profile_data, self._jobs, self._resource_requirements,
+            max_timestamp, task_logger, _flags.deadline_variance)
         for task in self._tasks:
             self._logger.debug("Loaded Task from JSON: {}".format(task))
-        self._logger.debug("Loaded {} Tasks from {}".format(len(self._tasks),
-                                                            profile_path))
+        self._logger.debug("Loaded {} Tasks from {}".format(
+            len(self._tasks), profile_path))
         self._grouped_tasks, self._task_graph = TaskLoader.\
             _TaskLoader__create_task_graph(self._tasks, self._job_graph)
         self._logger.debug("Finished creating TaskGraph from loaded tasks.")
@@ -177,8 +174,7 @@ class TaskLoader(object):
                     resource_vector[Resource(name=resource_name,
                                              _id=resource_id)] = quantity
                 potential_requirements.append(
-                        Resources(resource_vector=resource_vector,
-                                  _logger=logger))
+                    Resources(resource_vector=resource_vector, _logger=logger))
             _requirements[entry['name']] = potential_requirements
         return _requirements
 
@@ -216,16 +212,17 @@ class TaskLoader(object):
                 continue
             deadline = utils.fuzz_time(entry['ts'] + entry['dur'],
                                        deadline_variance)
-            tasks.append(Task(name=entry['name'],
-                              job=jobs[entry['pid']],
-                              resource_requirements=choice(
-                                                  resources[entry['name']]),
-                              runtime=entry['dur'],
-                              deadline=deadline,
-                              timestamp=entry['args']['timestamp'],
-                              release_time=entry['ts'],
-                              _logger=logger,
-                              ))
+            tasks.append(
+                Task(
+                    name=entry['name'],
+                    job=jobs[entry['pid']],
+                    resource_requirements=choice(resources[entry['name']]),
+                    runtime=entry['dur'],
+                    deadline=deadline,
+                    timestamp=entry['args']['timestamp'],
+                    release_time=entry['ts'],
+                    _logger=logger,
+                ))
         return tasks
 
     @staticmethod
@@ -253,8 +250,8 @@ class TaskLoader(object):
         for task in tasks:
             grouped_tasks[task.job.name].append(task)
         for job_name, tasks in grouped_tasks.items():
-            grouped_tasks[job_name] = list(sorted(tasks,
-                                                  key=attrgetter('timestamp')))
+            grouped_tasks[job_name] = list(
+                sorted(tasks, key=attrgetter('timestamp')))
 
         # Add all the grouped tasks to the TaskGraph with dependencies on the
         # task of the previous timestamp, and parents from the Job with the
@@ -273,9 +270,10 @@ class TaskLoader(object):
                 # Find the task with the same timestamp from the Tasks with the
                 # name of each job in the parent job.
                 for parent_job in parent_jobs:
-                    parent_task_same_timestamp = list(filter(
-                            lambda parent_task: (parent_task.timestamp ==
-                                                 task.timestamp),
+                    parent_task_same_timestamp = list(
+                        filter(
+                            lambda parent_task:
+                            (parent_task.timestamp == task.timestamp),
                             grouped_tasks[parent_job.name]))
 
                     # There can be multiple different tasks for the message

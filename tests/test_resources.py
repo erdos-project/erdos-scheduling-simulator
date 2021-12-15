@@ -201,9 +201,11 @@ def test_allocation_of_multiple_resources():
     assert resources.get_available_quantity(gpu_resource_any) == 10,\
         "Incorrect quantity of the CPU resource."
 
-    resources.allocate_multiple(Resources({cpu_resource_any: 5,
-                                           gpu_resource_any: 5}),
-                                __create_default_task())
+    resources.allocate_multiple(
+        Resources({
+            cpu_resource_any: 5,
+            gpu_resource_any: 5
+        }), __create_default_task())
 
     assert resources.get_available_quantity(cpu_resource_any) == 5,\
         "Incorrect quantity of the CPU resource."
@@ -216,9 +218,11 @@ def test_correct_maintenance_of_allocated_resources():
     cpu_resource_1 = Resource(name="CPU")
     cpu_resource_2 = Resource(name="CPU")
     gpu_resource_1 = Resource(name="GPU")
-    resources = Resources({cpu_resource_1: 5,
-                           cpu_resource_2: 5,
-                           gpu_resource_1: 10})
+    resources = Resources({
+        cpu_resource_1: 5,
+        cpu_resource_2: 5,
+        gpu_resource_1: 10
+    })
 
     cpu_resource_any = Resource(name="CPU", _id="any")
     gpu_resource_any = Resource(name="GPU", _id="any")
@@ -253,9 +257,11 @@ def test_deallocation_of_resources():
     cpu_resource_1 = Resource(name="CPU")
     cpu_resource_2 = Resource(name="CPU")
     gpu_resource_1 = Resource(name="GPU")
-    resources = Resources({cpu_resource_1: 5,
-                           cpu_resource_2: 5,
-                           gpu_resource_1: 10})
+    resources = Resources({
+        cpu_resource_1: 5,
+        cpu_resource_2: 5,
+        gpu_resource_1: 10
+    })
 
     cpu_resource_any = Resource(name="CPU", _id="any")
     gpu_resource_any = Resource(name="GPU", _id="any")
@@ -288,9 +294,11 @@ def test_resources_copy():
     cpu_resource_1 = Resource(name="CPU")
     cpu_resource_2 = Resource(name="CPU")
     gpu_resource_1 = Resource(name="GPU")
-    resources = Resources({cpu_resource_1: 5,
-                           cpu_resource_2: 5,
-                           gpu_resource_1: 10})
+    resources = Resources({
+        cpu_resource_1: 5,
+        cpu_resource_2: 5,
+        gpu_resource_1: 10
+    })
 
     cpu_resource_any = Resource(name="CPU", _id="any")
     gpu_resource_any = Resource(name="GPU", _id="any")
@@ -323,9 +331,11 @@ def test_resources_deepcopy():
     cpu_resource_1 = Resource(name="CPU")
     cpu_resource_2 = Resource(name="CPU")
     gpu_resource_1 = Resource(name="GPU")
-    resources = Resources({cpu_resource_1: 5,
-                           cpu_resource_2: 5,
-                           gpu_resource_1: 10})
+    resources = Resources({
+        cpu_resource_1: 5,
+        cpu_resource_2: 5,
+        gpu_resource_1: 10
+    })
 
     cpu_resource_any = Resource(name="CPU", _id="any")
     gpu_resource_any = Resource(name="GPU", _id="any")
