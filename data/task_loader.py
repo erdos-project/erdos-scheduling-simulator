@@ -1,4 +1,5 @@
 import json
+import logging
 from random import choice
 from operator import attrgetter
 from collections import defaultdict
@@ -19,9 +20,12 @@ class TaskLoader(object):
         profile_path (`str`): The path to the JSON profile path from Pylot.
         resource_path (`str`): The path to the JSON file of task resource
             requirements.
+        max_timestamp (`int`): The maximum timestamp of tasks to load from the
+            JSON file.
         _flags (`absl.flags`): The flags used to initialize the app, if any.
     """
     def __init__(self, graph_path: str, profile_path: str, resource_path: str,
+                 max_timestamp: int = float('inf'),
                  _flags: Optional['absl.flags'] = None):
         # Set up the logger.
         if _flags:
@@ -40,9 +44,17 @@ class TaskLoader(object):
         # Fix the timestamp offsets from the beginning.
         start_real_time = int(profile_data[0]['ts'])
         start_sim_time = int(profile_data[0]['args']['timestamp'][1:-1])
+        sim_interval = 1
         for entry in profile_data:
             entry_sim_time = int(entry['args']['timestamp'][1:-1])
-            entry['args']['timestamp'] = entry_sim_time - start_sim_time
+            # Figure out the timestamp difference between subsequent timestamps
+            # in the profile data, and normalize it to integer timestamps with
+            # a difference of 1 starting from 0.
+            if sim_interval == 1 and entry_sim_time != start_sim_time:
+                sim_interval = (entry_sim_time - start_sim_time)
+            entry['args']['timestamp'] = int(
+                                          (entry_sim_time - start_sim_time) /
+                                          sim_interval)
             entry['ts'] = entry['ts'] - start_real_time
 
         # Create the Jobs from the profile path.
@@ -55,13 +67,13 @@ class TaskLoader(object):
         self._logger.debug("The DOT graph has {} Jobs".
                            format(len(job_dot_graph.get_nodes())))
         if len(self._jobs) != len(job_dot_graph.get_nodes()):
-            raise ValueError("Mismatch between the Jobs from the DOT graph\
-                    and the JSON profile.")
+            raise ValueError("Mismatch between the Jobs from the DOT graph "
+                             "and the JSON profile.")
         for node in job_dot_graph.get_nodes():
             node_label = node.get_label()
             if node_label not in self._jobs:
-                raise ValueError("{} found in DOT file,\
-                        but not in JSON profile.".format(node_label))
+                raise ValueError("{} found in DOT file, "
+                                 "but not in JSON profile.".format(node_label))
 
         # Create the JobGraph from the jobs and the DOT representation.
         self._job_graph = TaskLoader._TaskLoader__create_job_graph(
@@ -71,19 +83,32 @@ class TaskLoader(object):
                 )
 
         # Create the Resource requirements from the resource_path.
+        resource_logger = utils.setup_logging(name='Resources',
+                                              log_file=_flags.log_file_name,
+                                              log_level=_flags.log_level)
         with open(resource_path, 'r') as f:
             self._resource_requirements =\
-                    TaskLoader._TaskLoader__create_resources(json.load(f))
+                    TaskLoader._TaskLoader__create_resources(json.load(f),
+                                                             resource_logger)
 
         # Create the Tasks and the TaskGraph from the Jobs.
+        task_logger = utils.setup_logging(name='Task',
+                                          log_file=_flags.log_file_name,
+                                          log_level=_flags.log_level)
         self._tasks = TaskLoader._TaskLoader__create_tasks(
                                                 profile_data,
                                                 self._jobs,
-                                                self._resource_requirements)
+                                                self._resource_requirements,
+                                                max_timestamp,
+                                                task_logger,
+                                                _flags.deadline_variance)
+        for task in self._tasks:
+            self._logger.debug("Loaded Task from JSON: {}".format(task))
         self._logger.debug("Loaded {} Tasks from {}".format(len(self._tasks),
                                                             profile_path))
-        self._task_graph = TaskLoader._TaskLoader__create_task_graph(
-                self._tasks, self._job_graph)
+        self._grouped_tasks, self._task_graph = TaskLoader.\
+            _TaskLoader__create_task_graph(self._tasks, self._job_graph)
+        self._logger.debug("Finished creating TaskGraph from loaded tasks.")
 
     @staticmethod
     def __create_jobs(json_entries: Sequence[Mapping[str, str]])\
@@ -127,13 +152,16 @@ class TaskLoader(object):
         return job_graph
 
     @staticmethod
-    def __create_resources(resource_requirements: Sequence[Mapping[str, str]])\
+    def __create_resources(resource_requirements: Sequence[Mapping[str, str]],
+                           logger: Optional[logging.Logger] = None)\
             -> Mapping[str, Sequence[Resources]]:
         """Retrieve the Resource requirements from the given JSON entries.
 
         Args:
             resource_requirements (`Sequence[Mapping[str, str]]`): The JSON
                 entries for the resource requirements of each task.
+            logger (`Optional[logging.Logger]`): The logger to use to log the
+                results of the execution.
 
         Returns:
             A Mapping of task name (`str`) to a sequence of Resources
@@ -149,14 +177,18 @@ class TaskLoader(object):
                     resource_vector[Resource(name=resource_name,
                                              _id=resource_id)] = quantity
                 potential_requirements.append(
-                        Resources(resource_vector=resource_vector))
+                        Resources(resource_vector=resource_vector,
+                                  _logger=logger))
             _requirements[entry['name']] = potential_requirements
         return _requirements
 
     @staticmethod
     def __create_tasks(json_entries: Sequence[Mapping[str, str]],
                        jobs: Mapping[str, Job],
-                       resources: Mapping[str, Sequence[Resources]])\
+                       resources: Mapping[str, Sequence[Resources]],
+                       max_timestamp: float = float('inf'),
+                       logger: Optional[logging.Logger] = None,
+                       deadline_variance: Optional[float] = 0.0)\
             -> Sequence[Task]:
         """Creates a list of tasks from the given JSON entries.
 
@@ -167,6 +199,12 @@ class TaskLoader(object):
                 to a `Job` instance.
             resources (`Mapping[str, Sequence[Resources]]`): The set of
                 potential resources required by each task invocation.
+            max_timestamp (`int`): The maximum timestamp of tasks to load from
+                the JSON file.
+            logger (`Optional[logging.Logger]`): The logger to pass to each
+                Task to enable logging of its execution.
+            deadline_variance (`Optional[float]`): The % variance to add to
+                the assigned deadline for each task.
 
         Returns:
             A `Sequence[Task]` with the task information retrieved from the
@@ -174,13 +212,19 @@ class TaskLoader(object):
         """
         tasks = []
         for entry in json_entries:
+            if entry['args']['timestamp'] > max_timestamp:
+                continue
+            deadline = utils.fuzz_time(entry['ts'] + entry['dur'],
+                                       deadline_variance)
             tasks.append(Task(name=entry['name'],
                               job=jobs[entry['pid']],
                               resource_requirements=choice(
                                                   resources[entry['name']]),
                               runtime=entry['dur'],
-                              deadline=None,  # TODO(Sukrit): Assign deadlines.
-                              timestamp=[entry['args']['timestamp']],
+                              deadline=deadline,
+                              timestamp=entry['args']['timestamp'],
+                              release_time=entry['ts'],
+                              _logger=logger,
                               ))
         return tasks
 
@@ -240,7 +284,7 @@ class TaskLoader(object):
                     for parent_task in parent_task_same_timestamp:
                         task_graph[parent_task].append(task)
 
-        return TaskGraph(tasks=task_graph)
+        return grouped_tasks, TaskGraph(tasks=task_graph)
 
     def get_jobs(self) -> Sequence[Job]:
         """Retrieve the set of `Job`s loaded by the TaskLoader.
@@ -273,3 +317,23 @@ class TaskLoader(object):
             The `TaskGraph` constructed by the TaskLoader.
         """
         return self._task_graph
+
+    def log_statistics(self):
+        """Logs the statistics from the Tasks loaded by the TaskLoader. """
+        for job, tasks in self._grouped_tasks.items():
+            # Log the Job name.
+            self._logger.debug("Job: {}".format(job))
+
+            # Group the tasks by their names.
+            tasks_by_task_name = defaultdict(list)
+            for task in tasks:
+                tasks_by_task_name[task.name].append(task)
+
+            # For each group, log the required statistics.
+            for task_name, _tasks in tasks_by_task_name.items():
+                # Log the task name.
+                self._logger.debug("  Task: {}".format(task_name))
+
+                # Log stats about the runtime of the tasks.
+                runtimes = list(map(attrgetter('runtime'), _tasks))
+                utils.log_statistics(runtimes, self._logger)

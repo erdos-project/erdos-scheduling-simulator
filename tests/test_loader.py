@@ -55,6 +55,7 @@ def test_create_tasks():
                 "timestamp": 1,
             },
             "dur": 100,
+            "ts": 50,
         }
     ]
     jobs = {
@@ -71,7 +72,7 @@ def test_create_tasks():
     assert tasks[0].name == "perception_operator.on_watermark",\
         "Incorrect name returned for the Task."
     assert tasks[0].runtime == 100, "Incorrect runtime returned for the Task."
-    assert tasks[0].timestamp == [1], "Incorrect timestamp for the Task."
+    assert tasks[0].timestamp == 1, "Incorrect timestamp for the Task."
     assert jobs["perception_operator"] == tasks[0].job,\
         "Incorrect Job returned for the Task."
 
@@ -116,19 +117,19 @@ def test_create_taskgraph():
 
     # Create a list of Tasks to be put into a graph.
     tasks = [
-        __create_default_task(job=jobs["perception_operator"], timestamp=[1]),
-        __create_default_task(job=jobs["perception_operator"], timestamp=[2]),
-        __create_default_task(job=jobs["perception_operator"], timestamp=[3]),
-        __create_default_task(job=jobs["prediction_operator"], timestamp=[1]),
-        __create_default_task(job=jobs["prediction_operator"], timestamp=[2]),
-        __create_default_task(job=jobs["prediction_operator"], timestamp=[3]),
-        __create_default_task(job=jobs["planning_operator"], timestamp=[1]),
-        __create_default_task(job=jobs["planning_operator"], timestamp=[2]),
-        __create_default_task(job=jobs["planning_operator"], timestamp=[3]),
+        __create_default_task(job=jobs["perception_operator"], timestamp=1),
+        __create_default_task(job=jobs["perception_operator"], timestamp=2),
+        __create_default_task(job=jobs["perception_operator"], timestamp=3),
+        __create_default_task(job=jobs["prediction_operator"], timestamp=1),
+        __create_default_task(job=jobs["prediction_operator"], timestamp=2),
+        __create_default_task(job=jobs["prediction_operator"], timestamp=3),
+        __create_default_task(job=jobs["planning_operator"], timestamp=1),
+        __create_default_task(job=jobs["planning_operator"], timestamp=2),
+        __create_default_task(job=jobs["planning_operator"], timestamp=3),
     ]
 
     # Create a TaskGraph using the jobs and the list of tasks.
-    task_graph = TaskLoader._TaskLoader__create_task_graph(tasks, job_graph)
+    _, task_graph = TaskLoader._TaskLoader__create_task_graph(tasks, job_graph)
     assert len(task_graph) == len(tasks), "Incorrect length of TaskGraph."
 
     # Check the parent-child relationships.

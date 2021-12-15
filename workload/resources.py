@@ -1,10 +1,9 @@
 import uuid
+import logging
 from copy import copy
 from collections import defaultdict
 from functools import total_ordering
 from typing import Mapping, Optional
-
-import absl
 
 import utils
 
@@ -102,17 +101,15 @@ class Resources(object):
     Args:
         resource_vector (Mapping[Resource, int]): A mapping from an arbitrary
             set of resources to their quantities.
-        _flags (`Optional[absl.flags]`): The flags with which the app was
-            initiated, if any.
+        _logger (`Optional[logging.Logger]`): The logger to use to log the
+            results of the execution.
     """
     def __init__(self,
                  resource_vector: Optional[Mapping[Resource, int]] = {},
-                 _flags: Optional['absl.flags'] = None):
+                 _logger: Optional[logging.Logger] = None):
         # Set up the logger.
-        if _flags:
-            self._logger = utils.setup_logging(name=self.__class__.__name__,
-                                               log_file=_flags.log_file_name,
-                                               log_level=_flags.log_level)
+        if _logger:
+            self._logger = _logger
         else:
             self._logger = utils.setup_logging(name=self.__class__.__name__)
 
@@ -120,8 +117,8 @@ class Resources(object):
         for resource, quantity in resource_vector.items():
             self._resource_vector[copy(resource)] = quantity
         if not all(map(lambda x: type(x) == Resource, self._resource_vector)):
-            raise ValueError("The keys for the resource vector\
-                              should be of type 'Resource'")
+            raise ValueError("The keys for the resource vector "
+                             "should be of type 'Resource'")
         self._current_allocations = defaultdict(list)
 
     def add_resource(self, resource: Resource, quantity: Optional[int] = 1):
@@ -177,9 +174,9 @@ class Resources(object):
                            format(quantity, resource, self))
         available_quantity = self.get_available_quantity(resource)
         if available_quantity < quantity:
-            raise ValueError("Trying to allocate more than available units of \
-                             {}: requested {}, available {}".format(resource,
-                             quantity, available_quantity))
+            raise ValueError("Trying to allocate more than available units of "
+                             "{}: requested {}, available {}".format(
+                                 resource, quantity, available_quantity))
 
         # Go over the list of resources and allocate the required number of
         # resources of the given type.
@@ -224,9 +221,10 @@ class Resources(object):
         for resource, quantity in resources._resource_vector.items():
             available_quantity = self.get_available_quantity(resource)
             if quantity > available_quantity:
-                raise ValueError("Trying to allocate more than the available \
-                        units of {}: requested {}, available {}".format(
-                            resource, quantity, available_quantity))
+                raise ValueError("Trying to allocate more than the available "
+                                 "units of {}: requested {}, available {}".
+                                 format(resource, quantity, available_quantity)
+                                 )
 
         # Allocate all the resources together.
         for resource, quantity in resources._resource_vector.items():
@@ -268,7 +266,7 @@ class Resources(object):
         """
         cls = self.__class__
         instance = cls.__new__(cls)
-        cls.__init__(instance, self._resource_vector)
+        cls.__init__(instance, self._resource_vector, self._logger)
 
         # Copy over the allocations.
         for task, allocations in self._current_allocations.items():
@@ -285,7 +283,7 @@ class Resources(object):
         """
         cls = self.__class__
         instance = cls.__new__(cls)
-        cls.__init__(instance, self._resource_vector)
+        cls.__init__(instance, self._resource_vector, self._logger)
 
         # Undo the allocations.
         for allocations in self._current_allocations.values():

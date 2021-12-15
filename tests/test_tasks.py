@@ -4,17 +4,27 @@ from workload import Job, Resource, Resources, TaskState, Task, TaskGraph
 
 
 def __create_default_task(
+        name=None,
         job=Job(name="Perception"),
         resource_requirements=Resources(
                         resource_vector={Resource(name="CPU", _id="any"): 1}),
         runtime=1.0,
         deadline=10.0,
-        timestamp=[0],
+        timestamp=0,
+        release_time=-1,
+        start_time=-1,
+        completion_time=-1,
 ):
     """ Helper function to create a default task. """
-    return Task(name="{}_Task".format(job.name), job=job,
+    return Task(name=name if name else "{}_Task".format(job.name),
+                job=job,
                 resource_requirements=resource_requirements,
-                runtime=runtime, deadline=deadline, timestamp=timestamp)
+                runtime=runtime,
+                deadline=deadline,
+                timestamp=timestamp,
+                release_time=release_time,
+                start_time=start_time,
+                completion_time=completion_time)
 
 
 def test_successful_task_creation():
@@ -28,6 +38,22 @@ def test_successful_task_release():
     """ Test that release() transitions the task to a RELEASED state. """
     default_task = __create_default_task()
     default_task.release(2.0)
+    assert default_task.release_time == 2.0, "Incorrect release time for Task."
+    assert default_task.state == TaskState.RELEASED,\
+        "Incorrect state for Task."
+
+
+def test_failed_task_release_without_release_time():
+    """ Test that a task release without release time fails. """
+    default_task = __create_default_task()
+    with pytest.raises(ValueError):
+        default_task.release()
+
+
+def test_successful_task_release_without_release_time():
+    """ Test that a task release without release time succeeds. """
+    default_task = __create_default_task(release_time=2.0)
+    default_task.release()
     assert default_task.release_time == 2.0, "Incorrect release time for Task."
     assert default_task.state == TaskState.RELEASED,\
         "Incorrect state for Task."
@@ -232,6 +258,26 @@ def test_get_released_tasks():
         "Incorrect length of released tasks returned."
 
 
+def test_release_tasks():
+    """ Test that the correct tasks are released by the TaskGraph. """
+    perception_task = __create_default_task(job=Job(name="Perception"))
+    prediction_task = __create_default_task(job=Job(name="Prediction"))
+    planning_task = __create_default_task(job=Job(name="Planning"))
+    localization_task = __create_default_task(job=Job(name="Localization"))
+    task_graph = TaskGraph()
+    task_graph.add_task(perception_task, [prediction_task])
+    task_graph.add_task(prediction_task, [planning_task])
+    task_graph.add_task(localization_task)
+    assert len(task_graph.get_released_tasks()) == 0,\
+        "Incorrect length of released tasks returned."
+
+    # Release all available tasks.
+    released_tasks = task_graph.release_tasks(1.0)
+    assert len(released_tasks) == 2, "Incorrect number of released tasks."
+    assert released_tasks == [perception_task, localization_task],\
+        "Incorrect tasks released by the API."
+
+
 def test_retrieval_of_parents():
     """ Test that the correct set of parents are retrieved. """
     default_task = __create_default_task(job=Job(name="Perception"))
@@ -275,6 +321,7 @@ def test_task_completion_notification():
     # Run and finish the execution of Perception.
     perception_task.start(3.0)
     perception_task.update_remaining_time(0)
+    perception_task.finish(4.0)
     task_graph.notify_task_completion(perception_task, 4.0)
     released_tasks = task_graph.get_released_tasks()
     assert perception_task.is_complete(), "Task was not completed."
@@ -286,6 +333,7 @@ def test_task_completion_notification():
     # Run and finish the execution of Prediction.
     prediction_task.start(3.0)
     prediction_task.update_remaining_time(0)
+    prediction_task.finish(4.0)
     task_graph.notify_task_completion(prediction_task, 4.0)
     released_tasks = task_graph.get_released_tasks()
     assert prediction_task.is_complete(), "Task was not completed."
@@ -293,3 +341,320 @@ def test_task_completion_notification():
         "Incorrect length of released tasks returned."
     assert released_tasks[0] == planning_task,\
         "Incorrect task released."
+
+
+def test_task_graph_index_success():
+    """ Test that indexing a TaskGraph works correctly. """
+    # Create the individual tasks.
+    perception_task_0 = __create_default_task(job=Job(name="Perception"),
+                                              timestamp=0)
+    perception_task_1 = __create_default_task(job=Job(name="Perception"),
+                                              timestamp=1)
+    prediction_task_0 = __create_default_task(job=Job(name="Prediction"),
+                                              timestamp=0)
+    prediction_task_1 = __create_default_task(job=Job(name="Prediction"),
+                                              timestamp=1)
+    planning_task_0 = __create_default_task(job=Job(name="Planning"),
+                                            timestamp=0)
+    planning_task_1 = __create_default_task(job=Job(name="Planning"),
+                                            timestamp=1)
+
+    # Create the TaskGraph.
+    task_graph = TaskGraph(tasks={
+            perception_task_0: [prediction_task_0, perception_task_1],
+            prediction_task_0: [planning_task_0, prediction_task_1],
+            planning_task_0: [planning_task_1],
+            perception_task_1: [prediction_task_1],
+            prediction_task_1: [planning_task_1],
+            planning_task_1: [],
+        })
+    assert len(task_graph) == 6, "Incorrect length of TaskGraph."
+    assert task_graph._max_timestamp == 1,\
+        "Incorrect maximum timestamp maintained in the TaskGraph."
+
+    # Slice the TaskGraph.
+    task_graph_slice = task_graph[0]
+    assert type(task_graph_slice) == TaskGraph,\
+        "Incorrect type of slice returned."
+    assert len(task_graph_slice) == 3, "Incorrect length of sliced TaskGraph."
+    assert task_graph_slice._max_timestamp == 0,\
+        "Incorrect maximum timestamp maintained in the sliced TaskGraph."
+
+
+def test_task_graph_index_failure():
+    """ Test that an invalid argument to indexing a TaskGraph fails. """
+    # Create the individual tasks.
+    perception_task_0 = __create_default_task(job=Job(name="Perception"),
+                                              timestamp=0)
+    perception_task_1 = __create_default_task(job=Job(name="Perception"),
+                                              timestamp=1)
+    prediction_task_0 = __create_default_task(job=Job(name="Prediction"),
+                                              timestamp=0)
+    prediction_task_1 = __create_default_task(job=Job(name="Prediction"),
+                                              timestamp=1)
+    planning_task_0 = __create_default_task(job=Job(name="Planning"),
+                                            timestamp=0)
+    planning_task_1 = __create_default_task(job=Job(name="Planning"),
+                                            timestamp=1)
+
+    # Create the TaskGraph.
+    task_graph = TaskGraph(tasks={
+            perception_task_0: [prediction_task_0, perception_task_1],
+            prediction_task_0: [planning_task_0, prediction_task_1],
+            planning_task_0: [planning_task_1],
+            perception_task_1: [prediction_task_1],
+            prediction_task_1: [planning_task_1],
+            planning_task_1: [],
+        })
+    assert len(task_graph) == 6, "Incorrect length of TaskGraph."
+    assert task_graph._max_timestamp == 1,\
+        "Incorrect maximum timestamp maintained in the TaskGraph."
+
+    # Slice the TaskGraph.
+    with pytest.raises(ValueError):
+        task_graph[5.0]
+
+
+def test_task_graph_slice_success():
+    """ Test that slicing a TaskGraph works correctly. """
+    # Create the individual tasks.
+    perception_task_0 = __create_default_task(job=Job(name="Perception"),
+                                              timestamp=0)
+    perception_task_1 = __create_default_task(job=Job(name="Perception"),
+                                              timestamp=1)
+    perception_task_2 = __create_default_task(job=Job(name="Perception"),
+                                              timestamp=2)
+    prediction_task_0 = __create_default_task(job=Job(name="Prediction"),
+                                              timestamp=0)
+    prediction_task_1 = __create_default_task(job=Job(name="Prediction"),
+                                              timestamp=1)
+    prediction_task_2 = __create_default_task(job=Job(name="Prediction"),
+                                              timestamp=2)
+    planning_task_0 = __create_default_task(job=Job(name="Planning"),
+                                            timestamp=0)
+    planning_task_1 = __create_default_task(job=Job(name="Planning"),
+                                            timestamp=1)
+    planning_task_2 = __create_default_task(job=Job(name="Planning"),
+                                            timestamp=2)
+
+    # Create the TaskGraph.
+    task_graph = TaskGraph(tasks={
+            perception_task_0: [prediction_task_0, perception_task_1],
+            prediction_task_0: [planning_task_0, prediction_task_1],
+            planning_task_0: [planning_task_1],
+            perception_task_1: [prediction_task_1, perception_task_2],
+            prediction_task_1: [planning_task_1, prediction_task_2],
+            planning_task_1: [planning_task_2],
+            perception_task_2: [prediction_task_2],
+            prediction_task_2: [planning_task_2],
+            planning_task_2: [],
+        })
+    assert len(task_graph) == 9, "Incorrect length of TaskGraph."
+    assert task_graph._max_timestamp == 2,\
+        "Incorrect maximum timestamp maintained in the TaskGraph."
+
+    # Slice the TaskGraph.
+    task_graph_slice = task_graph[:2]
+    assert type(task_graph_slice) == list,\
+        "Incorrect type of slice returned."
+    assert len(task_graph_slice) == 2, "Incorrect length of sliced TaskGraph."
+    assert len(task_graph_slice[0]) == 3, "Incorrect length of TaskGraph."
+    assert len(task_graph_slice[1]) == 3, "Incorrect length of TaskGraph."
+    assert task_graph_slice[0]._max_timestamp == 0,\
+        "Incorrect maximum timestamp maintained in the sliced TaskGraph."
+    assert task_graph_slice[1]._max_timestamp == 1,\
+        "Incorrect maximum timestamp maintained in the sliced TaskGraph."
+
+
+def test_is_source_task():
+    """ Test that the is_source_task method works correctly. """
+    # Create the individual tasks.
+    perception_task_0 = __create_default_task(job=Job(name="Perception"),
+                                              timestamp=0)
+    perception_task_1 = __create_default_task(job=Job(name="Perception"),
+                                              timestamp=1)
+    prediction_task_0 = __create_default_task(job=Job(name="Prediction"),
+                                              timestamp=0)
+    prediction_task_1 = __create_default_task(job=Job(name="Prediction"),
+                                              timestamp=1)
+    planning_task_0 = __create_default_task(job=Job(name="Planning"),
+                                            timestamp=0)
+    planning_task_1 = __create_default_task(job=Job(name="Planning"),
+                                            timestamp=1)
+
+    # Create the TaskGraph.
+    task_graph = TaskGraph(tasks={
+            perception_task_0: [prediction_task_0, perception_task_1],
+            prediction_task_0: [planning_task_0, prediction_task_1],
+            planning_task_0: [planning_task_1],
+            perception_task_1: [prediction_task_1],
+            prediction_task_1: [planning_task_1],
+            planning_task_1: [],
+        })
+
+    # Check that the is_source_task works correctly.
+    assert task_graph.is_source_task(perception_task_0),\
+        "Perception Task is a source task."
+    assert task_graph.is_source_task(perception_task_1),\
+        "Perception Task is a source task."
+    assert not task_graph.is_source_task(prediction_task_0),\
+        "Prediction Task is not a source task."
+    assert not task_graph.is_source_task(prediction_task_1),\
+        "Prediction Task is not a source task."
+    assert not task_graph.is_source_task(planning_task_0),\
+        "Planning Task is not a source task."
+    assert not task_graph.is_source_task(planning_task_1),\
+        "Planning Task is not a source task."
+
+
+def test_get_source_tasks():
+    """ Test that the is_source_task method works correctly. """
+    # Create the individual tasks.
+    perception_task_0 = __create_default_task(job=Job(name="Perception"),
+                                              timestamp=0)
+    perception_task_1 = __create_default_task(job=Job(name="Perception"),
+                                              timestamp=1)
+    prediction_task_0 = __create_default_task(job=Job(name="Prediction"),
+                                              timestamp=0)
+    prediction_task_1 = __create_default_task(job=Job(name="Prediction"),
+                                              timestamp=1)
+    planning_task_0 = __create_default_task(job=Job(name="Planning"),
+                                            timestamp=0)
+    planning_task_1 = __create_default_task(job=Job(name="Planning"),
+                                            timestamp=1)
+
+    # Create the TaskGraph.
+    task_graph = TaskGraph(tasks={
+            perception_task_0: [prediction_task_0, perception_task_1],
+            prediction_task_0: [planning_task_0, prediction_task_1],
+            planning_task_0: [planning_task_1],
+            perception_task_1: [prediction_task_1],
+            prediction_task_1: [planning_task_1],
+            planning_task_1: [],
+        })
+
+    # Check that the get_source_tasks works correctly.
+    source_tasks = task_graph.get_source_tasks()
+    assert len(source_tasks) == 2,\
+        "Incorrect length of retrieved source tasks."
+    assert set(source_tasks) == {perception_task_0, perception_task_1},\
+        "Incorrect tasks retrieved by get_source_tasks()"
+
+
+def test_task_find():
+    # Create the individual tasks.
+    perception_task_0 = __create_default_task(name="Perception_Watermark",
+                                              job=Job(name="Perception"),
+                                              timestamp=0)
+    perception_task_1 = __create_default_task(name="Perception_Watermark",
+                                              job=Job(name="Perception"),
+                                              timestamp=1)
+    prediction_task_0 = __create_default_task(name="Prediction_Watermark",
+                                              job=Job(name="Prediction"),
+                                              timestamp=0)
+    prediction_task_1 = __create_default_task(name="Prediction_Watermark",
+                                              job=Job(name="Prediction"),
+                                              timestamp=1)
+    planning_task_0 = __create_default_task(name="Planning_Watermark",
+                                            job=Job(name="Planning"),
+                                            timestamp=0)
+    planning_task_1 = __create_default_task(name="Planning_Watermark",
+                                            job=Job(name="Planning"),
+                                            timestamp=1)
+
+    # Create the TaskGraph.
+    task_graph = TaskGraph(tasks={
+            perception_task_0: [prediction_task_0, perception_task_1],
+            prediction_task_0: [planning_task_0, prediction_task_1],
+            planning_task_0: [planning_task_1],
+            perception_task_1: [prediction_task_1],
+            prediction_task_1: [planning_task_1],
+            planning_task_1: [],
+        })
+
+    # Check that find works correctly.
+    perception_tasks = task_graph.find("Perception_Watermark")
+    prediction_tasks = task_graph.find("Prediction_Watermark")
+    planning_tasks = task_graph.find("Planning_Watermark")
+    assert len(perception_tasks) == 2,\
+        "Incorrect length of retrieved Perception tasks."
+    assert set(perception_tasks) == {perception_task_0, perception_task_1},\
+        "Incorrect tasks retrieved by the TaskGraph."
+    assert len(prediction_tasks) == 2,\
+        "Incorrect length of retrieved Perception tasks."
+    assert set(prediction_tasks) == {prediction_task_0, prediction_task_1},\
+        "Incorrect tasks retrieved by the TaskGraph."
+    assert len(planning_tasks) == 2,\
+        "Incorrect length of retrieved Perception tasks."
+    assert set(planning_tasks) == {planning_task_0, planning_task_1},\
+        "Incorrect tasks retrieved by the TaskGraph."
+
+
+def test_task_time_dilation():
+    # Create the individual tasks.
+    localization_task_0 = __create_default_task(name="Localization_Watermark",
+                                                job=Job(name="Localization"),
+                                                timestamp=0,
+                                                release_time=5.0)
+    localization_task_1 = __create_default_task(name="Localization_Watermark",
+                                                job=Job(name="Localization"),
+                                                timestamp=1,
+                                                release_time=120.0)
+    perception_task_0 = __create_default_task(name="Perception_Watermark",
+                                              job=Job(name="Perception"),
+                                              timestamp=0,
+                                              release_time=0.0)
+    perception_task_1 = __create_default_task(name="Perception_Watermark",
+                                              job=Job(name="Perception"),
+                                              timestamp=1,
+                                              release_time=100.0)
+    prediction_task_0 = __create_default_task(name="Prediction_Watermark",
+                                              job=Job(name="Prediction"),
+                                              timestamp=0,
+                                              release_time=10.0)
+    prediction_task_1 = __create_default_task(name="Prediction_Watermark",
+                                              job=Job(name="Prediction"),
+                                              timestamp=1,
+                                              release_time=150.0)
+    planning_task_0 = __create_default_task(name="Planning_Watermark",
+                                            job=Job(name="Planning"),
+                                            timestamp=0,
+                                            release_time=50.0)
+    planning_task_1 = __create_default_task(name="Planning_Watermark",
+                                            job=Job(name="Planning"),
+                                            timestamp=1,
+                                            release_time=190.0)
+
+    # Create the TaskGraph.
+    task_graph = TaskGraph(tasks={
+            # Timestamp = 0
+            localization_task_0: [prediction_task_0, localization_task_1],
+            perception_task_0: [prediction_task_0, perception_task_1],
+            prediction_task_0: [planning_task_0, prediction_task_1],
+            planning_task_0: [planning_task_1],
+
+            # Timestamp = 1
+            localization_task_1: [prediction_task_1],
+            perception_task_1: [prediction_task_1],
+            prediction_task_1: [planning_task_1],
+            planning_task_1: [],
+        })
+
+    # Check that time dilation works correctly.
+    task_graph.dilate(50.0)
+    assert localization_task_0.release_time == 5.0,\
+        "Incorrect release time for Localization task [timestamp=0]"
+    assert localization_task_1.release_time == 55.0,\
+        "Incorrect release time for Localization task [timestamp=1]"
+    assert perception_task_0.release_time == 0.0,\
+        "Incorrect release time for Perception task [timestamp=0]"
+    assert perception_task_1.release_time == 50.0,\
+        "Incorrect release time for Perception task [timestamp=1]"
+    assert prediction_task_0.release_time == 10.0,\
+        "Incorrect release time for Prediction task [timestamp=0]"
+    assert prediction_task_1.release_time == 92.5,\
+        "Incorrect release time for Prediction task [timestamp=1]"
+    assert planning_task_0.release_time == 50.0,\
+        "Incorrect release time for Planning task [timestamp=0]"
+    assert planning_task_1.release_time == 132.5,\
+        "Incorrect release time for Planning task [timestamp=1]"

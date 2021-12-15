@@ -102,7 +102,7 @@ def test_simulator_construction():
                           scheduler=MockScheduler(runtime=1.0, placement=None),
                           job_graph=None)
     assert len(simulator._worker_pools) == 1, "Incorrect number of WorkerPool"
-    assert len(simulator._event_queue) == 3,\
+    assert len(simulator._event_queue) == 2,\
         "Incorrect number of starting events in the EventQueue."
 
 
@@ -144,6 +144,26 @@ def test_construction_of_scheduler_start_event():
         "Incorrect start time for Scheduler."
 
 
+def test_simulator_loop_finish_event():
+    """ Test that a correct SIMULATOR_END event is generated. """
+    worker_pool = __create_default_worker_pool()
+    simulator = Simulator(worker_pools=[worker_pool],
+                          scheduler=MockScheduler(runtime=1.0, placement=None),
+                          job_graph=None)
+    assert simulator._event_queue.next().event_type ==\
+        EventType.SIMULATOR_START, "Incorrect event received."
+    assert simulator._event_queue.next().event_type ==\
+        EventType.SCHEDULER_START, "Incorrect event received."
+    assert len(simulator._event_queue) == 0,\
+        "Incorrect length for event queue."
+
+    simulator_start_event = simulator._Simulator__get_next_scheduler_event(
+            event=Event(event_type=EventType.SCHEDULER_FINISHED, time=3.0),
+            scheduler_frequency=-1.0, last_scheduler_start_time=1.0)
+    assert simulator_start_event.event_type == EventType.SIMULATOR_END,\
+        "Incorrect event received from next_scheduler_event"
+
+
 def test_scheduler_invocation_by_simulator():
     """ Test that the simulator correctly invokes the scheduler. """
     worker_pool = __create_default_worker_pool()
@@ -170,29 +190,29 @@ def test_simulator_step():
     task.start(2.0)
 
     assert simulator._simulator_time == 0, "Incorrect starting simulator time."
-    assert len(simulator._event_queue) == 3,\
+    assert len(simulator._event_queue) == 2,\
         "Incorrect number of starting events."
 
     # Step through the execution.
     simulator._Simulator__step()
     assert simulator._simulator_time == 1, "Incorrect starting simulator time."
-    assert len(simulator._event_queue) == 3,\
+    assert len(simulator._event_queue) == 2,\
         "Incorrect number of starting events."
     simulator._Simulator__step()
     assert simulator._simulator_time == 2, "Incorrect starting simulator time."
-    assert len(simulator._event_queue) == 3,\
+    assert len(simulator._event_queue) == 2,\
         "Incorrect number of starting events."
     simulator._Simulator__step()
     assert simulator._simulator_time == 3, "Incorrect starting simulator time."
-    assert len(simulator._event_queue) == 3,\
+    assert len(simulator._event_queue) == 2,\
         "Incorrect number of starting events."
     simulator._Simulator__step()
     assert simulator._simulator_time == 4, "Incorrect starting simulator time."
-    assert len(simulator._event_queue) == 3,\
+    assert len(simulator._event_queue) == 2,\
         "Incorrect number of starting events."
     simulator._Simulator__step()
     assert simulator._simulator_time == 5, "Incorrect starting simulator time."
-    assert len(simulator._event_queue) == 4,\
+    assert len(simulator._event_queue) == 3,\
         "Incorrect number of starting events."
 
     # Check the order of events in the queue.
@@ -204,9 +224,6 @@ def test_simulator_step():
         "Incorrect event type."
     next_event = simulator._event_queue.next()
     assert next_event.event_type == EventType.TASK_FINISHED,\
-        "Incorrect event type."
-    next_event = simulator._event_queue.next()
-    assert next_event.event_type == EventType.SIMULATOR_END,\
         "Incorrect event type."
 
 
@@ -220,7 +237,7 @@ def test_simulator_handle_event():
     # Test the SIMULATOR_START event.
     return_value = simulator._Simulator__handle_event(
             event=Event(event_type=EventType.SIMULATOR_START, time=1.0),
-            task_graph=None)
+            task_graph=TaskGraph())
     assert not return_value, "Incorrect return value for event type."
 
     # Test the SIMULATOR_END event.
@@ -248,21 +265,22 @@ def test_simulator_handle_event():
     perception_task.release(2.0)
     perception_task.start(3.0)
     perception_task.update_remaining_time(0)
+    perception_task.finish(4.0)
 
-    assert len(simulator._event_queue) == 3, "Incorrect length of EventQueue."
+    assert len(simulator._event_queue) == 2, "Incorrect length of EventQueue."
     return_value = simulator._Simulator__handle_event(
             event=Event(event_type=EventType.TASK_FINISHED, time=4.0,
                         task=perception_task),
             task_graph=task_graph)
     assert not return_value, "Incorrect return value for event type."
-    assert len(simulator._event_queue) == 4, "Incorrect length of EventQueue."
+    assert len(simulator._event_queue) == 3, "Incorrect length of EventQueue."
 
     # Test the SCHEDULER_START event.
     return_value = simulator._Simulator__handle_event(
             event=Event(event_type=EventType.SCHEDULER_START, time=5.0,),
             task_graph=None)
     assert not return_value, "Incorrect return value for event type."
-    assert len(simulator._event_queue) == 5, "Incorrect length of EventQueue."
+    assert len(simulator._event_queue) == 4, "Incorrect length of EventQueue."
 
     # Test the SCHEDULER_FINISHED event.
     simulator._last_task_placement = [(planning_task, worker_pool.id)]
@@ -271,7 +289,7 @@ def test_simulator_handle_event():
             task_graph=None)
     assert len(simulator._released_tasks) == 0,\
         "Incorrect length of available tasks."
-    assert len(simulator._event_queue) == 6, "Incorrect length of EventQueue."
+    assert len(simulator._event_queue) == 5, "Incorrect length of EventQueue."
     assert planning_task.state == TaskState.RUNNING, "Wrong task state."
     assert len(worker_pool.get_placed_tasks()) == 1,\
         "Incorrect number of placed tasks on WorkerPool."

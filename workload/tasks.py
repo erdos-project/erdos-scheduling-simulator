@@ -1,9 +1,8 @@
 import uuid
+import logging
 from enum import Enum
 from collections import namedtuple, defaultdict
-from typing import Mapping, Sequence, Optional
-
-import absl
+from typing import Mapping, Sequence, Optional, Union
 
 import utils
 from workload import Job, Resources
@@ -41,6 +40,7 @@ class Task(object):
         runtime (`float`): The expected runtime of this task.
         deadline (`float`): The deadline by which the task should complete.
         state (`TaskState`): Defines the state of the task.
+        timestamp (`int`): The timestamp for the Task (single dimension).
         start_time (`float`): The time at which the task was started (only
             available if state != TaskState.RELEASED, -1 otherwise)
         remaining_time (`float`): The time remaining to finish the completion
@@ -48,20 +48,22 @@ class Task(object):
         completion_time (`float`): The time at which the task completed / was
             preempted (only available if state is either EVICTED / COMPLETED,
             -1 otherwise)
-        _flags (`Optional[absl.flags]`): The flags with which the app was
-            initiated, if any.
+        _logger(`Optional[logging.Logger]`): The logger to use to log the
+            results of the execution.
     """
     def __init__(self, name: str, job: Job, resource_requirements: Resources,
                  runtime: float, deadline: float,
-                 timestamp: Sequence[int] = [],
-                 _flags: Optional['absl.flags'] = None):
+                 timestamp: int = None,
+                 release_time: Optional[float] = -1,
+                 start_time: Optional[float] = -1,
+                 completion_time: Optional[float] = -1,
+                 _logger: Optional[logging.Logger] = None):
         # Set up the logger.
-        if _flags:
-            self._logger = utils.setup_logging(name=self.__class__.__name__,
-                                               log_file=_flags.log_file_name,
-                                               log_level=_flags.log_level)
+        if _logger:
+            self._logger = _logger
         else:
-            self._logger = utils.setup_logging(name=self.__class__.__name__)
+            self._logger = utils.setup_logging(name="{}_{}".format(name,
+                                                                   timestamp))
 
         self._name = name
         self._creating_job = job
@@ -72,32 +74,43 @@ class Task(object):
         self._id = uuid.uuid4()
 
         # The timestamps maintained for each state of the task.
-        self._release_time = -1     # (VIRTUAL -> RELEASED)
-        self._start_time = -1       # (RELEASED -> RUNNING)
-        self._completion_time = -1  # (RUNNING -> EVICTED / COMPLETED)
-        self._paused_times = []     # (RUNNING -> PAUSED)
+        # (VIRTUAL -> RELEASED)
+        self._release_time = release_time
+        # (RELEASED -> RUNNING)
+        self._start_time = start_time
+        # (RUNNING -> EVICTED / COMPLETED)
+        self._completion_time = completion_time
+        # (RUNNING -> PAUSED)
+        self._paused_times = []
 
         # The data required for managing the execution of a particular task.
         self._remaining_time = runtime
         self._last_step_time = -1  # Time when this task was stepped through.
         self._state = TaskState.VIRTUAL
 
-    def release(self, time: float):
+    def release(self, time: Optional[float] = None):
         """Release the task and transition away from the virtual state.
 
         Args:
-            time (`float`): The simulation time at which to release the task.
+            time (`Optional[float]`): The simulation time at which to release
+                the task. If None, should be specified at task construction.
         """
         self._logger.debug("Transitioning {} to {}".format(self,
                                                            TaskState.RELEASED))
-        self._release_time = time
+        if time is None and self._release_time == -1:
+            raise ValueError("Release time should be specified either while "
+                             "creating the Task or when releasing it.")
+        self._release_time = time if time is not None else self._release_time
         self._state = TaskState.RELEASED
 
-    def start(self, time: float, variance: Optional[float] = 0.0):
+    def start(self,
+              time: Optional[float] = None,
+              variance: Optional[float] = 0.0):
         """Begins the execution of the task at the given simulator time.
 
         Args:
-            time (`float`): The simulation time at which to begin the task.
+            time (`Optional[float]`): The simulation time at which to begin the
+                task. If None, should be specified at task construction.
             variance (`Optional[float]`): The percentage variation to add to
                 the runtime of the task.
 
@@ -106,13 +119,15 @@ class Task(object):
         """
         if self.state not in (TaskState.RELEASED, TaskState.PAUSED):
             raise ValueError("Only RELEASED or PAUSED tasks can be started.")
+        if time is None and self._start_time == -1:
+            raise ValueError("Start time should be specified either while "
+                             "creating the Task or when starting it.")
 
-        remaining_time = max(0, self._remaining_time +
-                             (self._remaining_time * variance / 100.0))
-        self._logger.debug("Transitioning {} to {} at time {}\
-                           with the remaining time {}".format(self,
-                           TaskState.RUNNING, time, remaining_time))
-        self._start_time = time
+        remaining_time = utils.fuzz_time(self._remaining_time, variance)
+        self._logger.debug("Transitioning {} to {} at time {} "
+                           "with the remaining time {}".format(
+                               self, TaskState.RUNNING, time, remaining_time))
+        self._start_time = time if time is not None else self._start_time
         self._last_step_time = time
         self._state = TaskState.RUNNING
         self.update_remaining_time(remaining_time)
@@ -130,23 +145,24 @@ class Task(object):
         if (self.state != TaskState.RUNNING or
            self.start_time > current_time + step_size):
             # We cannot step a Task that's not supposed to be running.
-            self._logger.warning("Cannot step {} with start time {} at time {}\
-                               since it's either not RUNNING or isn't supposed\
-                               to start yet.".format(self, self.start_time,
-                                                     self.state))
+            self._logger.warning("Cannot step {} with start time {} at time "
+                                 "{} since it's either not RUNNING or isn't "
+                                 "supposed to start yet.".format(
+                                     self, self.start_time, current_time))
             return False
 
         # Task can be run, step through the task's execution.
         execution_time = current_time + step_size - self._last_step_time
-        self._last_step_time = current_time + step_size
         if self._remaining_time - execution_time <= 0:
+            self._last_step_time = current_time + self._remaining_time
             self._remaining_time = 0
-            self.finish(current_time + step_size)
+            self.finish(self._last_step_time)
             return True
         else:
+            self._last_step_time = current_time + step_size
             self._remaining_time -= execution_time
-            self._logger.debug("Stepped {} for {} steps.\
-                               Remaining execution time: {}".
+            self._logger.debug("Stepped {} for {} steps. "
+                               "Remaining execution time: {}".
                                format(self, step_size, self._remaining_time))
             return False
 
@@ -177,10 +193,10 @@ class Task(object):
         """
         if self.state != TaskState.PAUSED:
             raise ValueError("Task is not PAUSED right now.")
-        self._logger.debug("Transitioning {} which was PAUSED at {} to {} at\
-                           time {}".format(self,
-                                           self._paused_times[-1].pause_time,
-                                           TaskState.RUNNING, time))
+        self._logger.debug("Transitioning {} which was PAUSED at {} to {} at "
+                           "time {}".format(self,
+                                            self._paused_times[-1].pause_time,
+                                            TaskState.RUNNING, time))
         self._paused_times[-1]._replace(restart_time=time)
         self._last_step_time = time
         self._state = TaskState.RUNNING
@@ -214,11 +230,11 @@ class Task(object):
             `ValueError` if the task is COMPLETED / EVICTED, or time < 0.
         """
         if self.is_complete():
-            raise ValueError("The remaining time of COMPLETED/EVICTED\
-                    tasks cannot be updated.")
+            raise ValueError("The remaining time of COMPLETED/EVICTED "
+                             "tasks cannot be updated.")
         if time < 0:
-            raise ValueError("Trying to set a negative value for\
-                    remaining time.")
+            raise ValueError("Trying to set a negative value for "
+                             "remaining time.")
         self._remaining_time = time
 
     def update_deadline(self, new_deadline: float):
@@ -244,8 +260,34 @@ class Task(object):
                 self.state == TaskState.COMPLETED)
 
     def __str__(self):
-        return "Task(name={}, id={}, job={}, timestamp={}, state={})".format(
-                self.name, self.id, self.job, self.timestamp, self.state)
+        if self.state == TaskState.VIRTUAL:
+            return ("Task(name={}, id={}, job={}, timestamp={}, state={})".
+                    format(self.name, self.id, self.job,
+                           self.timestamp, self.state))
+        elif self.state == TaskState.RELEASED:
+            return ("Task(name={}, id={}, job={}, timestamp={}, "
+                    "state={}, release_time={})".format(
+                           self.name, self.id,
+                           self.job, self.timestamp, self.state,
+                           self.release_time))
+        elif self.state == TaskState.RUNNING:
+            return ("Task(name={}, id={}, job={}, timestamp={}, "
+                    "state={}, start_time={}, remaining_time={})".format(
+                           self.name, self.id,
+                           self.job, self.timestamp, self.state,
+                           self.start_time, self.remaining_time))
+        elif self.state == TaskState.PAUSED:
+            return ("Task(name={}, id={}, job={}, timestamp={}, "
+                    "state={}, pause_time={}, remaining_time={})".format(
+                           self.name, self.id,
+                           self.job, self.timestamp, self.state,
+                           self.pause_time, self.remaining_time))
+        elif self.is_complete():
+            return ("Task(name={}, id={}, job={}, timestamp={}, "
+                    "state={}, completion_time={})".format(
+                           self.name, self.id,
+                           self.job, self.timestamp, self.state,
+                           self.completion_time))
 
     def repr(self):
         return str(self)
@@ -293,6 +335,10 @@ class Task(object):
         return self._start_time
 
     @property
+    def pause_time(self):
+        return self._paused_times[-1].pause_time
+
+    @property
     def remaining_time(self):
         return self._remaining_time
 
@@ -316,11 +362,11 @@ class TaskGraph(object):
     def __init__(self, tasks: Optional[Mapping[Task, Sequence[Task]]] = {}):
         self._task_graph = defaultdict(list)
         self.__parent_task_graph = defaultdict(list)
+        self._max_timestamp = float('-inf')
+
+        # Maintain the child and parent abstractions from the given taskset.
         for task, children in tasks.items():
-            self._task_graph[task].extend(children)
-            for child in children:
-                self._task_graph[child].extend([])
-                self.__parent_task_graph[child].append(task)
+            self.add_task(task, children)
 
     def add_task(self, task: Task, _children: Optional[Sequence[Task]] = []):
         """Adds the task to the graph along with the given children.
@@ -329,12 +375,15 @@ class TaskGraph(object):
             task (`Task`): The task to be added to the graph.
             children (`Sequence[Task]`): The children of the task, if any.
         """
-        self._task_graph[task].extend(_children)
-
-        # Add all the children tasks with an empty children list.
-        for child in _children:
-            self._task_graph[child].extend([])
-            self.__parent_task_graph[child].append(task)
+        if len(_children) == 0:
+            # If no children are provided, add just the task.
+            if task.timestamp > self._max_timestamp:
+                self._max_timestamp = task.timestamp
+            self._task_graph[task].extend([])
+        else:
+            # Add the children to the graph individually.
+            for child in _children:
+                self.add_child(task, child)
 
     def notify_task_completion(self, task: Task, finish_time: float) ->\
             Sequence[Task]:
@@ -349,9 +398,14 @@ class TaskGraph(object):
 
         Returns:
             The set of tasks released by the completion of this task.
+
+        Raises:
+            `ValueError` if an incomplete task is passed.
         """
-        # Invoke finish on the task to change the state of the task.
-        task.finish(finish_time)
+        # Ensure that the task is actually complete.
+        if not task.is_complete():
+            raise ValueError("Cannot notify TaskGraph of an incomplete "
+                             "task: {}".format(task))
 
         # Release any tasks that can be unlocked by the completion.
         released_tasks = []
@@ -369,26 +423,32 @@ class TaskGraph(object):
             task (`Task`): The task, to which the child needs to be added.
             child (`Task`): The child task to be added.
         """
+        # Maintain the maximum timestamp encountered in tasks.
+        if task.timestamp > self._max_timestamp:
+            self._max_timestamp = task.timestamp
+
+        if child.timestamp > self._max_timestamp:
+            self._max_timestamp = child.timestamp
+
+        # Maintian the child and parent connections for the task.
         self._task_graph[task].append(child)
         self._task_graph[child].extend([])
         self.__parent_task_graph[child].append(task)
 
-    def find(self, task_id: uuid.UUID) -> Optional[Task]:
-        """Finds the task with the given ID.
+    def find(self, task_name: str) -> Sequence[Task]:
+        """Find all the instances of a task with the given name.
 
-        Use this method to retrieve the instance of the task from the graph,
-        and query / change its parameters.
+        Use this method to retrieve the instances of a task from the graph,
+        and query / change their parameters.
 
         Args:
-            task_id (`uuid.UUID`): Find a task with the given ID.
+            task_name (`str`): Find a task with the given name.
 
         Returns:
-            A `Task` with the given UUID, and None if no such task is found.
+            A possibly empty `Sequence[Task]` with the given name.
         """
-        for task in self._task_graph:
-            if task.id == task_id:
-                return task
-        return None
+        return list(filter(lambda task: task.name == task_name,
+                           self._task_graph.keys()))
 
     def get_children(self, task: Task) -> Sequence[Task]:
         """Retrieves the children of the given task.
@@ -430,6 +490,34 @@ class TaskGraph(object):
                 released_tasks.append(task)
         return released_tasks
 
+    def release_tasks(self, time: Optional[float] = None) -> Sequence[Task]:
+        """Releases the set of tasks that have no dependencies and are thus
+        available to run.
+
+        Args:
+            time (`Optional[float]`): The simulation time at which to release
+                the task. If None, the time should have been specified at task
+                construction time.
+
+        Returns:
+            A list of tasks that can be run (are in RELEASED state).
+
+        Raises:
+            `ValueError` if no `time` for release is passed, and the tasks
+            were not instantiated with a `release_time`.
+        """
+        tasks_to_be_released = []
+        for task in self._task_graph:
+            if len(self.__parent_task_graph[task]) == 0 or\
+               all(map(lambda task: task.is_complete(),
+                       self.__parent_task_graph[task])):
+                tasks_to_be_released.append(task)
+
+        # Release the tasks.
+        for task in tasks_to_be_released:
+            task.release(time)
+        return tasks_to_be_released
+
     def clean(self):
         """Cleans the `TaskGraph` of tasks that have finished completion.
 
@@ -439,7 +527,7 @@ class TaskGraph(object):
         We only clean up the tasks whose children have finished execution.
         """
         tasks_to_clean = []
-        for task, children in self._task_graph:
+        for task, children in self._task_graph.items():
             # Has this task finished execution?
             if task.is_complete():
                 # Check if all children have finished execution too.
@@ -460,5 +548,129 @@ class TaskGraph(object):
                 self.__parent_task_graph[child].remove(task)
             del self._task_graph[task]
 
+    def __getitem__(self, slice_obj) ->\
+            Union['TaskGraph', Sequence['TaskGraph']]:
+        """Retrieve a slice of the TaskGraph as specified by the `slice_obj`.
+
+        The `slice_obj` should specify the timestamps for which the slice is
+        required. In case a slice object is passed, this method returns a
+        `Sequence[TaskGraph]` of sliced TaskGraphs with the corresponding
+        timestamps.
+        """
+        if isinstance(slice_obj, int):
+            # Get the slice for a single timestamp.
+            tasks = {}
+            for task, children in self._task_graph.items():
+                if task.timestamp == slice_obj:
+                    # Maintain the task dependencies with the same timestamps.
+                    same_timestamp_children = []
+                    for child in children:
+                        if child.timestamp == slice_obj:
+                            same_timestamp_children.append(child)
+
+                    # Add the task to the representation.
+                    tasks[task] = same_timestamp_children
+            return TaskGraph(tasks=tasks)
+        elif isinstance(slice_obj, slice):
+            return [self[index] for index in
+                    range(*slice_obj.indices(self._max_timestamp + 1))]
+        else:
+            raise ValueError("Unexpected value while slicing: {}".
+                             format(slice_obj))
+
+    def is_source_task(self, task: Task) -> bool:
+        """Check if the given `task` is a source Task or not.
+
+        Args:
+            task (`Task`): The task to check.
+
+        Returns:
+            `True` if the task is a source task i.e. only has a dependency on
+            the same task of the previous timestamp, and `False` otherwise.
+        """
+        parents = self.__parent_task_graph[task]
+        return (len(parents) == 0 or
+                (len(parents) == 1 and
+                 parents[0].name == task.name and
+                 parents[0].timestamp == task.timestamp - 1))
+
+    def get_source_tasks(self) -> Sequence[Task]:
+        """Retrieve the source tasks from this instance of a TaskGraph.
+
+        This method returns multiple instances of Tasks with different
+        timestamps.
+
+        Returns:
+            A `Sequence[Task]` of tasks that have no dependencies on any
+            tasks with the same timestamps.
+        """
+        return list(filter(self.is_source_task, self._task_graph.keys()))
+
+    def dilate(self, difference: float):
+        """Dilate the time between occurrence of events of successive
+        logical timestamps according to the given difference.
+
+        If the provided difference is greater than the time between the
+        occurrence of two events, the effect is a slowdown of the events.
+
+        If the provided difference is smaller than the time between the
+        occurrence of two events, the effect is a speedup of the events.
+
+        This method changes the `TaskGraph` in-place by modifying the release
+        time of the actual tasks.
+
+        Args:
+            difference (`float`): The time difference to keep between the
+                occurrence of two source Tasks of different timestamps.
+        """
+        for parent_graph, child_graph in zip(self[0:], self[1:]):
+            # Fix the offsets of the source tasks according to the release
+            # time of the parents.
+            child_source_tasks = child_graph.get_source_tasks()
+            offsets = []
+            for child_source_task in child_source_tasks:
+                parent_source_task = parent_graph.find(child_source_task.name)
+                assert len(parent_source_task) == 1,\
+                    "Expected a single parent for the task: {}".\
+                    format(child_source_task)
+                parent_source_task = parent_source_task[0]
+
+                # Calculate the offset and set the release time according to
+                # the parent task's release time and the provided difference.
+                offset = (child_source_task.release_time -
+                          (parent_source_task.release_time + difference))
+                offsets.append(offset)
+                child_source_task._release_time = (
+                        parent_source_task.release_time + difference)
+
+            # Calculate the average of the offsets of the source tasks and
+            # offset the remainder of the tasks by the average.
+            average_offset = sum(offsets) / len(offsets)
+            for task in child_graph._task_graph:
+                if not child_graph.is_source_task(task):
+                    task._release_time -= average_offset
+
+    def merge(self, task_graphs: Sequence['TaskGraph']) -> 'TaskGraph':
+        """Merge the given task_graphs after ordering them by timestamps.
+
+        Args:
+            task_graphs (`Sequence[TaskGraph]`): A sequence of task graphs to
+                be merged.
+
+        Returns:
+            The merged TaskGraph from the sequence ordered by timestamp.
+        """
+        raise NotImplementedError("Merging of Taskgraphs has not been "
+                                  "implemented yet.")
+
     def __len__(self):
         return len(self._task_graph)
+
+    def __str__(self):
+        constructed_string = ""
+        for task, children in self._task_graph.items():
+            constructed_string += "{}_{}: {}\n".format(
+                task.name, task.timestamp,
+                list(map(lambda t: "{}_{}".format(t.name, t.timestamp),
+                         children)))
+        return constructed_string
