@@ -70,7 +70,11 @@ class TaskLoader(object):
             len(job_dot_graph.get_nodes())))
         if len(self._jobs) != len(job_dot_graph.get_nodes()):
             raise ValueError("Mismatch between the Jobs from the DOT graph "
-                             "and the JSON profile.")
+                             "and the JSON profile. JSON profile had {} jobs "
+                             "and DOT graph had {} jobs.".format(
+                                 len(self._jobs),
+                                 len(job_dot_graph.get_nodes()),
+                             ))
         for node in job_dot_graph.get_nodes():
             node_label = node.get_label()
             if node_label not in self._jobs:

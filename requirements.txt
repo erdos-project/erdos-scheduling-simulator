@@ -1,5 +1,6 @@
 absl-py
 pyboolector
 z3
+pyparsing<=3.0.1  # Fix parsing error in pydot.
 pydot
 numpy
