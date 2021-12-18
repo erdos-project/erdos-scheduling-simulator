@@ -192,6 +192,7 @@ class Simulator(object):
         self._last_task_placement = []
         self._released_tasks = []
         self._finished_tasks = 0
+        self._missed_deadlines = 0
         self._scheduler_delay = _flags.scheduler_delay if _flags else 1
         self._runtime_variance = _flags.runtime_variance if _flags else 0.0
 
@@ -293,10 +294,12 @@ class Simulator(object):
                 event.time))
         elif event.event_type == EventType.SIMULATOR_END:
             # End of the simulator loop.
-            self._csv_logger.debug("{sim_time},SIMULATOR_END,"
-                                   "{finished_tasks},0".format(
-                                       sim_time=self._simulator_time,
-                                       finished_tasks=self._finished_tasks))
+            self._csv_logger.debug(
+                "{sim_time},SIMULATOR_END,"
+                "{finished_tasks},{missed_deadlines}".format(
+                    sim_time=self._simulator_time,
+                    finished_tasks=self._finished_tasks,
+                    missed_deadlines=self._missed_deadlines))
             self._logger.info("Ending the simulator loop at time {}".format(
                 event.time))
             return True
@@ -326,12 +329,25 @@ class Simulator(object):
             self._finished_tasks += 1
             self._csv_logger.debug(
                 "{sim_time},TASK_FINISHED,{task_name},{timestamp},"
-                "{completion_time},{task_id}".format(
+                "{completion_time},{deadline_time},{task_id}".format(
                     sim_time=event.time,
                     task_name=event.task.name,
                     timestamp=event.task.timestamp,
                     completion_time=event.task.completion_time,
+                    deadline_time=event.task.deadline,
                     task_id=event.task.id))
+
+            # Log if the task missed its deadline or not.
+            if event.time > event.task.deadline:
+                self._missed_deadlines += 1
+                self._csv_logger.debug(
+                    "{sim_time},MISSED_DEADLINE,{task_name},{timestamp},"
+                    "{deadline_time},{task_id}".format(
+                        sim_time=event.time,
+                        task_name=event.task.name,
+                        timestamp=event.task.timestamp,
+                        deadline_time=event.task.deadline,
+                        task_id=event.task.id))
 
             # The given task has finished execution, unlock dependencies.
             new_tasks = task_graph.notify_task_completion(
