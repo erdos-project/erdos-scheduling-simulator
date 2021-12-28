@@ -289,7 +289,7 @@ class Task(object):
                         self.name, self.id, self.job, self.timestamp,
                         self.state, self.completion_time))
 
-    def repr(self):
+    def __repr__(self):
         return str(self)
 
     def __hash__(self):

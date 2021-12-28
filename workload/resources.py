@@ -325,7 +325,7 @@ class Resources(object):
         memo[id(self)] = instance
         return instance
 
-    def repr(self):
+    def __repr__(self):
         return str(self)
 
     def __gt__(self, other: 'Resources') -> bool:
