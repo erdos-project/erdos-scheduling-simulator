@@ -114,8 +114,10 @@ class Resources(object):
             self._logger = utils.setup_logging(name=self.__class__.__name__)
 
         self._resource_vector = defaultdict(int)
+        self.__total_resources = defaultdict(int)
         for resource, quantity in resource_vector.items():
             self._resource_vector[copy(resource)] = quantity
+            self.__total_resources[copy(resource)] = quantity
         if not all(map(lambda x: type(x) == Resource, self._resource_vector)):
             raise ValueError("The keys for the resource vector "
                              "should be of type 'Resource'")
@@ -133,6 +135,7 @@ class Resources(object):
             raise ValueError("Invalid type for resource: {}".format(
                 type(resource)))
         self._resource_vector[resource] += quantity
+        self.__total_resources[resource] += quantity
         self._logger.debug("Added {} [quantity={}] to {}".format(
             resource, quantity, self))
 
@@ -241,6 +244,23 @@ class Resources(object):
                 quantity, resource, self, task))
             self.allocate(resource, task, quantity)
 
+    def get_allocated_quantity(self, resource: Resource) -> int:
+        """Get the quantity of the given `resource` that has been allocated.
+
+        Args:
+            resource (`Resource`): The resource whose allocated quantity needs
+                to be computed.
+
+        Returns:
+            An `int` quantity of the `resource` that has been allocated.
+        """
+        total_quantity = 0
+        for _resource, _quantity in self.__total_resources.items():
+            if _resource == resource:
+                total_quantity += _quantity
+        available_quantity = self.get_available_quantity(resource)
+        return total_quantity - available_quantity
+
     def deallocate(
             self,
             task: 'Task'  # noqa: F821
@@ -328,3 +348,37 @@ class Resources(object):
             else:
                 return False
         return True
+
+    def __add__(self, other: 'Resources') -> 'Resources':
+        """Adds the availability and the allocations of the Resources in self
+        to the resources in other and returns a new instances of Resources.
+
+        Args:
+            other (`Resources`): The resources set to be added to self.
+
+        Returns:
+            The sum of the availability and allocation of the two Resources.
+        """
+        # Add the resource vector from the two resources.
+        resource_vector = defaultdict(int)
+
+        for resource, quantity in self._resource_vector.items():
+            resource_vector[resource] += quantity
+
+        for resource, quantity in other._resource_vector.items():
+            resource_vector[resource] += quantity
+
+        # Add the allocation vector from the two resources.
+        current_allocations = defaultdict(list)
+
+        for task, allocations in self._current_allocations.items():
+            current_allocations[task].extend(allocations)
+
+        for task, allocations in other._current_allocations.items():
+            current_allocations[task].extend(allocations)
+
+        # Construct a new Resources instance.
+        resources = Resources()
+        resources._resource_vector = resource_vector
+        resources._current_allocations = current_allocations
+        return resources

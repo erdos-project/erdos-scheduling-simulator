@@ -357,3 +357,31 @@ def test_resources_deepcopy():
         "Incorrect quantity of the CPU resource."
     assert resources_copy.get_available_quantity(gpu_resource_1) == 10,\
         "Incorrect quantity of the GPU resource."
+
+
+def test_resources_get_allocated_quantity():
+    """ Test that get_allocated_quantity() method of Resources works. """
+    cpu_resource_1 = Resource(name="CPU")
+    cpu_resource_2 = Resource(name="CPU")
+    gpu_resource_1 = Resource(name="GPU")
+    resources = Resources({
+        cpu_resource_1: 5,
+        cpu_resource_2: 5,
+        gpu_resource_1: 10
+    })
+
+    cpu_resource_any = Resource(name="CPU", _id="any")
+    gpu_resource_any = Resource(name="GPU", _id="any")
+
+    task = __create_default_task()
+    resources.allocate(cpu_resource_any, task, 8)
+
+    assert resources.get_available_quantity(cpu_resource_any) == 2,\
+        "Incorrect quantity of available CPU resources."
+    assert resources.get_available_quantity(gpu_resource_any) == 10,\
+        "Incorrect quantity of available GPU resources."
+
+    assert resources.get_allocated_quantity(cpu_resource_any) == 8,\
+        "Incorrect quantity of allocated CPU resources."
+    assert resources.get_allocated_quantity(gpu_resource_any) == 0,\
+        "Incorrect quantity of allocated GPU resources."
