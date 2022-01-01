@@ -385,3 +385,52 @@ def test_resources_get_allocated_quantity():
         "Incorrect quantity of allocated CPU resources."
     assert resources.get_allocated_quantity(gpu_resource_any) == 0,\
         "Incorrect quantity of allocated GPU resources."
+
+
+def test_resources_addition():
+    """ Test that the addition of two Resources works correctly. """
+    # Construct the first set of Resources, and allocate some to a task.
+    cpu_resource_1 = Resource(name="CPU")
+    gpu_resource_1 = Resource(name="GPU")
+    resources_1 = Resources({
+        cpu_resource_1: 10,
+        gpu_resource_1: 10
+    })
+    task_1 = __create_default_task()
+    resources_1.allocate(cpu_resource_1, task_1, 5)
+
+    # Construct the second set of Resources, and allocate some to a task.
+    cpu_resource_2 = Resource(name="CPU")
+    gpu_resource_2 = Resource(name="GPU")
+    resources_2 = Resources({
+        cpu_resource_2: 10,
+        gpu_resource_2: 10
+    })
+    task_2 = __create_default_task()
+    resources_2.allocate(gpu_resource_2, task_2, 5)
+
+    assert resources_1.get_available_quantity(cpu_resource_1) == 5,\
+        "Incorrect quantity of available CPU resources."
+    assert resources_2.get_available_quantity(cpu_resource_2) == 10,\
+        "Incorrect quantity of available CPU resources."
+
+    assert resources_1.get_available_quantity(gpu_resource_1) == 10,\
+        "Incorrect quantity of available GPU resources."
+    assert resources_2.get_available_quantity(gpu_resource_2) == 5,\
+        "Incorrect quantity of available GPU resources."
+
+    # Add the two resources.
+    final_resources = resources_1 + resources_2
+    assert final_resources.get_available_quantity(cpu_resource_1) == 5,\
+        "Incorrect quantity of available CPU resources."
+    assert final_resources.get_available_quantity(cpu_resource_2) == 10,\
+        "Incorrect quantity of available CPU resources."
+    assert final_resources.get_available_quantity(gpu_resource_1) == 10,\
+        "Incorrect quantity of available GPU resources."
+    assert final_resources.get_available_quantity(gpu_resource_2) == 5,\
+        "Incorrect quantity of available GPU resources."
+
+    assert final_resources.get_allocated_quantity(cpu_resource_1) == 5,\
+        "Incorrect quantity of allocated CPU resources."
+    assert final_resources.get_allocated_quantity(gpu_resource_2) == 5,\
+        "Incorrect quantity of allocated GPU resources."

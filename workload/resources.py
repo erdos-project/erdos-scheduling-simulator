@@ -368,6 +368,15 @@ class Resources(object):
         for resource, quantity in other._resource_vector.items():
             resource_vector[resource] += quantity
 
+        # Add the total resources vector from the two resources.
+        total_resources_vector = defaultdict(int)
+
+        for resource, quantity in self.__total_resources.items():
+            total_resources_vector[resource] += quantity
+
+        for resource, quantity in other.__total_resources.items():
+            total_resources_vector[resource] += quantity
+
         # Add the allocation vector from the two resources.
         current_allocations = defaultdict(list)
 
@@ -380,5 +389,6 @@ class Resources(object):
         # Construct a new Resources instance.
         resources = Resources()
         resources._resource_vector = resource_vector
+        resources.__total_resources = total_resources_vector
         resources._current_allocations = current_allocations
         return resources
