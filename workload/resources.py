@@ -139,26 +139,6 @@ class Resources(object):
         self._logger.debug("Added {} [quantity={}] to {}".format(
             resource, quantity, self))
 
-    def get_available_quantity(self, resource: Resource) -> int:
-        """Provides the quantity of the available resources of the given type.
-
-        If the resource has a specific `id`, then the quantity of that resource
-        is returned. Otherwise, a sum of all the quantities of resources with
-        the `name` are returned.
-
-        Args:
-            resource (`Resource`): The resource to retrieve the available
-                quantity of.
-
-        Returns:
-            The available quantity of the given resource.
-        """
-        resource_quantity = 0
-        for _resource, _quantity in self._resource_vector.items():
-            if _resource == resource:
-                resource_quantity += _quantity
-        return resource_quantity
-
     def allocate(
             self,
             resource: Resource,
@@ -243,6 +223,26 @@ class Resources(object):
             self._logger.debug("Allocating {} of {} from {} to {}".format(
                 quantity, resource, self, task))
             self.allocate(resource, task, quantity)
+
+    def get_available_quantity(self, resource: Resource) -> int:
+        """Provides the quantity of the available resources of the given type.
+
+        If the resource has a specific `id`, then the quantity of that resource
+        is returned. Otherwise, a sum of all the quantities of resources with
+        the `name` are returned.
+
+        Args:
+            resource (`Resource`): The resource to retrieve the available
+                quantity of.
+
+        Returns:
+            The available quantity of the given resource.
+        """
+        resource_quantity = 0
+        for _resource, _quantity in self._resource_vector.items():
+            if _resource == resource:
+                resource_quantity += _quantity
+        return resource_quantity
 
     def get_allocated_quantity(self, resource: Resource) -> int:
         """Get the quantity of the given `resource` that has been allocated.
@@ -387,7 +387,7 @@ class Resources(object):
             current_allocations[task].extend(allocations)
 
         # Construct a new Resources instance.
-        resources = Resources()
+        resources = Resources(_logger=self._logger)
         resources._resource_vector = resource_vector
         resources.__total_resources = total_resources_vector
         resources._current_allocations = current_allocations

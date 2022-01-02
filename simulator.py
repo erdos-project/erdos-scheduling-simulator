@@ -7,7 +7,7 @@ import absl
 
 import utils
 from workers import WorkerPool
-from workload import JobGraph, TaskGraph, Task
+from workload import JobGraph, TaskGraph, Task, Resource, Resources
 from schedulers import BaseScheduler
 
 
@@ -168,18 +168,19 @@ class Simulator(object):
             self._csv_logger = utils.setup_csv_logging(
                 name=self.__class__.__name__, log_file=None)
 
-        self._logger.info("The Worker Pools are: ")
-        for worker_pool in worker_pools:
-            self._logger.info("{}".format(worker_pool))
-            self._csv_logger.info("0,WORKER_POOL,{name},{pool_id}".format(
-                name=worker_pool.name, pool_id=worker_pool.id))
-            for worker in worker_pool.workers:
-                self._logger.info("\t{}".format(worker))
-
         self._worker_pools = {
             worker_pool.id: worker_pool
             for worker_pool in worker_pools
         }
+        self._logger.info("The Worker Pools are: ")
+        for worker_pool in worker_pools:
+            self._logger.info("{}".format(worker_pool))
+            self._csv_logger.debug("0,WORKER_POOL,{name},{pool_id}".format(
+                name=worker_pool.name, pool_id=worker_pool.id))
+            self.__log_utilization(0)
+            for worker in worker_pool.workers:
+                self._logger.info("\t{}".format(worker))
+
         self._scheduler = scheduler
         self._job_graph = job_graph
         self._simulator_time = 0
@@ -286,10 +287,10 @@ class Simulator(object):
 
         if event.event_type == EventType.SIMULATOR_START:
             # Start of the simulator loop.
-            self._csv_logger.debug("{sim_time},SIMULATOR_START,"
-                                   "{total_tasks},0".format(
-                                       sim_time=self._simulator_time,
-                                       total_tasks=len(task_graph)))
+            self._csv_logger.debug(
+                "{sim_time},SIMULATOR_START,{total_tasks}".format(
+                    sim_time=self._simulator_time,
+                    total_tasks=len(task_graph)))
             self._logger.info("Starting the simulator loop at time {}".format(
                 event.time))
         elif event.event_type == EventType.SIMULATOR_END:
@@ -310,11 +311,13 @@ class Simulator(object):
                               "tasks.".format(self._simulator_time, event))
             self._csv_logger.debug(
                 "{sim_time},TASK_RELEASE,{task_name},{timestamp},"
-                "{release_time},{task_id}".format(
+                "{release_time},{runtime},{deadline:.2f},{task_id}".format(
                     sim_time=event.time,
                     task_name=event.task.name,
                     timestamp=event.task.timestamp,
                     release_time=event.task.release_time,
+                    runtime=event.task.runtime,
+                    deadline=event.task.deadline,
                     task_id=event.task.id))
 
             # If we are not in the midst of a scheduler invocation, and the
@@ -329,12 +332,12 @@ class Simulator(object):
             self._finished_tasks += 1
             self._csv_logger.debug(
                 "{sim_time},TASK_FINISHED,{task_name},{timestamp},"
-                "{completion_time},{deadline_time},{task_id}".format(
+                "{completion_time},{deadline:.2f},{task_id}".format(
                     sim_time=event.time,
                     task_name=event.task.name,
                     timestamp=event.task.timestamp,
                     completion_time=event.task.completion_time,
-                    deadline_time=event.task.deadline,
+                    deadline=event.task.deadline,
                     task_id=event.task.id))
 
             # Log if the task missed its deadline or not.
@@ -453,6 +456,10 @@ class Simulator(object):
                     worker_pool.place_task(task)
                     self._logger.info("[{}] Placed {} on {}".format(
                         self._simulator_time, task, worker_pool))
+
+            # Now that all the tasks are placed, log the worker resource
+            # utilization.
+            self.__log_utilization(event.time)
 
             # Reset the available tasks and the last task placement.
             self._released_tasks.extend(unplaced_tasks)
@@ -623,3 +630,31 @@ class Simulator(object):
 
         return Event(event_type=EventType.SCHEDULER_FINISHED,
                      time=placement_time)
+
+    def __log_utilization(self, sim_time: float):
+        """Logs the utilization of the resources of a particular WorkerPool.
+
+        Args:
+            sim_time (`float`): The simulation time at which the utilization
+                is logged.
+        """
+        # Cumulate the resources from all the WorkerPools
+        total_resources = Resources(_logger=self._logger)
+        for worker_pool in self._worker_pools.values():
+            total_resources += worker_pool.resources
+
+        # Log the utilization of the final set of resources.
+        for resource_name in set(
+                map(attrgetter('name'),
+                    total_resources._resource_vector.keys())):
+            resource = Resource(name=resource_name, _id="any")
+            self._csv_logger.debug(
+                "{sim_time},WORKER_POOL_UTILIZATION,"
+                "{resource_name},{allocated_quantity},"
+                "{available_quantity}".format(
+                    sim_time=sim_time,
+                    resource_name=resource_name,
+                    allocated_quantity=total_resources.get_allocated_quantity(
+                        resource),
+                    available_quantity=total_resources.get_available_quantity(
+                        resource)))

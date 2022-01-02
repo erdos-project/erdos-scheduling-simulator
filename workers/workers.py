@@ -1,10 +1,11 @@
 import uuid
 import logging
+from operator import attrgetter
 from copy import copy, deepcopy
 from typing import Optional, Sequence, Type
 
 import utils
-from workload import Resources, Task, TaskState
+from workload import Resource, Resources, Task, TaskState
 
 
 class Worker(object):
@@ -335,6 +336,38 @@ class WorkerPool(object):
             worker.can_accomodate_task(task)
             for worker in self._workers.values())
 
+    def log_utilization(self, csv_logger: logging.Logger, sim_time: float):
+        """Logs the utilization of the resources of a particular WorkerPool.
+
+        Args:
+            csv_logger (`logging.Logger`): The logger to utilize to log the
+                resource utilization.
+            sim_time (`float`): The simulation time at which the utilization
+                is logged.
+        """
+        # Add the resources of all the workers in this pool.
+        final_resources = Resources(_logger=logging.getLogger('dummy'))
+        for worker in self._workers.values():
+            final_resources += worker.resources
+
+        # Log the utilization from the final set of resources.
+        for resource_name in set(
+                map(attrgetter('name'),
+                    final_resources._resource_vector.keys())):
+            resource = Resource(name=resource_name, _id="any")
+            csv_logger.debug(
+                "{sim_time},WORKER_POOL_UTILIZATION,{pool_name},"
+                "{pool_id},{resource_name},"
+                "{allocated_quantity},{available_quantity}".format(
+                    sim_time=sim_time,
+                    pool_name=self.name,
+                    pool_id=self.id,
+                    resource_name=resource_name,
+                    allocated_quantity=final_resources.get_allocated_quantity(
+                        resource),
+                    available_quantity=final_resources.get_available_quantity(
+                        resource)))
+
     @property
     def name(self):
         return self._name
@@ -346,6 +379,14 @@ class WorkerPool(object):
     @property
     def workers(self):
         return list(self._workers.values())
+
+    @property
+    def resources(self):
+        # Add the resources of all the workers in this pool.
+        final_resources = Resources(_logger=self._logger)
+        for worker in self._workers.values():
+            final_resources += worker.resources
+        return final_resources
 
     def __str__(self):
         return "WorkerPool(name={}, id={})".format(self.name, self.id)
