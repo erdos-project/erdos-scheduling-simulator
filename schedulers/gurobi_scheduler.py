@@ -5,33 +5,44 @@ import gurobipy as gp
 from gurobipy import GRB
 from schedulers.ilp_scheduler import ILPScheduler
 import functools  # for reduce
+import time
 
 
 class GurobiScheduler(ILPScheduler):
-    def schedule(self,
-                 needs_gpu: List[bool],
-                 release_times: List[int],
-                 absolute_deadlines: List[int],
-                 expected_runtimes: List[int],
-                 dependency_matrix,
-                 pinned_tasks: List[int],
-                 num_tasks: int,
-                 num_gpus: int,
-                 num_cpus: int,
-                 bits=None,
-                 optimize=False,
-                 dump=False,
-                 outpath=None):
-        M = 10000000
+    def schedule(
+        self,
+        needs_gpu: List[bool],
+        release_times: List[int],
+        absolute_deadlines: List[int],
+        expected_runtimes: List[int],
+        dependency_matrix,
+        pinned_tasks: List[int],
+        num_tasks: int,
+        num_gpus: int,
+        num_cpus: int,
+        bits=None,
+        optimize=False,
+        dump=False,
+        dump_nx=False,
+        outpath=None,
+    ):
+        M = max(absolute_deadlines)
 
         def MySum(lst):
             return functools.reduce(lambda a, b: a + b, lst, 0)
 
+        start_time = time.time()
         # import pdb; pdb.set_trace()
         if optimize:
             print("We are Optimizing")
             s = gp.Model('RAP')
+            import IPython
+            IPython.embed
+            s.setParam("OptimalityTol", 1e-3)
         else:
+            print("Missing opt flag")
+            import IPython
+            IPython.embed()
             raise NotImplementedError
         # x = m.addVar(vtype=GRB.BINARY, name="x")
         times = [
@@ -77,10 +88,10 @@ class GurobiScheduler(ILPScheduler):
                     s.addConstr(
                         disjoint[0]
                     )  # dependent jobs need to finish before the next one
-                if row_i != col_j:
+                if row_i < col_j:
                     alpha = s.addVar(vtype=GRB.BINARY,
                                      name=f'alpha{row_i}_{col_j}')
-                    beta = s.addVar(vtype=GRB.INTEGER,
+                    beta = s.addVar(vtype=GRB.BINARY,
                                     name=f'beta{row_i}_{col_j}')
                     decision_vars.append((alpha, beta))
                     s.addConstr(
@@ -89,20 +100,22 @@ class GurobiScheduler(ILPScheduler):
                     s.addConstr(
                         alpha * M + (1 - beta) * M - 1 >=
                         placements[row_i] - placements[col_j])  # pj > pi
-                    s.addConstr(
-                        times[col_j] - times[row_i] <=
-                        1 + expected_runtimes[row_i] +
-                        (1 - alpha) * M + beta * M)  # tj - ti <= 1 + ei
-                    s.addConstr(times[row_i] - times[col_j] <= 1 +
-                                expected_runtimes[col_j] + (1 - alpha) * M +
-                                (1 - beta) * M)  # ti - tj <= 1 + ej
+                    s.addConstr(times[col_j] - times[row_i] >=
+                                expected_runtimes[row_i] -
+                                (1 - alpha) * M - beta * M)  # tj - ti >= ei
+                    s.addConstr(times[row_i] - times[col_j] >=
+                                expected_runtimes[col_j] - (1 - alpha) * M -
+                                (1 - beta) * M)  # ti - tj <= ej
 
         for i, pin in enumerate(pinned_tasks):
             if pin:
                 s.add(placements[i] == int(pin))
 
         if optimize:
-            result = s.setObjective(MySum(costs), GRB.MAXIMIZE)
+            s.setObjective(MySum(costs), GRB.MAXIMIZE)
+        s.optimize()
+        end_time = time.time()
+        runtime = end_time - start_time
         if dump:
             assert outpath is not None
             # import IPython; IPython.embed()
@@ -111,12 +124,18 @@ class GurobiScheduler(ILPScheduler):
                 if not optimize:
                     outfile.write("(check-sat)")
 
-        schedulable = s.optimize()
-        return None
-        if optimize:
-            print(s.lower(result))
-        print(schedulable)
-        # if schedulable != unsat:
-        #     return [s.model()[p]
-        #             for p in placements], [s.model()[t] for t in times]
-        return None
+        if s.status == GRB.OPTIMAL:
+            print(f"Found optimal value: {s.objVal}")
+            # find model
+            assignment = [t.X for t in times], [p.X for p in placements]
+            # import IPython; IPython.embed()
+            return assignment, s.objVal, runtime
+        elif s.status == GRB.INFEASIBLE:
+            print("No solution to solver run")
+            return None, None, None
+        else:
+
+            print(f"Opt solver end with status: {s.status}")
+            # import IPython
+            # IPython.embed()
+            return None, None, None

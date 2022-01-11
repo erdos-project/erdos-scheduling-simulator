@@ -2,7 +2,6 @@ from typing import List
 
 import pyboolector
 from pyboolector import Boolector
-
 from schedulers.ilp_scheduler import ILPScheduler
 
 
@@ -80,5 +79,5 @@ class BoolectorScheduler(ILPScheduler):
             print(ass_p, ass_t)
             l_out = list(zip(ass_p, ass_t))
             l_out.sort()
-            return l_out
-        return None
+            return l_out, None
+        return None, None
