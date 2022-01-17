@@ -15,6 +15,7 @@ class Job(object):
     Args:
         name: The name of the ERDOS operator that corresponds to this job.
     """
+
     def __init__(self, name: str):
         self._name = name
         self._id = uuid.uuid4()
@@ -47,6 +48,7 @@ class JobGraph(object):
     A `JobGraph` is a static entity that defines the relationship between the
     different `Job`s of the application.
     """
+
     def __init__(self, jobs: Optional[Mapping[Job, Sequence[Job]]] = {}):
         self._job_graph = defaultdict(list)
         self.__parent_job_graph = defaultdict(list)

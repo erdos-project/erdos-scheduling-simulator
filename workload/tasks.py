@@ -51,6 +51,7 @@ class Task(object):
         _logger(`Optional[logging.Logger]`): The logger to use to log the
             results of the execution.
     """
+
     def __init__(self,
                  name: str,
                  job: Job,
@@ -365,6 +366,7 @@ class TaskGraph(object):
     A `TaskGraph` is a runtime entity that constantly evolves as more tasks
     are released by the `JobGraph` and added to the given `TaskGraph`.
     """
+
     def __init__(self, tasks: Optional[Mapping[Task, Sequence[Task]]] = {}):
         self._task_graph = defaultdict(list)
         self.__parent_task_graph = defaultdict(list)

@@ -35,6 +35,7 @@ class Event(object):
         `ValueError` if the event is of type `TASK_RELEASE` or `TASK_FINISHED`
         and no associated task is provided.
     """
+
     def __init__(self,
                  event_type: EventType,
                  time: float,
@@ -79,6 +80,7 @@ class EventQueue(object):
     to add the events into, and retrieve events from according to their
     release time.
     """
+
     def __init__(self):
         self._event_queue = []
 
@@ -144,6 +146,7 @@ class Simulator(object):
             the scheduler just after the previous one has completed.
         _flags (`absl.flags`): The flags used to initialize the app, if any.
     """
+
     def __init__(
         self,
         worker_pools: Sequence[WorkerPool],

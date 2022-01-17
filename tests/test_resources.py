@@ -392,20 +392,14 @@ def test_resources_addition():
     # Construct the first set of Resources, and allocate some to a task.
     cpu_resource_1 = Resource(name="CPU")
     gpu_resource_1 = Resource(name="GPU")
-    resources_1 = Resources({
-        cpu_resource_1: 10,
-        gpu_resource_1: 10
-    })
+    resources_1 = Resources({cpu_resource_1: 10, gpu_resource_1: 10})
     task_1 = __create_default_task()
     resources_1.allocate(cpu_resource_1, task_1, 5)
 
     # Construct the second set of Resources, and allocate some to a task.
     cpu_resource_2 = Resource(name="CPU")
     gpu_resource_2 = Resource(name="GPU")
-    resources_2 = Resources({
-        cpu_resource_2: 10,
-        gpu_resource_2: 10
-    })
+    resources_2 = Resources({cpu_resource_2: 10, gpu_resource_2: 10})
     task_2 = __create_default_task()
     resources_2.allocate(gpu_resource_2, task_2, 5)
 

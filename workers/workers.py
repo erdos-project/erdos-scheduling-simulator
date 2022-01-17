@@ -21,6 +21,7 @@ class Worker(object):
         _logger(`Optional[logging.Logger]`): The logger to use to log the
             results of the execution.
     """
+
     def __init__(self,
                  name: str,
                  resources: Resources,
@@ -205,6 +206,7 @@ class WorkerPool(object):
         _logger (`Optional[absl.flags]`): The flags with which the app was
             initiated, if any.
     """
+
     def __init__(
             self,
             name: str,

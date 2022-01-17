@@ -24,6 +24,7 @@ class TaskLoader(object):
             JSON file.
         _flags (`absl.flags`): The flags used to initialize the app, if any.
     """
+
     def __init__(self,
                  graph_path: str,
                  profile_path: str,

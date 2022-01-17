@@ -19,6 +19,7 @@ class WorkerLoader(object):
             scheduling the tasks across the Workers of a WorkerPool.
         _flags (`absl.flags`): The flags used to initialize the app, if any.
     """
+
     def __init__(self,
                  worker_profile_path: str,
                  scheduler: Optional[Type[BaseScheduler]] = None,

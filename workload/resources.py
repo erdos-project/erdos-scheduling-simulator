@@ -17,6 +17,7 @@ class Resource(object):
         name (`str`): The name of the resource.
         id (`uuid`): The ID of the resource.
     """
+
     def __init__(self, name: str, _id: Optional[str] = None):
         """Initialize a Resource.
 
@@ -106,6 +107,7 @@ class Resources(object):
         __virtual (`Optional[bool]`): Set to True if the Resources are
             virtual and used to test the effects of a potential allocation.
     """
+
     def __init__(self,
                  resource_vector: Optional[Mapping[Resource, int]] = {},
                  _logger: Optional[logging.Logger] = None,
