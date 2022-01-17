@@ -265,9 +265,15 @@ class Task(object):
 
     def __str__(self):
         if self.state == TaskState.VIRTUAL:
-            return (
-                "Task(name={}, id={}, job={}, timestamp={}, state={})".format(
-                    self.name, self.id, self.job, self.timestamp, self.state))
+            if self.release_time == -1:
+                return ("Task(name={}, id={}, job={}, timestamp={}, state={})".
+                        format(self.name, self.id, self.job, self.timestamp,
+                               self.state))
+            else:
+                return ("Task(name={}, id={}, job={}, timestamp={}, state={}, "
+                        "release_time={})".format(self.name, self.id, self.job,
+                                                  self.timestamp, self.state,
+                                                  self.release_time))
         elif self.state == TaskState.RELEASED:
             return ("Task(name={}, id={}, job={}, timestamp={}, "
                     "state={}, release_time={})".format(
@@ -413,7 +419,10 @@ class TaskGraph(object):
             if all(
                     map(lambda task: task.is_complete(),
                         self.get_parents(child))):
-                child.release(finish_time)
+                if child.release_time == -1:
+                    child.release(finish_time)
+                else:
+                    child.release()
                 released_tasks.append(child)
         return released_tasks
 
