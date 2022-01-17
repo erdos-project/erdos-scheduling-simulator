@@ -9,6 +9,7 @@ import networkx as nx
 
 
 class Z3Scheduler(ILPScheduler):
+
     def schedule(self,
                  needs_gpu: List[bool],
                  release_times: List[int],
@@ -25,6 +26,7 @@ class Z3Scheduler(ILPScheduler):
                  outpath=None,
                  dump_nx=False,
                  nx_outpath=None):
+
         def MySum(lst):
             return functools.reduce(lambda a, b: a + b, lst, 0)
 
