@@ -64,20 +64,27 @@ def setup_csv_logging(name: str, log_file: str) -> logging.Logger:
                          log_level="debug")
 
 
-def fuzz_time(time: float, variance: float) -> float:
+def fuzz_time(time: float,
+              variance: float,
+              positive: Optional[bool] = True) -> float:
     """Fuzz the given `time` according to the provided `variance`.
 
     Args:
         time (`float`): The time to fuzz.
         variance (`float`): The % variance to fuzz `time` by.
+        positive (`Optional[bool]`): If True, the fuzzing only increases the
+            time.
 
     Returns:
         The fuzzed time according to the given variance.
     """
-    return max(
-        0,
-        random.uniform(time - (time * abs(variance) / 100.0),
-                       time + (time * abs(variance) / 100.0)))
+    if positive:
+        return random.uniform(time, time + (time * abs(variance) / 100.0))
+    else:
+        return max(
+            0,
+            random.uniform(time - (time * abs(variance) / 100.0),
+                           time + (time * abs(variance) / 100.0)))
 
 
 def log_statistics(data: Sequence[float],
