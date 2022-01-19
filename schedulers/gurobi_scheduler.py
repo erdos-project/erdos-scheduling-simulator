@@ -9,6 +9,7 @@ import time
 
 
 class GurobiScheduler(ILPScheduler):
+
     def schedule(
         self,
         needs_gpu: List[bool],
