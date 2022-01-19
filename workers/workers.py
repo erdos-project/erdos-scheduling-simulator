@@ -48,7 +48,7 @@ class Worker(object):
         """
         self._resources.allocate_multiple(task.resource_requirements, task)
         self._placed_tasks[task] = task.state
-        self._logger.debug("Placed {} on {}".format(task, self))
+        self._logger.debug(f"Placed {task} on {self}")
 
     def preempt_task(self, task: Task):
         """Preempts the given `Task` and frees the resources.
@@ -109,12 +109,10 @@ class Worker(object):
         for task in self._placed_tasks:
             if task.state != TaskState.RUNNING:
                 continue
-            self._logger.debug("Stepping through the execution of {} for {} "
-                               "steps from time {}.".format(
-                                   task, step_size, current_time))
+            self._logger.debug(f"Stepping through the execution of {task} for "
+                               f"{step_size} steps from time {current_time}.")
             if task.step(current_time, step_size):
-                self._logger.debug("{} finished execution on {}.".format(
-                    task, self))
+                self._logger.debug(f"{task} finished execution on {self}.")
                 completed_tasks.append(task)
 
         # Delete the completed tasks from the set of placed tasks.
@@ -176,8 +174,8 @@ class Worker(object):
         return self._resources
 
     def __str__(self):
-        return "Worker(name={}, id={}, resources={})".\
-               format(self.name, self.id, self.resources)
+        return (f"Worker(name={self.name}, id={self.id}, "
+                f"resources={self.resources})")
 
     def __repr__(self):
         return str(self)
@@ -233,10 +231,11 @@ class WorkerPool(object):
         """
         for worker in workers:
             if worker.id in self._workers:
-                self._logger.info("Skipping addition of {} since it already "
-                                  "exists in {}".format(worker, self))
+                self._logger.info(
+                    f"Skipping addition of {worker} since it already "
+                    f"exists in {self}")
             else:
-                self._logger.debug("Adding {} to {}".format(worker, self))
+                self._logger.debug(f"Adding {worker} to {self}")
                 self._workers[worker.id] = worker
 
     def place_task(self, task: Task):
@@ -271,7 +270,7 @@ class WorkerPool(object):
                     break
 
         if placement is None:
-            raise ValueError("The task ({}) could not be placed.".format(task))
+            raise ValueError(f"The task ({task}) could not be placed.")
         else:
             self._workers[placement].place_task(task)
             self._placed_tasks[task] = placement
@@ -314,9 +313,9 @@ class WorkerPool(object):
         completed_tasks = []
         # Invoke the step() method on all the workers.
         for _, worker in self._workers.items():
-            self._logger.debug("Stepping through the execution of {} for {} "
-                               "steps from time {}".format(
-                                   worker, step_size, current_time))
+            self._logger.debug(
+                f"Stepping through the execution of {worker} for {step_size} "
+                f"steps from time {current_time}")
             completed_tasks.extend(worker.step(current_time, step_size))
 
         # Delete the completed tasks from the set of placed tasks.
@@ -358,17 +357,10 @@ class WorkerPool(object):
                     final_resources._resource_vector.keys())):
             resource = Resource(name=resource_name, _id="any")
             csv_logger.debug(
-                "{sim_time},WORKER_POOL_UTILIZATION,{pool_name},"
-                "{pool_id},{resource_name},"
-                "{allocated_quantity},{available_quantity}".format(
-                    sim_time=sim_time,
-                    pool_name=self.name,
-                    pool_id=self.id,
-                    resource_name=resource_name,
-                    allocated_quantity=final_resources.get_allocated_quantity(
-                        resource),
-                    available_quantity=final_resources.get_available_quantity(
-                        resource)))
+                f"{sim_time},WORKER_POOL_UTILIZATION,{self.name},"
+                f"{self.id},{resource_name},"
+                f"{final_resources.get_allocated_quantity(resource)},"
+                f"{final_resources.get_available_quantity(resource)}")
 
     @property
     def name(self):
@@ -391,7 +383,7 @@ class WorkerPool(object):
         return final_resources
 
     def __str__(self):
-        return "WorkerPool(name={}, id={})".format(self.name, self.id)
+        return f"WorkerPool(name={self.name}, id={self.id})"
 
     def __repr__(self):
         return str(self)

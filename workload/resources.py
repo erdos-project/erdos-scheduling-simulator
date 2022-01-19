@@ -40,7 +40,7 @@ class Resource(object):
         return str(self._id)
 
     def __str__(self):
-        return 'Resource(name={}, id={})'.format(self.name, self.id)
+        return f"Resource(name={self.name}, id={self.id})"
 
     def __repr__(self):
         return str(self)
@@ -138,13 +138,12 @@ class Resources(object):
                 added.
         """
         if type(resource) != Resource:
-            raise ValueError("Invalid type for resource: {}".format(
-                type(resource)))
+            raise ValueError(f"Invalid type for resource: {type(resource)}")
         self._resource_vector[resource] += quantity
         self.__total_resources[resource] += quantity
         if not self.__virtual:
-            self._logger.debug("Added {} [quantity={}] to {}".format(
-                resource, quantity, self))
+            self._logger.debug(
+                f"Added {resource} [quantity={quantity}] to {self}")
 
     def allocate(
             self,
@@ -166,9 +165,9 @@ class Resources(object):
         """
         available_quantity = self.get_available_quantity(resource)
         if available_quantity < quantity:
-            raise ValueError("Trying to allocate more than available units of "
-                             "{}: requested {}, available {}".format(
-                                 resource, quantity, available_quantity))
+            raise ValueError(
+                f"Trying to allocate more than available units of {resource}: "
+                f"requested {quantity}, available {available_quantity}")
 
         # Go over the list of resources and allocate the required number of
         # resources of the given type.
@@ -179,8 +178,8 @@ class Resources(object):
                 if _quantity >= remaining_quantity:
                     if not self.__virtual:
                         self._logger.debug(
-                            "Allocated {} [quantity={}] from {}".format(
-                                _resource, remaining_quantity, self))
+                            f"Allocated {_resource} "
+                            f"[quantity={remaining_quantity}] from {self}")
                     self._resource_vector[_resource] = (_quantity -
                                                         remaining_quantity)
                     self._current_allocations[task].append(
@@ -189,8 +188,8 @@ class Resources(object):
                 else:
                     if not self.__virtual:
                         self._logger.debug(
-                            "Allocated {} [quantity={}] from {}".format(
-                                _resource, _quantity, self))
+                            f"Allocated {_resource} [quantity={_quantity}] "
+                            f"from {self}")
                     self._resource_vector[_resource] = 0
                     self._current_allocations[task].append(
                         (_resource, _quantity))
@@ -221,15 +220,16 @@ class Resources(object):
             available_quantity = self.get_available_quantity(resource)
             if quantity > available_quantity:
                 raise ValueError(
-                    "Trying to allocate more than the available "
-                    "units of {}: requested {}, available {}".format(
-                        resource, quantity, available_quantity))
+                    f"Trying to allocate more than the available units of "
+                    f"{resource}: requested {quantity}, "
+                    f"available {available_quantity}")
 
         # Allocate all the resources together.
         for resource, quantity in resources._resource_vector.items():
             if not self.__virtual:
-                self._logger.debug("Allocating {} of {} from {} to {}".format(
-                    quantity, resource, self, task))
+                self._logger.debug(
+                    f"Allocating {quantity} of {resource} from {self} to "
+                    f"{task}")
             self.allocate(resource, task, quantity)
 
     def get_available_quantity(self, resource: Resource) -> int:
@@ -292,7 +292,7 @@ class Resources(object):
         del self._current_allocations[task]
 
     def __str__(self):
-        return "Resources({})".format(self._resource_vector)
+        return f"Resources({self._resource_vector})"
 
     def __len__(self):
         return len(self._resource_vector)

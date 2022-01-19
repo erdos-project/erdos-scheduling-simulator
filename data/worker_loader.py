@@ -50,8 +50,8 @@ class WorkerLoader(object):
                     WorkerLoader._WorkerLoader__create_worker_pools(
                         worker_data, scheduler)
         self._logger.debug(
-            "Loaded {} worker pools from the JSON file located at: {}".format(
-                len(self._worker_pools), worker_profile_path))
+            f"Loaded {len(self._worker_pools)} worker pools from the JSON "
+            f"file located at: {worker_profile_path}")
 
     @staticmethod
     def __create_worker_pools(
@@ -86,7 +86,7 @@ class WorkerLoader(object):
                     name, quantity = resource['name'], resource['quantity']
                     resources[Resource(name=name)] = quantity
                 resource_logger = utils.setup_logging(
-                    name="Resources_{}".format(worker['name']),
+                    name=f"Resources_{worker['name']}",
                     log_file=log_file,
                     log_level=log_level)
                 worker_logger = utils.setup_logging(name=worker['name'],
