@@ -26,6 +26,7 @@ rel_to_id = {
 
 
 class Z3Scheduler(ILPScheduler):
+
     def schedule(self,
                  needs_gpu: List[bool],
                  release_times: List[int],
@@ -43,6 +44,7 @@ class Z3Scheduler(ILPScheduler):
                  dump_nx=False,
                  nx_outpath=None,
                  verbose=True):
+
         def MySum(lst):
             return functools.reduce(lambda a, b: a + b, lst, 0)
 
@@ -80,7 +82,7 @@ class Z3Scheduler(ILPScheduler):
                              has_b=0)
 
         if optimize:
-            if verbose == True: 
+            if verbose == True:
                 print("We are Optimizing")
             s = Optimize()
         else:
@@ -244,4 +246,4 @@ class Z3Scheduler(ILPScheduler):
             if verbose == True:
                 print(outputs)
             return outputs, cost, runtime
-        return (None, None) , None, runtime
+        return (None, None), None, runtime
