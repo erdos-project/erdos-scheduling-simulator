@@ -17,12 +17,13 @@ class Resource(object):
         name (`str`): The name of the resource.
         id (`uuid`): The ID of the resource.
     """
+
     def __init__(self, name: str, _id: Optional[str] = None):
         """Initialize a Resource.
 
         Args:
             name (`str`): The name of the resource.
-            id (`Optional[str]`): The ID of the resource. Use `any` to
+            _id (`Optional[str]`): The ID of the resource. Use `any` to
                 represent a general resource of the given name.
         """
         if _id is not None and _id != 'any':
@@ -39,7 +40,7 @@ class Resource(object):
         return str(self._id)
 
     def __str__(self):
-        return 'Resource(name={}, id={})'.format(self.name, self.id)
+        return f"Resource(name={self.name}, id={self.id})"
 
     def __repr__(self):
         return str(self)
@@ -103,10 +104,14 @@ class Resources(object):
             set of resources to their quantities.
         _logger (`Optional[logging.Logger]`): The logger to use to log the
             results of the execution.
+        __virtual (`Optional[bool]`): Set to True if the Resources are
+            virtual and used to test the effects of a potential allocation.
     """
+
     def __init__(self,
                  resource_vector: Optional[Mapping[Resource, int]] = {},
-                 _logger: Optional[logging.Logger] = None):
+                 _logger: Optional[logging.Logger] = None,
+                 __virtual: Optional[bool] = False):
         # Set up the logger.
         if _logger:
             self._logger = _logger
@@ -114,12 +119,15 @@ class Resources(object):
             self._logger = utils.setup_logging(name=self.__class__.__name__)
 
         self._resource_vector = defaultdict(int)
+        self.__total_resources = defaultdict(int)
         for resource, quantity in resource_vector.items():
             self._resource_vector[copy(resource)] = quantity
+            self.__total_resources[copy(resource)] = quantity
         if not all(map(lambda x: type(x) == Resource, self._resource_vector)):
             raise ValueError("The keys for the resource vector "
                              "should be of type 'Resource'")
         self._current_allocations = defaultdict(list)
+        self.__virtual = __virtual
 
     def add_resource(self, resource: Resource, quantity: Optional[int] = 1):
         """Add the given quantity of the specified resource.
@@ -130,31 +138,12 @@ class Resources(object):
                 added.
         """
         if type(resource) != Resource:
-            raise ValueError("Invalid type for resource: {}".format(
-                type(resource)))
+            raise ValueError(f"Invalid type for resource: {type(resource)}")
         self._resource_vector[resource] += quantity
-        self._logger.debug("Added {} [quantity={}] to {}".format(
-            resource, quantity, self))
-
-    def get_available_quantity(self, resource: Resource) -> int:
-        """Provides the quantity of the available resources of the given type.
-
-        If the resource has a specific `id`, then the quantity of that resource
-        is returned. Otherwise, a sum of all the quantities of resources with
-        the `name` are returned.
-
-        Args:
-            resource (`Resource`): The resource to retrieve the available
-                quantity of.
-
-        Returns:
-            The available quantity of the given resource.
-        """
-        resource_quantity = 0
-        for _resource, _quantity in self._resource_vector.items():
-            if _resource == resource:
-                resource_quantity += _quantity
-        return resource_quantity
+        self.__total_resources[resource] += quantity
+        if not self.__virtual:
+            self._logger.debug(
+                f"Added {resource} [quantity={quantity}] to {self}")
 
     def allocate(
             self,
@@ -174,13 +163,11 @@ class Resources(object):
             `ValueError` if more than the available quantity of the resource is
             requested.
         """
-        self._logger.debug("Trying to allocate {} of {} from {}".format(
-            quantity, resource, self))
         available_quantity = self.get_available_quantity(resource)
         if available_quantity < quantity:
-            raise ValueError("Trying to allocate more than available units of "
-                             "{}: requested {}, available {}".format(
-                                 resource, quantity, available_quantity))
+            raise ValueError(
+                f"Trying to allocate more than available units of {resource}: "
+                f"requested {quantity}, available {available_quantity}")
 
         # Go over the list of resources and allocate the required number of
         # resources of the given type.
@@ -189,18 +176,20 @@ class Resources(object):
             if _resource == resource:
                 _quantity = self._resource_vector[_resource]
                 if _quantity >= remaining_quantity:
-                    self._logger.debug(
-                        "Allocated {} [quantity={}] from {}".format(
-                            _resource, remaining_quantity, self))
+                    if not self.__virtual:
+                        self._logger.debug(
+                            f"Allocated {_resource} "
+                            f"[quantity={remaining_quantity}] from {self}")
                     self._resource_vector[_resource] = (_quantity -
                                                         remaining_quantity)
                     self._current_allocations[task].append(
                         (_resource, remaining_quantity))
                     break
                 else:
-                    self._logger.debug(
-                        "Allocated {} [quantity={}] from {}".format(
-                            _resource, _quantity, self))
+                    if not self.__virtual:
+                        self._logger.debug(
+                            f"Allocated {_resource} [quantity={_quantity}] "
+                            f"from {self}")
                     self._resource_vector[_resource] = 0
                     self._current_allocations[task].append(
                         (_resource, _quantity))
@@ -231,15 +220,54 @@ class Resources(object):
             available_quantity = self.get_available_quantity(resource)
             if quantity > available_quantity:
                 raise ValueError(
-                    "Trying to allocate more than the available "
-                    "units of {}: requested {}, available {}".format(
-                        resource, quantity, available_quantity))
+                    f"Trying to allocate more than the available units of "
+                    f"{resource}: requested {quantity}, "
+                    f"available {available_quantity}")
 
         # Allocate all the resources together.
         for resource, quantity in resources._resource_vector.items():
-            self._logger.debug("Allocating {} of {} from {} to {}".format(
-                quantity, resource, self, task))
+            if not self.__virtual:
+                self._logger.debug(
+                    f"Allocating {quantity} of {resource} from {self} to "
+                    f"{task}")
             self.allocate(resource, task, quantity)
+
+    def get_available_quantity(self, resource: Resource) -> int:
+        """Provides the quantity of the available resources of the given type.
+
+        If the resource has a specific `id`, then the quantity of that resource
+        is returned. Otherwise, a sum of all the quantities of resources with
+        the `name` are returned.
+
+        Args:
+            resource (`Resource`): The resource to retrieve the available
+                quantity of.
+
+        Returns:
+            The available quantity of the given resource.
+        """
+        resource_quantity = 0
+        for _resource, _quantity in self._resource_vector.items():
+            if _resource == resource:
+                resource_quantity += _quantity
+        return resource_quantity
+
+    def get_allocated_quantity(self, resource: Resource) -> int:
+        """Get the quantity of the given `resource` that has been allocated.
+
+        Args:
+            resource (`Resource`): The resource whose allocated quantity needs
+                to be computed.
+
+        Returns:
+            An `int` quantity of the `resource` that has been allocated.
+        """
+        total_quantity = 0
+        for _resource, _quantity in self.__total_resources.items():
+            if _resource == resource:
+                total_quantity += _quantity
+        available_quantity = self.get_available_quantity(resource)
+        return total_quantity - available_quantity
 
     def deallocate(
             self,
@@ -264,7 +292,7 @@ class Resources(object):
         del self._current_allocations[task]
 
     def __str__(self):
-        return "Resources({})".format(self._resource_vector)
+        return f"Resources({self._resource_vector})"
 
     def __len__(self):
         return len(self._resource_vector)
@@ -278,7 +306,7 @@ class Resources(object):
         """
         cls = self.__class__
         instance = cls.__new__(cls)
-        cls.__init__(instance, self._resource_vector, self._logger)
+        cls.__init__(instance, self._resource_vector, self._logger, True)
 
         # Copy over the allocations.
         for task, allocations in self._current_allocations.items():
@@ -295,7 +323,7 @@ class Resources(object):
         """
         cls = self.__class__
         instance = cls.__new__(cls)
-        cls.__init__(instance, self._resource_vector, self._logger)
+        cls.__init__(instance, self._resource_vector, self._logger, True)
 
         # Undo the allocations.
         for allocations in self._current_allocations.values():
@@ -305,7 +333,7 @@ class Resources(object):
         memo[id(self)] = instance
         return instance
 
-    def repr(self):
+    def __repr__(self):
         return str(self)
 
     def __gt__(self, other: 'Resources') -> bool:
@@ -328,3 +356,47 @@ class Resources(object):
             else:
                 return False
         return True
+
+    def __add__(self, other: 'Resources') -> 'Resources':
+        """Adds the availability and the allocations of the Resources in self
+        to the resources in other and returns a new instances of Resources.
+
+        Args:
+            other (`Resources`): The resources set to be added to self.
+
+        Returns:
+            The sum of the availability and allocation of the two Resources.
+        """
+        # Add the resource vector from the two resources.
+        resource_vector = defaultdict(int)
+
+        for resource, quantity in self._resource_vector.items():
+            resource_vector[resource] += quantity
+
+        for resource, quantity in other._resource_vector.items():
+            resource_vector[resource] += quantity
+
+        # Add the total resources vector from the two resources.
+        total_resources_vector = defaultdict(int)
+
+        for resource, quantity in self.__total_resources.items():
+            total_resources_vector[resource] += quantity
+
+        for resource, quantity in other.__total_resources.items():
+            total_resources_vector[resource] += quantity
+
+        # Add the allocation vector from the two resources.
+        current_allocations = defaultdict(list)
+
+        for task, allocations in self._current_allocations.items():
+            current_allocations[task].extend(allocations)
+
+        for task, allocations in other._current_allocations.items():
+            current_allocations[task].extend(allocations)
+
+        # Construct a new Resources instance.
+        resources = Resources(_logger=self._logger)
+        resources._resource_vector = resource_vector
+        resources.__total_resources = total_resources_vector
+        resources._current_allocations = current_allocations
+        return resources

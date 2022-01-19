@@ -7,6 +7,7 @@ from workload import Task, TaskGraph, Resource
 from workers import WorkerPool
 
 class ILPScheduler(object):
+
     def schedule(needs_gpu: List[bool],
                  release_times: List[int],
                  absolute_deadlines: List[int],

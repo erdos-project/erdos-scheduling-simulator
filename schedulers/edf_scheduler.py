@@ -17,6 +17,7 @@ class EDFScheduler(BaseScheduler):
         runtime (`float`): The runtime to return to the simulator. If -1, the
             scheduler returns the actual runtime.
     """
+
     def __init__(self, preemptive: bool = False, runtime: float = -1.0):
         self._preemptive = preemptive
         self._runtime = runtime

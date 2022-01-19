@@ -24,6 +24,7 @@ class TaskLoader(object):
             JSON file.
         _flags (`absl.flags`): The flags used to initialize the app, if any.
     """
+
     def __init__(self,
                  graph_path: str,
                  profile_path: str,
@@ -214,8 +215,8 @@ class TaskLoader(object):
         for entry in json_entries:
             if entry['args']['timestamp'] > max_timestamp:
                 continue
-            deadline = utils.fuzz_time(entry['ts'] + entry['dur'],
-                                       deadline_variance)
+            runtime_deadline = utils.fuzz_time(entry['dur'], deadline_variance)
+            deadline = entry['ts'] + runtime_deadline
             tasks.append(
                 Task(
                     name=entry['name'],
