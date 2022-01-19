@@ -41,7 +41,8 @@ class Z3Scheduler(ILPScheduler):
                  dump=False,
                  outpath=None,
                  dump_nx=False,
-                 nx_outpath=None):
+                 nx_outpath=None,
+                 verbose=True):
         def MySum(lst):
             return functools.reduce(lambda a, b: a + b, lst, 0)
 
@@ -79,7 +80,8 @@ class Z3Scheduler(ILPScheduler):
                              has_b=0)
 
         if optimize:
-            print("We are Optimizing")
+            if verbose == True: 
+                print("We are Optimizing")
             s = Optimize()
         else:
             s = Solver()
@@ -232,11 +234,14 @@ class Z3Scheduler(ILPScheduler):
         cost = None
         if optimize:
             cost = s.lower(result)
-            print(cost)
-        print(schedulable)
+            if verbose == True:
+                print(cost)
+        if verbose == True:
+            print(schedulable)
         if schedulable != unsat:
             outputs = [int(str(s.model()[t])) for t in times
                        ], [int(str(s.model()[p])) for p in placements]
-            print(outputs)
+            if verbose == True:
+                print(outputs)
             return outputs, cost, runtime
-        return None, None, None
+        return (None, None) , None, runtime

@@ -77,7 +77,7 @@ class ILPBaseScheduler(BaseScheduler):
         pinned_tasks = [None] * num_tasks
 
         expected_runtimes = [
-            task._expected_runtime for task in tasks_to_be_scheduled
+            task.remaining_time for task in tasks_to_be_scheduled
         ]
         gpu_resource_requirement = [
             task.resource_requirements.get_available_quantity(
@@ -103,7 +103,11 @@ class ILPBaseScheduler(BaseScheduler):
              optimize=True,
              dump=False,  # indicates if we shud log the ILP call
              outpath=None,
-             dump_nx=False)
+             dump_nx=False, 
+             verbose=False)
+
+        if opt_value == None: # Doesn't handle loadshedding
+            return (sched_runtime, None)
 
         cpu_map = [[wp_id] * cpu_map[wp_id] for wp_id in cpu_map.keys()]
         cpu_map = [j for sub in cpu_map for j in sub]
