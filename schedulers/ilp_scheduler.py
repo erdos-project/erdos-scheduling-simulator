@@ -86,7 +86,7 @@ class ILPBaseScheduler(BaseScheduler):
         ]
         needs_gpu = [r > 0 for r in gpu_resource_requirement]
 
-        # TODO (Justin) : This doesn't account for the dependencies 
+        # TODO (Justin) : This doesn't account for the dependencies
         # between tasks.
         dependency_matrix = [[False] * num_tasks] * num_tasks
 
