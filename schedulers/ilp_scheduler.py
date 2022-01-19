@@ -49,23 +49,24 @@ class ILPBaseScheduler(BaseScheduler):
             # Create a virtual WorkerPool set to try scheduling decisions on.
             schedulable_worker_pools = [copy(w) for w in worker_pools]
         
-        import IPython; IPython.embed()
-        
-        cpu_map = { wp.id : wp.get_available_quantity(Resource(name="CPU", _id="any")) for wp in schedulable_worker_pools}
-        gpu_map = { wp.id : wp.get_available_quantity(Resource(name="GPU", _id="any")) for wp in schedulable_worker_pools}
+    
+        cpu_map = { wp.id : wp.resources.get_available_quantity(Resource(name="CPU", _id="any")) for wp in schedulable_worker_pools}
+        gpu_map = { wp.id : wp.resources.get_available_quantity(Resource(name="GPU", _id="any")) for wp in schedulable_worker_pools}
         
         num_cpus = sum(cpu_map.values())
         num_gpus = sum(gpu_map.values()) 
 
         estimated_scheduling_overhead = 0
-        num_tasks = len (released_tasks)
-        absolute_deadlines = [task.deadline for task in released_tasks]
+        num_tasks = len (tasks_to_be_scheduled)
+        absolute_deadlines = [task.deadline for task in tasks_to_be_scheduled]
         release_times = [estimated_scheduling_overhead] * num_tasks
         pinned_tasks = [None] * num_tasks
 
-        expected_runtimes = [task._expected_runtime for task in released_tasks]
-        gpu_resource_requirement = [task.resource_requirements.get_available_quantity(Resource(name="GPU", _id="any")) for task in released_tasks]
+        expected_runtimes = [task._expected_runtime for task in tasks_to_be_scheduled]
+        gpu_resource_requirement = [task.resource_requirements.get_available_quantity(Resource(name="GPU", _id="any")) for task in tasks_to_be_scheduled]
         needs_gpu = [r > 0 for r in gpu_resource_requirement]
+
+        # TODO (Justin) : This doesn't account for the dependencies between tasks.
         dependency_matrix = [[False] * num_tasks] * num_tasks
 
         (start_times,
@@ -90,9 +91,10 @@ class ILPBaseScheduler(BaseScheduler):
         gpu_map = [ [wp_id]*gpu_map[wp_id] for wp_id in gpu_map.keys()]
         gpu_map = [j for sub in gpu_map for j in sub]
 
-        resource_map = gpu_map + cpu_map
+        resource_map = cpu_map + gpu_map
 
-        placements = [resource_map[p] for p in placements]
+        placements = [(t,resource_map[p-1]) for t,p in zip(tasks_to_be_scheduled, placements)]
+
 
         return (sched_runtime, placements)
 

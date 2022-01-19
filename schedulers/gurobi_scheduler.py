@@ -9,7 +9,6 @@ import time
 
 
 class GurobiScheduler(ILPScheduler):
-<<<<<<< HEAD
     def schedule(
         self,
         needs_gpu: List[bool],
@@ -28,24 +27,6 @@ class GurobiScheduler(ILPScheduler):
         outpath=None,
     ):
         M = max(absolute_deadlines)
-=======
-
-    def schedule(self,
-                 needs_gpu: List[bool],
-                 release_times: List[int],
-                 absolute_deadlines: List[int],
-                 expected_runtimes: List[int],
-                 dependency_matrix,
-                 pinned_tasks: List[int],
-                 num_tasks: int,
-                 num_gpus: int,
-                 num_cpus: int,
-                 bits=None,
-                 optimize=False,
-                 dump=False,
-                 outpath=None):
-        M = 10000000
->>>>>>> b2d566e1cae698824d9814c4e85acdf1245d64a7
 
         def MySum(lst):
             return functools.reduce(lambda a, b: a + b, lst, 0)
