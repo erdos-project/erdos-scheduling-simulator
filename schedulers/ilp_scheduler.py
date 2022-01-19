@@ -1,6 +1,6 @@
 from typing import List
 from schedulers.base_scheduler import BaseScheduler
-from typing import Sequence, Mapping, Tuple, Optional
+from typing import Sequence, Tuple
 from copy import copy, deepcopy
 
 from workload import Task, TaskGraph, Resource
@@ -86,7 +86,8 @@ class ILPBaseScheduler(BaseScheduler):
         ]
         needs_gpu = [r > 0 for r in gpu_resource_requirement]
 
-        # TODO (Justin) : This doesn't account for the dependencies between tasks.
+        # TODO (Justin) : This doesn't account for the dependencies 
+        # between tasks.
         dependency_matrix = [[False] * num_tasks] * num_tasks
 
         (start_times,
@@ -106,7 +107,7 @@ class ILPBaseScheduler(BaseScheduler):
              dump_nx=False,
              verbose=False)
 
-        if opt_value == None:  # Doesn't handle loadshedding
+        if opt_value is None:  # Doesn't handle loadshedding
             return (sched_runtime, None)
 
         cpu_map = [[wp_id] * cpu_map[wp_id] for wp_id in cpu_map.keys()]

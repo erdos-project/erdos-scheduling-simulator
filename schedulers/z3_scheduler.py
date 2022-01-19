@@ -82,7 +82,7 @@ class Z3Scheduler(ILPScheduler):
                              has_b=0)
 
         if optimize:
-            if verbose == True:
+            if verbose:
                 print("We are Optimizing")
             s = Optimize()
         else:
@@ -236,14 +236,14 @@ class Z3Scheduler(ILPScheduler):
         cost = None
         if optimize:
             cost = s.lower(result)
-            if verbose == True:
+            if verbose:
                 print(cost)
-        if verbose == True:
+        if verbose:
             print(schedulable)
         if schedulable != unsat:
             outputs = [int(str(s.model()[t])) for t in times
                        ], [int(str(s.model()[p])) for p in placements]
-            if verbose == True:
+            if verbose:
                 print(outputs)
             return outputs, cost, runtime
         return (None, None), None, runtime
