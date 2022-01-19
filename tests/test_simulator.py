@@ -10,6 +10,7 @@ from test_tasks import __create_default_task
 
 class MockScheduler(BaseScheduler):
     """ A MockScheduler that enables the testing of the Simulator. """
+
     def __init__(self, runtime: float, placement):
         self._runtime = runtime
         self._task_placement = placement

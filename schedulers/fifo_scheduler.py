@@ -7,6 +7,7 @@ from workload import Task, TaskGraph
 # TODO (Sukrit): This Scheduler does not correspond to the base Scheduler
 # interface. Fix this once the interface is defined.
 class FIFOScheduler(BaseScheduler):
+
     def __init__(self,
                  num_cpus: int,
                  num_gpus: int,

@@ -1,10 +1,11 @@
 import uuid
 import logging
+from operator import attrgetter
 from copy import copy, deepcopy
 from typing import Optional, Sequence, Type
 
 import utils
-from workload import Resources, Task, TaskState
+from workload import Resource, Resources, Task, TaskState
 
 
 class Worker(object):
@@ -20,6 +21,7 @@ class Worker(object):
         _logger(`Optional[logging.Logger]`): The logger to use to log the
             results of the execution.
     """
+
     def __init__(self,
                  name: str,
                  resources: Resources,
@@ -46,7 +48,7 @@ class Worker(object):
         """
         self._resources.allocate_multiple(task.resource_requirements, task)
         self._placed_tasks[task] = task.state
-        self._logger.debug("Placed {} on {}".format(task, self))
+        self._logger.debug(f"Placed {task} on {self}")
 
     def preempt_task(self, task: Task):
         """Preempts the given `Task` and frees the resources.
@@ -107,12 +109,10 @@ class Worker(object):
         for task in self._placed_tasks:
             if task.state != TaskState.RUNNING:
                 continue
-            self._logger.debug("Stepping through the execution of {} for {} "
-                               "steps from time {}.".format(
-                                   task, step_size, current_time))
+            self._logger.debug(f"Stepping through the execution of {task} for "
+                               f"{step_size} steps from time {current_time}.")
             if task.step(current_time, step_size):
-                self._logger.debug("{} finished execution on {}.".format(
-                    task, self))
+                self._logger.debug(f"{task} finished execution on {self}.")
                 completed_tasks.append(task)
 
         # Delete the completed tasks from the set of placed tasks.
@@ -174,8 +174,8 @@ class Worker(object):
         return self._resources
 
     def __str__(self):
-        return "Worker(name={}, id={}, resources={})".\
-               format(self.name, self.id, self.resources)
+        return (f"Worker(name={self.name}, id={self.id}, "
+                f"resources={self.resources})")
 
     def __repr__(self):
         return str(self)
@@ -204,6 +204,7 @@ class WorkerPool(object):
         _logger (`Optional[absl.flags]`): The flags with which the app was
             initiated, if any.
     """
+
     def __init__(
             self,
             name: str,
@@ -230,10 +231,11 @@ class WorkerPool(object):
         """
         for worker in workers:
             if worker.id in self._workers:
-                self._logger.info("Skipping addition of {} since it already "
-                                  "exists in {}".format(worker, self))
+                self._logger.info(
+                    f"Skipping addition of {worker} since it already "
+                    f"exists in {self}")
             else:
-                self._logger.debug("Adding {} to {}".format(worker, self))
+                self._logger.debug(f"Adding {worker} to {self}")
                 self._workers[worker.id] = worker
 
     def place_task(self, task: Task):
@@ -268,7 +270,7 @@ class WorkerPool(object):
                     break
 
         if placement is None:
-            raise ValueError("The task ({}) could not be placed.".format(task))
+            raise ValueError(f"The task ({task}) could not be placed.")
         else:
             self._workers[placement].place_task(task)
             self._placed_tasks[task] = placement
@@ -311,9 +313,9 @@ class WorkerPool(object):
         completed_tasks = []
         # Invoke the step() method on all the workers.
         for _, worker in self._workers.items():
-            self._logger.debug("Stepping through the execution of {} for {} "
-                               "steps from time {}".format(
-                                   worker, step_size, current_time))
+            self._logger.debug(
+                f"Stepping through the execution of {worker} for {step_size} "
+                f"steps from time {current_time}")
             completed_tasks.extend(worker.step(current_time, step_size))
 
         # Delete the completed tasks from the set of placed tasks.
@@ -335,6 +337,31 @@ class WorkerPool(object):
             worker.can_accomodate_task(task)
             for worker in self._workers.values())
 
+    def log_utilization(self, csv_logger: logging.Logger, sim_time: float):
+        """Logs the utilization of the resources of a particular WorkerPool.
+
+        Args:
+            csv_logger (`logging.Logger`): The logger to utilize to log the
+                resource utilization.
+            sim_time (`float`): The simulation time at which the utilization
+                is logged.
+        """
+        # Add the resources of all the workers in this pool.
+        final_resources = Resources(_logger=logging.getLogger('dummy'))
+        for worker in self._workers.values():
+            final_resources += worker.resources
+
+        # Log the utilization from the final set of resources.
+        for resource_name in set(
+                map(attrgetter('name'),
+                    final_resources._resource_vector.keys())):
+            resource = Resource(name=resource_name, _id="any")
+            csv_logger.debug(
+                f"{sim_time},WORKER_POOL_UTILIZATION,{self.name},"
+                f"{self.id},{resource_name},"
+                f"{final_resources.get_allocated_quantity(resource)},"
+                f"{final_resources.get_available_quantity(resource)}")
+
     @property
     def name(self):
         return self._name
@@ -347,8 +374,16 @@ class WorkerPool(object):
     def workers(self):
         return list(self._workers.values())
 
+    @property
+    def resources(self):
+        # Add the resources of all the workers in this pool.
+        final_resources = Resources(_logger=self._logger)
+        for worker in self._workers.values():
+            final_resources += worker.resources
+        return final_resources
+
     def __str__(self):
-        return "WorkerPool(name={}, id={})".format(self.name, self.id)
+        return f"WorkerPool(name={self.name}, id={self.id})"
 
     def __repr__(self):
         return str(self)

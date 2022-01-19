@@ -1,5 +1,4 @@
 import json
-import logging
 from typing import Optional, Sequence, Mapping, Type
 
 import absl
@@ -20,6 +19,7 @@ class WorkerLoader(object):
             scheduling the tasks across the Workers of a WorkerPool.
         _flags (`absl.flags`): The flags used to initialize the app, if any.
     """
+
     def __init__(self,
                  worker_profile_path: str,
                  scheduler: Optional[Type[BaseScheduler]] = None,
@@ -40,29 +40,25 @@ class WorkerLoader(object):
             raise ValueError("Empty data returned.")
 
         # Create the sequence of WorkerPools from the JSON data.
-        worker_logger = utils.setup_logging(name="Worker",
-                                            log_file=_flags.log_file_name,
-                                            log_level=_flags.log_level)
-        worker_pool_logger = utils.setup_logging(name="WorkerPool",
-                                                 log_file=_flags.log_file_name,
-                                                 log_level=_flags.log_level)
-        resource_logger = utils.setup_logging(name="Resources",
-                                              log_file=_flags.log_file_name,
-                                              log_level=_flags.log_level)
-        self._worker_pools = WorkerLoader._WorkerLoader__create_worker_pools(
-            worker_data, scheduler, worker_logger, worker_pool_logger,
-            resource_logger)
+        if _flags:
+            self._worker_pools = \
+                    WorkerLoader._WorkerLoader__create_worker_pools(
+                        worker_data, scheduler, _flags.log_file_name,
+                        _flags.log_level)
+        else:
+            self._worker_pools = \
+                    WorkerLoader._WorkerLoader__create_worker_pools(
+                        worker_data, scheduler)
         self._logger.debug(
-            "Loaded {} worker pools from the JSON file located at: {}".format(
-                len(self._worker_pools), worker_profile_path))
+            f"Loaded {len(self._worker_pools)} worker pools from the JSON "
+            f"file located at: {worker_profile_path}")
 
     @staticmethod
     def __create_worker_pools(
             worker_pools: Sequence[Mapping[str, str]],
             scheduler: Type[BaseScheduler],
-            worker_logger: Optional[logging.Logger] = None,
-            worker_pool_logger: Optional[logging.Logger] = None,
-            resource_logger: Optional[logging.Logger] = None)\
+            log_file: Optional[str] = None,
+            log_level: Optional[str] = 'debug')\
             -> Sequence[WorkerPool]:
         """Creates a list of WorkerPools that use the given scheduler
         implementation from the JSON entries in `worker_pools`.
@@ -72,12 +68,10 @@ class WorkerLoader(object):
                 read from the data file.
             scheduler (`Type[BaseScheduler]`): The scheduler implementation
                 to use for each of the WorkerPools.
-            worker_logger(`Optional[logging.Logger]`): The logger to use to
-                log the results of the Worker's execution.
-            worker_pool_logger(`Optional[logging.Logger]`): The logger to use
-                to log the results of the WorkerPool's execution.
-            resource_logger(`Optional[logging.Logger]`): The logger to use to
-                log the results of the Resource's execution.
+            log_file (`Optional[str]`): The name of the file to log the
+                execution trace to.
+            log_level (`Optional[str]`): The level of logging to do
+                (default = 'debug')
 
         Returns:
             A `Sequence[WorkerPool]` with the `Worker`s in each of the pool
@@ -91,6 +85,13 @@ class WorkerLoader(object):
                 for resource in worker['resources']:
                     name, quantity = resource['name'], resource['quantity']
                     resources[Resource(name=name)] = quantity
+                resource_logger = utils.setup_logging(
+                    name=f"Resources_{worker['name']}",
+                    log_file=log_file,
+                    log_level=log_level)
+                worker_logger = utils.setup_logging(name=worker['name'],
+                                                    log_file=log_file,
+                                                    log_level=log_level)
                 workers.append(
                     Worker(
                         name=worker['name'],
@@ -98,6 +99,9 @@ class WorkerLoader(object):
                                             _logger=resource_logger),
                         _logger=worker_logger,
                     ))
+            worker_pool_logger = utils.setup_logging(name=worker_pool['name'],
+                                                     log_file=log_file,
+                                                     log_level=log_level)
             constructed_worker_pools.append(
                 WorkerPool(
                     name=worker_pool['name'],

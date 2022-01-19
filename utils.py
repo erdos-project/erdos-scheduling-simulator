@@ -64,20 +64,27 @@ def setup_csv_logging(name: str, log_file: str) -> logging.Logger:
                          log_level="debug")
 
 
-def fuzz_time(time: float, variance: float) -> float:
+def fuzz_time(time: float,
+              variance: float,
+              positive: Optional[bool] = True) -> float:
     """Fuzz the given `time` according to the provided `variance`.
 
     Args:
         time (`float`): The time to fuzz.
         variance (`float`): The % variance to fuzz `time` by.
+        positive (`Optional[bool]`): If True, the fuzzing only increases the
+            time.
 
     Returns:
         The fuzzed time according to the given variance.
     """
-    return max(
-        0,
-        random.uniform(time - (time * abs(variance) / 100.0),
-                       time + (time * abs(variance) / 100.0)))
+    if positive:
+        return random.uniform(time, time + (time * abs(variance) / 100.0))
+    else:
+        return max(
+            0,
+            random.uniform(time - (time * abs(variance) / 100.0),
+                           time + (time * abs(variance) / 100.0)))
 
 
 def log_statistics(data: Sequence[float],
@@ -90,25 +97,17 @@ def log_statistics(data: Sequence[float],
         logger (`logging.Logger`): The logger to use for logging the stats.
         offset (`Optional[str]`): The space offset to use for logging.
     """
-    logger.debug("{}Number of values: {}".format(offset, len(data)))
-    logger.debug("{}Average: {}".format(offset, np.mean(data)))
-    logger.debug("{}Median: {}".format(offset, np.median(data)))
-    logger.debug("{}Minimum: {}".format(offset, np.min(data)))
-    logger.debug("{}Maximum: {}".format(offset, np.max(data)))
-    logger.debug("{}Standard Deviation: {}".format(offset, np.std(data)))
-    logger.debug("{}Percentile (1st): {}".format(offset,
-                                                 np.percentile(data, 1)))
-    logger.debug("{}Percentile (10th): {}".format(offset,
-                                                  np.percentile(data, 10)))
-    logger.debug("{}Percentile (25th): {}".format(offset,
-                                                  np.percentile(data, 25)))
-    logger.debug("{}Percentile (50th): {}".format(offset,
-                                                  np.percentile(data, 50)))
-    logger.debug("{}Percentile (75th): {}".format(offset,
-                                                  np.percentile(data, 75)))
-    logger.debug("{}Percentile (90th): {}".format(offset,
-                                                  np.percentile(data, 90)))
-    logger.debug("{}Percentile (99th): {}".format(offset,
-                                                  np.percentile(data, 99)))
-    logger.debug("{}Percentile (99.9th): {}".format(offset,
-                                                    np.percentile(data, 99.9)))
+    logger.debug(f"{offset}Number of values: {len(data)}")
+    logger.debug(f"{offset}Average: {np.mean(data)}")
+    logger.debug(f"{offset}Median: {np.median(data)}")
+    logger.debug(f"{offset}Minimum: {np.min(data)}")
+    logger.debug(f"{offset}Maximum: {np.max(data)}")
+    logger.debug(f"{offset}Standard Deviation: {np.std(data)}")
+    logger.debug(f"{offset}Percentile (1st): {np.percentile(data, 1)}")
+    logger.debug(f"{offset}Percentile (10th): {np.percentile(data, 10)}")
+    logger.debug(f"{offset}Percentile (25th): {np.percentile(data, 25)}")
+    logger.debug(f"{offset}Percentile (50th): {np.percentile(data, 50)}")
+    logger.debug(f"{offset}Percentile (75th): {np.percentile(data, 75)}")
+    logger.debug(f"{offset}Percentile (90th): {np.percentile(data, 90)}")
+    logger.debug(f"{offset}Percentile (99th): {np.percentile(data, 99)}")
+    logger.debug(f"{offset}Percentile (99.9th): {np.percentile(data, 99.9)}")

@@ -15,6 +15,7 @@ class Job(object):
     Args:
         name: The name of the ERDOS operator that corresponds to this job.
     """
+
     def __init__(self, name: str):
         self._name = name
         self._id = uuid.uuid4()
@@ -31,7 +32,7 @@ class Job(object):
         return self._id == other._id
 
     def __str__(self):
-        return "Job(name={}, id={})".format(self.name, self.id)
+        return f"Job(name={self.name}, id={self.id})"
 
     def __repr__(self):
         return str(self)
@@ -47,6 +48,7 @@ class JobGraph(object):
     A `JobGraph` is a static entity that defines the relationship between the
     different `Job`s of the application.
     """
+
     def __init__(self, jobs: Optional[Mapping[Job, Sequence[Job]]] = {}):
         self._job_graph = defaultdict(list)
         self.__parent_job_graph = defaultdict(list)
@@ -81,7 +83,7 @@ class JobGraph(object):
             ValueError if the `job` is not in the graph already.
         """
         if job not in self._job_graph:
-            raise ValueError("{} not in job graph.".format(job))
+            raise ValueError(f"{job} not in job graph.")
         self._job_graph[job].append(child)
         self._job_graph[child].extend([])
         self.__parent_job_graph[child].append(job)
@@ -97,7 +99,7 @@ class JobGraph(object):
         """
         if job not in self._job_graph:
             raise ValueError(
-                "No job with the ID: {} exists in the graph".format(job.id))
+                f"No job with the ID: {job.id} exists in the graph")
         return self._job_graph[job]
 
     def get_parents(self, job: Job) -> Sequence[Job]:
@@ -118,7 +120,7 @@ class JobGraph(object):
         return len(self._job_graph)
 
     def __str__(self):
-        return "JobGraph({})".format(self._job_graph)
+        return f"JobGraph({self._job_graph})"
 
     def __repr__(self):
         return str(self)

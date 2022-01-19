@@ -3,6 +3,7 @@ from workload import Task, TaskGraph
 
 
 class BaseScheduler(object):
+
     def schedule(
             self,
             sim_time: float,

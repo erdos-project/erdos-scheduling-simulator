@@ -8,6 +8,7 @@ import functools  # for reduce
 
 
 class GurobiScheduler(ILPScheduler):
+
     def schedule(self,
                  needs_gpu: List[bool],
                  release_times: List[int],
