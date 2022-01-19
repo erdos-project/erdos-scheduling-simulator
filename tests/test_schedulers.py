@@ -6,6 +6,7 @@ from workers import Worker, WorkerPool
 
 from tests.test_tasks import __create_default_task
 
+
 def test_ilp_scheduler_success():
     """Scenario:
 
@@ -13,12 +14,12 @@ def test_ilp_scheduler_success():
     according to the resource requirements.
     """
     ilp_scheduler = ILPBaseScheduler(Z3Scheduler)
-    
+
     # Create the tasks and the TaskGraph.
     task_cpu = __create_default_task(resource_requirements=Resources(
         resource_vector={Resource(name="CPU", _id="any"): 1}),
                                      deadline=200.0)
-    print (f"cpu_task :: {task_cpu.id}")
+    print(f"cpu_task :: {task_cpu.id}")
     task_gpu = __create_default_task(resource_requirements=Resources(
         resource_vector={Resource(name="GPU", _id="any"): 1}),
                                      deadline=50.0)
@@ -29,9 +30,9 @@ def test_ilp_scheduler_success():
         name="Worker",
         resources=Resources({Resource(name="CPU"): 1}),
     )
-    
+
     worker_pool_one = WorkerPool(name="WorkerPool_1", workers=[worker_one])
-    print (f"worker_pool_one :: {worker_pool_one.id}")
+    print(f"worker_pool_one :: {worker_pool_one.id}")
     worker_two = Worker(
         name="Worker",
         resources=Resources({Resource(name="GPU"): 1}),
@@ -55,6 +56,7 @@ def test_ilp_scheduler_success():
     assert placements[0][1] == worker_pool_one.id,\
         "Incorrect placement of the task on the WorkerPool."
 
+
 def test_edf_scheduler_success():
     """Scenario:
 
@@ -62,7 +64,7 @@ def test_edf_scheduler_success():
     according to the resource requirements.
     """
     edf_scheduler = EDFScheduler()
-    
+
     # Create the tasks and the TaskGraph.
     task_cpu = __create_default_task(resource_requirements=Resources(
         resource_vector={Resource(name="CPU", _id="any"): 1}),
