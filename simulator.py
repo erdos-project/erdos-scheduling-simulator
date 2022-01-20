@@ -200,9 +200,9 @@ class Simulator(object):
         self._scheduler_delay = _flags.scheduler_delay if _flags else 1
         self._runtime_variance = _flags.runtime_variance if _flags else 0.0
 
-        # Initialize the event queue, and add a SIMULATOR_START / SIMULATOR_END
-        # task to signify the beginning and completion of the simulator loop.
-        # Also add a SCHEDULER_START event to invoke the scheduling loop.
+        # Initialize the event queue, and add a SIMULATOR_START task to
+        # signify the beginning of the simulator loop. Also add a
+        # SCHEDULER_START event to invoke the scheduling loop.
         self._event_queue = EventQueue()
 
         sim_start_event = Event(event_type=EventType.SIMULATOR_START, time=0)
@@ -540,7 +540,8 @@ class Simulator(object):
                 f"[{event.time}] There are no currently released tasks, "
                 f"no running tasks, and no events available in "
                 f"the event queue. Ending the loop.")
-            return Event(event_type=EventType.SIMULATOR_END, time=loop_timeout)
+            return Event(event_type=EventType.SIMULATOR_END,
+                         time=event.time + 1)
 
         next_event = self._event_queue.peek()
         if len(running_tasks) > 0:
