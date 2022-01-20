@@ -6,9 +6,7 @@ from z3 import Int, Solver, Implies, Or, IntVal, unsat, Optimize
 from schedulers.ilp_scheduler import ILPScheduler
 import time
 import networkx as nx
-# import matplotlib
-# matplotlib.use("Agg")
-# import matplotlib.pyplot as plt
+
 
 rel_to_id = {
     "": 0,
@@ -222,7 +220,6 @@ class Z3Scheduler(ILPScheduler):
         runtime = end_time - start_time
         if dump:
             assert outpath is not None
-            # import IPython; IPython.embed()
             with open(outpath, "w") as outfile:
                 outfile.write(s.sexpr())
                 if not optimize:
@@ -230,7 +227,7 @@ class Z3Scheduler(ILPScheduler):
         if dump_nx:
             nx.write_gpickle(G, outpath + '.pkl')
             nx.drawing.nx_agraph.write_dot(G, outpath + '.dot')
-            # import pdb; pdb.set_trace()
+
 
         schedulable = s.check()
         cost = None
