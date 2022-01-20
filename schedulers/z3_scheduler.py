@@ -7,7 +7,6 @@ from schedulers.ilp_scheduler import ILPScheduler
 import time
 import networkx as nx
 
-
 rel_to_id = {
     "": 0,
     "<": 1,
@@ -227,7 +226,6 @@ class Z3Scheduler(ILPScheduler):
         if dump_nx:
             nx.write_gpickle(G, outpath + '.pkl')
             nx.drawing.nx_agraph.write_dot(G, outpath + '.dot')
-
 
         schedulable = s.check()
         cost = None

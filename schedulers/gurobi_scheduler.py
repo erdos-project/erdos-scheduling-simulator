@@ -81,10 +81,8 @@ class GurobiScheduler(ILPScheduler):
 
                 # dependent jobs need to finish before the next one
                 if dependency_matrix[row_i][col_j]:
-                    s.addConstr(
-                        times[row_i] + expected_runtimes[row_i] <=
-                        times[col_j] - 1
-                    )  
+                    s.addConstr(times[row_i] +
+                                expected_runtimes[row_i] <= times[col_j] - 1)
                 if row_i < col_j:
                     # require that if two tasks are on the same resources,
                     # they must not overlap.
@@ -95,24 +93,22 @@ class GurobiScheduler(ILPScheduler):
                     decision_vars.append((alpha, beta))
 
                     # pi > pj
-                    s.addConstr(
-                        -alpha * M - beta * M + 1 <=
-                        placements[row_i] - placements[col_j]) 
-                    
+                    s.addConstr(-alpha * M - beta * M +
+                                1 <= placements[row_i] - placements[col_j])
+
                     # pj > pi
-                    s.addConstr(
-                        alpha * M + (1 - beta) * M - 1 >=
-                        placements[row_i] - placements[col_j])  
+                    s.addConstr(alpha * M + (1 - beta) * M -
+                                1 >= placements[row_i] - placements[col_j])
 
                     # tj - ti >= ei
-                    s.addConstr(times[col_j] - times[row_i] >=
-                                expected_runtimes[row_i] -
-                                (1 - alpha) * M - beta * M)  
+                    s.addConstr(times[col_j] -
+                                times[row_i] >= expected_runtimes[row_i] -
+                                (1 - alpha) * M - beta * M)
 
                     # ti - tj <= ej
-                    s.addConstr(times[row_i] - times[col_j] >=
-                                expected_runtimes[col_j] - (1 - alpha) * M -
-                                (1 - beta) * M)  
+                    s.addConstr(times[row_i] -
+                                times[col_j] >= expected_runtimes[col_j] -
+                                (1 - alpha) * M - (1 - beta) * M)
 
         for i, pin in enumerate(pinned_tasks):
             if pin:
