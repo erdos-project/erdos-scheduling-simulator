@@ -5,3 +5,4 @@ pytest
 pytest-cov
 z3 
 z3-solver
+networkx
