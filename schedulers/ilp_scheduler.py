@@ -108,7 +108,7 @@ class ILPBaseScheduler(BaseScheduler):
              verbose=False)
 
         if opt_value is None:  # Doesn't handle loadshedding
-            return (sched_runtime, None)
+            return (sched_runtime, [])
 
         cpu_map = [[wp_id] * cpu_map[wp_id] for wp_id in cpu_map.keys()]
         cpu_map = [j for sub in cpu_map for j in sub]
