@@ -88,7 +88,7 @@ def test_ilp_scheduler_limited_resources():
         worker_pools=[worker_pool])
 
     # TODO (Justin): No behavior for loadshedding
-    assert placements is None, "Doesn't detect workload is unschedulable."
+    assert placements == [], "Doesn't detect workload is unschedulable."
 
     # assert len(placements) == 2, "Incorrect length of task placements."
     # assert placements[1][0] == task_higher_priority,\
