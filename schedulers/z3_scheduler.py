@@ -20,6 +20,7 @@ rel_to_id = {
     "and": 10
 }
 
+
 class Z3Scheduler(ILPScheduler):
 
     def schedule(self,
@@ -47,15 +48,12 @@ class Z3Scheduler(ILPScheduler):
         # e.g. call add_relation(G, 'ub_a', {'rel:'<', 'num':5}, ['a'])
         #  to add constraint (a < 5)
 
-
         start_time = time.time()
         times = [Int(f't{i}')
                  for i in range(0, num_tasks)]  # Time when execution starts
         costs = [Int(f'c{i}') for i in range(0, num_tasks)]  # Costs of gap
         placements = [Int(f'p{i}')
                       for i in range(0, num_tasks)]  # placement on CPU or GPU
-
-
 
         if optimize:
             if verbose:
