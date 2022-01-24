@@ -10,7 +10,7 @@ from tests.test_tasks import __create_default_task
 def test_ilp_scheduler_success():
     """Scenario:
 
-    EDF scheduler successfully schedules the tasks across a set of WorkerPools
+    ILP z3 scheduler successfully schedules the tasks across a set of WorkerPools
     according to the resource requirements.
     """
     ilp_scheduler = ILPBaseScheduler(Z3Scheduler)
@@ -58,8 +58,8 @@ def test_ilp_scheduler_success():
 def test_ilp_scheduler_limited_resources():
     """Scenario:
 
-    EDF scheduler chooses the higher-priority task if only enough resources
-    for one task.
+    ILP Z3 scheduler recognizes the workload is not schedulable.
+    TODO: Add loadshedding.
     """
     ilp_scheduler = ILPBaseScheduler(Z3Scheduler)
 
