@@ -102,11 +102,13 @@ def main(args):
         scheduler = LSFScheduler(preemptive=FLAGS.preemption,
                                  runtime=FLAGS.scheduler_runtime)
     elif FLAGS.scheduler == 'gurobi':
-        scheduler = ILPBaseScheduler(GurobiScheduler,preemptive=FLAGS.preemption,
-                                 runtime=FLAGS.scheduler_runtime)
+        scheduler = ILPBaseScheduler(GurobiScheduler,
+                                     preemptive=FLAGS.preemption,
+                                     runtime=FLAGS.scheduler_runtime)
     elif FLAGS.scheduler == 'z3':
-        scheduler = ILPBaseScheduler(Z3Scheduler, preemptive=FLAGS.preemption,
-                                 runtime=FLAGS.scheduler_runtime)
+        scheduler = ILPBaseScheduler(Z3Scheduler,
+                                     preemptive=FLAGS.preemption,
+                                     runtime=FLAGS.scheduler_runtime)
     else:
         raise ValueError("Unsupported scheduler implementation: {}".format(
             FLAGS.scheduler))
