@@ -1,4 +1,7 @@
 from absl import app, flags
+from schedulers.gurobi_scheduler import GurobiScheduler
+from schedulers.z3_scheduler import Z3Scheduler
+from schedulers.ilp_scheduler import ILPBaseScheduler
 
 import utils
 from simulator import Simulator
@@ -44,7 +47,7 @@ flags.DEFINE_float(
     'The difference to keep between the source Jobs of successive timestamps.')
 
 # Scheduler related flags.
-flags.DEFINE_enum('scheduler', 'edf', ['edf', 'lsf'],
+flags.DEFINE_enum('scheduler', 'edf', ['edf', 'lsf', 'gurobi', 'z3'],
                   'The scheduler to use for this execution.')
 flags.DEFINE_bool('preemption', False,
                   'Enable preemption of running tasks in the scheduler.')
@@ -97,6 +100,12 @@ def main(args):
                                  runtime=FLAGS.scheduler_runtime)
     elif FLAGS.scheduler == 'lsf':
         scheduler = LSFScheduler(preemptive=FLAGS.preemption,
+                                 runtime=FLAGS.scheduler_runtime)
+    elif FLAGS.scheduler == 'gurobi':
+        scheduler = ILPBaseScheduler(GurobiScheduler,preemptive=FLAGS.preemption,
+                                 runtime=FLAGS.scheduler_runtime)
+    elif FLAGS.scheduler == 'z3':
+        scheduler = ILPBaseScheduler(Z3Scheduler, preemptive=FLAGS.preemption,
                                  runtime=FLAGS.scheduler_runtime)
     else:
         raise ValueError("Unsupported scheduler implementation: {}".format(
