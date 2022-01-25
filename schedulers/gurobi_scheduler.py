@@ -1,6 +1,5 @@
 from typing import List
 
-# from z3 import Int, Solver, Implies, Or, IntVal, unsat, Optimize
 import gurobipy as gp
 from gurobipy import GRB
 from schedulers.ilp_scheduler import ILPScheduler
@@ -24,7 +23,34 @@ class GurobiScheduler(ILPScheduler):
         bits=None,
         optimize=False,
         log_dir=None,
+        verbose= False
     ):
+        """
+        Runs scheduling using Gurobi
+        Args:
+        - needs_gpu: List of booleans, one for each task, indicating whether
+            the task requires a GPU.
+        - release_times: List of ints, one for each task, indicating the
+            release time of the task.
+        - absolute_deadlines: List of ints, one for each task, indicating the
+            absolute deadline of the task.
+        - expected_runtimes: List of ints, one for each task, indicating the
+            expected runtime of the task.
+        - dependency_matrix: List of lists of booleans, one for each task,
+            indicating whether task i must finish before task j starts.
+        - pinned_tasks: List of ints, one for each task, indicating the
+            hardware index if a task is pinned to that resource (or already
+            running there).
+        - num_tasks: Number of tasks.
+        - num_gpus: Number of GPUs.
+        - num_cpus: Number of CPUs.
+        - bits: Number of bits to use for the ILP.
+        - optimize: Must be True or an error will be raise gurobi only does opt.
+        - log_dir: Directory to write the ILP to.
+        - verbose: print status update.
+
+    
+        """
         M = max(absolute_deadlines)
 
         def MySum(lst):
@@ -33,7 +59,8 @@ class GurobiScheduler(ILPScheduler):
         start_time = time.time()
 
         if optimize:
-            print("We are Optimizing")
+            if verbose: 
+                print("We are Optimizing")
             s = gp.Model('RAP')
             s.setParam("OptimalityTol", 1e-3)
         else:
@@ -122,14 +149,16 @@ class GurobiScheduler(ILPScheduler):
             raise NotImplementedError
 
         if s.status == GRB.OPTIMAL:
-            print(f"Found optimal value: {s.objVal}")
+            if verbose: 
+                print(f"Found optimal value: {s.objVal}")
             # find model
             assignment = [t.X for t in times], [p.X for p in placements]
             return assignment, s.objVal, runtime
         elif s.status == GRB.INFEASIBLE:
-            print("No solution to solver run")
+            if verbose: 
+                print("No solution to solver run")
             return None, None, None
         else:
-
-            print(f"Opt solver end with status: {s.status}")
+            if verbose:
+                print(f"Opt solver end with status: {s.status}")
             return None, None, None
