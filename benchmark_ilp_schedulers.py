@@ -12,7 +12,7 @@ FLAGS = flags.FLAGS
 flags.DEFINE_integer('NUM_GPUS', 2, 'Number of GPUs available.')
 flags.DEFINE_integer('NUM_CPUS', 10, 'Number of CPUs available.')
 flags.DEFINE_integer('task_runtime', 15, 'Estimated task runtime.')
-flags.DEFINE_enum('scheduler', 'z3', [ 'z3', 'gurobi'],
+flags.DEFINE_enum('scheduler', 'z3', ['z3', 'gurobi'],
                   'Sets which ILP scheduler to use')
 flags.DEFINE_bool('opt', False,
                   'False --> feasibility only; True --> maximize slack')
@@ -21,6 +21,7 @@ flags.DEFINE_integer('dep1', 0, "first dep source")
 flags.DEFINE_integer('dep2', 1, "first dep target")
 
 mini_run = False
+
 
 def do_run(scheduler: ILPScheduler,
            num_tasks: int = 5,
@@ -50,25 +51,27 @@ def do_run(scheduler: ILPScheduler,
         dependency_matrix[FLAGS.dep1][FLAGS.dep2] = True
         needs_gpu[3] = False
 
-    out, output_cost, sched_runtime = scheduler.schedule(needs_gpu,
-                                                         release_times,
-                                                         absolute_deadlines,
-                                                         expected_runtimes,
-                                                         dependency_matrix,
-                                                         pinned_tasks,
-                                                         num_tasks,
-                                                         num_gpus,
-                                                         num_cpus,
-                                                         bits=13,
-                                                         optimize=optimize,
-                                                         log_dir=log_dir,)
+    out, output_cost, sched_runtime = scheduler.schedule(
+        needs_gpu,
+        release_times,
+        absolute_deadlines,
+        expected_runtimes,
+        dependency_matrix,
+        pinned_tasks,
+        num_tasks,
+        num_gpus,
+        num_cpus,
+        bits=13,
+        optimize=optimize,
+        log_dir=log_dir,
+    )
 
     print(sched_runtime)
-    
+
     verify_schedule(out[0], out[1], needs_gpu, release_times,
                     absolute_deadlines, expected_runtimes, dependency_matrix,
                     num_gpus, num_cpus)
-    
+
     print(out)
     if log_dir is not None:
         with open(log_dir + f"{'opt' if optimize else 'feas'}_result.pkl",
@@ -136,7 +139,6 @@ def main(args):
         if runtime > 600 or mini_run:
             break
     print(runtimes)
-
 
 
 if __name__ == '__main__':
