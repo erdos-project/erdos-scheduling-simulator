@@ -6,21 +6,6 @@ from z3 import Int, Solver, Implies, Or, IntVal, unsat, Optimize
 from schedulers.ilp_scheduler import ILPScheduler
 import time
 
-rel_to_id = {
-    "": 0,
-    "<": 1,
-    "<=": 2,
-    ">": 3,
-    ">=": 4,
-    "!=": 5,
-    "==": 6,
-    "min": 7,
-    "max": 8,
-    "or": 9,
-    "and": 10
-}
-
-
 class Z3Scheduler(ILPScheduler):
 
     def schedule(self,
@@ -35,10 +20,7 @@ class Z3Scheduler(ILPScheduler):
                  num_cpus: int,
                  bits=None,
                  optimize=False,
-                 dump=False,
-                 outpath=None,
-                 dump_nx=False,
-                 nx_outpath=None,
+                 log_dir=None,
                  verbose=True):
 
         def MySum(lst):
@@ -103,9 +85,10 @@ class Z3Scheduler(ILPScheduler):
 
         end_time = time.time()
         runtime = end_time - start_time
-        if dump:
-            assert outpath is not None
-            with open(outpath, "w") as outfile:
+
+        if log_dir is not None:
+            log_dir = log_dir + f"{'opt' if optimize else 'feas'}.smt"
+            with open(log_dir, "w") as outfile:
                 outfile.write(s.sexpr())
                 if not optimize:
                     outfile.write("(check-sat)")

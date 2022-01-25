@@ -10,5 +10,5 @@ setup(
     keywords=("simulator for scheduling traces"),
     packages=find_packages(),
     license="Apache 2.0",
-    install_requires=["absl-py", "pyboolector", "z3"],
+    install_requires=["absl-py", "z3"],
 )

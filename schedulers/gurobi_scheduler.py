@@ -23,9 +23,7 @@ class GurobiScheduler(ILPScheduler):
         num_cpus: int,
         bits=None,
         optimize=False,
-        dump=False,
-        dump_nx=False,
-        outpath=None,
+        log_dir=None,
     ):
         M = max(absolute_deadlines)
 
@@ -119,8 +117,8 @@ class GurobiScheduler(ILPScheduler):
         s.optimize()
         end_time = time.time()
         runtime = end_time - start_time
-        if dump:
-            assert outpath is not None
+        if log_dir is not None:
+            assert log_dir is not None
             raise NotImplementedError
 
         if s.status == GRB.OPTIMAL:

@@ -132,9 +132,7 @@ class ILPBaseScheduler(BaseScheduler):
              num_gpus,  #: int,
              num_cpus,  #: int,
              optimize=True,
-             dump=False,  # indicates if we shud log the ILP call
-             outpath=None,
-             dump_nx=False,
+             log_dir=None,
              verbose=False)
 
         if opt_value is None:  # Doesn't handle loadshedding
@@ -191,9 +189,7 @@ class ILPBaseScheduler(BaseScheduler):
              num_gpus,  #: int,
              num_cpus,  #: int,
              optimize=True,
-             dump=False,  # indicates if we shud log the ILP call
-             outpath=None,
-             dump_nx=False)
+             log_dir=None)
 
         result = list(zip(start_times, placements))
         return sched_runtime, result

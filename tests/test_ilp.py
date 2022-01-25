@@ -11,9 +11,7 @@ def __do_run(
     num_gpus: int = 2,
     num_cpus: int = 10,
     optimize: bool = True,
-    dump: bool = False,
-    outpath: str = None,
-    dump_nx: bool = False,
+    log_dir: str = None,
     mini_run: bool = False,
 ):
 
@@ -36,10 +34,7 @@ def __do_run(
         dependency_matrix[0][1] = True
         needs_gpu[3] = False
 
-    if outpath is not None:
-        smtpath = outpath + f"{'opt' if optimize else 'feas'}.smt"
-    else:
-        smtpath = None
+
     out, output_cost, sched_runtime = scheduler.schedule(needs_gpu,
                                                          release_times,
                                                          absolute_deadlines,
@@ -51,9 +46,7 @@ def __do_run(
                                                          num_cpus,
                                                          bits=13,
                                                          optimize=optimize,
-                                                         dump=dump,
-                                                         outpath=smtpath,
-                                                         dump_nx=dump_nx)
+                                                         log_dir=log_dir,)
 
     # import IPython; IPython.embed()
     verify_schedule(out[0], out[1], needs_gpu, release_times,
@@ -77,9 +70,7 @@ def test_z3_ilp_success():
                                                 2,
                                                 1,
                                                 optimize=True,
-                                                dump=False,
-                                                outpath=None,
-                                                dump_nx=False,
+                                                log_dir=None,
                                                 mini_run=True)
     assert output_cost == 39945, "Gurobi ILP: Wrong cost"
     assert placements == ([2, 7, 12, 2,
@@ -98,9 +89,7 @@ def test_gurobi_ilp_success():
                                                 2,
                                                 1,
                                                 optimize=True,
-                                                dump=False,
-                                                outpath=None,
-                                                dump_nx=False,
+                                                log_dir=None,
                                                 mini_run=True)
     assert output_cost == 39945, "Z3 ILP: Wrong cost"
     assert placements == ([2.0, 2.0, 7.0, 7.0,
