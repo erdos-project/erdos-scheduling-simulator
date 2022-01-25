@@ -10,7 +10,8 @@ from tests.test_tasks import __create_default_task
 def test_ilp_scheduler_success():
     """Scenario:
 
-    ILP z3 scheduler successfully schedules the tasks across a set of WorkerPools
+    ILP z3 scheduler successfully schedules the
+    tasks across a set of WorkerPools
     according to the resource requirements.
     """
     ilp_scheduler = ILPBaseScheduler(Z3Scheduler)
