@@ -28,17 +28,17 @@ class GurobiScheduler(ILPScheduler):
         Args:
             needs_gpu (`List[bool]`): List of booleans, one for each task,
                 indicating whether the task requires a GPU.
-            release_times (`List[int]`): List of ints, one for each task, 
+            release_times (`List[int]`): List of ints, one for each task,
                 indicating the release time of the task.
             absolute_deadlines (`List[int]`): List of ints, one for each task,
                 indicating the absolute deadline of the task.
-            expected_runtimes (`List[int]`): List of ints, one for each task, 
+            expected_runtimes (`List[int]`): List of ints, one for each task,
                 indicating the expected runtime of the task.
-            dependency_matrix (`List[List[bool]]`): List of lists of booleans, 
-                one for each task, indicating whether task i must finish 
+            dependency_matrix (`List[List[bool]]`): List of lists of booleans,
+                one for each task, indicating whether task i must finish
                 before task j starts.
-            pinned_tasks (`List[int]`): List of ints, one for each task, 
-                indicating the hardware index if a task is pinned to that 
+            pinned_tasks (`List[int]`): List of ints, one for each task,
+                indicating the hardware index if a task is pinned to that
                 resource (or already running there).
             num_tasks (`int`): Number of tasks.
             num_gpus (`int`): Number of GPUs.
@@ -47,7 +47,7 @@ class GurobiScheduler(ILPScheduler):
             optimize (`bool`): Must be True or an error will be
                 raise gurobi only does opt.
             log_dir (`str`): Directory to write the ILP to.
-            verbose (`bool`): print status update.  
+            verbose (`bool`): print status update.
         """
         M = max(absolute_deadlines)
 
