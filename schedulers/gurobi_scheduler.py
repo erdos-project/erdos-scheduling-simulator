@@ -9,22 +9,20 @@ import time
 
 class GurobiScheduler(ILPScheduler):
 
-    def schedule(
-        self,
-        needs_gpu: List[bool],
-        release_times: List[int],
-        absolute_deadlines: List[int],
-        expected_runtimes: List[int],
-        dependency_matrix,
-        pinned_tasks: List[int],
-        num_tasks: int,
-        num_gpus: int,
-        num_cpus: int,
-        bits=None,
-        optimize=False,
-        log_dir=None,
-        verbose= False
-    ):
+    def schedule(self,
+                 needs_gpu: List[bool],
+                 release_times: List[int],
+                 absolute_deadlines: List[int],
+                 expected_runtimes: List[int],
+                 dependency_matrix,
+                 pinned_tasks: List[int],
+                 num_tasks: int,
+                 num_gpus: int,
+                 num_cpus: int,
+                 bits=None,
+                 optimize=False,
+                 log_dir=None,
+                 verbose=False):
         """
         Runs scheduling using Gurobi
         Args:
@@ -59,7 +57,7 @@ class GurobiScheduler(ILPScheduler):
         start_time = time.time()
 
         if optimize:
-            if verbose: 
+            if verbose:
                 print("We are Optimizing")
             s = gp.Model('RAP')
             s.setParam("OptimalityTol", 1e-3)
@@ -149,13 +147,13 @@ class GurobiScheduler(ILPScheduler):
             raise NotImplementedError
 
         if s.status == GRB.OPTIMAL:
-            if verbose: 
+            if verbose:
                 print(f"Found optimal value: {s.objVal}")
             # find model
             assignment = [t.X for t in times], [p.X for p in placements]
             return assignment, s.objVal, runtime
         elif s.status == GRB.INFEASIBLE:
-            if verbose: 
+            if verbose:
                 print("No solution to solver run")
             return None, None, None
         else:

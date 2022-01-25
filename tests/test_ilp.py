@@ -34,19 +34,20 @@ def __do_run(
         dependency_matrix[0][1] = True
         needs_gpu[3] = False
 
-
-    out, output_cost, sched_runtime = scheduler.schedule(needs_gpu,
-                                                         release_times,
-                                                         absolute_deadlines,
-                                                         expected_runtimes,
-                                                         dependency_matrix,
-                                                         pinned_tasks,
-                                                         num_tasks,
-                                                         num_gpus,
-                                                         num_cpus,
-                                                         bits=13,
-                                                         optimize=optimize,
-                                                         log_dir=log_dir,)
+    out, output_cost, sched_runtime = scheduler.schedule(
+        needs_gpu,
+        release_times,
+        absolute_deadlines,
+        expected_runtimes,
+        dependency_matrix,
+        pinned_tasks,
+        num_tasks,
+        num_gpus,
+        num_cpus,
+        bits=13,
+        optimize=optimize,
+        log_dir=log_dir,
+    )
 
     # import IPython; IPython.embed()
     verify_schedule(out[0], out[1], needs_gpu, release_times,

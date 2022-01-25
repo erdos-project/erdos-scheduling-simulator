@@ -6,6 +6,7 @@ from z3 import Int, Solver, Implies, Or, IntVal, unsat, Optimize
 from schedulers.ilp_scheduler import ILPScheduler
 import time
 
+
 class Z3Scheduler(ILPScheduler):
 
     def schedule(self,
