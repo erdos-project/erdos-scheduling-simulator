@@ -26,25 +26,25 @@ class Z3Scheduler(ILPScheduler):
         """
         Runs scheduling using Z3
         Args:
-            needs_gpu (`List[bool]`): List of booleans, one for each task, indicating whether
-                the task requires a GPU.
-            release_times (`List[int]`): List of ints, one for each task, indicating the
-                release time of the task.
-            absolute_deadlines (`List[int]`): List of ints, one for each task, indicating the
-                absolute deadline of the task.
-            expected_runtimes (`List[int]`): List of ints, one for each task, indicating the
-                expected runtime of the task.
-            dependency_matrix (`List[List[bool]]`): List of lists of booleans, one for each task,
-                indicating whether task i must finish before task j starts.
-            pinned_tasks (`List[int]`): List of ints, one for each task, indicating the
-                hardware index if a task is pinned to that resource (or already
-                running there).
+            needs_gpu (`List[bool]`): List of booleans, one for each task,
+                indicating whether the task requires a GPU.
+            release_times (`List[int]`): List of ints, one for each task, 
+                indicating the release time of the task.
+            absolute_deadlines (`List[int]`): List of ints, one for each task,
+                indicating the absolute deadline of the task.
+            expected_runtimes (`List[int]`): List of ints, one for each task, 
+                indicating the expected runtime of the task.
+            dependency_matrix (`List[List[bool]]`): List of lists of booleans, 
+                one for each task, indicating whether task i must finish 
+                before task j starts.
+            pinned_tasks (`List[int]`): List of ints, one for each task, 
+                indicating the hardware index if a task is pinned to that 
+                resource (or already running there).
             num_tasks (`int`): Number of tasks.
             num_gpus (`int`): Number of GPUs.
             num_cpus (`int`): Number of CPUs.
             bits (`int`): Number of bits to use for the ILP.
-            optimize (`bool`): Must be True or an error will be
-                raise gurobi only does opt.
+            optimize (`bool`): Run with optimization or just feasible.
             log_dir (`str`): Directory to write the ILP to.
             verbose (`bool`): print status update. 
         """
