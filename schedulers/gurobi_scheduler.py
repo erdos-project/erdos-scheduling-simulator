@@ -43,11 +43,10 @@ class GurobiScheduler(ILPScheduler):
         - num_gpus: Number of GPUs.
         - num_cpus: Number of CPUs.
         - bits: Number of bits to use for the ILP.
-        - optimize: Must be True or an error will be raise gurobi only does opt.
+        - optimize: Must be True or an error will be
+            raise gurobi only does opt.
         - log_dir: Directory to write the ILP to.
         - verbose: print status update.
-
-    
         """
         M = max(absolute_deadlines)
 
