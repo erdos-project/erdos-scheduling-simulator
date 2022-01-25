@@ -1,8 +1,6 @@
-
 from schedulers.ilp_scheduler import ILPScheduler, verify_schedule
 from schedulers.z3_scheduler import Z3Scheduler
 from schedulers.gurobi_scheduler import GurobiScheduler
-
 
 from tests.test_tasks import __create_default_task
 
