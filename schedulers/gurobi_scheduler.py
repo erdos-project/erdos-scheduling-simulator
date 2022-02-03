@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Dict
 
 import gurobipy as gp
 from gurobipy import GRB
@@ -17,8 +17,7 @@ class GurobiScheduler(ILPScheduler):
                  dependency_matrix,
                  pinned_tasks: List[int],
                  num_tasks: int,
-                 num_gpus: int,
-                 num_cpus: int,
+                 num_resources: Dict[str,int],
                  bits=None,
                  optimize=False,
                  log_dir=None,
@@ -41,8 +40,7 @@ class GurobiScheduler(ILPScheduler):
                 indicating the hardware index if a task is pinned to that
                 resource (or already running there).
             num_tasks (`int`): Number of tasks.
-            num_gpus (`int`): Number of GPUs.
-            num_cpus (`int`): Number of CPUs.
+            num_resources (`Dict[str,int]`): Number of resources.
             bits (`int`): Number of bits to use for the ILP.
             optimize (`bool`): Must be True or an error will be
                 raise gurobi only does opt.
@@ -50,6 +48,8 @@ class GurobiScheduler(ILPScheduler):
             verbose (`bool`): print status update.
         """
         M = max(absolute_deadlines)
+        num_gpus = num_resources['GPU']
+        num_cpus = num_resources['CPU']
 
         def MySum(lst):
             return functools.reduce(lambda a, b: a + b, lst, 0)

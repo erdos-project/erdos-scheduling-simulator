@@ -7,14 +7,13 @@ from workload import Task, TaskGraph, Resource
 from workers import WorkerPool
 
 
-def verify_schedule(start_times, placements, needs_gpu, release_times,
+def verify_schedule(start_times, placements, resource_requirements, release_times,
                     absolute_deadlines, expected_runtimes, dependency_matrix,
-                    num_gpus, num_cpus):
+                    num_resources):
     # check release times
-    # import IPython; IPython.embed()
     assert all([s >= r for s, r in zip(start_times, release_times)
                 ]), "not_valid_release_times"
-    assert all([(not need_gpu or (p > num_cpus))
+    assert all([(not need_gpu or (p >= num_cpus))
                 for need_gpu, p in zip(needs_gpu, placements)
                 ]), "not_valid_placement"
     assert all([
@@ -83,22 +82,24 @@ class ILPBaseScheduler(BaseScheduler):
 
             # Create a virtual WorkerPool set to try scheduling decisions on.
             schedulable_worker_pools = [copy(w) for w in worker_pools]
+        
+        # unique list of resource names -- not relying on set stability
+        resource_names = list({ r.name  for wp in schedulable_worker_pools for r in wp.resources._resource_vector.keys()})
 
-        cpu_map = {
+        r_maps = { r_name:
+            {
             wp.id:
-            wp.resources.get_available_quantity(Resource(name="CPU",
+            wp.resources.get_available_quantity(Resource(name=r_name,
                                                          _id="any"))
             for wp in schedulable_worker_pools
+            }
+            for r_name in resource_names
         }
-        gpu_map = {
-            wp.id:
-            wp.resources.get_available_quantity(Resource(name="GPU",
-                                                         _id="any"))
-            for wp in schedulable_worker_pools
-        }
-
-        num_cpus = sum(cpu_map.values())
-        num_gpus = sum(gpu_map.values())
+        
+        num_resources = [
+            sum(r_maps[r_name].values())
+            for r_name in resource_names
+        ]
 
         estimated_scheduling_overhead = 0
         num_tasks = len(tasks_to_be_scheduled)
@@ -109,12 +110,14 @@ class ILPBaseScheduler(BaseScheduler):
         expected_runtimes = [
             task.remaining_time for task in tasks_to_be_scheduled
         ]
-        gpu_resource_requirement = [
-            task.resource_requirements.get_available_quantity(
-                Resource(name="GPU", _id="any"))
+
+        resource_requirements = [
+            [
+                task.resource_requirements < Resource(name=r_name, _id="any")
+                for r_name in resource_names
+            ]
             for task in tasks_to_be_scheduled
         ]
-        needs_gpu = [r > 0 for r in gpu_resource_requirement]
 
         # TODO (Justin) : This doesn't account for the dependencies
         # between tasks.
@@ -122,15 +125,14 @@ class ILPBaseScheduler(BaseScheduler):
 
         (start_times,
          placements), opt_value, sched_runtime = self.sched_solver.schedule(
-             needs_gpu,  #: List[bool],
-             release_times,  #: List[int],
-             absolute_deadlines,  #: List[int],
-             expected_runtimes,  #: List[int],
-             dependency_matrix,
-             pinned_tasks,  #: List[int],
+             resource_requirements, #: List<tasks>[List<uniq_resources>[bool]]
+             release_times,  #: List<tasks>[int],
+             absolute_deadlines,  #: List<tasks>[int],
+             expected_runtimes,  #: List<tasks>[int],
+             dependency_matrix, #: List<tasks>[List<tasks>[bool]],
+             pinned_tasks,  #: List<tasks>[int<total_num_resources>],
              num_tasks,  #: int,
-             num_gpus,  #: int,
-             num_cpus,  #: int,
+             [num_resources[r_name] for r_name in resource_names], #: List<uniq_resources>[int],
              optimize=True,
              log_dir=None,
              verbose=False)
@@ -138,17 +140,22 @@ class ILPBaseScheduler(BaseScheduler):
         if opt_value is None:  # Doesn't handle loadshedding
             return (sched_runtime, [])
 
-        verify_schedule(start_times, placements, needs_gpu, release_times,
+        verify_schedule(start_times, placements, resource_requirements, release_times,
                         absolute_deadlines, expected_runtimes,
-                        dependency_matrix, num_gpus, num_cpus)
+                        dependency_matrix, num_resources)
 
-        cpu_map = [[wp_id] * cpu_map[wp_id] for wp_id in cpu_map.keys()]
-        cpu_map = [j for sub in cpu_map for j in sub]
+        resource_map = {
+            r_name:
+            [[wp_id] * r_maps[wp_id] for wp_id in r_maps[r_name].keys()]
+            for r_name in r_maps.keys()
+        }
 
-        gpu_map = [[wp_id] * gpu_map[wp_id] for wp_id in gpu_map.keys()]
-        gpu_map = [j for sub in gpu_map for j in sub]
-
-        resource_map = cpu_map + gpu_map
+        resource_map = {
+            r_name:
+            [j for sub in resource_map[r_name] for j in sub] # flatten
+            for r_name in resource_map.keys()
+        }
+        # TODO: this doesn't actually handle the resource map ordering
 
         placements = [(t, resource_map[p - 1])
                       for t, p in zip(tasks_to_be_scheduled, placements)]

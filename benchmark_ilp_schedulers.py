@@ -19,8 +19,9 @@ flags.DEFINE_bool('opt', False,
 
 flags.DEFINE_integer('dep1', 0, "first dep source")
 flags.DEFINE_integer('dep2', 1, "first dep target")
+flags.DEFINE_bool('mini_run', False,
+                  'True --> simple problem; False --> iterative benchmarking')
 
-mini_run = False
 
 
 def do_run(scheduler: ILPScheduler,
@@ -47,7 +48,7 @@ def do_run(scheduler: ILPScheduler,
     # Hardware index if a task is pinned to that resource (or already running
     # there).
     pinned_tasks = [None] * num_tasks
-    if not mini_run:
+    if not FLAGS.mini_run:
         dependency_matrix[FLAGS.dep1][FLAGS.dep2] = True
         needs_gpu[3] = False
 
@@ -101,7 +102,7 @@ def main(args):
     else:
         raise ValueError('Unexpected --scheduler value {FLAGS.scheduler}')
     runtimes = []
-    for i in range(1, 11, 1):
+    for i in range(4, 5, 1):
         multiplier = 5 * i
         horizon = 50 * multiplier
         num_tasks = 5 * multiplier
@@ -114,7 +115,7 @@ def main(args):
         if log_dir is not None and not Path(log_dir).is_dir():
             Path(log_dir).mkdir()
 
-        if mini_run:
+        if FLAGS.mini_run:
             runtime, output_cost = do_run(scheduler,
                                           5,
                                           5,
@@ -136,7 +137,7 @@ def main(args):
 
         print(f"runtime: {runtime} ----- output_cost: {output_cost}")
         runtimes.append((num_tasks, runtime, output_cost))
-        if runtime > 600 or mini_run:
+        if runtime > 600 or FLAGS.mini_run:
             break
     print(runtimes)
 
