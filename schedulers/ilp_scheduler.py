@@ -11,6 +11,8 @@ def verify_schedule(start_times, placements, resource_requirements, release_time
                     absolute_deadlines, expected_runtimes, dependency_matrix,
                     num_resources):
     # check release times
+    num_resources_ub = [sum(num_resources[0:i+1]) for i in range(len(num_resources))]
+    num_resources_lb = [0] + [sum(num_resources[0:i+1]) for i in range(len(num_resources)-1)]
     assert all([s >= r for s, r in zip(start_times, release_times)
                 ]), "not_valid_release_times"
     assert all([(not need_gpu or (p >= num_cpus))
@@ -94,12 +96,12 @@ class ILPBaseScheduler(BaseScheduler):
             for wp in schedulable_worker_pools
             }
             for r_name in resource_names
-        }
+        } # {reseource_type : {key = pool ID : value = number of resource_type}}
         
         num_resources = [
             sum(r_maps[r_name].values())
             for r_name in resource_names
-        ]
+        ] # [number of resources of each type] ordered by resource_names
 
         estimated_scheduling_overhead = 0
         num_tasks = len(tasks_to_be_scheduled)
@@ -117,7 +119,7 @@ class ILPBaseScheduler(BaseScheduler):
                 for r_name in resource_names
             ]
             for task in tasks_to_be_scheduled
-        ]
+        ] # [[true iff task fits on resource type r for r in uniq_resource ] for each task]
 
         # TODO (Justin) : This doesn't account for the dependencies
         # between tasks.
