@@ -1,7 +1,8 @@
 from typing import List
 
 import functools
-from z3 import Int, Solver, Implies, If, Or, IntVal, unsat, Optimize, BitVec, Bool, BitVecVal, UGE, ULT
+from z3 import Int, Solver, Implies, Or, unsat, Optimize, IntVal
+# from z3 import  If,    BitVec, Bool,  UGE, ULT, BitVecVal
 from math import ceil, log2
 
 from schedulers.ilp_scheduler import ILPScheduler
@@ -157,7 +158,8 @@ class Z3Scheduler(ILPScheduler):
 
         for i, pin in enumerate(pinned_tasks):
             if pin:
-                s.add(placements[i] == BitVecVal(pin, bits))
+                s.add(placements[i] == IntVal(pin))
+                # TODO: wrong
 
         if optimize:
             result = s.maximize(MySum(costs))
