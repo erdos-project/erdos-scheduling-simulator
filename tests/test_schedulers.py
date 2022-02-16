@@ -61,10 +61,8 @@ def test_ilp_scheduler_success():
         assert placements[1][1] == worker_pool_one.id,\
             "Incorrect placement of the task on the WorkerPool."
     else:
-        raiseExceptions(
-            "Incorrect placements: two tasks " /
-            "arent the same ones as the ones placed"
-        )
+        raiseExceptions("Incorrect placements: two tasks " /
+                        "arent the same ones as the ones placed")
 
 
 def test_ilp_scheduler_limited_resources():
