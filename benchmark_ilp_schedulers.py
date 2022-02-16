@@ -97,7 +97,7 @@ def do_run(scheduler: ILPScheduler,
 
 
 def main(args):
-    logger = utils.setup_logging(name=f"benchmark_ilp")
+    logger = utils.setup_logging(name="benchmark_ilp")
     if FLAGS.scheduler == 'z3':
         scheduler = Z3Scheduler()
     elif FLAGS.scheduler == 'gurobi':

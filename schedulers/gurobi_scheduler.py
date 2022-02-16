@@ -22,7 +22,7 @@ class GurobiScheduler(ILPScheduler):
         if _logger:
             self._logger = _logger
         else:
-            self._logger = utils.setup_logging(name=f"gurobi")
+            self._logger = utils.setup_logging(name="gurobi")
 
     def schedule(self,
                  needs_gpu: List[bool],

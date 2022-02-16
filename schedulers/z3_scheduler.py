@@ -23,7 +23,7 @@ class Z3Scheduler(ILPScheduler):
         if _logger:
             self._logger = _logger
         else:
-            self._logger = utils.setup_logging(name=f"z3")
+            self._logger = utils.setup_logging(name="z3")
 
     def schedule(self,
                  resource_requirement: List[List[bool]],
