@@ -64,13 +64,13 @@ def test_z3_ilp_success():
     Mini-instance of z3 ilp
     """
     _, output_cost, placements = __do_run(Z3Scheduler(),
-                                                5,
-                                                5,
-                                                8000,
-                                                2,
-                                                1,
-                                                goal='max_slack',
-                                                log_dir=None)
+                                          5,
+                                          5,
+                                          8000,
+                                          2,
+                                          1,
+                                          goal='max_slack',
+                                          log_dir=None)
 
     assert output_cost == 39955, "Z3 ILP: Wrong cost -- {output_cost} instead of 39955"
     assert placements == ([2, 7, 2, 2, 7], [1, 2, 2, 0,
@@ -83,13 +83,15 @@ def test_gurobi_ilp_success():
     Mini-instance of gurobi ilp
     """
     _, output_cost, placements = __do_run(GurobiScheduler(),
-                                                5,
-                                                5,
-                                                8000,
-                                                2,
-                                                1,
-                                                goal='max_slack',
-                                                log_dir=None)
+                                          5,
+                                          5,
+                                          8000,
+                                          2,
+                                          1,
+                                          goal='max_slack',
+                                          log_dir=None)
 
     assert output_cost == 39955, f"Gurobi ILP: Wrong cost -- {output_cost} instead of 39945"
-    assert placements == ([2, 7, 7, 2, 2], [2, 1, 2, 0, 1]), f"Gurobi ILP: Wrong placements -- {placements}"
+    assert placements == ([2, 7, 7, 2, 2],
+                          [2, 1, 2, 0,
+                           1]), f"Gurobi ILP: Wrong placements -- {placements}"
