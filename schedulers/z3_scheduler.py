@@ -7,8 +7,6 @@ import time
 from math import ceil, log2
 from typing import Dict, List, Optional
 
-from z3 import Int, Solver, Implies, Or, unsat, Optimize, BitVecVal
-
 import utils
 from schedulers.ilp_scheduler import ILPScheduler
 
