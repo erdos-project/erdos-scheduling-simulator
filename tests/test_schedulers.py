@@ -55,14 +55,14 @@ def test_ilp_scheduler_success():
         assert placements[0][1] == worker_pool_one.id,\
             "Incorrect placement of the task on the WorkerPool."
     elif placements[0][0] == task_gpu and placements[1][0] == task_cpu:
-        print("here")
         assert placements[0][1] == worker_pool_two.id,\
             "Incorrect placement of the task on the WorkerPool."
         assert placements[1][1] == worker_pool_one.id,\
             "Incorrect placement of the task on the WorkerPool."
     else:
-        raiseExceptions("Incorrect placements: two tasks " /
-                        "arent the same ones as the ones placed")
+        raiseExceptions(
+            "Incorrect placements: two tasks arent the same as the ones placed"
+        )
 
 
 def test_ilp_scheduler_limited_resources():

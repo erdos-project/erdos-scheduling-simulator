@@ -10,9 +10,8 @@ def __do_run(
     horizon: int = 45,
     num_gpus: int = 2,
     num_cpus: int = 10,
-    optimize: bool = True,
+    goal: str = 'max_slack',
     log_dir: str = None,
-    mini_run: bool = False,
 ):
 
     print(f"Running for {num_tasks} task over horizon of {horizon}")
@@ -30,9 +29,8 @@ def __do_run(
     # Hardware index if a task is pinned to that resource (or already running
     # there).
     pinned_tasks = [None] * num_tasks
-    if not mini_run:
-        dependency_matrix[0][1] = True
-        needs_gpu[3] = False
+    dependency_matrix[0][1] = True
+    needs_gpu[3] = False
 
     resource_requirement = [[False, True] if need_gpu else [True, False]
                             for need_gpu in needs_gpu]
@@ -45,9 +43,12 @@ def __do_run(
         dependency_matrix,
         pinned_tasks,
         num_tasks,
-        [num_cpus, num_gpus],
+        {
+            'CPU': num_cpus,
+            'GPU': num_gpus
+        },
         bits=13,
-        optimize=optimize,
+        goal=goal,
         log_dir=log_dir,
     )
 
@@ -72,9 +73,8 @@ def test_z3_ilp_success():
                                                 8000,
                                                 2,
                                                 1,
-                                                optimize=True,
-                                                log_dir=None,
-                                                mini_run=True)
+                                                goal='max_slack',
+                                                log_dir=None)
     assert output_cost == 39945, "Gurobi ILP: Wrong cost"
     assert placements == ([2, 7, 12, 2,
                            7], [3, 3, 2, 2, 2]), "Gurobi ILP: Wrong placements"
@@ -91,9 +91,8 @@ def test_gurobi_ilp_success():
                                                 8000,
                                                 2,
                                                 1,
-                                                optimize=True,
-                                                log_dir=None,
-                                                mini_run=True)
+                                                goal='max_slack',
+                                                log_dir=None)
     assert output_cost == 39945, "Z3 ILP: Wrong cost"
     assert placements == ([2.0, 2.0, 7.0, 7.0,
                            12.0], [2.0, 3.0, 3.0, 2.0,

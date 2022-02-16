@@ -1,13 +1,28 @@
-from typing import List, Dict
+import functools
+import logging
+import time
+
+from typing import Dict, List, Optional
 
 import gurobipy as gp
-from gurobipy import GRB
+
+import utils
 from schedulers.ilp_scheduler import ILPScheduler
-import functools  # for reduce
-import time
 
 
 class GurobiScheduler(ILPScheduler):
+
+    def __init__(self,
+                 preemptive: bool = False,
+                 runtime: float = -1.0,
+                 _logger: Optional[logging.Logger] = None):
+        self._preemptive = preemptive
+        self._runtime = runtime
+        # Set up the logger.
+        if _logger:
+            self._logger = _logger
+        else:
+            self._logger = utils.setup_logging(name="gurobi")
 
     def schedule(self,
                  needs_gpu: List[bool],
@@ -19,11 +34,11 @@ class GurobiScheduler(ILPScheduler):
                  num_tasks: int,
                  num_resources: Dict[str, int],
                  bits=None,
-                 optimize=False,
+                 goal='max_slack',
                  log_dir=None,
-                 verbose=False):
-        """
-        Runs scheduling using Gurobi
+                 logger: Optional[logging.Logger] = None):
+        """Runs scheduling using Gurobi.
+
         Args:
             needs_gpu (`List[bool]`): List of booleans, one for each task,
                 indicating whether the task requires a GPU.
@@ -42,11 +57,14 @@ class GurobiScheduler(ILPScheduler):
             num_tasks (`int`): Number of tasks.
             num_resources (`Dict[str,int]`): Number of resources.
             bits (`int`): Number of bits to use for the ILP.
-            optimize (`bool`): Must be True or an error will be
-                raise gurobi only does opt.
+            goal (`str`): Goal of the scheduler run. Note: Gurobi does not
+                support feasibility checking.
             log_dir (`str`): Directory to write the ILP to.
-            verbose (`bool`): print status update.
+            logger(`Optional[logging.Logger]`): The logger to use to log the
+                results of the execution.
         """
+        assert goal != 'feasibility', \
+            'Gurobi does not support feasibility checking.'
         M = max(absolute_deadlines)
         num_gpus = num_resources['GPU']
         num_cpus = num_resources['CPU']
@@ -56,28 +74,22 @@ class GurobiScheduler(ILPScheduler):
 
         start_time = time.time()
 
-        if optimize:
-            if verbose:
-                print("We are Optimizing")
-            s = gp.Model('RAP')
-            s.setParam("OptimalityTol", 1e-3)
-        else:
-            print("Missing opt flag")
-            raise NotImplementedError
+        s = gp.Model('RAP')
+        s.setParam("OptimalityTol", 1e-3)
 
-        # We are solving for times and placements while minimizing costs
+        # We are solving for times and placements while minimizing costs.
         times = [
-            s.addVar(vtype=GRB.INTEGER, name=f't{i}')
+            s.addVar(vtype=gp.GRB.INTEGER, name=f't{i}')
             for i in range(0, num_tasks)
-        ]  # Time when execution starts
+        ]  # Time when execution starts.
         costs = [
-            s.addVar(vtype=GRB.INTEGER, name=f'c{i}')
+            s.addVar(vtype=gp.GRB.INTEGER, name=f'c{i}')
             for i in range(0, num_tasks)
-        ]  # Costs of gap
+        ]  # Costs of gap.
         placements = [
-            s.addVar(vtype=GRB.INTEGER, name=f'p{i}')
+            s.addVar(vtype=gp.GRB.INTEGER, name=f'p{i}')
             for i in range(0, num_tasks)
-        ]  # placement on CPU or GPU
+        ]  # Placement on CPU or GPU.
 
         for t, r, e, d, c in zip(times, release_times, expected_runtimes,
                                  absolute_deadlines, costs):
@@ -88,7 +100,7 @@ class GurobiScheduler(ILPScheduler):
             # Defines cost as slack deadline - finish time.
             s.addConstr(d - t - e == c)
 
-        # Add constraints whether a task is placed on GPU or CPU
+        # Add constraints whether a task is placed on GPU or CPU.
         for p, gpu in zip(placements, needs_gpu):
             if gpu:
                 s.addConstr(p >= num_cpus + 1)
@@ -102,16 +114,16 @@ class GurobiScheduler(ILPScheduler):
         for row_i in range(len(dependency_matrix)):
             for col_j in range(len(dependency_matrix[0])):
 
-                # dependent jobs need to finish before the next one
+                # Dependent jobs need to finish before the next one.
                 if dependency_matrix[row_i][col_j]:
                     s.addConstr(times[row_i] +
                                 expected_runtimes[row_i] <= times[col_j] - 1)
                 if row_i < col_j:
-                    # require that if two tasks are on the same resources,
-                    # they must not overlap.
-                    alpha = s.addVar(vtype=GRB.BINARY,
+                    # If two tasks are on the same resources, they must not
+                    # overlap.
+                    alpha = s.addVar(vtype=gp.GRB.BINARY,
                                      name=f'alpha{row_i}_{col_j}')
-                    beta = s.addVar(vtype=GRB.BINARY,
+                    beta = s.addVar(vtype=gp.GRB.BINARY,
                                     name=f'beta{row_i}_{col_j}')
                     decision_vars.append((alpha, beta))
 
@@ -137,8 +149,7 @@ class GurobiScheduler(ILPScheduler):
             if pin:
                 s.add(placements[i] == int(pin))
 
-        if optimize:
-            s.setObjective(MySum(costs), GRB.MAXIMIZE)
+        s.setObjective(MySum(costs), gp.GRB.MAXIMIZE)
         s.optimize()
         end_time = time.time()
         runtime = end_time - start_time
@@ -146,17 +157,13 @@ class GurobiScheduler(ILPScheduler):
             assert log_dir is not None
             raise NotImplementedError
 
-        if s.status == GRB.OPTIMAL:
-            if verbose:
-                print(f"Found optimal value: {s.objVal}")
-            # find model
+        if s.status == gp.GRB.OPTIMAL:
+            self._logger.debug(f"Found optimal value: {s.objVal}")
             assignment = [t.X for t in times], [p.X for p in placements]
             return assignment, s.objVal, runtime
-        elif s.status == GRB.INFEASIBLE:
-            if verbose:
-                print("No solution to solver run")
+        elif s.status == gp.GRB.INFEASIBLE:
+            self._logger.debug("No solution to solver run")
             return None, None, None
         else:
-            if verbose:
-                print(f"Opt solver end with status: {s.status}")
+            self._logger.debug(f"Opt solver end with status: {s.status}")
             return None, None, None

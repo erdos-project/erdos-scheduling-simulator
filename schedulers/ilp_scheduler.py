@@ -10,16 +10,16 @@ from workers import WorkerPool
 def verify_schedule(start_times, placements, resource_requirements,
                     release_times, absolute_deadlines, expected_runtimes,
                     dependency_matrix, num_resources):
-    # check release times
+    # Check if each task's start time is greater than its release time.
+    assert all([s >= r for s, r in zip(start_times, release_times)
+                ]), "not_valid_release_times"
+
     num_resources_ub = [
         sum(num_resources[0:i + 1]) for i in range(len(num_resources))
     ]
     num_resources_lb = [0] + [
         sum(num_resources[0:i + 1]) for i in range(len(num_resources) - 1)
     ]
-
-    assert all([s >= r for s, r in zip(start_times, release_times)
-                ]), "not_valid_release_times"
     assert all([
         all([
             p < num_resources_ub[i] and num_resources_lb[i] <= p
@@ -27,15 +27,21 @@ def verify_schedule(start_times, placements, resource_requirements,
             for i, resource_req in enumerate(resource_req_arr)
         ]) for resource_req_arr, p in zip(resource_requirements, placements)
     ]), "not_valid_placement"
+
+    # Check if all tasks finished before the deadline.
     assert all([
         (d >= s + e)
         for d, e, s in zip(absolute_deadlines, expected_runtimes, start_times)
     ]), "doesn't finish before deadline"
+
+    # Check if the task dependencies were satisfied.
     for i, row_i in enumerate(dependency_matrix):
         for j, column_j in enumerate(row_i):
             if i != j and column_j:
                 assert start_times[i] + expected_runtimes[i] <= start_times[
                     j], f"not_valid_dependency{i}->{j}"
+
+    # Check if tasks overlapped on a resource.
     placed_tasks = [
         (p, s, s + e)
         for p, s, e in zip(placements, start_times, expected_runtimes)
@@ -43,7 +49,6 @@ def verify_schedule(start_times, placements, resource_requirements,
     placed_tasks.sort()
     for t1, t2 in zip(placed_tasks, placed_tasks[1:]):
         if t1[0] == t2[0]:
-            print(t1, t2)
             assert t1[2] <= t2[1], f"overlapping_tasks_on_{t1[0]}"
 
 
@@ -104,6 +109,7 @@ class ILPBaseScheduler(BaseScheduler):
         # uniquify scrambles the order
         resource_names.sort()
 
+        # {reseource_type : {key = pool ID : value = number of resource_type}}
         r_maps = {
             r_name: {
                 wp.id: wp.resources.get_available_quantity(
@@ -112,9 +118,9 @@ class ILPBaseScheduler(BaseScheduler):
             }
             for r_name in resource_names
         }
+
         # {resource_type : {key = pool ID :
         #          value = number of resource_type}}
-
         num_resources = [
             sum(r_maps[r_name].values()) for r_name in resource_names
         ]  # [number of resources of each type] ordered by resource_names
@@ -134,10 +140,9 @@ class ILPBaseScheduler(BaseScheduler):
                 {Resource(name=r_name, _id="any"): 1})
             for r_name in resource_names
         ] for task in tasks_to_be_scheduled]
-        # [
-        #   [true iff task fits on resource type r
-        #   for r in uniq_resource ]
-        # for each task ]
+
+        # [[true iff task fits on resource type r for r in uniq_resource ]
+        #  for each task]
 
         # TODO (Justin) : This doesn't account for the dependencies
         # between tasks.
@@ -153,9 +158,8 @@ class ILPBaseScheduler(BaseScheduler):
              pinned_tasks,  #: List<tasks>[int<total_num_resources>],
              num_tasks,  #: int,
              num_resources,  #: List<uniq_resources>[int],
-             optimize=True,
-             log_dir=None,
-             verbose=False)
+             goal='max_slack',
+             log_dir=None)
 
         if opt_value is None:  # Doesn't handle loadshedding
             return (sched_runtime, [])
@@ -164,13 +168,16 @@ class ILPBaseScheduler(BaseScheduler):
                         release_times, absolute_deadlines, expected_runtimes,
                         dependency_matrix, num_resources)
 
+        # {resource_type : List<unique_wp_id>[
+        #    List<one-id-per-quantity>[pool ID]]}
         resource_map = {
             r_name: [[wp_id] * r_maps[r_name][wp_id]
                      for wp_id in r_maps[r_name].keys()]
             for r_name in r_maps.keys()
         }
-        # {resource_type : List<unique_wp_id>[List<one-id-per-quantity>[pool ID]]}
 
+        # {resource_type:
+        #    List<unique_wp_id>[List<one-id-per-quantity>[pool ID]]}
         resource_map = [
             [j for sub in resource_map[r_name]
              for j in sub]  # flatten along wps
@@ -218,7 +225,7 @@ class ILPBaseScheduler(BaseScheduler):
              num_tasks,  #: int,
              num_gpus,  #: int,
              num_cpus,  #: int,
-             optimize=True,
+             goal='max_slack',
              log_dir=None)
 
         result = list(zip(start_times, placements))
