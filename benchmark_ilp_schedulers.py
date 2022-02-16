@@ -54,7 +54,7 @@ def do_run(scheduler: ILPScheduler,
     dependency_matrix[FLAGS.source_task][FLAGS.dependent_task] = True
     needs_gpu[3] = False
 
-    resource_requirements = [[True, False] if need_gpu else [False, True]
+    resource_requirements = [[False, True] if need_gpu else [True, False]
                              for need_gpu in needs_gpu]
     out, output_cost, sched_runtime = scheduler.schedule(
         resource_requirements,
@@ -64,10 +64,7 @@ def do_run(scheduler: ILPScheduler,
         dependency_matrix,
         pinned_tasks,
         num_tasks,
-        {
-            'GPU': num_gpus,
-            'CPU': num_cpus
-        },
+        [num_cpus, num_gpus],
         bits=13,
         goal=goal,
         log_dir=log_dir,
@@ -75,14 +72,15 @@ def do_run(scheduler: ILPScheduler,
 
     logger.info(f"Scheduler runtime {sched_runtime}")
 
-    verify_schedule(out[0], out[1], needs_gpu, release_times,
+    verify_schedule(out[0], out[1], resource_requirements, release_times,
                     absolute_deadlines, expected_runtimes, dependency_matrix,
-                    [num_gpus, num_cpus])
+                    [num_cpus, num_gpus])
 
     logger.info(f"Scheduler output {out}")
     if log_dir is not None:
         with open(log_dir + f"{goal}_result.pkl", 'wb') as fp:
             data = {
+                'resource_requirements': resource_requirements,
                 'needs_gpu': needs_gpu,
                 'release_times': release_times,
                 'absolute_deadlines': absolute_deadlines,
@@ -96,7 +94,7 @@ def do_run(scheduler: ILPScheduler,
                 'output_cost': int(f"{output_cost}")
             }
             pickle.dump(data, fp)
-    return (sched_runtime), output_cost
+    return sched_runtime, output_cost
 
 
 def main(args):
