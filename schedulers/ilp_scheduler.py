@@ -50,6 +50,10 @@ def verify_schedule(start_times, placements, resource_requirements,
     for t1, t2 in zip(placed_tasks, placed_tasks[1:]):
         if t1[0] == t2[0]:
             assert t1[2] <= t2[1], f"overlapping_tasks_on_{t1[0]}"
+            
+def compute_slack_cost(placement, expected_runtime, absolute_deadlines):
+    slacks = [ d - e - p for p,e,d in zip (placement, expected_runtime, absolute_deadlines)]
+    return sum(slacks)
 
 
 class ILPScheduler(object):
