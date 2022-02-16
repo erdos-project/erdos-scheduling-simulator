@@ -7,7 +7,7 @@ from typing import Optional
 
 import utils
 
-from schedulers.ilp_scheduler import ILPScheduler
+from schedulers.ilp_scheduler import ILPScheduler, verify_schedule
 from schedulers.z3_scheduler import Z3Scheduler
 from schedulers.gurobi_scheduler import GurobiScheduler
 
@@ -64,7 +64,10 @@ def do_run(scheduler: ILPScheduler,
         dependency_matrix,
         pinned_tasks,
         num_tasks,
-        [num_gpus, num_cpus],
+        {
+            'GPU': num_gpus,
+            'CPU': num_cpus
+        },
         bits=13,
         goal=goal,
         log_dir=log_dir,
@@ -72,9 +75,9 @@ def do_run(scheduler: ILPScheduler,
 
     logger.info(f"Scheduler runtime {sched_runtime}")
 
-    # verify_schedule(out[0], out[1], needs_gpu, release_times,
-    #                 absolute_deadlines, expected_runtimes, dependency_matrix,
-    #                 [num_gpus, num_cpus])
+    verify_schedule(out[0], out[1], needs_gpu, release_times,
+                    absolute_deadlines, expected_runtimes, dependency_matrix,
+                    [num_gpus, num_cpus])
 
     logger.info(f"Scheduler output {out}")
     if log_dir is not None:
