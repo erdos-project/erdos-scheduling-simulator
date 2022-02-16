@@ -10,16 +10,16 @@ from workers import WorkerPool
 def verify_schedule(start_times, placements, resource_requirements,
                     release_times, absolute_deadlines, expected_runtimes,
                     dependency_matrix, num_resources):
-    # check release times
+    # Check if each task's start time is greater than its release time.
+    assert all([s >= r for s, r in zip(start_times, release_times)
+                ]), "not_valid_release_times"
+
     num_resources_ub = [
         sum(num_resources[0:i + 1]) for i in range(len(num_resources))
     ]
     num_resources_lb = [0] + [
         sum(num_resources[0:i + 1]) for i in range(len(num_resources) - 1)
     ]
-
-    assert all([s >= r for s, r in zip(start_times, release_times)
-                ]), "not_valid_release_times"
     assert all([
         all([
             p < num_resources_ub[i] and num_resources_lb[i] <= p
@@ -27,15 +27,21 @@ def verify_schedule(start_times, placements, resource_requirements,
             for i, resource_req in enumerate(resource_req_arr)
         ]) for resource_req_arr, p in zip(resource_requirements, placements)
     ]), "not_valid_placement"
+
+    # Check if all tasks finished before the deadline.
     assert all([
         (d >= s + e)
         for d, e, s in zip(absolute_deadlines, expected_runtimes, start_times)
     ]), "doesn't finish before deadline"
+
+    # Check if the task dependencies were satisfied.
     for i, row_i in enumerate(dependency_matrix):
         for j, column_j in enumerate(row_i):
             if i != j and column_j:
                 assert start_times[i] + expected_runtimes[i] <= start_times[
                     j], f"not_valid_dependency{i}->{j}"
+
+    # Check if tasks overlapped on a resource.
     placed_tasks = [
         (p, s, s + e)
         for p, s, e in zip(placements, start_times, expected_runtimes)
