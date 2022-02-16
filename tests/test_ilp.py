@@ -1,4 +1,5 @@
-from schedulers.ilp_scheduler import ILPScheduler, verify_schedule, compute_slack_cost
+from schedulers.ilp_scheduler import ILPScheduler
+from schedulers.ilp_scheduler import verify_schedule, compute_slack_cost
 from schedulers.z3_scheduler import Z3Scheduler
 from schedulers.gurobi_scheduler import GurobiScheduler
 
@@ -72,7 +73,7 @@ def test_z3_ilp_success():
                                           goal='max_slack',
                                           log_dir=None)
     assert compute_slack_cost(placements[0], [5] * 5, [8000] *
-                              5) == output_cost, f"Z3 ILP: inconsistent cost"
+                              5) == output_cost, "Z3 ILP: inconsistent cost"
     assert output_cost == 39955, "Z3 ILP: Wrong cost -- {output_cost}" + \
         " instead of 39955"
 
@@ -93,7 +94,7 @@ def test_gurobi_ilp_success():
 
     assert compute_slack_cost(
         placements[0], [5] * 5,
-        [8000] * 5) == output_cost, f"Gurobi ILP: inconsistent cost"
+        [8000] * 5) == output_cost, "Gurobi ILP: inconsistent cost"
 
     assert output_cost == 39955, f"Gurobi ILP: Wrong cost -- {output_cost}" + \
         "instead of 39945"
