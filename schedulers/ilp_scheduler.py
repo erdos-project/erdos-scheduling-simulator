@@ -111,6 +111,8 @@ class ILPBaseScheduler(BaseScheduler):
             for r_name in resource_names
         }
 
+        # {resource_type : {key = pool ID :
+        #          value = number of resource_type}}
         num_resources = [
             sum(r_maps[r_name].values()) for r_name in resource_names
         ]  # [number of resources of each type] ordered by resource_names
@@ -130,6 +132,7 @@ class ILPBaseScheduler(BaseScheduler):
                 {Resource(name=r_name, _id="any"): 1})
             for r_name in resource_names
         ] for task in tasks_to_be_scheduled]
+
         # [[true iff task fits on resource type r for r in uniq_resource ]
         #  for each task]
 
@@ -165,6 +168,8 @@ class ILPBaseScheduler(BaseScheduler):
             for r_name in r_maps.keys()
         }
 
+        # {resource_type:
+        #    List<unique_wp_id>[List<one-id-per-quantity>[pool ID]]}
         resource_map = [
             [j for sub in resource_map[r_name]
              for j in sub]  # flatten along wps
