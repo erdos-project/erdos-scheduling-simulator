@@ -2,7 +2,7 @@ import functools
 import logging
 import time
 
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 import gurobipy as gp
 
@@ -35,13 +35,15 @@ class GurobiScheduler(ILPScheduler):
                  num_resources: List[int],
                  bits=None,
                  goal='max_slack',
+                 enforce_deadline=True,
                  log_dir=None,
                  logger: Optional[logging.Logger] = None):
         """Runs scheduling using Gurobi.
 
         Args:
-            needs_gpu (`List[bool]`): List of booleans, one for each task,
-                indicating whether the task requires a GPU.
+            resource_requirements: List[List[bool]], List of lists of booleans,
+                where each sublist is a list of booleans indicating whether a
+                task conforms to a resource type.
             release_times (`List[int]`): List of ints, one for each task,
                 indicating the release time of the task.
             absolute_deadlines (`List[int]`): List of ints, one for each task,
@@ -55,7 +57,7 @@ class GurobiScheduler(ILPScheduler):
                 indicating the hardware index if a task is pinned to that
                 resource (or already running there).
             num_tasks (`int`): Number of tasks.
-            num_resources (`Dict[str,int]`): Number of resources.
+            num_resources (`List[int]`): Number of resources.
             bits (`int`): Number of bits to use for the ILP.
             goal (`str`): Goal of the scheduler run. Note: Gurobi does not
                 support feasibility checking.
@@ -108,7 +110,8 @@ class GurobiScheduler(ILPScheduler):
         for t, r, e, d, c in zip(times, release_times, expected_runtimes,
                                  absolute_deadlines, costs):
             # Finish before deadline.
-            s.addConstr(t + e <= d - 1)
+            if enforce_deadline:
+                s.addConstr(t + e <= d - 1)
             # Start at or after release time.
             s.addConstr(r <= t)
             # Defines cost as slack deadline - finish time.

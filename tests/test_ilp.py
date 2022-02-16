@@ -72,7 +72,8 @@ def test_z3_ilp_success():
                                           goal='max_slack',
                                           log_dir=None)
 
-    assert output_cost == 39955, "Z3 ILP: Wrong cost -- {output_cost} instead of 39955"
+    assert output_cost == 39955, "Z3 ILP: Wrong cost -- {output_cost}" + \
+                                    " instead of 39955"
     assert placements == ([2, 7, 2, 2, 7], [1, 2, 2, 0,
                                             1]), "Z3 ILP: Wrong placements"
 
@@ -91,7 +92,8 @@ def test_gurobi_ilp_success():
                                           goal='max_slack',
                                           log_dir=None)
 
-    assert output_cost == 39955, f"Gurobi ILP: Wrong cost -- {output_cost} instead of 39945"
+    assert output_cost == 39955, f"Gurobi ILP: Wrong cost -- {output_cost}" + \
+                            "instead of 39945"
     assert placements == ([2, 7, 7, 2, 2],
                           [2, 1, 2, 0,
                            1]), f"Gurobi ILP: Wrong placements -- {placements}"
