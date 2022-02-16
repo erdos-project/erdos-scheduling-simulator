@@ -17,7 +17,7 @@ class GurobiScheduler(ILPScheduler):
                  dependency_matrix,
                  pinned_tasks: List[int],
                  num_tasks: int,
-                 num_resources: Dict[str,int],
+                 num_resources: Dict[str, int],
                  bits=None,
                  optimize=False,
                  log_dir=None,
