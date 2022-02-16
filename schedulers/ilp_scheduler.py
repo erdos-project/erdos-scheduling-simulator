@@ -43,12 +43,10 @@ def verify_schedule(start_times, placements, resource_requirements,
     placed_tasks.sort()
     for t1, t2 in zip(placed_tasks, placed_tasks[1:]):
         if t1[0] == t2[0]:
-            print(t1, t2)
             assert t1[2] <= t2[1], f"overlapping_tasks_on_{t1[0]}"
 
 
 class ILPScheduler(object):
-
     def schedule(needs_gpu: List[bool],
                  release_times: List[int],
                  absolute_deadlines: List[int],
@@ -63,7 +61,6 @@ class ILPScheduler(object):
 
 
 class ILPBaseScheduler(BaseScheduler):
-
     def __init__(self,
                  sched_solver: ILPScheduler,
                  preemptive: bool = False,
@@ -104,6 +101,7 @@ class ILPBaseScheduler(BaseScheduler):
         # uniquify scrambles the order
         resource_names.sort()
 
+        # {reseource_type : {key = pool ID : value = number of resource_type}}
         r_maps = {
             r_name: {
                 wp.id: wp.resources.get_available_quantity(
@@ -111,7 +109,7 @@ class ILPBaseScheduler(BaseScheduler):
                 for wp in schedulable_worker_pools
             }
             for r_name in resource_names
-        }  # {reseource_type : {key = pool ID : value = number of resource_type}}
+        }
 
         num_resources = [
             sum(r_maps[r_name].values()) for r_name in resource_names
@@ -127,13 +125,13 @@ class ILPBaseScheduler(BaseScheduler):
             task.remaining_time for task in tasks_to_be_scheduled
         ]
 
-        resource_requirements = [
-            [
-                task.resource_requirements > Resources(
-                    {Resource(name=r_name, _id="any"): 1})
-                for r_name in resource_names
-            ] for task in tasks_to_be_scheduled
-        ]  # [[true iff task fits on resource type r for r in uniq_resource ] for each task]
+        resource_requirements = [[
+            task.resource_requirements > Resources(
+                {Resource(name=r_name, _id="any"): 1})
+            for r_name in resource_names
+        ] for task in tasks_to_be_scheduled]
+        # [[true iff task fits on resource type r for r in uniq_resource ]
+        #  for each task]
 
         # TODO (Justin) : This doesn't account for the dependencies
         # between tasks.
@@ -149,9 +147,8 @@ class ILPBaseScheduler(BaseScheduler):
              pinned_tasks,  #: List<tasks>[int<total_num_resources>],
              num_tasks,  #: int,
              num_resources,  #: List<uniq_resources>[int],
-             optimize=True,
-             log_dir=None,
-             verbose=False)
+             goal='max_slack',
+             log_dir=None)
 
         if opt_value is None:  # Doesn't handle loadshedding
             return (sched_runtime, [])
@@ -160,11 +157,13 @@ class ILPBaseScheduler(BaseScheduler):
                         release_times, absolute_deadlines, expected_runtimes,
                         dependency_matrix, num_resources)
 
+        # {resource_type : List<unique_wp_id>[
+        #    List<one-id-per-quantity>[pool ID]]}
         resource_map = {
             r_name: [[wp_id] * r_maps[r_name][wp_id]
                      for wp_id in r_maps[r_name].keys()]
             for r_name in r_maps.keys()
-        }  # {resource_type : List<unique_wp_id>[List<one-id-per-quantity>[pool ID]]}
+        }
 
         resource_map = [
             [j for sub in resource_map[r_name]
@@ -213,7 +212,7 @@ class ILPBaseScheduler(BaseScheduler):
              num_tasks,  #: int,
              num_gpus,  #: int,
              num_cpus,  #: int,
-             optimize=True,
+             goal='max_slack',
              log_dir=None)
 
         result = list(zip(start_times, placements))

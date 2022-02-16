@@ -1,12 +1,12 @@
 from absl import app, flags
+
+import utils
+from data import TaskLoader, WorkerLoader
+from schedulers import EDFScheduler, LSFScheduler
 from schedulers.gurobi_scheduler import GurobiScheduler
 from schedulers.z3_scheduler import Z3Scheduler
 from schedulers.ilp_scheduler import ILPBaseScheduler
-
-import utils
 from simulator import Simulator
-from data import TaskLoader, WorkerLoader
-from schedulers import EDFScheduler, LSFScheduler
 
 FLAGS = flags.FLAGS
 
