@@ -62,7 +62,8 @@ def test_ilp_scheduler_success():
             "Incorrect placement of the task on the WorkerPool."
     else:
         raiseExceptions(
-            "Incorrect placements: two tasks arent the same ones as the ones placed"
+            "Incorrect placements: two tasks " /
+            "arent the same ones as the ones placed"
         )
 
 
