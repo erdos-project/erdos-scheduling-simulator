@@ -12,6 +12,7 @@ from schedulers.ilp_scheduler import ILPScheduler
 
 
 class Z3Scheduler(ILPScheduler):
+
     def __init__(self,
                  preemptive: bool = False,
                  runtime: float = -1.0,

@@ -11,6 +11,7 @@ from schedulers.ilp_scheduler import ILPScheduler
 
 
 class GurobiScheduler(ILPScheduler):
+
     def __init__(self,
                  preemptive: bool = False,
                  runtime: float = -1.0,
