@@ -67,7 +67,7 @@ class Z3Scheduler(ILPScheduler):
             logger(`Optional[logging.Logger]`): The logger to use to log the
                 results of the execution.
         """
-        
+
         num_resources_ub = [
             sum(num_resources[0:i + 1]) for i in range(len(num_resources))
         ]
