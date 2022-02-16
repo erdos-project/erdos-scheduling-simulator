@@ -23,7 +23,6 @@ flags.DEFINE_bool('mini_run', False,
                   'True --> simple problem; False --> iterative benchmarking')
 
 
-
 def do_run(scheduler: ILPScheduler,
            num_tasks: int = 5,
            expected_runtime: int = 20,
@@ -52,16 +51,17 @@ def do_run(scheduler: ILPScheduler,
         dependency_matrix[FLAGS.dep1][FLAGS.dep2] = True
         needs_gpu[3] = False
 
+    resource_requirements = [[True, False] if need_gpu else [False, True]
+                             for need_gpu in needs_gpu]
     out, output_cost, sched_runtime = scheduler.schedule(
-        needs_gpu,
+        resource_requirements,
         release_times,
         absolute_deadlines,
         expected_runtimes,
         dependency_matrix,
         pinned_tasks,
         num_tasks,
-        num_gpus,
-        num_cpus,
+        [num_gpus, num_cpus],
         bits=13,
         optimize=optimize,
         log_dir=log_dir,

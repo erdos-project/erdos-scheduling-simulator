@@ -34,16 +34,18 @@ def __do_run(
         dependency_matrix[0][1] = True
         needs_gpu[3] = False
 
+    resource_requirement = [[False, True] if need_gpu else [True, False]
+                            for need_gpu in needs_gpu]
+
     out, output_cost, sched_runtime = scheduler.schedule(
-        needs_gpu,
+        resource_requirement,
         release_times,
         absolute_deadlines,
         expected_runtimes,
         dependency_matrix,
         pinned_tasks,
         num_tasks,
-        num_gpus,
-        num_cpus,
+        [num_cpus, num_gpus],
         bits=13,
         optimize=optimize,
         log_dir=log_dir,

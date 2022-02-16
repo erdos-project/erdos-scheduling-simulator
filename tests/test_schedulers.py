@@ -1,3 +1,4 @@
+from logging import raiseExceptions
 from workload import TaskGraph, Resource, Resources
 from schedulers import EDFScheduler, LSFScheduler
 from schedulers.ilp_scheduler import ILPBaseScheduler
@@ -45,15 +46,24 @@ def test_ilp_scheduler_success():
         task_graph=task_graph,
         worker_pools=[worker_pool_one, worker_pool_two],
     )
+
     assert len(placements) == 2, "Incorrect length of task placements."
-    assert placements[1][0] == task_gpu,\
-        "Incorrect task received in the placement."
-    assert placements[1][1] == worker_pool_two.id,\
-        "Incorrect placement of the task on the WorkerPool."
-    assert placements[0][0] == task_cpu,\
-        "Incorrect task received in the placement."
-    assert placements[0][1] == worker_pool_one.id,\
-        "Incorrect placement of the task on the WorkerPool."
+
+    if placements[1][0] == task_gpu and placements[0][0] == task_cpu:
+        assert placements[1][1] == worker_pool_two.id,\
+            "Incorrect placement of the task on the WorkerPool."
+        assert placements[0][1] == worker_pool_one.id,\
+            "Incorrect placement of the task on the WorkerPool."
+    elif placements[0][0] == task_gpu and placements[1][0] == task_cpu:
+        print("here")
+        assert placements[0][1] == worker_pool_two.id,\
+            "Incorrect placement of the task on the WorkerPool."
+        assert placements[1][1] == worker_pool_one.id,\
+            "Incorrect placement of the task on the WorkerPool."
+    else:
+        raiseExceptions(
+            "Incorrect placements: two tasks arent the same ones as the ones placed"
+        )
 
 
 def test_ilp_scheduler_limited_resources():
