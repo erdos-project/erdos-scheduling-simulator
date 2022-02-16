@@ -111,7 +111,9 @@ class ILPBaseScheduler(BaseScheduler):
                 for wp in schedulable_worker_pools
             }
             for r_name in resource_names
-        }  # {reseource_type : {key = pool ID : value = number of resource_type}}
+        }  
+        # {resource_type : {key = pool ID : 
+        #          value = number of resource_type}}
 
         num_resources = [
             sum(r_maps[r_name].values()) for r_name in resource_names
@@ -133,7 +135,11 @@ class ILPBaseScheduler(BaseScheduler):
                     {Resource(name=r_name, _id="any"): 1})
                 for r_name in resource_names
             ] for task in tasks_to_be_scheduled
-        ]  # [[true iff task fits on resource type r for r in uniq_resource ] for each task]
+        ]  
+        # [
+        #   [true iff task fits on resource type r 
+        #   for r in uniq_resource ] 
+        # for each task ]
 
         # TODO (Justin) : This doesn't account for the dependencies
         # between tasks.
@@ -164,7 +170,8 @@ class ILPBaseScheduler(BaseScheduler):
             r_name: [[wp_id] * r_maps[r_name][wp_id]
                      for wp_id in r_maps[r_name].keys()]
             for r_name in r_maps.keys()
-        }  # {resource_type : List<unique_wp_id>[List<one-id-per-quantity>[pool ID]]}
+        }  
+        # {resource_type : List<unique_wp_id>[List<one-id-per-quantity>[pool ID]]}
 
         resource_map = [
             [j for sub in resource_map[r_name]
