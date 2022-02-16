@@ -32,30 +32,26 @@ def __do_run(
     dependency_matrix[0][1] = True
     needs_gpu[3] = False
 
-    resource_requirement = [[False, True] if need_gpu else [True, False]
-                            for need_gpu in needs_gpu]
+    resource_requirements = [[False, True] if need_gpu else [True, False]
+                             for need_gpu in needs_gpu]
 
     out, output_cost, sched_runtime = scheduler.schedule(
-        resource_requirement,
+        resource_requirements,
         release_times,
         absolute_deadlines,
         expected_runtimes,
         dependency_matrix,
         pinned_tasks,
         num_tasks,
-        {
-            'CPU': num_cpus,
-            'GPU': num_gpus
-        },
+        [num_cpus, num_gpus],
         bits=13,
         goal=goal,
         log_dir=log_dir,
     )
 
-    # import IPython; IPython.embed()
-    verify_schedule(out[0], out[1], needs_gpu, release_times,
+    verify_schedule(out[0], out[1], resource_requirements, release_times,
                     absolute_deadlines, expected_runtimes, dependency_matrix,
-                    num_gpus, num_cpus)
+                    [num_cpus, num_gpus])
     #  print ('GPU/CPU Placement:' ,out[0])
     #  print ('Start Time:' ,out[1])
 
@@ -67,7 +63,7 @@ def test_z3_ilp_success():
 
     Mini-instance of z3 ilp
     """
-    runtime, output_cost, placements = __do_run(Z3Scheduler(),
+    _, output_cost, placements = __do_run(Z3Scheduler(),
                                                 5,
                                                 5,
                                                 8000,
@@ -75,17 +71,18 @@ def test_z3_ilp_success():
                                                 1,
                                                 goal='max_slack',
                                                 log_dir=None)
-    assert output_cost == 39945, "Gurobi ILP: Wrong cost"
-    assert placements == ([2, 7, 12, 2,
-                           7], [3, 3, 2, 2, 2]), "Gurobi ILP: Wrong placements"
+
+    assert output_cost == 39955, "Z3 ILP: Wrong cost -- {output_cost} instead of 39955"
+    assert placements == ([2, 7, 2, 2, 7], [1, 2, 2, 0,
+                                            1]), "Z3 ILP: Wrong placements"
 
 
 def test_gurobi_ilp_success():
     """Scenario:
 
-    Mini-instance of z3 ilp
+    Mini-instance of gurobi ilp
     """
-    runtime, output_cost, placements = __do_run(GurobiScheduler(),
+    _, output_cost, placements = __do_run(GurobiScheduler(),
                                                 5,
                                                 5,
                                                 8000,
@@ -93,7 +90,6 @@ def test_gurobi_ilp_success():
                                                 1,
                                                 goal='max_slack',
                                                 log_dir=None)
-    assert output_cost == 39945, "Z3 ILP: Wrong cost"
-    assert placements == ([2.0, 2.0, 7.0, 7.0,
-                           12.0], [2.0, 3.0, 3.0, 2.0,
-                                   3.0]), "Z3 ILP: Wrong placements"
+
+    assert output_cost == 39955, f"Gurobi ILP: Wrong cost -- {output_cost} instead of 39945"
+    assert placements == ([2, 7, 7, 2, 2], [2, 1, 2, 0, 1]), f"Gurobi ILP: Wrong placements -- {placements}"

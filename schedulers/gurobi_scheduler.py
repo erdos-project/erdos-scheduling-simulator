@@ -25,14 +25,14 @@ class GurobiScheduler(ILPScheduler):
             self._logger = utils.setup_logging(name="gurobi")
 
     def schedule(self,
-                 needs_gpu: List[bool],
+                 resource_requirements: List[List[bool]],
                  release_times: List[int],
                  absolute_deadlines: List[int],
                  expected_runtimes: List[int],
                  dependency_matrix,
                  pinned_tasks: List[int],
                  num_tasks: int,
-                 num_resources: Dict[str, int],
+                 num_resources: List[int],
                  bits=None,
                  goal='max_slack',
                  log_dir=None,
@@ -66,8 +66,22 @@ class GurobiScheduler(ILPScheduler):
         assert goal != 'feasibility', \
             'Gurobi does not support feasibility checking.'
         M = max(absolute_deadlines)
-        num_gpus = num_resources['GPU']
-        num_cpus = num_resources['CPU']
+
+        num_resources_ub = [
+            sum(num_resources[0:i + 1]) for i in range(len(num_resources))
+        ]
+        num_resources_lb = [0] + [
+            sum(num_resources[0:i + 1]) for i in range(len(num_resources) - 1)
+        ]
+
+        def safe_resource_index(resource_requirement: List[bool]):
+            # check that there's only one True
+            compats = [r for r in resource_requirement if r]
+            if len(compats) > 1:
+                raise Exception("More than one compatible resource")
+            if len(compats) == 0:
+                raise Exception("No compatible resource")
+            return resource_requirement.index(True)
 
         def MySum(lst):
             return functools.reduce(lambda a, b: a + b, lst, 0)
@@ -101,14 +115,12 @@ class GurobiScheduler(ILPScheduler):
             s.addConstr(d - t - e == c)
 
         # Add constraints whether a task is placed on GPU or CPU.
-        for p, gpu in zip(placements, needs_gpu):
-            if gpu:
-                s.addConstr(p >= num_cpus + 1)
-                s.addConstr(p <=
-                            (num_gpus + num_cpus))  # second half is num_gpus
-            else:
-                s.addConstr(p >= 1)
-                s.addConstr(p <= num_cpus)  # first half is num_cpus
+        for p, res_req in zip(placements, resource_requirements):
+            resource_index = safe_resource_index(
+                res_req)  # convert bool vec to int index
+            s.addConstr(p >= num_resources_lb[resource_index])
+            s.addConstr(p <= num_resources_ub[resource_index] -
+                        1)  # p < num_resources[resource_index]
 
         decision_vars = []
         for row_i in range(len(dependency_matrix)):
@@ -117,7 +129,7 @@ class GurobiScheduler(ILPScheduler):
                 # Dependent jobs need to finish before the next one.
                 if dependency_matrix[row_i][col_j]:
                     s.addConstr(times[row_i] +
-                                expected_runtimes[row_i] <= times[col_j] - 1)
+                                expected_runtimes[row_i] <= times[col_j])
                 if row_i < col_j:
                     # If two tasks are on the same resources, they must not
                     # overlap.
@@ -159,8 +171,9 @@ class GurobiScheduler(ILPScheduler):
 
         if s.status == gp.GRB.OPTIMAL:
             self._logger.debug(f"Found optimal value: {s.objVal}")
-            assignment = [t.X for t in times], [p.X for p in placements]
-            return assignment, s.objVal, runtime
+            assignment = [int(t.X)
+                          for t in times], [int(p.X) for p in placements]
+            return assignment, int(s.objVal), runtime
         elif s.status == gp.GRB.INFEASIBLE:
             self._logger.debug("No solution to solver run")
             return None, None, None
