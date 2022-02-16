@@ -4,7 +4,7 @@ from z3 import Int, Solver, Implies, Or, unsat, Optimize, IntVal
 import logging
 import time
 
-from math import ceil, log2
+# from math import ceil, log2
 from typing import Dict, List, Optional
 
 import utils
@@ -67,9 +67,6 @@ class Z3Scheduler(ILPScheduler):
             logger(`Optional[logging.Logger]`): The logger to use to log the
                 results of the execution.
         """
-        assert (len(num_resources) == 2), "Only support 2 resources"
-        num_cpus = num_resources[0]
-        num_gpus = num_resources[1]
 
         num_resources_ub = [
             sum(num_resources[0:i + 1]) for i in range(len(num_resources))
