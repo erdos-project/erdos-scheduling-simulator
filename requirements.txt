@@ -1,6 +1,7 @@
 absl-py
-pyboolector
-z3
+gurobipy
+numpy
 pyparsing<=3.0.1  # Fix parsing error in pydot.
 pydot
-numpy
+z3
+z3-solver
