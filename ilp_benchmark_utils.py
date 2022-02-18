@@ -1,5 +1,6 @@
 from schedulers.ilp_scheduler import ILPScheduler
-from schedulers.ilp_utils import verify_schedule, needs_gpu_to_resource_requirements
+from schedulers.ilp_utils import (
+    verify_schedule, needs_gpu_to_resource_requirements)
 
 import logging
 import pickle
@@ -142,8 +143,8 @@ class SymmetricTasksBenchmark(ILPBenchmarker):
         # True if task i must finish before task j starts
         dependency_matrix = [[False for i in range(0, num_tasks)]
                              for j in range(0, num_tasks)]
-        # Hardware index if a task is pinned to that resource (or already running
-        # there).
+        # Hardware index if a task is pinned to that
+        # resource (or already running there).
         pinned_tasks = [None] * num_tasks
         dependency_matrix[self.source_task][self.dependent_task] = True
         needs_gpu[self.cpu_process] = False
@@ -183,8 +184,8 @@ class OneLongTwoShortBenchmark(ILPBenchmarker):
         # True if task i must finish before task j starts
         dependency_matrix = [[False for i in range(0, num_tasks)]
                              for j in range(0, num_tasks)]
-        # Hardware index if a task is pinned to that resource (or already running
-        # there).
+        # Hardware index if a task is pinned
+        # to that resource (or already running there).
         pinned_tasks = [None] * num_tasks
 
         resource_requirements = needs_gpu_to_resource_requirements(needs_gpu)
@@ -243,8 +244,8 @@ class StaggeredReleaseBenchmark(ILPBenchmarker):
         # True if task i must finish before task j starts
         dependency_matrix = [[False for i in range(0, num_tasks)]
                              for j in range(0, num_tasks)]
-        # Hardware index if a task is pinned to that resource (or already running
-        # there).
+        # Hardware index if a task is pinned to that
+        # resource (or already running there).
         pinned_tasks = [None] * num_tasks
 
         resource_requirements = needs_gpu_to_resource_requirements(needs_gpu)

@@ -5,7 +5,8 @@ from schedulers.z3_scheduler import Z3Scheduler
 from schedulers.gurobi_scheduler import GurobiScheduler
 import matplotlib.pyplot as plt
 
-from ilp_benchmark_utils import StaggeredReleaseBenchmark, OneLongTwoShortBenchmark, SymmetricTasksBenchmark
+from ilp_benchmark_utils import (
+    StaggeredReleaseBenchmark, OneLongTwoShortBenchmark, SymmetricTasksBenchmark)
 
 FLAGS = flags.FLAGS
 
