@@ -9,6 +9,7 @@ from typing import Dict, List, Optional
 
 import utils
 from schedulers.ilp_scheduler import ILPScheduler
+from schedulers.ilp_utils import compute_slack_cost
 
 
 class Z3Scheduler(ILPScheduler):
@@ -186,11 +187,14 @@ class Z3Scheduler(ILPScheduler):
         end_time = time.time()
         runtime = end_time - start_time
         cost = None
-        if goal != 'feasibility':
-            cost = s.lower(result)
-            self._logger.debug(cost)
+
         self._logger.debug(schedulable)
         if schedulable != unsat:
+            if goal != 'feasibility':
+                cost = int(str(s.lower(result)))
+                self._logger.debug(cost)
+            else:
+                cost = compute_slack_cost(placements)
             # placements = [
             #     int(str(s.model()[p])) if not needs_gpu[i] else
             #     (10 if bool(s.model()[p]) else 11)

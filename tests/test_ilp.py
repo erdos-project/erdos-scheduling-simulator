@@ -1,5 +1,5 @@
 from schedulers.ilp_scheduler import ILPScheduler
-from schedulers.ilp_scheduler import verify_schedule, compute_slack_cost
+from schedulers.ilp_utils import needs_gpu_to_resource_requirements, verify_schedule, compute_slack_cost
 from schedulers.z3_scheduler import Z3Scheduler
 from schedulers.gurobi_scheduler import GurobiScheduler
 
@@ -33,8 +33,7 @@ def __do_run(
     dependency_matrix[0][1] = True
     needs_gpu[3] = False
 
-    resource_requirements = [[False, True] if need_gpu else [True, False]
-                             for need_gpu in needs_gpu]
+    resource_requirements = needs_gpu_to_resource_requirements(needs_gpu)
 
     out, output_cost, sched_runtime = scheduler.schedule(
         resource_requirements,

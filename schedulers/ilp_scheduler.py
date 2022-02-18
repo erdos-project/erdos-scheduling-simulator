@@ -5,72 +5,19 @@ from copy import copy, deepcopy
 
 from workload import Task, TaskGraph, Resource, Resources
 from workers import WorkerPool
-
-
-def verify_schedule(start_times, placements, resource_requirements,
-                    release_times, absolute_deadlines, expected_runtimes,
-                    dependency_matrix, num_resources):
-    # Check if each task's start time is greater than its release time.
-    assert all([s >= r for s, r in zip(start_times, release_times)
-                ]), "not_valid_release_times"
-
-    num_resources_ub = [
-        sum(num_resources[0:i + 1]) for i in range(len(num_resources))
-    ]
-    num_resources_lb = [0] + [
-        sum(num_resources[0:i + 1]) for i in range(len(num_resources) - 1)
-    ]
-    assert all([
-        all([
-            p < num_resources_ub[i] and num_resources_lb[i] <= p
-            if resource_req else True
-            for i, resource_req in enumerate(resource_req_arr)
-        ]) for resource_req_arr, p in zip(resource_requirements, placements)
-    ]), "not_valid_placement"
-
-    # Check if all tasks finished before the deadline.
-    assert all([
-        (d >= s + e)
-        for d, e, s in zip(absolute_deadlines, expected_runtimes, start_times)
-    ]), "doesn't finish before deadline"
-
-    # Check if the task dependencies were satisfied.
-    for i, row_i in enumerate(dependency_matrix):
-        for j, column_j in enumerate(row_i):
-            if i != j and column_j:
-                assert start_times[i] + expected_runtimes[i] <= start_times[
-                    j], f"not_valid_dependency{i}->{j}"
-
-    # Check if tasks overlapped on a resource.
-    placed_tasks = [
-        (p, s, s + e)
-        for p, s, e in zip(placements, start_times, expected_runtimes)
-    ]
-    placed_tasks.sort()
-    for t1, t2 in zip(placed_tasks, placed_tasks[1:]):
-        if t1[0] == t2[0]:
-            assert t1[2] <= t2[1], f"overlapping_tasks_on_{t1[0]}"
-
-
-def compute_slack_cost(placement, expected_runtime, absolute_deadlines):
-    slacks = [
-        d - e - p
-        for p, e, d in zip(placement, expected_runtime, absolute_deadlines)
-    ]
-    return sum(slacks)
+from schedulers.ilp_utils import verify_schedule
 
 
 class ILPScheduler(object):
 
-    def schedule(needs_gpu: List[bool],
+    def schedule(resource_requirements: List[List[bool]],
                  release_times: List[int],
                  absolute_deadlines: List[int],
                  expected_runtimes: List[int],
                  dependency_matrix,
                  pinned_tasks: List[int],
                  num_tasks: int,
-                 num_gpus: int,
-                 num_cpus: int,
+                 num_resources: List[int],
                  bits: int = 8):
         raise NotImplementedError
 
