@@ -91,9 +91,6 @@ class Z3Scheduler(ILPScheduler):
         # Add new constraint node 'new_node' with attribute 'attr'
         # e.g. call add_relation(G, 'ub_a', {'rel:'<', 'num':5}, ['a'])
         #  to add constraint (a < 5)
-
-        # bits = ceil(log2(num_gpus + num_cpus))
-
         start_time = time.time()
         times = [Int(f't{i}')
                  for i in range(0, num_tasks)]  # Time when execution starts
@@ -195,6 +192,7 @@ class Z3Scheduler(ILPScheduler):
                 self._logger.debug(cost)
             else:
                 cost = compute_slack_cost(placements)
+
             # placements = [
             #     int(str(s.model()[p])) if not needs_gpu[i] else
             #     (10 if bool(s.model()[p]) else 11)

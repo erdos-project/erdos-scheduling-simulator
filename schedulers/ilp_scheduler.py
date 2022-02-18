@@ -154,34 +154,3 @@ class ILPBaseScheduler(BaseScheduler):
     @property
     def runtime(self):
         return self._runtime
-
-    def _schedule(self, tasks, task_graph,
-                  worker_pools) -> Tuple[float, Sequence[Tuple[int, int]]]:
-        dependency_matrix = task_graph.get_dep(tasks)
-        needs_gpu = [t.needs_gpu for t in tasks]
-        absolute_deadlines = [t.deadline for t in tasks]
-        expected_runtimes = [t.expected_runtime for t in tasks]
-        num_tasks = len(tasks)
-
-        num_gpus = worker_pools.num_gpu()
-        num_cpus = worker_pools.num_cpu()
-
-        release_times = [0] * num_tasks
-        pinned_tasks = [None] * num_tasks
-
-        (start_times,
-         placements), opt_value, sched_runtime = self.sched_solver.schedule(
-             needs_gpu,  #: List[bool],
-             release_times,  #: List[int],
-             absolute_deadlines,  #: List[int],
-             expected_runtimes,  #: List[int],
-             dependency_matrix,
-             pinned_tasks,  #: List[int],
-             num_tasks,  #: int,
-             num_gpus,  #: int,
-             num_cpus,  #: int,
-             goal='max_slack',
-             log_dir=None)
-
-        result = list(zip(start_times, placements))
-        return sched_runtime, result

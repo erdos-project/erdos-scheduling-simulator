@@ -1,3 +1,6 @@
+import logging
+import pickle
+
 from absl import app, flags
 import utils
 
@@ -13,7 +16,9 @@ FLAGS = flags.FLAGS
 flags.DEFINE_integer('num_gpus', 2, 'Number of GPUs available.')
 flags.DEFINE_integer('num_cpus', 10, 'Number of CPUs available.')
 flags.DEFINE_integer('task_runtime', 15, 'Estimated task runtime.')
+
 flags.DEFINE_enum('scheduler', 'z3', ['z3', 'gurobi', 'eval'],
+
                   'Sets which ILP scheduler to use.')
 flags.DEFINE_enum('goal', 'feasibility', ['feasibility', 'max_slack'],
                   'Sets the goal of the solver.')
