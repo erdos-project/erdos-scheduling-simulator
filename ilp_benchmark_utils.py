@@ -1,6 +1,6 @@
 from schedulers.ilp_scheduler import ILPScheduler
-from schedulers.ilp_utils import (
-    verify_schedule, needs_gpu_to_resource_requirements)
+from schedulers.ilp_utils import (verify_schedule,
+                                  needs_gpu_to_resource_requirements)
 
 import logging
 import pickle
