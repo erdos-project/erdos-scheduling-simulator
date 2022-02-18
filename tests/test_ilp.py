@@ -1,7 +1,8 @@
 from schedulers.gurobi_scheduler import GurobiScheduler
 from schedulers.z3_scheduler import Z3Scheduler
 from schedulers.ilp_scheduler import verify_schedule
-from schedulers.ilp_utils import needs_gpu_to_resource_requirements, verify_schedule, compute_slack_cost
+from schedulers.ilp_utils import (
+    needs_gpu_to_resource_requirements, verify_schedule, compute_slack_cost)
 from schedulers.ilp_scheduler import ILPScheduler
 
 
