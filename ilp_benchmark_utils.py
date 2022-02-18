@@ -25,19 +25,17 @@ class ILPBenchmarker(object):
                   num_gpus: int = 2,
                   goal: str = 'max_slack',
                   log_dir: str = None,
-                  logger: Optional[logging.Logger] = None
-                  ):
+                  logger: Optional[logging.Logger] = None):
 
         # Make workload
         (needs_gpu, resource_requirements, release_times, absolute_deadlines,
-         expected_runtimes, dependency_matrix, pinned_tasks,
-         num_tasks, num_resources, horizon) = self.make_workload(num_tasks,
-                                                                 expected_runtime,
-                                                                 num_cpus,
-                                                                 num_gpus)
+         expected_runtimes, dependency_matrix, pinned_tasks, num_tasks,
+         num_resources, horizon) = self.make_workload(num_tasks,
+                                                      expected_runtime,
+                                                      num_cpus, num_gpus)
         # Make logging path
-        log_dir = self.make_subdir(
-            log_dir, num_tasks, horizon, num_gpus, num_cpus)
+        log_dir = self.make_subdir(log_dir, num_tasks, horizon, num_gpus,
+                                   num_cpus)
         # Check log_dir exists
         if log_dir is not None and not Path(log_dir).is_dir():
             Path(log_dir).mkdir()
@@ -46,7 +44,8 @@ class ILPBenchmarker(object):
         if logger is None:
             logger = utils.setup_logging(name=f"{num_tasks}_{horizon}")
         logger.info(
-            f"Running scheduler for {num_tasks} task over horizon of {horizon}")
+            f"Running scheduler for {num_tasks} task over horizon of {horizon}"
+        )
 
         # Run scheduling
         out, output_cost, runtime = scheduler.schedule(
@@ -69,8 +68,8 @@ class ILPBenchmarker(object):
 
         # Check results are valid
         verify_schedule(out[0], out[1], resource_requirements, release_times,
-                        absolute_deadlines, expected_runtimes, dependency_matrix,
-                        [num_cpus, num_gpus])
+                        absolute_deadlines, expected_runtimes,
+                        dependency_matrix, [num_cpus, num_gpus])
 
         # Log in
         if log_dir is not None:
@@ -96,22 +95,20 @@ class ILPBenchmarker(object):
         placement = (out[1] if out else None)
         return (runtime), start_time, placement, output_cost
 
-    def make_workload(self,
-                      num_tasks: int,
-                      expected_runtime: int,
-                      num_cpus: int,
-                      num_gpus: int
-                      ):
+    def make_workload(self, num_tasks: int, expected_runtime: int,
+                      num_cpus: int, num_gpus: int):
         raise NotImplementedError
 
-    def visualize(self, start_time, placement, num_cpus, num_gpus, num_tasks, expected_runtime):
+    def visualize(self, start_time, placement, num_cpus, num_gpus, num_tasks,
+                  expected_runtime):
         """ Creates a visualization if it's possible """
         if start_time is None:
             return
         raise NotImplementedError
 
 
-class SymmetricTasksBenchmark (ILPBenchmarker):
+class SymmetricTasksBenchmark(ILPBenchmarker):
+
     def __init__(self, deps=1, cpu_process=3):
         self.deps = deps
         if deps == 1:
@@ -131,12 +128,8 @@ class SymmetricTasksBenchmark (ILPBenchmarker):
                                          f"-before-{self.dependent_task}/")
         return (log_dir + (subdir_name) if log_dir else None)
 
-    def make_workload(self,
-                      num_tasks: int,
-                      expected_runtime: int,
-                      num_cpus: int,
-                      num_gpus: int
-                      ):
+    def make_workload(self, num_tasks: int, expected_runtime: int,
+                      num_cpus: int, num_gpus: int):
         horizon = 10 * num_tasks
         # True if a task requires a GPU.
         needs_gpu = [True] * num_tasks
@@ -159,32 +152,29 @@ class SymmetricTasksBenchmark (ILPBenchmarker):
 
         num_resources = [num_cpus, num_gpus]
 
-        return (needs_gpu, resource_requirements, release_times, absolute_deadlines,
-                expected_runtimes, dependency_matrix, pinned_tasks,
-                num_tasks, num_resources, horizon)
+        return (needs_gpu, resource_requirements, release_times,
+                absolute_deadlines, expected_runtimes, dependency_matrix,
+                pinned_tasks, num_tasks, num_resources, horizon)
 
-    def visualize(self, start_time, placement, num_cpus, num_gpus, num_tasks, expected_runtime):
+    def visualize(self, start_time, placement, num_cpus, num_gpus, num_tasks,
+                  expected_runtime):
         """ Creates a visualization if it's possible """
         if start_time is None:
             return
         return
 
 
-class OneLongTwoShortBenchmark (ILPBenchmarker):
+class OneLongTwoShortBenchmark(ILPBenchmarker):
 
     def __init__(self, height=1.0):
         self.height = height
 
-    def make_workload(self,
-                      num_tasks: int,
-                      expected_runtime: int,
-                      num_cpus: int,
-                      num_gpus: int
-                      ):
+    def make_workload(self, num_tasks: int, expected_runtime: int,
+                      num_cpus: int, num_gpus: int):
         horizon = 30 + 10 * (num_tasks - 1)
         needs_gpu = [True] * num_tasks
         # Release time when task is ready to start.
-        release_times = [22 * (i//3) for i in range(0, num_tasks)]
+        release_times = [22 * (i // 3) for i in range(0, num_tasks)]
         # Absolute deadline when task must finish.
         absolute_deadlines = [r + 30 for r in release_times]
         # Expected task runtime.
@@ -201,11 +191,12 @@ class OneLongTwoShortBenchmark (ILPBenchmarker):
 
         num_resources = [num_cpus, num_gpus]
 
-        return (needs_gpu, resource_requirements, release_times, absolute_deadlines,
-                expected_runtimes, dependency_matrix, pinned_tasks,
-                num_tasks, num_resources, horizon)
+        return (needs_gpu, resource_requirements, release_times,
+                absolute_deadlines, expected_runtimes, dependency_matrix,
+                pinned_tasks, num_tasks, num_resources, horizon)
 
-    def visualize(self, start_time, placement, num_cpus, num_gpus, num_tasks, expected_runtime):
+    def visualize(self, start_time, placement, num_cpus, num_gpus, num_tasks,
+                  expected_runtime):
         """ Creates a visualization if it's possible """
         if start_time is None:
             return
@@ -213,30 +204,35 @@ class OneLongTwoShortBenchmark (ILPBenchmarker):
         height = self.height
         plt.figure(figsize=(15, 8))
         for i in range(len(start_time)):
-            task_runtime = 25 if (i+1) % 3 == 0 else 10
+            task_runtime = 25 if (i + 1) % 3 == 0 else 10
             if placement[i] == 10:
-                plt.barh(y=i * height + 0.5 * height, height=height, left=start_time[i], width=task_runtime,
+                plt.barh(y=i * height + 0.5 * height,
+                         height=height,
+                         left=start_time[i],
+                         width=task_runtime,
                          color='#A4c08A')
             else:
-                plt.barh(y=i * height + 0.5 * height, height=height, left=start_time[i], width=task_runtime,
+                plt.barh(y=i * height + 0.5 * height,
+                         height=height,
+                         left=start_time[i],
+                         width=task_runtime,
                          color="yellow")
-        plt.title("Type 2 (22, cpu) task bar graph with {} task numbe for {} gpu and {} cpu {}".format(
-            num_tasks, num_gpus, num_cpus, arrangement))
-        plt.savefig("Type_2_22_task_bar_graph_plot_with_{}_tasks_for_{}_gpu_and_{}_cpu_{}_cpu".format(
-            num_tasks, num_gpus, num_cpus, arrangement))
+        plt.title(
+            "Type 2 (22, cpu) task bar graph with {} task numbe for {} gpu and {} cpu {}"
+            .format(num_tasks, num_gpus, num_cpus, arrangement))
+        plt.savefig(
+            "Type_2_22_task_bar_graph_plot_with_{}_tasks_for_{}_gpu_and_{}_cpu_{}_cpu"
+            .format(num_tasks, num_gpus, num_cpus, arrangement))
 
 
-class StaggeredReleaseBenchmark (ILPBenchmarker):
+class StaggeredReleaseBenchmark(ILPBenchmarker):
+
     def __init__(self, height=1.0):
         self.height = height
 
-    def make_workload(self,
-                      num_tasks: int,
-                      expected_runtime: int,
-                      num_cpus: int,
-                      num_gpus: int
-                      ):
-        horizon = 45 + 5 * (num_tasks-1)
+    def make_workload(self, num_tasks: int, expected_runtime: int,
+                      num_cpus: int, num_gpus: int):
+        horizon = 45 + 5 * (num_tasks - 1)
         needs_gpu = [True] * num_tasks
         # Release time when task is ready to start.
         release_times = [5 * k for k in range(0, num_tasks)]
@@ -255,24 +251,26 @@ class StaggeredReleaseBenchmark (ILPBenchmarker):
 
         num_resources = [num_cpus, num_gpus]
 
-        return (needs_gpu, resource_requirements, release_times, absolute_deadlines,
-                expected_runtimes, dependency_matrix, pinned_tasks,
-                num_tasks, num_resources, horizon)
+        return (needs_gpu, resource_requirements, release_times,
+                absolute_deadlines, expected_runtimes, dependency_matrix,
+                pinned_tasks, num_tasks, num_resources, horizon)
 
-    def visualize(self, start_time, placement, num_cpus, num_gpus, num_tasks, expected_runtime):
+    def visualize(self, start_time, placement, num_cpus, num_gpus, num_tasks,
+                  expected_runtime):
         """ Creates a visualization if it's possible """
         if start_time is None:
             return
         arrangement = "zero edges graph"
         plt.figure(figsize=(15, 8))
         for i in range(len(start_time)):
-            plt.barh(
-                y=i*self.height+0.5*self.height,
-                height=self.height,
-                left=start_time[i],
-                width=expected_runtime,
-                color='#A4C08A')
-        plt.title("Type 1 task bar graph with {} task numbe for {} gpu and {} cpu {}".format(
-            num_tasks, num_gpus, num_cpus, arrangement))
-        plt.savefig("Type_1_task_bar_graph_plot_with_{}_tasks_for_{}_gpu_and_{}_cpu_{}_debug".format(
-            num_tasks, num_gpus, num_cpus, arrangement))
+            plt.barh(y=i * self.height + 0.5 * self.height,
+                     height=self.height,
+                     left=start_time[i],
+                     width=expected_runtime,
+                     color='#A4C08A')
+        plt.title(
+            "Type 1 task bar graph with {} task numbe for {} gpu and {} cpu {}"
+            .format(num_tasks, num_gpus, num_cpus, arrangement))
+        plt.savefig(
+            "Type_1_task_bar_graph_plot_with_{}_tasks_for_{}_gpu_and_{}_cpu_{}_debug"
+            .format(num_tasks, num_gpus, num_cpus, arrangement))
