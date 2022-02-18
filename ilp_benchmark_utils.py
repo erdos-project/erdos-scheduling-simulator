@@ -218,12 +218,12 @@ class OneLongTwoShortBenchmark(ILPBenchmarker):
                          left=start_time[i],
                          width=task_runtime,
                          color="yellow")
-        plt.title("Type 2 (22, cpu) task bar graph with {} task" +
-                  " number for {} gpu and {} cpu {}".format(
-                      num_tasks, num_gpus, num_cpus, arrangement))
-        plt.savefig("Type_2_22_task_bar_graph_plot_with_{}_" +
-                    "tasks_for_{}_gpu_and_{}_cpu_{}_cpu".format(
-                        num_tasks, num_gpus, num_cpus, arrangement))
+        plt.title(
+            f"Type 2 (22, cpu) task bar graph with {num_tasks} task" +
+            f" number for {num_gpus} gpu and {num_cpus} cpu {arrangement}")
+        plt.savefig(
+            f"Type_2_22_task_bar_graph_plot_with_{num_tasks}_" +
+            f"tasks_for_{num_gpus}_gpu_and_{num_cpus}_cpu_{arrangement}_cpu")
 
 
 class StaggeredReleaseBenchmark(ILPBenchmarker):
@@ -269,9 +269,9 @@ class StaggeredReleaseBenchmark(ILPBenchmarker):
                      left=start_time[i],
                      width=expected_runtime,
                      color='#A4C08A')
-        plt.title("Type 1 task bar graph with {} task" +
-                  " number for {} gpu and {} cpu {}".format(
-                      num_tasks, num_gpus, num_cpus, arrangement))
-        plt.savefig("Type_1_task_bar_graph_plot_with_{}_" +
-                    "tasks_for_{}_gpu_and_{}_cpu_{}_debug".format(
-                        num_tasks, num_gpus, num_cpus, arrangement))
+        plt.title(
+            f"Type 1 task bar graph with {num_tasks} task" +
+            f" number for {num_gpus} gpu and {num_cpus} cpu {arrangement}")
+        plt.savefig(
+            "Type_1_task_bar_graph_plot_with_{num_tasks}_" +
+            "tasks_for_{num_gpus}_gpu_and_{num_cpus}_cpu_{arrangement}_debug")
