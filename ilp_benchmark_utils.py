@@ -175,7 +175,7 @@ class OneLongTwoShortBenchmark(ILPBenchmarker):
         horizon = 30 + 10 * (num_tasks - 1)
         needs_gpu = [True] * num_tasks
         # Release time when task is ready to start.
-        release_times = [22 * (i // 3) for i in range(0, num_tasks)]
+        release_times = [23 * (i // 3) for i in range(0, num_tasks)]
         # Absolute deadline when task must finish.
         absolute_deadlines = [r + 30 for r in release_times]
         # Expected task runtime.

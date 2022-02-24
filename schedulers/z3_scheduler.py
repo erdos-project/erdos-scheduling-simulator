@@ -187,20 +187,21 @@ class Z3Scheduler(ILPScheduler):
 
         self._logger.debug(schedulable)
         if schedulable != unsat:
+            placements = [
+                int(str(s.model()[p])) for i, p in enumerate(placements)
+            ]
             if goal != 'feasibility':
                 cost = int(str(s.lower(result)))
                 self._logger.debug(cost)
             else:
-                cost = compute_slack_cost(placements)
+                cost = compute_slack_cost(placements, expected_runtimes,
+                                          absolute_deadlines)
 
             # placements = [
             #     int(str(s.model()[p])) if not needs_gpu[i] else
             #     (10 if bool(s.model()[p]) else 11)
             #     for i, p in enumerate(placements)
             # ]
-            placements = [
-                int(str(s.model()[p])) for i, p in enumerate(placements)
-            ]
 
             outputs = [int(str(s.model()[t]))
                        for t in times], [p for p in placements]

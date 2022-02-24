@@ -53,7 +53,7 @@ def main(args):
     results_dict = {}
     for name, scheduler in schedulers.items():
         results = []
-        for num_tasks in range(5, 7, 1):
+        for num_tasks in range(40, 41, 1):
 
             (runtime, start_times, placement,
              output_cost) = benchmark.benchmark(scheduler,
