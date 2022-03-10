@@ -1,5 +1,4 @@
 import functools
-import logging
 import time
 
 from typing import List, Optional
@@ -15,14 +14,16 @@ class GurobiScheduler(ILPScheduler):
     def __init__(self,
                  preemptive: bool = False,
                  runtime: float = -1.0,
-                 _logger: Optional[logging.Logger] = None):
+                 _flags: Optional['absl.flags'] = None):
         self._preemptive = preemptive
         self._runtime = runtime
         # Set up the logger.
-        if _logger:
-            self._logger = _logger
+        if _flags:
+            self._logger = utils.setup_logging(name=self.__class__.__name__,
+                                               log_file=_flags.log_file_name,
+                                               log_level=_flags.log_level)
         else:
-            self._logger = utils.setup_logging(name="gurobi")
+            self._logger = utils.setup_logging(name=self.__class__.__name__)
 
     def schedule(self,
                  resource_requirements: List[List[bool]],
@@ -36,8 +37,7 @@ class GurobiScheduler(ILPScheduler):
                  bits=None,
                  goal='max_slack',
                  enforce_deadline=True,
-                 log_dir=None,
-                 logger: Optional[logging.Logger] = None):
+                 log_dir=None):
         """Runs scheduling using Gurobi.
 
         Args:
@@ -62,8 +62,6 @@ class GurobiScheduler(ILPScheduler):
             goal (`str`): Goal of the scheduler run. Note: Gurobi does not
                 support feasibility checking.
             log_dir (`str`): Directory to write the ILP to.
-            logger(`Optional[logging.Logger]`): The logger to use to log the
-                results of the execution.
         """
         assert goal != 'feasibility', \
             'Gurobi does not support feasibility checking.'
@@ -179,7 +177,7 @@ class GurobiScheduler(ILPScheduler):
             return assignment, int(s.objVal), runtime
         elif s.status == gp.GRB.INFEASIBLE:
             self._logger.debug("No solution to solver run")
-            return None, None, None
+            return (None, None), None, runtime
         else:
             self._logger.debug(f"Opt solver end with status: {s.status}")
-            return None, None, None
+            return (None, None), None, runtime

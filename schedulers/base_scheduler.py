@@ -1,15 +1,16 @@
-from typing import Sequence, Tuple
+from typing import Optional, Sequence, Tuple
 from workload import Task, TaskGraph
 
 
 class BaseScheduler(object):
 
     def schedule(
-            self,
-            sim_time: float,
-            released_tasks: Sequence[Task],
-            task_graph: TaskGraph,
-            worker_pools: 'Sequence[WorkerPool]',  # noqa: F821
+        self,
+        sim_time: float,
+        released_tasks: Sequence[Task],
+        task_graph: TaskGraph,
+        worker_pools: 'Sequence[WorkerPool]',  # noqa: F821
+        _flags: Optional['absl.flags'] = None
     ) -> (float, Sequence[Tuple[Task, str]]):
         """ Abstract method to be implemented by derived classes to allow the
         scheduling of tasks.

@@ -1,7 +1,7 @@
 import time
 from functools import partial
 from copy import copy, deepcopy
-from typing import Sequence, Tuple
+from typing import Optional, Sequence, Tuple
 
 from schedulers import BaseScheduler
 from workload import Task, TaskGraph
@@ -19,7 +19,10 @@ class LSFScheduler(BaseScheduler):
             scheduler returns the actual runtime.
     """
 
-    def __init__(self, preemptive: bool = False, runtime: float = -1.0):
+    def __init__(self,
+                 preemptive: bool = False,
+                 runtime: float = -1.0,
+                 _flags: Optional['absl.flags'] = None):
         self._preemptive = preemptive
         self._runtime = runtime
 

@@ -1,7 +1,6 @@
 import functools
 from z3 import Int, Solver, Implies, Or, unsat, Optimize, IntVal
 # from z3 import If, BitVec, Bool, UGE, ULT, BitVecVal
-import logging
 import time
 
 # from math import ceil, log2
@@ -16,14 +15,16 @@ class Z3Scheduler(ILPScheduler):
     def __init__(self,
                  preemptive: bool = False,
                  runtime: float = -1.0,
-                 _logger: Optional[logging.Logger] = None):
+                 _flags: Optional['absl.flags'] = None):
         self._preemptive = preemptive
         self._runtime = runtime
         # Set up the logger.
-        if _logger:
-            self._logger = _logger
+        if _flags:
+            self._logger = utils.setup_logging(name=self.__class__.__name__,
+                                               log_file=_flags.log_file_name,
+                                               log_level=_flags.log_level)
         else:
-            self._logger = utils.setup_logging(name="z3")
+            self._logger = utils.setup_logging(name=self.__class__.__name__)
 
     def schedule(self,
                  resource_requirement: List[List[bool]],
@@ -37,8 +38,7 @@ class Z3Scheduler(ILPScheduler):
                  bits=None,
                  goal='max_slack',
                  enforce_deadline=True,
-                 log_dir=None,
-                 logger: Optional[logging.Logger] = None):
+                 log_dir=None):
         """Runs scheduling using Z3.
 
         Args:
@@ -64,8 +64,6 @@ class Z3Scheduler(ILPScheduler):
             enforce_deadline (`bool`): Deadline must be met or else the
                 schedule will return None.
             log_dir (`str`): Directory to write the ILP to.
-            logger(`Optional[logging.Logger]`): The logger to use to log the
-                results of the execution.
         """
 
         num_resources_ub = [

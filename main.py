@@ -97,18 +97,22 @@ def main(args):
     scheduler = None
     if FLAGS.scheduler == 'edf':
         scheduler = EDFScheduler(preemptive=FLAGS.preemption,
-                                 runtime=FLAGS.scheduler_runtime)
+                                 runtime=FLAGS.scheduler_runtime,
+                                 _flags=FLAGS)
     elif FLAGS.scheduler == 'lsf':
         scheduler = LSFScheduler(preemptive=FLAGS.preemption,
-                                 runtime=FLAGS.scheduler_runtime)
+                                 runtime=FLAGS.scheduler_runtime,
+                                 _flags=FLAGS)
     elif FLAGS.scheduler == 'gurobi':
         scheduler = ILPBaseScheduler(GurobiScheduler,
                                      preemptive=FLAGS.preemption,
-                                     runtime=FLAGS.scheduler_runtime)
+                                     runtime=FLAGS.scheduler_runtime,
+                                     _flags=FLAGS)
     elif FLAGS.scheduler == 'z3':
         scheduler = ILPBaseScheduler(Z3Scheduler,
                                      preemptive=FLAGS.preemption,
-                                     runtime=FLAGS.scheduler_runtime)
+                                     runtime=FLAGS.scheduler_runtime,
+                                     _flags=FLAGS)
     else:
         raise ValueError("Unsupported scheduler implementation: {}".format(
             FLAGS.scheduler))

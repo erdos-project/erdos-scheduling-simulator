@@ -1,6 +1,6 @@
 from typing import List
 from schedulers.base_scheduler import BaseScheduler
-from typing import Sequence, Tuple
+from typing import Optional, Sequence, Tuple
 from copy import copy, deepcopy
 
 from workload import Task, TaskGraph, Resource, Resources
@@ -80,8 +80,9 @@ class ILPBaseScheduler(BaseScheduler):
     def __init__(self,
                  sched_solver: ILPScheduler,
                  preemptive: bool = False,
-                 runtime: float = -1.0):
-        self.sched_solver = sched_solver()
+                 runtime: float = -1.0,
+                 _flags: Optional['absl.flags'] = None):
+        self.sched_solver = sched_solver(preemptive, runtime, _flags)
         self._preemptive = preemptive
         self._runtime = runtime
 

@@ -13,6 +13,11 @@ from schedulers.gurobi_scheduler import GurobiScheduler
 
 FLAGS = flags.FLAGS
 
+flags.DEFINE_string('log_file_name',
+                    None,
+                    'Name of the file to log the results to.',
+                    short_name="log")
+flags.DEFINE_string('log_level', 'debug', 'Level of logging.')
 flags.DEFINE_integer('num_gpus', 2, 'Number of GPUs available.')
 flags.DEFINE_integer('num_cpus', 10, 'Number of CPUs available.')
 flags.DEFINE_integer('task_runtime', 15, 'Estimated task runtime.')
@@ -98,11 +103,13 @@ def do_run(scheduler: ILPScheduler,
 
 
 def main(args):
-    logger = utils.setup_logging(name="benchmark_ilp")
+    logger = utils.setup_logging(name=__name__,
+                                 log_file=FLAGS.log_file_name,
+                                 log_level=FLAGS.log_level)
     if FLAGS.scheduler == 'z3':
-        scheduler = Z3Scheduler()
+        scheduler = Z3Scheduler(_flags=FLAGS)
     elif FLAGS.scheduler == 'gurobi':
-        scheduler = GurobiScheduler()
+        scheduler = GurobiScheduler(_flags=FLAGS)
     else:
         raise ValueError('Unexpected --scheduler value {FLAGS.scheduler}')
     results = []
