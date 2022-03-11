@@ -14,9 +14,23 @@ class GurobiScheduler(ILPScheduler):
     def __init__(self,
                  preemptive: bool = False,
                  runtime: float = -1.0,
+                 goal: str = 'max_slack',
+                 enforce_deadlines: bool = True,
                  _flags: Optional['absl.flags'] = None):
+        """Constructs a Gurobi scheduler.
+
+        Args:
+            goal (`str`): Goal of the scheduler run. Note: Gurobi does not
+                support feasibility checking.
+            enforce_deadlines (`bool`): Deadlines must be met or else the
+                schedule will return None.
+        """
         self._preemptive = preemptive
         self._runtime = runtime
+        assert goal != 'feasibility', \
+            'Gurobi does not support feasibility checking.'
+        self._goal = goal
+        self._enforce_deadlines = enforce_deadlines
         # Set up the logger.
         if _flags:
             self._logger = utils.setup_logging(name=self.__class__.__name__,
@@ -25,19 +39,11 @@ class GurobiScheduler(ILPScheduler):
         else:
             self._logger = utils.setup_logging(name=self.__class__.__name__)
 
-    def schedule(self,
-                 resource_requirements: List[List[bool]],
-                 release_times: List[int],
-                 absolute_deadlines: List[int],
-                 expected_runtimes: List[int],
-                 dependency_matrix,
-                 pinned_tasks: List[int],
-                 num_tasks: int,
-                 num_resources: List[int],
-                 bits=None,
-                 goal='max_slack',
-                 enforce_deadline=True,
-                 log_dir=None):
+    def schedule(self, resource_requirements: List[List[bool]],
+                 release_times: List[int], absolute_deadlines: List[int],
+                 expected_runtimes: List[int], dependency_matrix,
+                 pinned_tasks: List[int], num_tasks: int,
+                 num_resources: List[int]):
         """Runs scheduling using Gurobi.
 
         Args:
@@ -58,13 +64,7 @@ class GurobiScheduler(ILPScheduler):
                 resource (or already running there).
             num_tasks (`int`): Number of tasks.
             num_resources (`List[int]`): Number of resources.
-            bits (`int`): Number of bits to use for the ILP.
-            goal (`str`): Goal of the scheduler run. Note: Gurobi does not
-                support feasibility checking.
-            log_dir (`str`): Directory to write the ILP to.
         """
-        assert goal != 'feasibility', \
-            'Gurobi does not support feasibility checking.'
         M = max(absolute_deadlines)
 
         num_resources_ub = [
@@ -108,7 +108,7 @@ class GurobiScheduler(ILPScheduler):
         for t, r, e, d, c in zip(times, release_times, expected_runtimes,
                                  absolute_deadlines, costs):
             # Finish before deadline.
-            if enforce_deadline:
+            if self._enforce_deadlines:
                 s.addConstr(t + e <= d - 1)
             # Start at or after release time.
             s.addConstr(r <= t)
@@ -166,9 +166,6 @@ class GurobiScheduler(ILPScheduler):
         s.optimize()
         end_time = time.time()
         runtime = end_time - start_time
-        if log_dir is not None:
-            assert log_dir is not None
-            raise NotImplementedError
 
         if s.status == gp.GRB.OPTIMAL:
             self._logger.debug(f"Found optimal value: {s.objVal}")

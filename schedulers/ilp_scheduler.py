@@ -62,16 +62,10 @@ def compute_slack_cost(placement, expected_runtime, absolute_deadlines):
 
 class ILPScheduler(object):
 
-    def schedule(needs_gpu: List[bool],
-                 release_times: List[int],
-                 absolute_deadlines: List[int],
-                 expected_runtimes: List[int],
-                 dependency_matrix,
-                 pinned_tasks: List[int],
-                 num_tasks: int,
-                 num_gpus: int,
-                 num_cpus: int,
-                 bits: int = 8):
+    def schedule(needs_gpu: List[bool], release_times: List[int],
+                 absolute_deadlines: List[int], expected_runtimes: List[int],
+                 dependency_matrix, pinned_tasks: List[int], num_tasks: int,
+                 num_gpus: int, num_cpus: int):
         raise NotImplementedError
 
 
@@ -166,9 +160,7 @@ class ILPBaseScheduler(BaseScheduler):
              dependency_matrix,  #: List<tasks>[List<tasks>[bool]],
              pinned_tasks,  #: List<tasks>[int<total_num_resources>],
              num_tasks,  #: int,
-             num_resources,  #: List<uniq_resources>[int],
-             goal='max_slack',
-             log_dir=None)
+             num_resources)  #: List<uniq_resources>[int])
 
         if opt_value is None:  # Doesn't handle loadshedding
             return (sched_runtime, [])
@@ -225,17 +217,8 @@ class ILPBaseScheduler(BaseScheduler):
 
         (start_times,
          placements), opt_value, sched_runtime = self.sched_solver.schedule(
-             needs_gpu,  #: List[bool],
-             release_times,  #: List[int],
-             absolute_deadlines,  #: List[int],
-             expected_runtimes,  #: List[int],
-             dependency_matrix,
-             pinned_tasks,  #: List[int],
-             num_tasks,  #: int,
-             num_gpus,  #: int,
-             num_cpus,  #: int,
-             goal='max_slack',
-             log_dir=None)
+             needs_gpu, release_times, absolute_deadlines, expected_runtimes,
+             dependency_matrix, pinned_tasks, num_tasks, num_gpus, num_cpus)
 
         result = list(zip(start_times, placements))
         return sched_runtime, result

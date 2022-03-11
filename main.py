@@ -20,6 +20,8 @@ flags.DEFINE_string('csv_file_name',
                     'Name of the CSV file to log the results to.',
                     short_name="csv")
 flags.DEFINE_string('log_level', 'debug', 'Level of logging.')
+flags.DEFINE_string('ilp_log_dir', None,
+                    'Directory where to log ILP scheduler info.')
 flags.DEFINE_string('graph_path', './data/pylot-complete-graph.dot',
                     'Path of the DOT file that contains the execution graph.')
 flags.DEFINE_string('profile_path', './data/pylot_profile.json',

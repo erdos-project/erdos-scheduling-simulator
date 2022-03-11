@@ -18,6 +18,8 @@ flags.DEFINE_string('log_file_name',
                     'Name of the file to log the results to.',
                     short_name="log")
 flags.DEFINE_string('log_level', 'debug', 'Level of logging.')
+flags.DEFINE_string('ilp_log_dir', None,
+                    'Directory where to log ILP scheduler info.')
 flags.DEFINE_integer('num_gpus', 2, 'Number of GPUs available.')
 flags.DEFINE_integer('num_cpus', 10, 'Number of CPUs available.')
 flags.DEFINE_integer('task_runtime', 15, 'Estimated task runtime.')
@@ -31,17 +33,10 @@ flags.DEFINE_integer('dependent_task', 1, 'Dependent task.')
 
 def do_run(scheduler: ILPScheduler,
            num_tasks: int = 5,
-           expected_runtime: int = 20,
            horizon: int = 45,
-           num_gpus: int = 2,
-           num_cpus: int = 10,
-           goal: str = 'max_slack',
            log_dir: str = None,
            logger: Optional[logging.Logger] = None):
-    if logger is None:
-        logger = utils.setup_logging(name=f"{num_tasks}_{horizon}")
-    logger.info(
-        f"Running scheduler for {num_tasks} task over horizon of {horizon}")
+    logger.info(f"Scheduling {num_tasks} tasks over horizon of {horizon}")
     # True if a task requires a GPU.
     needs_gpu = [True] * num_tasks
     # Release time when task is ready to start.
@@ -49,7 +44,7 @@ def do_run(scheduler: ILPScheduler,
     # Absolute deadline when task must finish.
     absolute_deadlines = [horizon for _ in range(0, num_tasks)]
     # Expected task runtime.
-    expected_runtimes = [expected_runtime for _ in range(0, num_tasks)]
+    expected_runtimes = [FLAGS.task_runtime for _ in range(0, num_tasks)]
     # True if task i must finish before task j starts
     dependency_matrix = [[False for i in range(0, num_tasks)]
                          for j in range(0, num_tasks)]
@@ -62,28 +57,19 @@ def do_run(scheduler: ILPScheduler,
     resource_requirements = [[False, True] if need_gpu else [True, False]
                              for need_gpu in needs_gpu]
     out, output_cost, sched_runtime = scheduler.schedule(
-        resource_requirements,
-        release_times,
-        absolute_deadlines,
-        expected_runtimes,
-        dependency_matrix,
-        pinned_tasks,
-        num_tasks,
-        [num_cpus, num_gpus],
-        bits=13,
-        goal=goal,
-        log_dir=log_dir,
-    )
+        resource_requirements, release_times, absolute_deadlines,
+        expected_runtimes, dependency_matrix, pinned_tasks, num_tasks,
+        [FLAGS.num_cpus, FLAGS.num_gpus])
 
     logger.info(f"Scheduler runtime {sched_runtime}")
 
     verify_schedule(out[0], out[1], resource_requirements, release_times,
                     absolute_deadlines, expected_runtimes, dependency_matrix,
-                    [num_cpus, num_gpus])
+                    [FLAGS.num_cpus, FLAGS.num_gpus])
 
     logger.info(f"Scheduler output {out}")
     if log_dir is not None:
-        with open(log_dir + f"{goal}_result.pkl", 'wb') as fp:
+        with open(log_dir + f"{FLAGS.goal}_result.pkl", 'wb') as fp:
             data = {
                 'resource_requirements': resource_requirements,
                 'needs_gpu': needs_gpu,
@@ -93,8 +79,8 @@ def do_run(scheduler: ILPScheduler,
                 'dependency_matrix': dependency_matrix,
                 'pinned_tasks': pinned_tasks,
                 'model': f"{out}",
-                'n_gpu': num_gpus,
-                'n_cpus': num_cpus,
+                'n_gpu': FLAGS.num_gpus,
+                'n_cpus': FLAGS.num_cpus,
                 'runtime': sched_runtime,
                 'output_cost': int(f"{output_cost}")
             }
@@ -107,31 +93,23 @@ def main(args):
                                  log_file=FLAGS.log_file_name,
                                  log_level=FLAGS.log_level)
     if FLAGS.scheduler == 'z3':
-        scheduler = Z3Scheduler(_flags=FLAGS)
+        scheduler = Z3Scheduler(goal=FLAGS.goal, _flags=FLAGS)
     elif FLAGS.scheduler == 'gurobi':
-        scheduler = GurobiScheduler(_flags=FLAGS)
-    else:
-        raise ValueError('Unexpected --scheduler value {FLAGS.scheduler}')
+        scheduler = GurobiScheduler(goal=FLAGS.goal, _flags=FLAGS)
     results = []
     for multiplier in range(1, 3, 1):
         horizon = 50 * multiplier
         num_tasks = 5 * multiplier
-        log_dir = (FLAGS.log_dir + (
+        log_dir = (FLAGS.ilp_log_dir + (
             f"/tasks={num_tasks}_horizon={horizon}_ngpu=" +
             f"{FLAGS.num_gpus}_ncpu={FLAGS.num_cpus}_dep={FLAGS.source_task}" +
-            f"-before-{FLAGS.dependent_task}/") if FLAGS.log_dir else None)
-
+            f"-before-{FLAGS.dependent_task}/") if FLAGS.ilp_log_dir else None)
         if log_dir is not None and not Path(log_dir).is_dir():
             Path(log_dir).mkdir()
 
         runtime, output_cost = do_run(scheduler,
                                       num_tasks,
-                                      FLAGS.task_runtime,
                                       horizon,
-                                      FLAGS.num_gpus,
-                                      FLAGS.num_cpus,
-                                      goal=FLAGS.goal,
-                                      log_dir=log_dir,
                                       logger=logger)
 
         logger.info(f"runtime: {runtime} ----- output_cost: {output_cost}")

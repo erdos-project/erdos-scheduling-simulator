@@ -45,9 +45,6 @@ def __do_run(
         pinned_tasks,
         num_tasks,
         [num_cpus, num_gpus],
-        bits=13,
-        goal=goal,
-        log_dir=log_dir,
     )
 
     verify_schedule(out[0], out[1], resource_requirements, release_times,

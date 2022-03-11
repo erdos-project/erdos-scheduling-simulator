@@ -15,9 +15,20 @@ class Z3Scheduler(ILPScheduler):
     def __init__(self,
                  preemptive: bool = False,
                  runtime: float = -1.0,
+                 goal: str = 'max_slack',
+                 enforce_deadlines: bool = True,
                  _flags: Optional['absl.flags'] = None):
+        """Constructs a Z3 scheduler.
+
+        Args:
+            goal (`str`): Goal of the scheduler run.
+            enforce_deadlines (`bool`): Deadlines must be met or else the
+                schedule will return None.
+        """
         self._preemptive = preemptive
         self._runtime = runtime
+        self._goal = goal
+        self._enforce_deadlines = enforce_deadlines
         # Set up the logger.
         if _flags:
             self._logger = utils.setup_logging(name=self.__class__.__name__,
@@ -26,19 +37,11 @@ class Z3Scheduler(ILPScheduler):
         else:
             self._logger = utils.setup_logging(name=self.__class__.__name__)
 
-    def schedule(self,
-                 resource_requirement: List[List[bool]],
-                 release_times: List[int],
-                 absolute_deadlines: List[int],
-                 expected_runtimes: List[int],
-                 dependency_matrix,
-                 pinned_tasks: List[int],
-                 num_tasks: int,
-                 num_resources: Dict[str, int],
-                 bits=None,
-                 goal='max_slack',
-                 enforce_deadline=True,
-                 log_dir=None):
+    def schedule(self, resource_requirement: List[List[bool]],
+                 release_times: List[int], absolute_deadlines: List[int],
+                 expected_runtimes: List[int], dependency_matrix,
+                 pinned_tasks: List[int], num_tasks: int,
+                 num_resources: Dict[str, int]):
         """Runs scheduling using Z3.
 
         Args:
@@ -59,11 +62,6 @@ class Z3Scheduler(ILPScheduler):
                 resource (or already running there).
             num_tasks (`int`): Number of tasks.
             num_resources (`List[int]`): Number of resources.
-            bits (`int`): Number of bits to use for the ILP.
-            goal (`str`): Goal of the scheduler run.
-            enforce_deadline (`bool`): Deadline must be met or else the
-                schedule will return None.
-            log_dir (`str`): Directory to write the ILP to.
         """
 
         num_resources_ub = [
@@ -98,7 +96,7 @@ class Z3Scheduler(ILPScheduler):
         placements = [Int(f'p{i}')
                       for i in range(0, num_tasks)]  # placement on CPU or GPU
 
-        if goal != 'feasibility':
+        if self._goal != 'feasibility':
             s = Optimize()
         else:
             s = Solver()
@@ -108,7 +106,7 @@ class Z3Scheduler(ILPScheduler):
                 zip(times, release_times, expected_runtimes,
                     absolute_deadlines, costs)):
             # Finish before deadline.
-            if enforce_deadline:
+            if self._enforce_deadlines:
                 s.add(t + e <= d)
             # Start at or after release time.
             s.add(r <= t)
@@ -170,21 +168,21 @@ class Z3Scheduler(ILPScheduler):
                 s.add(placements[i] == IntVal(pin))
                 # TODO: wrong
 
-        if goal != 'feasibility':
+        if self._goal != 'feasibility':
             result = s.maximize(MySum(costs))
 
-        if log_dir is not None:
-            log_dir = log_dir + f"{goal}.smt"
+        if self._flags.ilp_log_dir is not None:
+            log_dir = self._flags.ilp_log_dir + f"{self._goal}.smt"
             with open(log_dir, "w") as outfile:
                 outfile.write(s.sexpr())
-                if goal == 'feasibility':
+                if self._goal == 'feasibility':
                     outfile.write("(check-sat)")
 
         schedulable = s.check()
         end_time = time.time()
         runtime = end_time - start_time
         cost = None
-        if goal != 'feasibility':
+        if self._goal != 'feasibility':
             cost = s.lower(result)
             self._logger.debug(cost)
         self._logger.debug(schedulable)
