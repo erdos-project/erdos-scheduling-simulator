@@ -1,7 +1,7 @@
 from logging import raiseExceptions
 from workload import TaskGraph, Resource, Resources
 from schedulers import EDFScheduler, LSFScheduler
-from schedulers.ilp_scheduler import ILPBaseScheduler
+from schedulers.ilp_scheduler import ILPScheduler
 from schedulers.z3_scheduler import Z3Scheduler
 from workers import Worker, WorkerPool
 
@@ -15,7 +15,7 @@ def test_ilp_scheduler_success():
     tasks across a set of WorkerPools
     according to the resource requirements.
     """
-    ilp_scheduler = ILPBaseScheduler(Z3Scheduler)
+    ilp_scheduler = ILPScheduler(Z3Scheduler)
 
     # Create the tasks and the TaskGraph.
     task_cpu = __create_default_task(resource_requirements=Resources(
@@ -71,7 +71,7 @@ def test_ilp_scheduler_limited_resources():
     ILP Z3 scheduler recognizes the workload is not schedulable.
     TODO: Add loadshedding.
     """
-    ilp_scheduler = ILPBaseScheduler(Z3Scheduler)
+    ilp_scheduler = ILPScheduler(Z3Scheduler)
 
     # Create the tasks and the TaskGraph.
     task_lower_priority = __create_default_task(deadline=200.0)

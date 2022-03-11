@@ -10,6 +10,7 @@ import utils
 from schedulers.ilp_scheduler import ILPScheduler, verify_schedule
 from schedulers.z3_scheduler import Z3Scheduler
 from schedulers.gurobi_scheduler import GurobiScheduler
+from workload import Task
 
 FLAGS = flags.FLAGS
 
@@ -37,47 +38,38 @@ def do_run(scheduler: ILPScheduler,
            log_dir: str = None,
            logger: Optional[logging.Logger] = None):
     logger.info(f"Scheduling {num_tasks} tasks over horizon of {horizon}")
+    tasks = [
+        Task(f"task_{index}", None, None, FLAGS.task_runtime, horizon, None, 2)
+        for index in range(0, num_tasks)
+    ]
     # True if a task requires a GPU.
     needs_gpu = [True] * num_tasks
-    # Release time when task is ready to start.
-    release_times = [2 for _ in range(0, num_tasks)]
-    # Absolute deadline when task must finish.
-    absolute_deadlines = [horizon for _ in range(0, num_tasks)]
-    # Expected task runtime.
-    expected_runtimes = [FLAGS.task_runtime for _ in range(0, num_tasks)]
     # True if task i must finish before task j starts
     dependency_matrix = [[False for i in range(0, num_tasks)]
                          for j in range(0, num_tasks)]
-    # Hardware index if a task is pinned to that resource (or already running
-    # there).
-    pinned_tasks = [None] * num_tasks
     dependency_matrix[FLAGS.source_task][FLAGS.dependent_task] = True
     needs_gpu[3] = False
 
     resource_requirements = [[False, True] if need_gpu else [True, False]
                              for need_gpu in needs_gpu]
     out, output_cost, sched_runtime = scheduler.schedule(
-        resource_requirements, release_times, absolute_deadlines,
-        expected_runtimes, dependency_matrix, pinned_tasks, num_tasks,
+        resource_requirements, tasks, dependency_matrix,
         [FLAGS.num_cpus, FLAGS.num_gpus])
 
     logger.info(f"Scheduler runtime {sched_runtime}")
 
-    verify_schedule(out[0], out[1], resource_requirements, release_times,
-                    absolute_deadlines, expected_runtimes, dependency_matrix,
-                    [FLAGS.num_cpus, FLAGS.num_gpus])
+    verify_schedule(out[0], out[1], resource_requirements, tasks,
+                    dependency_matrix, [FLAGS.num_cpus, FLAGS.num_gpus])
 
+    # TODO: Move this logic to the scheduler.
     logger.info(f"Scheduler output {out}")
     if log_dir is not None:
         with open(log_dir + f"{FLAGS.goal}_result.pkl", 'wb') as fp:
             data = {
                 'resource_requirements': resource_requirements,
                 'needs_gpu': needs_gpu,
-                'release_times': release_times,
-                'absolute_deadlines': absolute_deadlines,
-                'expected_runtimes': expected_runtimes,
+                'tasks': tasks,
                 'dependency_matrix': dependency_matrix,
-                'pinned_tasks': pinned_tasks,
                 'model': f"{out}",
                 'n_gpu': FLAGS.num_gpus,
                 'n_cpus': FLAGS.num_cpus,

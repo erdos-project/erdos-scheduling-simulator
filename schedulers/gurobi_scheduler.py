@@ -1,12 +1,14 @@
 import functools
 import time
 
-from typing import List, Optional
+from typing import List, Optional, Sequence, Tuple
 
 import gurobipy as gp
 
 import utils
 from schedulers.ilp_scheduler import ILPScheduler
+from workload import Task, TaskGraph, TaskState
+from workers import WorkerPool
 
 
 class GurobiScheduler(ILPScheduler):
@@ -40,9 +42,7 @@ class GurobiScheduler(ILPScheduler):
             self._logger = utils.setup_logging(name=self.__class__.__name__)
 
     def schedule(self, resource_requirements: List[List[bool]],
-                 release_times: List[int], absolute_deadlines: List[int],
-                 expected_runtimes: List[int], dependency_matrix,
-                 pinned_tasks: List[int], num_tasks: int,
+                 tasks: List[Task], dependency_matrix,
                  num_resources: List[int]):
         """Runs scheduling using Gurobi.
 
@@ -50,22 +50,12 @@ class GurobiScheduler(ILPScheduler):
             resource_requirements: List[List[bool]], List of lists of booleans,
                 where each sublist is a list of booleans indicating whether a
                 task conforms to a resource type.
-            release_times (`List[int]`): List of ints, one for each task,
-                indicating the release time of the task.
-            absolute_deadlines (`List[int]`): List of ints, one for each task,
-                indicating the absolute deadline of the task.
-            expected_runtimes (`List[int]`): List of ints, one for each task,
-                indicating the expected runtime of the task.
             dependency_matrix (`List[List[bool]]`): List of lists of booleans,
                 one for each task, indicating whether task i must finish
                 before task j starts.
-            pinned_tasks (`List[int]`): List of ints, one for each task,
-                indicating the hardware index if a task is pinned to that
-                resource (or already running there).
-            num_tasks (`int`): Number of tasks.
             num_resources (`List[int]`): Number of resources.
         """
-        M = max(absolute_deadlines)
+        M = max([task.deadline for task in tasks])
 
         num_resources_ub = [
             sum(num_resources[0:i + 1]) for i in range(len(num_resources))
@@ -92,28 +82,29 @@ class GurobiScheduler(ILPScheduler):
         s.setParam("OptimalityTol", 1e-3)
 
         # We are solving for times and placements while minimizing costs.
+        # Time when execution starts.
         times = [
             s.addVar(vtype=gp.GRB.INTEGER, name=f't{i}')
-            for i in range(0, num_tasks)
-        ]  # Time when execution starts.
+            for i in range(0, len(tasks))
+        ]
+        # Costs of gap.
         costs = [
             s.addVar(vtype=gp.GRB.INTEGER, name=f'c{i}')
-            for i in range(0, num_tasks)
-        ]  # Costs of gap.
+            for i in range(0, len(tasks))
+        ]
+        # Placement on CPU or GPU.
         placements = [
             s.addVar(vtype=gp.GRB.INTEGER, name=f'p{i}')
-            for i in range(0, num_tasks)
-        ]  # Placement on CPU or GPU.
+            for i in range(0, len(tasks))
+        ]
 
-        for t, r, e, d, c in zip(times, release_times, expected_runtimes,
-                                 absolute_deadlines, costs):
-            # Finish before deadline.
+        for time_var, task, cost_var in zip(times, tasks, costs):
             if self._enforce_deadlines:
-                s.addConstr(t + e <= d - 1)
+                s.addConstr(time_var + task.runtime <= task.deadline)
             # Start at or after release time.
-            s.addConstr(r <= t)
+            s.addConstr(task.release_time <= time_var)
             # Defines cost as slack deadline - finish time.
-            s.addConstr(d - t - e == c)
+            s.addConstr(task.deadline - time_var - task.runtime == cost_var)
 
         # Add constraints whether a task is placed on GPU or CPU.
         for p, res_req in zip(placements, resource_requirements):
@@ -129,8 +120,8 @@ class GurobiScheduler(ILPScheduler):
 
                 # Dependent jobs need to finish before the next one.
                 if dependency_matrix[row_i][col_j]:
-                    s.addConstr(times[row_i] +
-                                expected_runtimes[row_i] <= times[col_j])
+                    s.addConstr(
+                        times[row_i] + tasks[row_i].runtime <= times[col_j])
                 if row_i < col_j:
                     # If two tasks are on the same resources, they must not
                     # overlap.
@@ -149,18 +140,21 @@ class GurobiScheduler(ILPScheduler):
                                 1 >= placements[row_i] - placements[col_j])
 
                     # tj - ti >= ei
-                    s.addConstr(times[col_j] -
-                                times[row_i] >= expected_runtimes[row_i] -
-                                (1 - alpha) * M - beta * M)
+                    s.addConstr(
+                        times[col_j] - times[row_i] >= tasks[row_i].runtime -
+                        (1 - alpha) * M - beta * M)
 
                     # ti - tj <= ej
-                    s.addConstr(times[row_i] -
-                                times[col_j] >= expected_runtimes[col_j] -
-                                (1 - alpha) * M - (1 - beta) * M)
+                    s.addConstr(
+                        times[row_i] - times[col_j] >= tasks[col_j].runtime -
+                        (1 - alpha) * M - (1 - beta) * M)
 
-        for i, pin in enumerate(pinned_tasks):
-            if pin:
-                s.add(placements[i] == int(pin))
+        if not self._preemptive:
+            # Add constraints for the running tasks.
+            for i, task in enumerate(tasks):
+                if task.state == TaskState.RUNNING:
+                    # TODO: Incorrect! Placement must equate to resource id!
+                    s.add(placements[i] == 0)
 
         s.setObjective(MySum(costs), gp.GRB.MAXIMIZE)
         s.optimize()

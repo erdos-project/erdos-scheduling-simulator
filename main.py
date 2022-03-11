@@ -5,7 +5,7 @@ from data import TaskLoader, WorkerLoader
 from schedulers import EDFScheduler, LSFScheduler
 from schedulers.gurobi_scheduler import GurobiScheduler
 from schedulers.z3_scheduler import Z3Scheduler
-from schedulers.ilp_scheduler import ILPBaseScheduler
+from schedulers.ilp_scheduler import ILPScheduler
 from simulator import Simulator
 
 FLAGS = flags.FLAGS
@@ -106,15 +106,15 @@ def main(args):
                                  runtime=FLAGS.scheduler_runtime,
                                  _flags=FLAGS)
     elif FLAGS.scheduler == 'gurobi':
-        scheduler = ILPBaseScheduler(GurobiScheduler,
-                                     preemptive=FLAGS.preemption,
-                                     runtime=FLAGS.scheduler_runtime,
-                                     _flags=FLAGS)
+        scheduler = ILPScheduler(GurobiScheduler,
+                                 preemptive=FLAGS.preemption,
+                                 runtime=FLAGS.scheduler_runtime,
+                                 _flags=FLAGS)
     elif FLAGS.scheduler == 'z3':
-        scheduler = ILPBaseScheduler(Z3Scheduler,
-                                     preemptive=FLAGS.preemption,
-                                     runtime=FLAGS.scheduler_runtime,
-                                     _flags=FLAGS)
+        scheduler = ILPScheduler(Z3Scheduler,
+                                 preemptive=FLAGS.preemption,
+                                 runtime=FLAGS.scheduler_runtime,
+                                 _flags=FLAGS)
     else:
         raise ValueError("Unsupported scheduler implementation: {}".format(
             FLAGS.scheduler))

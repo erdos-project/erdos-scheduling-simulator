@@ -8,6 +8,7 @@ from typing import Dict, List, Optional
 
 import utils
 from schedulers.ilp_scheduler import ILPScheduler
+from workload import Task, TaskState
 
 
 class Z3Scheduler(ILPScheduler):
@@ -38,9 +39,7 @@ class Z3Scheduler(ILPScheduler):
             self._logger = utils.setup_logging(name=self.__class__.__name__)
 
     def schedule(self, resource_requirement: List[List[bool]],
-                 release_times: List[int], absolute_deadlines: List[int],
-                 expected_runtimes: List[int], dependency_matrix,
-                 pinned_tasks: List[int], num_tasks: int,
+                 tasks: List[Task], dependency_matrix,
                  num_resources: Dict[str, int]):
         """Runs scheduling using Z3.
 
@@ -48,22 +47,11 @@ class Z3Scheduler(ILPScheduler):
             resource_requirement: List[List[bool]], List of lists of booleans,
                 where each sublist is a list of booleans indicating whether a
                 task conforms to a resource type.
-            release_times (`List[int]`): List of ints, one for each task,
-                indicating the release time of the task.
-            absolute_deadlines (`List[int]`): List of ints, one for each task,
-                indicating the absolute deadline of the task.
-            expected_runtimes (`List[int]`): List of ints, one for each task,
-                indicating the expected runtime of the task.
             dependency_matrix (`List[List[bool]]`): List of lists of booleans,
                 one for each task, indicating whether task i must finish
                 before task j starts.
-            pinned_tasks (`List[int]`): List of ints, one for each task,
-                indicating the hardware index if a task is pinned to that
-                resource (or already running there).
-            num_tasks (`int`): Number of tasks.
             num_resources (`List[int]`): Number of resources.
         """
-
         num_resources_ub = [
             sum(num_resources[0:i + 1]) for i in range(len(num_resources))
         ]
@@ -90,11 +78,12 @@ class Z3Scheduler(ILPScheduler):
         # bits = ceil(log2(num_gpus + num_cpus))
 
         start_time = time.time()
-        times = [Int(f't{i}')
-                 for i in range(0, num_tasks)]  # Time when execution starts
-        costs = [Int(f'c{i}') for i in range(0, num_tasks)]  # Costs of gap
-        placements = [Int(f'p{i}')
-                      for i in range(0, num_tasks)]  # placement on CPU or GPU
+        # Time when execution starts.
+        times = [Int(f't{i}') for i in range(0, len(tasks))]
+        # Costs of gap
+        costs = [Int(f'c{i}') for i in range(0, len(tasks))]
+        # Placement on CPU or GPU.
+        placements = [Int(f'p{i}') for i in range(0, len(tasks))]
 
         if self._goal != 'feasibility':
             s = Optimize()
@@ -102,15 +91,13 @@ class Z3Scheduler(ILPScheduler):
             s = Solver()
 
         # Add constraints
-        for i, (t, r, e, d, c) in enumerate(
-                zip(times, release_times, expected_runtimes,
-                    absolute_deadlines, costs)):
-            # Finish before deadline.
+        for time_var, task, cost_var in zip(times, tasks, costs):
             if self._enforce_deadlines:
-                s.add(t + e <= d)
+                s.addConstr(time_var + task.runtime <= task.deadline)
             # Start at or after release time.
-            s.add(r <= t)
-            s.add(c == d - e - t)
+            s.addConstr(task.release_time <= time_var)
+            # Defines cost as slack deadline - finish time.
+            s.addConstr(task.deadline - time_var - task.runtime == cost_var)
 
         for i, (p, res_req) in enumerate(zip(placements,
                                              resource_requirement)):
@@ -139,8 +126,8 @@ class Z3Scheduler(ILPScheduler):
         for row_i in range(len(dependency_matrix)):
             for col_j in range(len(dependency_matrix[0])):
                 disjoint = [
-                    times[row_i] + expected_runtimes[row_i] <= times[col_j],
-                    times[col_j] + expected_runtimes[col_j] <= times[row_i]
+                    times[row_i] + tasks[row_i].runtime <= times[col_j],
+                    times[col_j] + tasks[col_j].runtime <= times[row_i]
                 ]
                 if dependency_matrix[row_i][col_j]:
                     s.add(
@@ -163,10 +150,11 @@ class Z3Scheduler(ILPScheduler):
                     #         Or(disjoint))
                     s.add(Implies(i_val == j_val, Or(disjoint)))
 
-        for i, pin in enumerate(pinned_tasks):
-            if pin:
-                s.add(placements[i] == IntVal(pin))
-                # TODO: wrong
+        if not self._preemptive:
+            for i, task in enumerate(tasks):
+                if task.state == TaskState.RUNNING:
+                    # TODO: Incorrect! Placement must equate to resource id!
+                    s.add(placements[i] == 0)
 
         if self._goal != 'feasibility':
             result = s.maximize(MySum(costs))
