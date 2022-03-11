@@ -1,21 +1,19 @@
 from logging import raiseExceptions
 from workload import TaskGraph, Resource, Resources
-from schedulers import EDFScheduler, LSFScheduler
-from schedulers.ilp_scheduler import ILPScheduler
-from schedulers.z3_scheduler import Z3Scheduler
-from workers import Worker, WorkerPool
+from schedulers import EDFScheduler, LSFScheduler, Z3Scheduler
+from workers import Worker, WorkerPool, WorkerPools
 
 from tests.test_tasks import __create_default_task
 
 
-def test_ilp_scheduler_success():
+def test_z3_scheduler_success():
     """Scenario:
 
     ILP z3 scheduler successfully schedules the
     tasks across a set of WorkerPools
     according to the resource requirements.
     """
-    ilp_scheduler = ILPScheduler(Z3Scheduler)
+    z3_scheduler = Z3Scheduler()
 
     # Create the tasks and the TaskGraph.
     task_cpu = __create_default_task(resource_requirements=Resources(
@@ -40,11 +38,11 @@ def test_ilp_scheduler_success():
     worker_pool_two = WorkerPool(name="WorkerPool_2", workers=[worker_two])
 
     # Schedule the tasks.
-    _, placements = ilp_scheduler.schedule(
+    _, placements = z3_scheduler.schedule(
         1.0,
         released_tasks=[task_cpu, task_gpu],
         task_graph=task_graph,
-        worker_pools=[worker_pool_one, worker_pool_two],
+        worker_pools=WorkerPools([worker_pool_one, worker_pool_two]),
     )
 
     assert len(placements) == 2, "Incorrect length of task placements."
@@ -65,13 +63,13 @@ def test_ilp_scheduler_success():
         )
 
 
-def test_ilp_scheduler_limited_resources():
+def test_z3_scheduler_limited_resources():
     """Scenario:
 
     ILP Z3 scheduler recognizes the workload is not schedulable.
     TODO: Add loadshedding.
     """
-    ilp_scheduler = ILPScheduler(Z3Scheduler)
+    z3_scheduler = Z3Scheduler()
 
     # Create the tasks and the TaskGraph.
     task_lower_priority = __create_default_task(deadline=200.0)
@@ -91,11 +89,11 @@ def test_ilp_scheduler_limited_resources():
     worker_pool = WorkerPool(name="WorkerPool", workers=[worker])
 
     # Schedule the tasks.
-    _, placements = ilp_scheduler.schedule(
+    _, placements = z3_scheduler.schedule(
         50.0,
         released_tasks=[task_lower_priority, task_higher_priority],
         task_graph=task_graph,
-        worker_pools=[worker_pool])
+        worker_pools=WorkerPools([worker_pool]))
 
     # TODO (Justin): No behavior for loadshedding
     assert placements == [], "Doesn't detect workload is unschedulable."
@@ -145,7 +143,7 @@ def test_edf_scheduler_success():
         1.0,
         released_tasks=[task_cpu, task_gpu],
         task_graph=task_graph,
-        worker_pools=[worker_pool_one, worker_pool_two],
+        worker_pools=WorkerPools([worker_pool_one, worker_pool_two]),
     )
     assert len(placements) == 2, "Incorrect length of task placements."
     assert placements[0][0] == task_gpu,\
@@ -186,7 +184,7 @@ def test_edf_scheduler_limited_resources():
         1.0,
         released_tasks=[task_lower_priority, task_higher_priority],
         task_graph=task_graph,
-        worker_pools=[worker_pool],
+        worker_pools=WorkerPools([worker_pool]),
     )
     assert len(placements) == 2, "Incorrect length of task placements."
     assert placements[0][0] == task_higher_priority,\
@@ -227,7 +225,7 @@ def test_edf_scheduler_non_preemptive_higher_priority():
         1.0,
         released_tasks=[task_lower_priority],
         task_graph=task_graph,
-        worker_pools=[worker_pool])
+        worker_pools=WorkerPools([worker_pool]))
     assert len(placements) == 1, "Incorrect length of task placements."
     assert placements[0][0] == task_lower_priority,\
         "Incorrect task received in the placement."
@@ -240,7 +238,7 @@ def test_edf_scheduler_non_preemptive_higher_priority():
         1.0,
         released_tasks=[task_higher_priority],
         task_graph=task_graph,
-        worker_pools=[worker_pool])
+        worker_pools=WorkerPools([worker_pool]))
     assert len(placements) == 1, "Incorrect length of task placements."
     assert placements[0][0] == task_higher_priority,\
         "Incorrect task received in the placement."
@@ -276,7 +274,7 @@ def test_edf_scheduler_preemptive_higher_priority():
         1.0,
         released_tasks=[task_lower_priority],
         task_graph=task_graph,
-        worker_pools=[worker_pool])
+        worker_pools=WorkerPools([worker_pool]))
     assert len(placements) == 1, "Incorrect length of task placements."
     assert placements[0][0] == task_lower_priority,\
         "Incorrect task received in the placement."
@@ -289,7 +287,7 @@ def test_edf_scheduler_preemptive_higher_priority():
         1.0,
         released_tasks=[task_higher_priority],
         task_graph=task_graph,
-        worker_pools=[worker_pool])
+        worker_pools=WorkerPools([worker_pool]))
     assert len(placements) == 2, "Incorrect length of task placements."
     assert placements[0][0] == task_higher_priority,\
         "Incorrect task received in the placement."
@@ -335,7 +333,7 @@ def test_lsf_scheduler_success():
         1.0,
         released_tasks=[task_cpu, task_gpu],
         task_graph=task_graph,
-        worker_pools=[worker_pool_one, worker_pool_two],
+        worker_pools=WorkerPools([worker_pool_one, worker_pool_two]),
     )
     assert len(placements) == 2, "Incorrect length of task placements."
     assert placements[0][0] == task_gpu,\
@@ -378,7 +376,7 @@ def test_lsf_scheduler_limited_resources():
         50.0,
         released_tasks=[task_lower_priority, task_higher_priority],
         task_graph=task_graph,
-        worker_pools=[worker_pool])
+        worker_pools=WorkerPools([worker_pool]))
     assert len(placements) == 2, "Incorrect length of task placements."
     assert placements[0][0] == task_higher_priority,\
         "Incorrect task received in the placement."

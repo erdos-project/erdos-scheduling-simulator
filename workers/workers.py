@@ -258,7 +258,7 @@ class WorkerPool(object):
             runtime, placement = self._scheduler.schedule(
                 [task],  # Only this task is available.
                 None,  # No task graph.
-                self._workers)
+                WorkerPools(self._workers))
             # Add the runtime to the task start time.
             task._start_time += runtime
         else:
@@ -436,4 +436,60 @@ class WorkerPool(object):
         )
         instance._id = uuid.UUID(self.id)
         memo[id(self)] = instance
+        return instance
+
+
+class WorkerPools(object):
+    """A as a collection of `WorkerPool`s."""
+
+    def __init__(self, worker_pools: Sequence[WorkerPool]):
+        self._wps = worker_pools
+
+    def get_placed_tasks(self):
+        placed_tasks = []
+        for wp in self._wps:
+            placed_tasks.extend(wp.get_placed_tasks())
+        return placed_tasks
+
+    def get_resource_ilp_encoding(self):
+        """Constructs a map from resource name to (resource_start_id,
+        resource_end_id) and a map from worker pool id to resource_id.
+
+        The resource_start_id and resource_end_id are derived based on the
+        available quantify of the given resource.
+        """
+        # Unique list of resource names -- not relying on set stability.
+        resource_names = list({
+            r.name
+            for wp in self._wps for r in wp.resources._resource_vector.keys()
+        })
+        # Uniquify scrambles the order.
+        resource_names.sort()
+
+        res_type_to_id_range = {}
+        res_id_to_wp_id = {}
+        start_range_id = 0
+        for res_name in resource_names:
+            cur_range_id = start_range_id
+            for wp in self._wps:
+                res_available = wp.resources.get_available_quantity(
+                    Resource(name=res_name, _id="any"))
+                for res_id in range(cur_range_id,
+                                    cur_range_id + res_available):
+                    res_id_to_wp_id[res_id] = wp.id
+                cur_range_id += res_available
+            res_type_to_id_range[res_name] = (start_range_id, cur_range_id)
+            start_range_id = cur_range_id
+        return res_type_to_id_range, res_id_to_wp_id
+
+    def __copy__(self):
+        cls = self.__class__
+        instance = cls.__new__(cls)
+        cls.__init__([copy(wp) for wp in self._wps])
+        return instance
+
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        instance = cls.__new__(cls)
+        cls.__init__([deepcopy(wp) for wp in self._wps])
         return instance

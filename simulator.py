@@ -6,7 +6,7 @@ from typing import Type, Sequence, Optional
 import absl
 
 import utils
-from workers import WorkerPool
+from workers import WorkerPool, WorkerPools
 from workload import JobGraph, TaskGraph, Task, Resource, Resources
 from schedulers import BaseScheduler
 
@@ -585,7 +585,7 @@ class Simulator(object):
             raise ValueError("Incorrect event type passed.")
         scheduler_runtime, task_placement = self._scheduler.schedule(
             event.time, self._released_tasks, task_graph,
-            self._worker_pools.values())
+            WorkerPools(self._worker_pools.values()))
         placement_time = event.time + scheduler_runtime
         self._last_task_placement = task_placement
         self._released_tasks = []

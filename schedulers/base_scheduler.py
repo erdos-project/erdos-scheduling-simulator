@@ -9,7 +9,7 @@ class BaseScheduler(object):
         sim_time: float,
         released_tasks: Sequence[Task],
         task_graph: TaskGraph,
-        worker_pools: 'Sequence[WorkerPool]',  # noqa: F821
+        worker_pools: 'WorkerPools',  # noqa: F821
         _flags: Optional['absl.flags'] = None
     ) -> (float, Sequence[Tuple[Task, str]]):
         """ Abstract method to be implemented by derived classes to allow the
@@ -21,7 +21,7 @@ class BaseScheduler(object):
                 the invocation of the current run of the scheduler.
             task_graph (`TaskGraph`): The state of the TaskGraph at this
                 invocation including the future set of VIRTUAL tasks.
-            worker_pools (`Sequence[WorkerPool]`): The set of worker pools to
+            worker_pools (`WorkerPools`): The set of worker pools to
                 do the placement across.
 
         Returns:

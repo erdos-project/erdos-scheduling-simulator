@@ -5,7 +5,7 @@ from typing import Optional, Sequence, Tuple
 
 from schedulers import BaseScheduler
 from workload import Task, TaskGraph
-from workers import WorkerPool
+from workers import WorkerPools
 
 
 class EDFScheduler(BaseScheduler):
@@ -26,7 +26,7 @@ class EDFScheduler(BaseScheduler):
         self._runtime = runtime
 
     def schedule(self, sim_time: float, released_tasks: Sequence[Task],
-                 task_graph: TaskGraph, worker_pools: Sequence[WorkerPool])\
+                 task_graph: TaskGraph, worker_pools: WorkerPools)\
             -> (float, Sequence[Tuple[Task, str]]):
         """Implements the BaseScheduler's schedule() method using the EDF
         algorithm for scheduling the given released_tasks across the
@@ -37,19 +37,15 @@ class EDFScheduler(BaseScheduler):
         if self.preemptive:
             # Collect all the currently placed tasks on the WorkerPool, along
             # with the set of released tasks.
-            # TODO (Sukrit): Should we check if they are currently running?
             tasks_to_be_scheduled = [task for task in released_tasks]
-            for worker_pool in worker_pools:
-                tasks_to_be_scheduled.extend(worker_pool.get_placed_tasks())
-
+            tasks_to_be_scheduled.extend(worker_pools.get_placed_tasks())
             # Restart the state of the WorkerPool.
-            schedulable_worker_pools = [deepcopy(w) for w in worker_pools]
+            schedulable_worker_pools = deepcopy(worker_pools)
         else:
             # Collect the currently released tasks.
             tasks_to_be_scheduled = [task for task in released_tasks]
-
             # Create a virtual WorkerPool set to try scheduling decisions on.
-            schedulable_worker_pools = [copy(w) for w in worker_pools]
+            schedulable_worker_pools = copy(worker_pools)
 
         # Sort the tasks according to their deadlines, and place them on the
         # worker pools.
@@ -66,7 +62,7 @@ class EDFScheduler(BaseScheduler):
         placements = []
         for task in ordered_tasks:
             is_task_placed = False
-            for worker_pool in schedulable_worker_pools:
+            for worker_pool in schedulable_worker_pools._wps:
                 if worker_pool.can_accomodate_task(task):
                     worker_pool.place_task(task)
                     is_task_placed = True
