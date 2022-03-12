@@ -485,11 +485,11 @@ class WorkerPools(object):
     def __copy__(self):
         cls = self.__class__
         instance = cls.__new__(cls)
-        cls.__init__([copy(wp) for wp in self._wps])
+        cls.__init__(instance, [copy(wp) for wp in self._wps])
         return instance
 
     def __deepcopy__(self, memo):
         cls = self.__class__
         instance = cls.__new__(cls)
-        cls.__init__([deepcopy(wp) for wp in self._wps])
+        cls.__init__(instance, [deepcopy(wp) for wp in self._wps])
         return instance

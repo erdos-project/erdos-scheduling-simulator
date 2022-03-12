@@ -1,11 +1,8 @@
 from absl import app, flags
 
 import utils
-from data import TaskLoader, WorkerLoader
-from schedulers import EDFScheduler, LSFScheduler
-from schedulers.gurobi_scheduler import GurobiScheduler
-from schedulers.z3_scheduler import Z3Scheduler
-from schedulers.ilp_scheduler import ILPScheduler
+from data import TaskLoader, WorkerLoaderJSON
+from schedulers import EDFScheduler, GurobiScheduler, LSFScheduler, Z3Scheduler
 from simulator import Simulator
 
 FLAGS = flags.FLAGS
@@ -20,8 +17,6 @@ flags.DEFINE_string('csv_file_name',
                     'Name of the CSV file to log the results to.',
                     short_name="csv")
 flags.DEFINE_string('log_level', 'debug', 'Level of logging.')
-flags.DEFINE_string('ilp_log_dir', None,
-                    'Directory where to log ILP scheduler info.')
 flags.DEFINE_string('graph_path', './data/pylot-complete-graph.dot',
                     'Path of the DOT file that contains the execution graph.')
 flags.DEFINE_string('profile_path', './data/pylot_profile.json',
@@ -92,8 +87,8 @@ def main(args):
         return
 
     # Load the worker topology.
-    worker_loader = WorkerLoader(worker_profile_path=FLAGS.worker_profile_path,
-                                 _flags=FLAGS)
+    worker_loader = WorkerLoaderJSON(
+        worker_profile_path=FLAGS.worker_profile_path, _flags=FLAGS)
 
     # Instantiate the scheduler based on the given flag.
     scheduler = None
@@ -106,15 +101,13 @@ def main(args):
                                  runtime=FLAGS.scheduler_runtime,
                                  _flags=FLAGS)
     elif FLAGS.scheduler == 'gurobi':
-        scheduler = ILPScheduler(GurobiScheduler,
-                                 preemptive=FLAGS.preemption,
-                                 runtime=FLAGS.scheduler_runtime,
-                                 _flags=FLAGS)
+        scheduler = GurobiScheduler(preemptive=FLAGS.preemption,
+                                    runtime=FLAGS.scheduler_runtime,
+                                    _flags=FLAGS)
     elif FLAGS.scheduler == 'z3':
-        scheduler = ILPScheduler(Z3Scheduler,
-                                 preemptive=FLAGS.preemption,
-                                 runtime=FLAGS.scheduler_runtime,
-                                 _flags=FLAGS)
+        scheduler = Z3Scheduler(preemptive=FLAGS.preemption,
+                                runtime=FLAGS.scheduler_runtime,
+                                _flags=FLAGS)
     else:
         raise ValueError("Unsupported scheduler implementation: {}".format(
             FLAGS.scheduler))

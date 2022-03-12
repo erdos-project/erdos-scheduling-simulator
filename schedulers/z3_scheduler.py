@@ -32,6 +32,7 @@ class Z3Scheduler(BaseScheduler):
         self._goal = goal
         self._enforce_deadlines = enforce_deadlines
         # Set up the logger.
+        self._flags = _flags
         if _flags:
             self._logger = utils.setup_logging(name=self.__class__.__name__,
                                                log_file=_flags.log_file_name,
@@ -139,14 +140,14 @@ class Z3Scheduler(BaseScheduler):
         # Add constraints
         for start_time, task, cost_var in zip(start_times, tasks, costs):
             if self._enforce_deadlines:
-                s.addConstr(start_time + task.runtime <= task.deadline)
+                s.add(start_time + task.runtime <= task.deadline)
             # Start at or after release time.
-            s.addConstr(task.release_time <= start_time)
+            s.add(task.release_time <= start_time)
             # Defines cost as slack deadline - finish time.
-            s.addConstr(task.deadline - start_time - task.runtime == cost_var)
+            s.add(task.deadline - start_time - task.runtime == cost_var)
 
         (res_type_to_id_range,
-         res_id_to_wp_id) = wps.resource_type_id_range_map()
+         res_id_to_wp_id) = wps.get_resource_ilp_encoding()
         self._add_task_resource_constraints(s, tasks, res_type_to_id_range,
                                             placements)
         # TODO(Justin): This doesn't account for the task dependencies.
@@ -163,12 +164,12 @@ class Z3Scheduler(BaseScheduler):
         runtime = scheduler_end_time - scheduler_start_time\
             if self.runtime == -1 else self.runtime
 
-        if self._flags.ilp_log_dir is not None:
-            log_dir = self._flags.ilp_log_dir + f"{self._goal}.smt"
-            with open(log_dir, "w") as outfile:
-                outfile.write(s.sexpr())
-                if self._goal == 'feasibility':
-                    outfile.write("(check-sat)")
+        # if self._flags.ilp_log_dir is not None:
+        #     log_dir = self._flags.ilp_log_dir + f"{self._goal}.smt"
+        #     with open(log_dir, "w") as outfile:
+        #         outfile.write(s.sexpr())
+        #         if self._goal == 'feasibility':
+        #             outfile.write("(check-sat)")
 
         cost = None
         if self._goal != 'feasibility':
@@ -181,6 +182,7 @@ class Z3Scheduler(BaseScheduler):
             #     (10 if bool(s.model()[p]) else 11)
             #     for i, p in enumerate(placements)
             # ]
+            result = []
             for task, start_time_v, placement_v in zip(tasks, start_times,
                                                        placements):
                 start_time = int(str(s.model()[start_time_v]))
@@ -192,4 +194,12 @@ class Z3Scheduler(BaseScheduler):
                 else:
                     result.append((task, None))
             return (runtime, result)
-        return runtime, None
+        return runtime, [(task, None) for task in tasks]
+
+    @property
+    def preemptive(self):
+        return self._preemptive
+
+    @property
+    def runtime(self):
+        return self._runtime

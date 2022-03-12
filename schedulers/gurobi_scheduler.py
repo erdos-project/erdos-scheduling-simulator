@@ -88,7 +88,7 @@ class GurobiScheduler(BaseScheduler):
                 if task.resource_requirements >= Resources(
                     {Resource(name=r_name, _id="any"): 1}):
                     s.addConstr(placement >= start_id)
-                    s.addConstr(placement < end_id)
+                    s.addConstr(placement <= end_id - 1)
 
     def _get_schedulable_tasks(self, released_tasks, wps):
         # Create the tasks to be scheduled.
@@ -108,6 +108,7 @@ class GurobiScheduler(BaseScheduler):
         def sum_costs(lst):
             return functools.reduce(lambda a, b: a + b, lst, 0)
 
+        # TODO: We should get tasks that will be released later as well.
         tasks = self._get_schedulable_tasks(released_tasks, wps)
 
         scheduler_start_time = time.time()
@@ -139,10 +140,10 @@ class GurobiScheduler(BaseScheduler):
             s.addConstr(task.deadline - start_time - task.runtime == cost_var)
 
         (res_type_to_id_range,
-         res_id_to_wp_id) = wps.resource_type_id_range_map()
+         res_id_to_wp_id) = wps.get_resource_ilp_encoding()
         self._add_task_resource_constraints(s, tasks, res_type_to_id_range,
                                             placements)
-        # TODO(Justin): This doesn't account for the task dependencies.
+        # TODO: This doesn't account for the task dependencies.
         dependency_matrix = [[False] * len(tasks)] * len(tasks)
         self._add_task_dependency_constraints(s, tasks, dependency_matrix,
                                               start_times, placements)
@@ -157,10 +158,8 @@ class GurobiScheduler(BaseScheduler):
 
         if s.status == gp.GRB.OPTIMAL:
             self._logger.debug(f"Found optimal value: {s.objVal}")
-
             self._verify_schedule(tasks, dependency_matrix, start_times,
                                   placements)
-
             result = []
             for task, start_time, placement in zip(tasks, start_times,
                                                    placements):
@@ -172,12 +171,12 @@ class GurobiScheduler(BaseScheduler):
                     result.append((task, None))
             return (runtime, result)
         elif s.status == gp.GRB.INFEASIBLE:
-            # Doesn't handle loadshedding.
+            # TODO: Implement load shedding.
             self._logger.debug("Solver couldn't find a solution.")
-            return runtime, None
+            return runtime, [(task, None) for task in tasks]
         else:
             self._logger.debug(f"Solver failed with status: {s.status}")
-            return runtime, None
+            return runtime, [(task, None) for task in tasks]
 
     def _verify_schedule(self, tasks, dependency_matrix, start_times,
                          placements):
