@@ -1,5 +1,7 @@
 import functools
+import pickle
 import time
+import sys
 
 from typing import Optional, Sequence
 
@@ -33,13 +35,23 @@ class GurobiScheduler(BaseScheduler):
             'Gurobi does not support feasibility checking.'
         self._goal = goal
         self._enforce_deadlines = enforce_deadlines
-        # Set up the logger.
+        self._time = None
+        self._released_tasks = None
+        self._task_graph = None
+        self._worker_pools = None
+        self._placements = None
+        self._cost = None
+        # Set up the loggers.
         if _flags:
             self._logger = utils.setup_logging(name=self.__class__.__name__,
                                                log_file=_flags.log_file_name,
                                                log_level=_flags.log_level)
+            self._scheduler_logger = utils.setup_scheduler_logging(
+                name=self.__class__.__name__,
+                log_file=_flags.scheduler_log_file_name)
         else:
             self._logger = utils.setup_logging(name=self.__class__.__name__)
+            self._scheduler_logger = None
 
     def _add_task_dependency_constraints(self, s, tasks, dependency_matrix,
                                          times, placements):
@@ -108,6 +120,10 @@ class GurobiScheduler(BaseScheduler):
         def sum_costs(lst):
             return functools.reduce(lambda a, b: a + b, lst, 0)
 
+        self._time = sim_time
+        self._released_tasks = released_tasks
+        self._task_graph = task_graph
+        self._worker_pools = wps
         # TODO: We should get tasks that will be released later as well.
         tasks = self._get_schedulable_tasks(released_tasks, wps)
 
@@ -151,65 +167,50 @@ class GurobiScheduler(BaseScheduler):
 
         s.setObjective(sum_costs(costs), gp.GRB.MAXIMIZE)
         s.optimize()
-
         scheduler_end_time = time.time()
-        runtime = scheduler_end_time - scheduler_start_time\
+        self._runtime = scheduler_end_time - scheduler_start_time\
             if self.runtime == -1 else self.runtime
 
         if s.status == gp.GRB.OPTIMAL:
             self._logger.debug(f"Found optimal value: {s.objVal}")
             self._verify_schedule(tasks, dependency_matrix, start_times,
                                   placements)
-            result = []
+            self._placements = []
             for task, start_time, placement in zip(tasks, start_times,
                                                    placements):
-                if int(start_time.X) <= sim_time + runtime:
+                if int(start_time.X) <= sim_time + self.runtime:
                     # TODO: It only places tasks with a start time smaller
                     # than the time at the end of the scheduler run.
-                    result.append((task, res_id_to_wp_id[int(placement.X)]))
+                    self._placements.append(
+                        (task, res_id_to_wp_id[int(placement.X)]))
                 else:
-                    result.append((task, None))
-            return (runtime, result)
-        elif s.status == gp.GRB.INFEASIBLE:
-            # TODO: Implement load shedding.
-            self._logger.debug("Solver couldn't find a solution.")
-            return runtime, [(task, None) for task in tasks]
+                    self._placements.append((task, None))
+            self._cost = int(s.objVal)
+            return self.runtime, self._placements
         else:
-            self._logger.debug(f"Solver failed with status: {s.status}")
-            return runtime, [(task, None) for task in tasks]
+            self._placements = [(task, None) for task in tasks]
+            self._cost = sys.maxsize
+            if s.status == gp.GRB.INFEASIBLE:
+                # TODO: Implement load shedding.
+                self._logger.debug("Solver couldn't find a solution.")
+                return self.runtime, self._placements
+            else:
+                self._logger.debug(f"Solver failed with status: {s.status}")
+                return self.runtime, self._placements
 
-    def _verify_schedule(self, tasks, dependency_matrix, start_times,
-                         placements):
-        # Check if each task's start time is greater than its release time.
-        assert all([
-            start_time >= task.release_time
-            for start_time, task in zip(start_times, tasks)
-        ]), "not_valid_release_times"
-
-        # Check if all tasks finished before the deadline.
-        assert all([(task.deadline >= start_time + task.runtime)
-                    for task, start_time in zip(tasks, start_times)
-                    ]), "doesn't finish before deadline"
-
-        # Check if the task dependencies were satisfied.
-        for i, row_i in enumerate(dependency_matrix):
-            for j, col_j in enumerate(row_i):
-                if i != j and col_j:
-                    assert start_times[i] + tasks[i].runtime <= start_times[
-                        j], f"not_valid_dependency{i}->{j}"
-
-        # TODO: Check if resource requirements wever satisfied.
-        for task, placement in zip(tasks, placements):
-            pass
-
-        # Check if tasks overlapped on a resource.
-        placed_tasks = [(placement, start_time, start_time + task.runtime)
-                        for placement, start_time, task in zip(
-                            placements, start_times, tasks)]
-        placed_tasks.sort()
-        for t1, t2 in zip(placed_tasks, placed_tasks[1:]):
-            if t1[0] == t2[0]:
-                assert t1[2] <= t2[1], f"overlapping_tasks_on_{t1[0]}"
+    def log(self):
+        if self._flags.scheduler_log_file_name is not None:
+            with open(self._flags.scheduler_log_file_name, 'wb') as log_file:
+                logged_data = {
+                    'time': self._time,
+                    'released_tasks': self._released_tasks,
+                    'task_graph': self._task_graph,
+                    'worker_pools': self._worker_pools,
+                    'runtime': self.runtime,
+                    'placements': self._placementsresult,
+                    'cost': self._cost
+                }
+                pickle.dump(logged_data, log_file)
 
     @property
     def preemptive(self):

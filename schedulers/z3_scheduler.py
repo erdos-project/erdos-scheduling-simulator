@@ -1,10 +1,13 @@
 import functools
-from z3 import Int, Solver, Implies, Or, unsat, Optimize
-# from z3 import If, BitVec, Bool, UGE, ULT, BitVecVal
+import pickle
 import time
+import sys
 
 # from math import ceil, log2
 from typing import Optional, Sequence
+
+from z3 import Int, Solver, Implies, Or, unsat, Optimize
+# from z3 import If, BitVec, Bool, UGE, ULT, BitVecVal
 
 import utils
 from schedulers import BaseScheduler
@@ -31,6 +34,12 @@ class Z3Scheduler(BaseScheduler):
         self._runtime = runtime
         self._goal = goal
         self._enforce_deadlines = enforce_deadlines
+        self._time = None
+        self._released_tasks = None
+        self._task_graph = None
+        self._worker_pools = None
+        self._placements = None
+        self._cost = None
         # Set up the logger.
         self._flags = _flags
         if _flags:
@@ -122,6 +131,11 @@ class Z3Scheduler(BaseScheduler):
         def sum_costs(lst):
             return functools.reduce(lambda a, b: a + b, lst, 0)
 
+        self._time = sim_time
+        self._released_tasks = released_tasks
+        self._task_graph = task_graph
+        self._worker_pools = wps
+        # TODO: We should get tasks that will be released later as well.
         tasks = self._get_schedulable_tasks(released_tasks, wps)
 
         scheduler_start_time = time.time()
@@ -161,7 +175,7 @@ class Z3Scheduler(BaseScheduler):
 
         schedulable = s.check()
         scheduler_end_time = time.time()
-        runtime = scheduler_end_time - scheduler_start_time\
+        self._runtime = scheduler_end_time - scheduler_start_time\
             if self.runtime == -1 else self.runtime
 
         # if self._flags.ilp_log_dir is not None:
@@ -171,30 +185,50 @@ class Z3Scheduler(BaseScheduler):
         #         if self._goal == 'feasibility':
         #             outfile.write("(check-sat)")
 
-        cost = None
-        if self._goal != 'feasibility':
-            cost = s.lower(result)
-            self._logger.debug(f"Solver found solution with cost {cost}")
+        self._cost = sys.maxsize
         self._logger.debug(f"Solver found {schedulable} solution")
         if schedulable != unsat:
+            if self._goal != 'feasibility':
+                self._cost = s.lower(result)
+                self._logger.debug(
+                    f"Solver found solution with cost {self._cost}")
             # placements = [
             #     int(str(s.model()[p])) if not needs_gpu[i] else
             #     (10 if bool(s.model()[p]) else 11)
             #     for i, p in enumerate(placements)
             # ]
-            result = []
+            self._verify_schedule(tasks, dependency_matrix, start_times,
+                                  placements)
+            self._placements = []
             for task, start_time_v, placement_v in zip(tasks, start_times,
                                                        placements):
                 start_time = int(str(s.model()[start_time_v]))
                 placement = int(str(s.model()[placement_v]))
                 # TODO: It only places tasks with a start time smaller
                 # than the time at the end of the scheduler run.
-                if int(start_time) <= sim_time + runtime:
-                    result.append((task, res_id_to_wp_id[placement]))
+                if int(start_time) <= sim_time + self.runtime:
+                    self._placements.append((task, res_id_to_wp_id[placement]))
                 else:
-                    result.append((task, None))
-            return (runtime, result)
-        return runtime, [(task, None) for task in tasks]
+                    self._placements.append((task, None))
+        else:
+            self._placements = [(task, None) for task in tasks]
+        # Log the scheduler run.
+        self.log()
+        return self.runtime, self._placements
+
+    def log(self):
+        if self._flags.scheduler_log_file_name is not None:
+            with open(self._flags.scheduler_log_file_name, 'wb') as log_file:
+                logged_data = {
+                    'time': self._time,
+                    'released_tasks': self._released_tasks,
+                    'task_graph': self._task_graph,
+                    'worker_pools': self._worker_pools,
+                    'runtime': self.runtime,
+                    'placements': self._placements,
+                    'cost': self._cost
+                }
+                pickle.dump(logged_data, log_file)
 
     @property
     def preemptive(self):
