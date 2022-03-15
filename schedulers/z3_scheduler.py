@@ -90,10 +90,12 @@ class Z3Scheduler(BaseScheduler):
                                        placements):
         # Add constraints whether a task is placed on GPU or CPU.
         # from num_cpus to num_cpus to num_gpus.
+
         for placement, task in zip(placements, tasks):
             for r_name, (start_id, end_id) in res_type_to_id_range.items():
-                if task.resource_requirements >= Resources(
-                    {Resource(name=r_name, _id="any"): 1}):
+                unit_resource = Resources(
+                    {Resource(name=r_name, _id="any"): 1})
+                if task.resource_requirements >= unit_resource:
                     s.add(placement >= start_id)
                     s.add(placement < end_id)
             # Legacy code for converting to bitvec to speed up solving if the

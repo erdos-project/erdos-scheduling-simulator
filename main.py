@@ -111,15 +111,6 @@ def main(args):
         task_loader.log_statistics()
         return
 
-    # Load the worker topology.
-    if FLAGS.execution_mode == 'replay':
-        worker_loader = WorkerLoaderJSON(
-            worker_profile_path=FLAGS.worker_profile_path, _flags=FLAGS)
-    elif FLAGS.execution_mode == 'benchmark':
-        worker_loader = WorkerLoaderBenchmark(FLAGS.benchmark_num_cpus,
-                                              FLAGS.benchmark_num_gpus,
-                                              _flags=FLAGS)
-
     # Instantiate the scheduler based on the given flag.
     scheduler = None
     if FLAGS.scheduler == 'edf':
@@ -143,6 +134,16 @@ def main(args):
     else:
         raise ValueError("Unsupported scheduler implementation: {}".format(
             FLAGS.scheduler))
+
+    # Load the worker topology.
+    if FLAGS.execution_mode == 'replay':
+        worker_loader = WorkerLoaderJSON(
+            worker_profile_path=FLAGS.worker_profile_path, _flags=FLAGS)
+    elif FLAGS.execution_mode == 'benchmark':
+        worker_loader = WorkerLoaderBenchmark(scheduler,
+                                              FLAGS.benchmark_num_cpus,
+                                              FLAGS.benchmark_num_gpus,
+                                              _flags=FLAGS)
 
     # Create and run the Simulator based on the scheduler.
     simulator = Simulator(worker_pools=worker_loader.get_worker_pools(),

@@ -11,6 +11,7 @@ from workload import Resource, Resources
 class WorkerLoaderBenchmark(object):
 
     def __init__(self,
+                 scheduler: Type[BaseScheduler],
                  num_cpus: int,
                  num_gpus: int,
                  _flags: Optional['absl.flags'] = None):
@@ -23,14 +24,14 @@ class WorkerLoaderBenchmark(object):
             self._logger = utils.setup_logging(name=self.__class__.__name__)
         self._flags = _flags
         if _flags:
-            self._worker_pools = \
-                    WorkerLoaderBenchmark._WorkerLoaderBenchmark__create_worker_pools(
-                        num_cpus, num_gpus, scheduler, _flags.log_file_name,
-                        _flags.log_level)
+            self._worker_pools = WorkerLoaderBenchmark. \
+                _WorkerLoaderBenchmark__create_worker_pools(
+                    num_cpus, num_gpus, scheduler, _flags.log_file_name,
+                    _flags.log_level)
         else:
-            self._worker_pools = \
-                    WorkerLoaderBenchmark._WorkerLoaderBenchmark__create_worker_pools(
-                        num_cpus, num_gpus, scheduler)
+            self._worker_pools = WorkerLoaderBenchmark. \
+                _WorkerLoaderBenchmark__create_worker_pools(
+                    num_cpus, num_gpus, scheduler)
 
     @staticmethod
     def __create_worker_pools(

@@ -97,8 +97,9 @@ class GurobiScheduler(BaseScheduler):
         # from num_cpus to num_cpus to num_gpus.
         for placement, task in zip(placements, tasks):
             for r_name, (start_id, end_id) in res_type_to_id_range.items():
-                if task.resource_requirements >= Resources(
-                    {Resource(name=r_name, _id="any"): 1}):
+                unit_resource = Resources(
+                    {Resource(name=r_name, _id="any"): 1})
+                if task.resource_requirements >= unit_resource:
                     s.addConstr(placement >= start_id)
                     s.addConstr(placement <= end_id - 1)
 
