@@ -11,7 +11,7 @@ import gurobipy as gp
 
 import utils
 from schedulers import BaseScheduler
-from workload import Resource, Resources, Task, TaskGraph, TaskState
+from workload import Task, TaskGraph, TaskState
 from workers import WorkerPools
 
 
@@ -62,8 +62,8 @@ class GurobiScheduler(BaseScheduler):
             for col_j in range(len(dependency_matrix[0])):
                 # Dependent jobs need to finish before the next one.
                 if dependency_matrix[row_i][col_j]:
-                    s.addConstr(
-                        times[row_i] + tasks[row_i].runtime <= times[col_j])
+                    s.addConstr(times[row_i] +
+                                tasks[row_i].remaining_time <= times[col_j])
                 if row_i < col_j:
                     # Tasks using the same resources must not overlap.
                     alpha = s.addVar(vtype=gp.GRB.BINARY,
@@ -79,12 +79,14 @@ class GurobiScheduler(BaseScheduler):
                                 1 >= placements[row_i] - placements[col_j])
                     # tj - ti >= ei
                     s.addConstr(
-                        times[col_j] - times[row_i] >= tasks[row_i].runtime -
+                        times[col_j] -
+                        times[row_i] >= tasks[row_i].remaining_time -
                         (1 - alpha) * max_deadline - beta * max_deadline)
                     # ti - tj <= ej
-                    s.addConstr(
-                        times[row_i] - times[col_j] >= tasks[col_j].runtime -
-                        (1 - alpha) * max_deadline - (1 - beta) * max_deadline)
+                    s.addConstr(times[row_i] -
+                                times[col_j] >= tasks[col_j].remaining_time -
+                                (1 - alpha) * max_deadline -
+                                (1 - beta) * max_deadline)
 
     def _add_task_pinning_constraints(self, s, tasks, placements):
         if not self._preemptive:
@@ -98,12 +100,12 @@ class GurobiScheduler(BaseScheduler):
         # Add constraints whether a task is placed on GPU or CPU.
         # from num_cpus to num_cpus to num_gpus.
         for placement, task in zip(placements, tasks):
-            for r_name, (start_id, end_id) in res_type_to_id_range.items():
-                unit_resource = Resources(
-                    {Resource(name=r_name, _id="any"): 1})
-                if task.resource_requirements >= unit_resource:
-                    s.addConstr(placement >= start_id)
-                    s.addConstr(placement <= end_id - 1)
+            assert len(task.resource_requirements
+                       ) <= 1, "Doesn't support multi-resource requirements"
+            for resource in task.resource_requirements._resource_vector.keys():
+                (start_id, end_id) = res_type_to_id_range[resource.name]
+                s.addConstr(placement >= start_id)
+                s.addConstr(placement <= end_id - 1)
 
     def _get_schedulable_tasks(self, released_tasks, wps):
         # Create the tasks to be scheduled.
@@ -152,11 +154,12 @@ class GurobiScheduler(BaseScheduler):
 
         for start_time, task, cost_var in zip(start_times, tasks, costs):
             if self._enforce_deadlines:
-                s.addConstr(start_time + task.runtime <= task.deadline)
+                s.addConstr(start_time + task.remaining_time <= task.deadline)
             # Start at or after release time.
             s.addConstr(task.release_time <= start_time)
             # Defines cost as slack deadline - finish time.
-            s.addConstr(task.deadline - start_time - task.runtime == cost_var)
+            s.addConstr(task.deadline - start_time -
+                        task.remaining_time == cost_var)
 
         (res_type_to_id_range,
          res_id_to_wp_id) = worker_pools.get_resource_ilp_encoding()
@@ -176,8 +179,6 @@ class GurobiScheduler(BaseScheduler):
 
         if s.status == gp.GRB.OPTIMAL:
             self._logger.debug(f"Found optimal value: {s.objVal}")
-            self._verify_schedule(tasks, dependency_matrix, start_times,
-                                  placements)
             self._placements = []
             for task, start_time, placement in zip(tasks, start_times,
                                                    placements):
@@ -189,6 +190,8 @@ class GurobiScheduler(BaseScheduler):
                 else:
                     self._placements.append((task, None))
             self._cost = int(s.objVal)
+            self._verify_schedule(self._placements, dependency_matrix,
+                                  [int(st.X) for st in start_times])
             return self.runtime, self._placements
         else:
             self._placements = [(task, None) for task in tasks]

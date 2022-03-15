@@ -1,6 +1,6 @@
 from logging import raiseExceptions
 from workload import TaskGraph, Resource, Resources
-from schedulers import EDFScheduler, LSFScheduler, Z3Scheduler
+from schedulers import EDFScheduler, GurobiScheduler, LSFScheduler, Z3Scheduler
 from workers import Worker, WorkerPool, WorkerPools
 
 from tests.utils import create_default_task
@@ -67,7 +67,6 @@ def test_z3_scheduler_limited_resources():
     """Scenario:
 
     ILP Z3 scheduler recognizes the workload is not schedulable.
-    TODO: Add loadshedding.
     """
     z3_scheduler = Z3Scheduler()
 
@@ -96,7 +95,8 @@ def test_z3_scheduler_limited_resources():
         worker_pools=WorkerPools([worker_pool]))
 
     # TODO (Justin): No behavior for loadshedding
-    assert placements == [], "Doesn't detect workload is unschedulable."
+    assert all([placement is None for (_, placement) in placements
+                ]), "Doesn't detect workload is unschedulable."
 
     # assert len(placements) == 2, "Incorrect length of task placements."
     # assert placements[1][0] == task_higher_priority,\
@@ -107,6 +107,97 @@ def test_z3_scheduler_limited_resources():
     #     "Incorrect task received in the placement."
     # assert placements[0][1] is None,\
     #     "Incorrect placement of the task on the WorkerPool."
+
+
+def test_gurobi_scheduler_success():
+    """Scenario:
+
+    ILP Gurobi scheduler successfully schedules the tasks across a set of
+    WorkerPools according to the resource requirements.
+    """
+    scheduler = GurobiScheduler()
+
+    # Create the tasks and the TaskGraph.
+    task_cpu = create_default_task(resource_requirements=Resources(
+        resource_vector={Resource(name="CPU", _id="any"): 1}),
+                                   deadline=200.0)
+    task_gpu = create_default_task(resource_requirements=Resources(
+        resource_vector={Resource(name="GPU", _id="any"): 1}),
+                                   deadline=50.0)
+    task_graph = TaskGraph()
+
+    # Create the WorkerPool.
+    worker_one = Worker(
+        name="Worker",
+        resources=Resources({Resource(name="CPU"): 1}),
+    )
+    worker_pool_one = WorkerPool(name="WorkerPool_1", workers=[worker_one])
+
+    worker_two = Worker(
+        name="Worker",
+        resources=Resources({Resource(name="GPU"): 1}),
+    )
+    worker_pool_two = WorkerPool(name="WorkerPool_2", workers=[worker_two])
+
+    # Schedule the tasks.
+    _, placements = scheduler.schedule(
+        1.0,
+        released_tasks=[task_cpu, task_gpu],
+        task_graph=task_graph,
+        worker_pools=WorkerPools([worker_pool_one, worker_pool_two]),
+    )
+
+    assert len(placements) == 2, "Incorrect length of task placements."
+
+    if placements[1][0] == task_gpu and placements[0][0] == task_cpu:
+        assert placements[1][1] == worker_pool_two.id,\
+            "Incorrect placement of the task on the WorkerPool."
+        assert placements[0][1] == worker_pool_one.id,\
+            "Incorrect placement of the task on the WorkerPool."
+    elif placements[0][0] == task_gpu and placements[1][0] == task_cpu:
+        assert placements[0][1] == worker_pool_two.id,\
+            "Incorrect placement of the task on the WorkerPool."
+        assert placements[1][1] == worker_pool_one.id,\
+            "Incorrect placement of the task on the WorkerPool."
+    else:
+        raiseExceptions(
+            "Incorrect placements: two tasks arent the same as the ones placed"
+        )
+
+
+def test_gurobi_scheduler_limited_resources():
+    """Scenario:
+
+    ILP Gurobi scheduler recognizes the workload is not schedulable.
+    """
+    scheduler = GurobiScheduler()
+
+    # Create the tasks and the TaskGraph.
+    task_lower_priority = create_default_task(deadline=200.0)
+    task_lower_priority.update_remaining_time(100.0)
+    task_higher_priority = create_default_task(deadline=220.0)
+    task_higher_priority.update_remaining_time(150.0)
+    task_graph = TaskGraph()
+
+    # Create the WorkerPool.
+    worker = Worker(
+        name="Worker",
+        resources=Resources({
+            Resource(name="CPU"): 1,
+            Resource(name="GPU"): 1
+        }),
+    )
+    worker_pool = WorkerPool(name="WorkerPool", workers=[worker])
+
+    # Schedule the tasks.
+    _, placements = scheduler.schedule(
+        50.0,
+        released_tasks=[task_lower_priority, task_higher_priority],
+        task_graph=task_graph,
+        worker_pools=WorkerPools([worker_pool]))
+
+    assert all([placement is None for (_, placement) in placements
+                ]), "Doesn't detect workload is unschedulable."
 
 
 def test_edf_scheduler_success():

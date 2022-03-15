@@ -13,7 +13,7 @@ from z3 import Int, Solver, Implies, Or, unsat, Optimize
 
 import utils
 from schedulers import BaseScheduler
-from workload import Resource, Resources, Task, TaskGraph, TaskState
+from workload import Task, TaskGraph, TaskState
 from workers import WorkerPools
 
 
@@ -56,9 +56,9 @@ class Z3Scheduler(BaseScheduler):
         for row_i in range(len(dependency_matrix)):
             for col_j in range(len(dependency_matrix[0])):
                 disjoint = [
-                    start_times[row_i] + tasks[row_i].runtime <=
+                    start_times[row_i] + tasks[row_i].remaining_time <=
                     start_times[col_j],
-                    start_times[col_j] + tasks[col_j].runtime <=
+                    start_times[col_j] + tasks[col_j].remaining_time <=
                     start_times[row_i]
                 ]
                 # Dependent jobs need to finish before the next one.
@@ -94,12 +94,12 @@ class Z3Scheduler(BaseScheduler):
         # from num_cpus to num_cpus to num_gpus.
 
         for placement, task in zip(placements, tasks):
-            for r_name, (start_id, end_id) in res_type_to_id_range.items():
-                unit_resource = Resources(
-                    {Resource(name=r_name, _id="any"): 1})
-                if task.resource_requirements >= unit_resource:
-                    s.add(placement >= start_id)
-                    s.add(placement < end_id)
+            assert len(task.resource_requirements
+                       ) <= 1, "Doesn't support multi-resource requirements"
+            for resource in task.resource_requirements._resource_vector.keys():
+                (start_id, end_id) = res_type_to_id_range[resource.name]
+                s.add(placement >= start_id)
+                s.add(placement < end_id)
             # Legacy code for converting to bitvec to speed up solving if the
             # number of a particular resource is small.
             # placements[i] = Bool(f'p{i}')
@@ -158,11 +158,11 @@ class Z3Scheduler(BaseScheduler):
         # Add constraints
         for start_time, task, cost_var in zip(start_times, tasks, costs):
             if self._enforce_deadlines:
-                s.add(start_time + task.runtime <= task.deadline)
+                s.add(start_time + task.remaining_time <= task.deadline)
             # Start at or after release time.
             s.add(task.release_time <= start_time)
             # Defines cost as slack deadline - finish time.
-            s.add(task.deadline - start_time - task.runtime == cost_var)
+            s.add(task.deadline - start_time - task.remaining_time == cost_var)
 
         (res_type_to_id_range,
          res_id_to_wp_id) = worker_pools.get_resource_ilp_encoding()
@@ -201,19 +201,19 @@ class Z3Scheduler(BaseScheduler):
             #     (10 if bool(s.model()[p]) else 11)
             #     for i, p in enumerate(placements)
             # ]
-            self._verify_schedule(tasks, dependency_matrix, start_times,
-                                  placements)
             self._placements = []
-            for task, start_time_v, placement_v in zip(tasks, start_times,
-                                                       placements):
-                start_time = int(str(s.model()[start_time_v]))
+            start_times = [int(str(s.model()[st])) for st in start_times]
+            for task, start_time, placement_v in zip(tasks, start_times,
+                                                     placements):
                 placement = int(str(s.model()[placement_v]))
                 # TODO: It only places tasks with a start time smaller
                 # than the time at the end of the scheduler run.
-                if int(start_time) <= sim_time + self.runtime:
+                if start_time <= sim_time + self.runtime:
                     self._placements.append((task, res_id_to_wp_id[placement]))
                 else:
                     self._placements.append((task, None))
+            self._verify_schedule(self._placements, dependency_matrix,
+                                  start_times)
         else:
             self._placements = [(task, None) for task in tasks]
         # Log the scheduler run.
@@ -221,7 +221,8 @@ class Z3Scheduler(BaseScheduler):
         return self.runtime, self._placements
 
     def log(self):
-        if self._flags.scheduler_log_file_name is not None:
+        if (self._flags is not None
+                and self._flags.scheduler_log_file_name is not None):
             with open(self._flags.scheduler_log_file_name, 'wb') as log_file:
                 logged_data = {
                     'time': self._time,

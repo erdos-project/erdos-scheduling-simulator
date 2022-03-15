@@ -39,34 +39,36 @@ class BaseScheduler(object):
         raise NotImplementedError(
             "The `log()` method has not been implemented.")
 
-    def _verify_schedule(self, tasks, dependency_matrix, start_times,
-                         placements):
+    def _verify_schedule(self, placements, dependency_matrix, start_times):
         # Check if each task's start time is greater than its release time.
         assert all([
             start_time >= task.release_time
-            for start_time, task in zip(start_times, tasks)
+            for start_time, (task, placement) in zip(start_times, placements)
         ]), "not_valid_release_times"
 
         # Check if all tasks finished before the deadline.
-        assert all([(task.deadline >= start_time + task.runtime)
-                    for task, start_time in zip(tasks, start_times)
-                    ]), "doesn't finish before deadline"
+        assert all([
+            (task.deadline >= start_time + task.runtime)
+            for (task, placement), start_time in zip(placements, start_times)
+        ]), "doesn't finish before deadline"
 
         # Check if the task dependencies were satisfied.
         for i, row_i in enumerate(dependency_matrix):
             for j, col_j in enumerate(row_i):
                 if i != j and col_j:
-                    assert start_times[i] + tasks[i].runtime <= start_times[
-                        j], f"not_valid_dependency{i}->{j}"
+                    assert start_times[i] + placements[i][
+                        0].runtime <= start_times[
+                            j], f"not_valid_dependency{i}->{j}"
 
         # TODO: Check if resource requirements wever satisfied.
-        for task, placement in zip(tasks, placements):
+        for task, placement in placements:
             pass
 
         # Check if tasks overlapped on a resource.
-        placed_tasks = [(placement, start_time, start_time + task.runtime)
-                        for placement, start_time, task in zip(
-                            placements, start_times, tasks)]
+        placed_tasks = [
+            (placement, start_time, start_time + task.runtime)
+            for (task, placement), start_time in zip(placements, start_times)
+        ]
         placed_tasks.sort()
         for t1, t2 in zip(placed_tasks, placed_tasks[1:]):
             if t1[0] == t2[0]:
