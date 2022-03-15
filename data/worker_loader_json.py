@@ -1,7 +1,7 @@
 import json
 from typing import Optional, Sequence, Mapping, Type
 
-import absl
+import absl  # noqa: F401
 
 import utils
 from schedulers import BaseScheduler

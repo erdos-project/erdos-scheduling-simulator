@@ -1,6 +1,6 @@
 from typing import Optional, Sequence
 
-import absl
+import absl  # noqa: F401
 
 import utils
 from data import TaskLoader

@@ -3,6 +3,8 @@ import pickle
 import time
 import sys
 
+import absl  # noqa: F401
+
 # from math import ceil, log2
 from typing import Optional, Sequence
 

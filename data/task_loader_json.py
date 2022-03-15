@@ -5,7 +5,7 @@ from operator import attrgetter
 from random import choice
 from typing import Sequence, Mapping, Tuple, Optional
 
-import absl
+import absl  # noqa: F401
 import pydot
 
 import utils

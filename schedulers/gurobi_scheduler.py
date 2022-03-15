@@ -5,6 +5,8 @@ import sys
 
 from typing import Optional, Sequence
 
+import absl  # noqa: F401
+
 import gurobipy as gp
 
 import utils

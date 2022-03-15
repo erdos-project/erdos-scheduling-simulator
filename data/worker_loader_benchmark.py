@@ -1,6 +1,6 @@
 from typing import Optional, Sequence, Type
 
-import absl
+import absl  # noqa: F401
 
 import utils
 from schedulers import BaseScheduler

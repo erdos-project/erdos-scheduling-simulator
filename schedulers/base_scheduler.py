@@ -1,6 +1,8 @@
 from typing import Optional, Sequence, Tuple
 from workload import Task, TaskGraph
 
+import absl  # noqa: F401
+
 
 class BaseScheduler(object):
 

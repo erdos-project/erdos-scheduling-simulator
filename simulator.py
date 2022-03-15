@@ -3,7 +3,7 @@ from enum import Enum
 from operator import attrgetter
 from typing import Type, Sequence, Optional
 
-import absl
+import absl  # noqa: F401
 
 import utils
 from workers import WorkerPool, WorkerPools
