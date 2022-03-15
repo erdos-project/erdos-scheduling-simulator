@@ -1,42 +1,20 @@
 import pytest
 
-from workload import Job, Resource, Resources, TaskState, Task, TaskGraph
+from workload import Job, TaskState, TaskGraph
 
-
-def __create_default_task(
-    name=None,
-    job=Job(name="Perception"),
-    resource_requirements=Resources(
-        resource_vector={Resource(name="CPU", _id="any"): 1}),
-    runtime=1.0,
-    deadline=10.0,
-    timestamp=0,
-    release_time=-1,
-    start_time=-1,
-    completion_time=-1,
-):
-    """ Helper function to create a default task. """
-    return Task(name=name if name else "{}_Task".format(job.name),
-                job=job,
-                resource_requirements=resource_requirements,
-                runtime=runtime,
-                deadline=deadline,
-                timestamp=timestamp,
-                release_time=release_time,
-                start_time=start_time,
-                completion_time=completion_time)
+from tests.utils import create_default_task
 
 
 def test_successful_task_creation():
     """ Test that a task is created successfully. """
-    default_task = __create_default_task()
+    default_task = create_default_task()
     assert default_task.name == "Perception_Task", "Incorrect name for Task."
     assert default_task.state == TaskState.VIRTUAL, "Incorrect state for Task."
 
 
 def test_successful_task_release():
     """ Test that release() transitions the task to a RELEASED state. """
-    default_task = __create_default_task()
+    default_task = create_default_task()
     default_task.release(2.0)
     assert default_task.release_time == 2.0, "Incorrect release time for Task."
     assert default_task.state == TaskState.RELEASED,\
@@ -45,14 +23,14 @@ def test_successful_task_release():
 
 def test_failed_task_release_without_release_time():
     """ Test that a task release without release time fails. """
-    default_task = __create_default_task()
+    default_task = create_default_task()
     with pytest.raises(ValueError):
         default_task.release()
 
 
 def test_successful_task_release_without_release_time():
     """ Test that a task release without release time succeeds. """
-    default_task = __create_default_task(release_time=2.0)
+    default_task = create_default_task(release_time=2.0)
     default_task.release()
     assert default_task.release_time == 2.0, "Incorrect release time for Task."
     assert default_task.state == TaskState.RELEASED,\
@@ -61,7 +39,7 @@ def test_successful_task_release_without_release_time():
 
 def test_successful_task_start():
     """ Test that a task is successfully started. """
-    default_task = __create_default_task()
+    default_task = create_default_task()
     default_task.release(2.0)
     default_task.start(3.0)
     assert default_task.start_time == 3.0, "Incorrect start time for Task."
@@ -72,14 +50,14 @@ def test_successful_task_start():
 
 def test_failed_task_start():
     """ Test that a task fails to start from an incorrect state."""
-    default_task = __create_default_task()
+    default_task = create_default_task()
     with pytest.raises(ValueError):
         default_task.start(3.0)
 
 
 def test_task_runtime_variability():
     """ Test that the runtime of the task can be varied upon its start. """
-    default_task = __create_default_task()
+    default_task = create_default_task()
     default_task.release(2.0)
     assert default_task.remaining_time == 1.0,\
         "Incorrect initial remaining time for the Task."
@@ -90,7 +68,7 @@ def test_task_runtime_variability():
 
 def test_successful_task_pause():
     """ Test that a task can be paused successfully. """
-    default_task = __create_default_task()
+    default_task = create_default_task()
     default_task.release(2.0)
     default_task.start(3.0)
     default_task.pause(4.0)
@@ -99,14 +77,14 @@ def test_successful_task_pause():
 
 def test_failed_task_pause():
     """ Test that a Task cannot be PAUSED from a non-RUNNING state. """
-    default_task = __create_default_task()
+    default_task = create_default_task()
     with pytest.raises(ValueError):
         default_task.pause(4.0)
 
 
 def test_successful_task_resume():
     """ Test that a task can be resumed successfully. """
-    default_task = __create_default_task()
+    default_task = create_default_task()
     default_task.release(2.0)
     default_task.start(3.0)
     default_task.pause(4.0)
@@ -116,7 +94,7 @@ def test_successful_task_resume():
 
 def test_failed_task_resume():
     """ Test that a Task cannot be resumed from a non-paused state. """
-    default_task = __create_default_task()
+    default_task = create_default_task()
     default_task.release(2.0)
     default_task.start(3.0)
     with pytest.raises(ValueError):
@@ -125,7 +103,7 @@ def test_failed_task_resume():
 
 def test_task_completion():
     """ Test that a Task can be completed successfully. """
-    default_task = __create_default_task()
+    default_task = create_default_task()
     default_task.release(2.0)
     default_task.start(3.0)
     default_task._remaining_time = 0
@@ -136,7 +114,7 @@ def test_task_completion():
 
 def test_task_eviction():
     """ Test that a Task can be evicted successfully. """
-    default_task = __create_default_task()
+    default_task = create_default_task()
     default_task.release(2.0)
     default_task.start(3.0)
     default_task.finish(4.0)
@@ -146,7 +124,7 @@ def test_task_eviction():
 
 def test_task_step_one():
     """ Test that a step() reduces the available time for a Task. """
-    default_task = __create_default_task(runtime=2.0)
+    default_task = create_default_task(runtime=2.0)
     default_task.release(2.0)
     default_task.start(3.0)
     assert default_task._remaining_time == 2.0,\
@@ -164,7 +142,7 @@ def test_task_step_one():
 
 def test_task_step_two():
     """ Test that a step() works correctly with different step sizes. """
-    default_task = __create_default_task(runtime=10.0)
+    default_task = create_default_task(runtime=10.0)
     default_task.release(2.0)
     default_task.start(5.0)
     assert default_task._remaining_time == 10.0,\
@@ -186,7 +164,7 @@ def test_task_step_two():
 
 def test_fail_step_non_running():
     """ Test that the step() method fails when the task is not running. """
-    default_task = __create_default_task()
+    default_task = create_default_task()
     default_task.release(2.0)
     default_task.start(3.0)
     default_task.pause(4.0)
@@ -202,14 +180,14 @@ def test_empty_task_graph_construction():
 
 def test_task_graph_construction_from_mapping():
     """ Test that a TaskGraph is correctly initialized from a Mapping. """
-    task_graph = TaskGraph(tasks={__create_default_task(): []})
+    task_graph = TaskGraph(tasks={create_default_task(): []})
     assert len(task_graph) == 1, "Incorrect length of the TaskGraph."
 
 
 def test_task_addition_to_task_graph():
     """ Test addition of Tasks to the graph. """
-    default_task = __create_default_task(job=Job(name="Perception"))
-    child_task = __create_default_task(job=Job(name="Planning"))
+    default_task = create_default_task(job=Job(name="Perception"))
+    child_task = create_default_task(job=Job(name="Planning"))
     task_graph = TaskGraph()
     assert len(task_graph) == 0, "Incorrect length of the TaskGraph."
     task_graph.add_task(default_task, [child_task])
@@ -218,8 +196,8 @@ def test_task_addition_to_task_graph():
 
 def test_addition_of_child_to_task():
     """ Test addition of children to a Task. """
-    default_task = __create_default_task(job=Job(name="Perception"))
-    child_task = __create_default_task(job=Job(name="Planning"))
+    default_task = create_default_task(job=Job(name="Perception"))
+    child_task = create_default_task(job=Job(name="Planning"))
     task_graph = TaskGraph()
     assert len(task_graph) == 0, "Incorrect length of the TaskGraph."
     task_graph.add_task(default_task)
@@ -230,8 +208,8 @@ def test_addition_of_child_to_task():
 
 def test_retrieval_of_children():
     """ Test that the correct set of children are retrieved. """
-    default_task = __create_default_task(job=Job(name="Perception"))
-    child_task = __create_default_task(job=Job(name="Planning"))
+    default_task = create_default_task(job=Job(name="Perception"))
+    child_task = create_default_task(job=Job(name="Planning"))
     task_graph = TaskGraph()
     task_graph.add_task(default_task, [child_task])
     children = task_graph.get_children(default_task)
@@ -241,8 +219,8 @@ def test_retrieval_of_children():
 
 def test_get_released_tasks():
     """ Test that the correct set of released tasks are returned. """
-    default_task = __create_default_task(job=Job(name="Perception"))
-    child_task = __create_default_task(job=Job(name="Planning"))
+    default_task = create_default_task(job=Job(name="Perception"))
+    child_task = create_default_task(job=Job(name="Planning"))
     task_graph = TaskGraph()
     task_graph.add_task(default_task, [child_task])
     assert len(task_graph.get_released_tasks()) == 0,\
@@ -260,10 +238,10 @@ def test_get_released_tasks():
 
 def test_release_tasks():
     """ Test that the correct tasks are released by the TaskGraph. """
-    perception_task = __create_default_task(job=Job(name="Perception"))
-    prediction_task = __create_default_task(job=Job(name="Prediction"))
-    planning_task = __create_default_task(job=Job(name="Planning"))
-    localization_task = __create_default_task(job=Job(name="Localization"))
+    perception_task = create_default_task(job=Job(name="Perception"))
+    prediction_task = create_default_task(job=Job(name="Prediction"))
+    planning_task = create_default_task(job=Job(name="Planning"))
+    localization_task = create_default_task(job=Job(name="Localization"))
     task_graph = TaskGraph()
     task_graph.add_task(perception_task, [prediction_task])
     task_graph.add_task(prediction_task, [planning_task])
@@ -280,8 +258,8 @@ def test_release_tasks():
 
 def test_retrieval_of_parents():
     """ Test that the correct set of parents are retrieved. """
-    default_task = __create_default_task(job=Job(name="Perception"))
-    child_task = __create_default_task(job=Job(name="Planning"))
+    default_task = create_default_task(job=Job(name="Perception"))
+    child_task = create_default_task(job=Job(name="Planning"))
     task_graph = TaskGraph()
     task_graph.add_task(default_task, [child_task])
     parents = task_graph.get_parents(child_task)
@@ -291,9 +269,9 @@ def test_retrieval_of_parents():
 
 def test_task_completion_notification():
     """ Test that the completion of a task ensures release of children. """
-    perception_task = __create_default_task(job=Job(name="Perception"))
-    prediction_task = __create_default_task(job=Job(name="Prediction"))
-    planning_task = __create_default_task(job=Job(name="Planning"))
+    perception_task = create_default_task(job=Job(name="Perception"))
+    prediction_task = create_default_task(job=Job(name="Prediction"))
+    planning_task = create_default_task(job=Job(name="Planning"))
     task_graph = TaskGraph()
     task_graph.add_task(perception_task, [planning_task])
     task_graph.add_task(prediction_task, [planning_task])
@@ -346,18 +324,18 @@ def test_task_completion_notification():
 def test_task_graph_index_success():
     """ Test that indexing a TaskGraph works correctly. """
     # Create the individual tasks.
-    perception_task_0 = __create_default_task(job=Job(name="Perception"),
-                                              timestamp=0)
-    perception_task_1 = __create_default_task(job=Job(name="Perception"),
-                                              timestamp=1)
-    prediction_task_0 = __create_default_task(job=Job(name="Prediction"),
-                                              timestamp=0)
-    prediction_task_1 = __create_default_task(job=Job(name="Prediction"),
-                                              timestamp=1)
-    planning_task_0 = __create_default_task(job=Job(name="Planning"),
+    perception_task_0 = create_default_task(job=Job(name="Perception"),
                                             timestamp=0)
-    planning_task_1 = __create_default_task(job=Job(name="Planning"),
+    perception_task_1 = create_default_task(job=Job(name="Perception"),
                                             timestamp=1)
+    prediction_task_0 = create_default_task(job=Job(name="Prediction"),
+                                            timestamp=0)
+    prediction_task_1 = create_default_task(job=Job(name="Prediction"),
+                                            timestamp=1)
+    planning_task_0 = create_default_task(job=Job(name="Planning"),
+                                          timestamp=0)
+    planning_task_1 = create_default_task(job=Job(name="Planning"),
+                                          timestamp=1)
 
     # Create the TaskGraph.
     task_graph = TaskGraph(
@@ -385,18 +363,18 @@ def test_task_graph_index_success():
 def test_task_graph_index_failure():
     """ Test that an invalid argument to indexing a TaskGraph fails. """
     # Create the individual tasks.
-    perception_task_0 = __create_default_task(job=Job(name="Perception"),
-                                              timestamp=0)
-    perception_task_1 = __create_default_task(job=Job(name="Perception"),
-                                              timestamp=1)
-    prediction_task_0 = __create_default_task(job=Job(name="Prediction"),
-                                              timestamp=0)
-    prediction_task_1 = __create_default_task(job=Job(name="Prediction"),
-                                              timestamp=1)
-    planning_task_0 = __create_default_task(job=Job(name="Planning"),
+    perception_task_0 = create_default_task(job=Job(name="Perception"),
                                             timestamp=0)
-    planning_task_1 = __create_default_task(job=Job(name="Planning"),
+    perception_task_1 = create_default_task(job=Job(name="Perception"),
                                             timestamp=1)
+    prediction_task_0 = create_default_task(job=Job(name="Prediction"),
+                                            timestamp=0)
+    prediction_task_1 = create_default_task(job=Job(name="Prediction"),
+                                            timestamp=1)
+    planning_task_0 = create_default_task(job=Job(name="Planning"),
+                                          timestamp=0)
+    planning_task_1 = create_default_task(job=Job(name="Planning"),
+                                          timestamp=1)
 
     # Create the TaskGraph.
     task_graph = TaskGraph(
@@ -420,24 +398,24 @@ def test_task_graph_index_failure():
 def test_task_graph_slice_success():
     """ Test that slicing a TaskGraph works correctly. """
     # Create the individual tasks.
-    perception_task_0 = __create_default_task(job=Job(name="Perception"),
-                                              timestamp=0)
-    perception_task_1 = __create_default_task(job=Job(name="Perception"),
-                                              timestamp=1)
-    perception_task_2 = __create_default_task(job=Job(name="Perception"),
-                                              timestamp=2)
-    prediction_task_0 = __create_default_task(job=Job(name="Prediction"),
-                                              timestamp=0)
-    prediction_task_1 = __create_default_task(job=Job(name="Prediction"),
-                                              timestamp=1)
-    prediction_task_2 = __create_default_task(job=Job(name="Prediction"),
-                                              timestamp=2)
-    planning_task_0 = __create_default_task(job=Job(name="Planning"),
+    perception_task_0 = create_default_task(job=Job(name="Perception"),
                                             timestamp=0)
-    planning_task_1 = __create_default_task(job=Job(name="Planning"),
+    perception_task_1 = create_default_task(job=Job(name="Perception"),
                                             timestamp=1)
-    planning_task_2 = __create_default_task(job=Job(name="Planning"),
+    perception_task_2 = create_default_task(job=Job(name="Perception"),
                                             timestamp=2)
+    prediction_task_0 = create_default_task(job=Job(name="Prediction"),
+                                            timestamp=0)
+    prediction_task_1 = create_default_task(job=Job(name="Prediction"),
+                                            timestamp=1)
+    prediction_task_2 = create_default_task(job=Job(name="Prediction"),
+                                            timestamp=2)
+    planning_task_0 = create_default_task(job=Job(name="Planning"),
+                                          timestamp=0)
+    planning_task_1 = create_default_task(job=Job(name="Planning"),
+                                          timestamp=1)
+    planning_task_2 = create_default_task(job=Job(name="Planning"),
+                                          timestamp=2)
 
     # Create the TaskGraph.
     task_graph = TaskGraph(
@@ -472,18 +450,18 @@ def test_task_graph_slice_success():
 def test_is_source_task():
     """ Test that the is_source_task method works correctly. """
     # Create the individual tasks.
-    perception_task_0 = __create_default_task(job=Job(name="Perception"),
-                                              timestamp=0)
-    perception_task_1 = __create_default_task(job=Job(name="Perception"),
-                                              timestamp=1)
-    prediction_task_0 = __create_default_task(job=Job(name="Prediction"),
-                                              timestamp=0)
-    prediction_task_1 = __create_default_task(job=Job(name="Prediction"),
-                                              timestamp=1)
-    planning_task_0 = __create_default_task(job=Job(name="Planning"),
+    perception_task_0 = create_default_task(job=Job(name="Perception"),
                                             timestamp=0)
-    planning_task_1 = __create_default_task(job=Job(name="Planning"),
+    perception_task_1 = create_default_task(job=Job(name="Perception"),
                                             timestamp=1)
+    prediction_task_0 = create_default_task(job=Job(name="Prediction"),
+                                            timestamp=0)
+    prediction_task_1 = create_default_task(job=Job(name="Prediction"),
+                                            timestamp=1)
+    planning_task_0 = create_default_task(job=Job(name="Planning"),
+                                          timestamp=0)
+    planning_task_1 = create_default_task(job=Job(name="Planning"),
+                                          timestamp=1)
 
     # Create the TaskGraph.
     task_graph = TaskGraph(
@@ -514,18 +492,18 @@ def test_is_source_task():
 def test_get_source_tasks():
     """ Test that the is_source_task method works correctly. """
     # Create the individual tasks.
-    perception_task_0 = __create_default_task(job=Job(name="Perception"),
-                                              timestamp=0)
-    perception_task_1 = __create_default_task(job=Job(name="Perception"),
-                                              timestamp=1)
-    prediction_task_0 = __create_default_task(job=Job(name="Prediction"),
-                                              timestamp=0)
-    prediction_task_1 = __create_default_task(job=Job(name="Prediction"),
-                                              timestamp=1)
-    planning_task_0 = __create_default_task(job=Job(name="Planning"),
+    perception_task_0 = create_default_task(job=Job(name="Perception"),
                                             timestamp=0)
-    planning_task_1 = __create_default_task(job=Job(name="Planning"),
+    perception_task_1 = create_default_task(job=Job(name="Perception"),
                                             timestamp=1)
+    prediction_task_0 = create_default_task(job=Job(name="Prediction"),
+                                            timestamp=0)
+    prediction_task_1 = create_default_task(job=Job(name="Prediction"),
+                                            timestamp=1)
+    planning_task_0 = create_default_task(job=Job(name="Planning"),
+                                          timestamp=0)
+    planning_task_1 = create_default_task(job=Job(name="Planning"),
+                                          timestamp=1)
 
     # Create the TaskGraph.
     task_graph = TaskGraph(
@@ -548,24 +526,24 @@ def test_get_source_tasks():
 
 def test_task_find():
     # Create the individual tasks.
-    perception_task_0 = __create_default_task(name="Perception_Watermark",
-                                              job=Job(name="Perception"),
-                                              timestamp=0)
-    perception_task_1 = __create_default_task(name="Perception_Watermark",
-                                              job=Job(name="Perception"),
-                                              timestamp=1)
-    prediction_task_0 = __create_default_task(name="Prediction_Watermark",
-                                              job=Job(name="Prediction"),
-                                              timestamp=0)
-    prediction_task_1 = __create_default_task(name="Prediction_Watermark",
-                                              job=Job(name="Prediction"),
-                                              timestamp=1)
-    planning_task_0 = __create_default_task(name="Planning_Watermark",
-                                            job=Job(name="Planning"),
+    perception_task_0 = create_default_task(name="Perception_Watermark",
+                                            job=Job(name="Perception"),
                                             timestamp=0)
-    planning_task_1 = __create_default_task(name="Planning_Watermark",
-                                            job=Job(name="Planning"),
+    perception_task_1 = create_default_task(name="Perception_Watermark",
+                                            job=Job(name="Perception"),
                                             timestamp=1)
+    prediction_task_0 = create_default_task(name="Prediction_Watermark",
+                                            job=Job(name="Prediction"),
+                                            timestamp=0)
+    prediction_task_1 = create_default_task(name="Prediction_Watermark",
+                                            job=Job(name="Prediction"),
+                                            timestamp=1)
+    planning_task_0 = create_default_task(name="Planning_Watermark",
+                                          job=Job(name="Planning"),
+                                          timestamp=0)
+    planning_task_1 = create_default_task(name="Planning_Watermark",
+                                          job=Job(name="Planning"),
+                                          timestamp=1)
 
     # Create the TaskGraph.
     task_graph = TaskGraph(
@@ -598,38 +576,38 @@ def test_task_find():
 
 def test_task_time_dilation():
     # Create the individual tasks.
-    localization_task_0 = __create_default_task(name="Localization_Watermark",
-                                                job=Job(name="Localization"),
-                                                timestamp=0,
-                                                release_time=5.0)
-    localization_task_1 = __create_default_task(name="Localization_Watermark",
-                                                job=Job(name="Localization"),
-                                                timestamp=1,
-                                                release_time=120.0)
-    perception_task_0 = __create_default_task(name="Perception_Watermark",
-                                              job=Job(name="Perception"),
+    localization_task_0 = create_default_task(name="Localization_Watermark",
+                                              job=Job(name="Localization"),
                                               timestamp=0,
-                                              release_time=0.0)
-    perception_task_1 = __create_default_task(name="Perception_Watermark",
-                                              job=Job(name="Perception"),
+                                              release_time=5.0)
+    localization_task_1 = create_default_task(name="Localization_Watermark",
+                                              job=Job(name="Localization"),
                                               timestamp=1,
-                                              release_time=100.0)
-    prediction_task_0 = __create_default_task(name="Prediction_Watermark",
-                                              job=Job(name="Prediction"),
-                                              timestamp=0,
-                                              release_time=10.0)
-    prediction_task_1 = __create_default_task(name="Prediction_Watermark",
-                                              job=Job(name="Prediction"),
-                                              timestamp=1,
-                                              release_time=150.0)
-    planning_task_0 = __create_default_task(name="Planning_Watermark",
-                                            job=Job(name="Planning"),
+                                              release_time=120.0)
+    perception_task_0 = create_default_task(name="Perception_Watermark",
+                                            job=Job(name="Perception"),
                                             timestamp=0,
-                                            release_time=50.0)
-    planning_task_1 = __create_default_task(name="Planning_Watermark",
-                                            job=Job(name="Planning"),
+                                            release_time=0.0)
+    perception_task_1 = create_default_task(name="Perception_Watermark",
+                                            job=Job(name="Perception"),
                                             timestamp=1,
-                                            release_time=190.0)
+                                            release_time=100.0)
+    prediction_task_0 = create_default_task(name="Prediction_Watermark",
+                                            job=Job(name="Prediction"),
+                                            timestamp=0,
+                                            release_time=10.0)
+    prediction_task_1 = create_default_task(name="Prediction_Watermark",
+                                            job=Job(name="Prediction"),
+                                            timestamp=1,
+                                            release_time=150.0)
+    planning_task_0 = create_default_task(name="Planning_Watermark",
+                                          job=Job(name="Planning"),
+                                          timestamp=0,
+                                          release_time=50.0)
+    planning_task_1 = create_default_task(name="Planning_Watermark",
+                                          job=Job(name="Planning"),
+                                          timestamp=1,
+                                          release_time=190.0)
 
     # Create the TaskGraph.
     task_graph = TaskGraph(

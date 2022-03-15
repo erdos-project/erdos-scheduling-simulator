@@ -3,7 +3,7 @@ from workload import TaskGraph, Resource, Resources
 from schedulers import EDFScheduler, LSFScheduler, Z3Scheduler
 from workers import Worker, WorkerPool, WorkerPools
 
-from tests.test_tasks import __create_default_task
+from tests.utils import create_default_task
 
 
 def test_z3_scheduler_success():
@@ -16,12 +16,12 @@ def test_z3_scheduler_success():
     z3_scheduler = Z3Scheduler()
 
     # Create the tasks and the TaskGraph.
-    task_cpu = __create_default_task(resource_requirements=Resources(
+    task_cpu = create_default_task(resource_requirements=Resources(
         resource_vector={Resource(name="CPU", _id="any"): 1}),
-                                     deadline=200.0)
-    task_gpu = __create_default_task(resource_requirements=Resources(
+                                   deadline=200.0)
+    task_gpu = create_default_task(resource_requirements=Resources(
         resource_vector={Resource(name="GPU", _id="any"): 1}),
-                                     deadline=50.0)
+                                   deadline=50.0)
     task_graph = TaskGraph()
 
     # Create the WorkerPool.
@@ -72,9 +72,9 @@ def test_z3_scheduler_limited_resources():
     z3_scheduler = Z3Scheduler()
 
     # Create the tasks and the TaskGraph.
-    task_lower_priority = __create_default_task(deadline=200.0)
+    task_lower_priority = create_default_task(deadline=200.0)
     task_lower_priority.update_remaining_time(100.0)
-    task_higher_priority = __create_default_task(deadline=220.0)
+    task_higher_priority = create_default_task(deadline=220.0)
     task_higher_priority.update_remaining_time(150.0)
     task_graph = TaskGraph()
 
@@ -118,12 +118,12 @@ def test_edf_scheduler_success():
     edf_scheduler = EDFScheduler()
 
     # Create the tasks and the TaskGraph.
-    task_cpu = __create_default_task(resource_requirements=Resources(
+    task_cpu = create_default_task(resource_requirements=Resources(
         resource_vector={Resource(name="CPU", _id="any"): 1}),
-                                     deadline=200.0)
-    task_gpu = __create_default_task(resource_requirements=Resources(
+                                   deadline=200.0)
+    task_gpu = create_default_task(resource_requirements=Resources(
         resource_vector={Resource(name="GPU", _id="any"): 1}),
-                                     deadline=50.0)
+                                   deadline=50.0)
     task_graph = TaskGraph()
 
     # Create the WorkerPool.
@@ -165,8 +165,8 @@ def test_edf_scheduler_limited_resources():
     edf_scheduler = EDFScheduler()
 
     # Create the tasks and the TaskGraph.
-    task_lower_priority = __create_default_task(deadline=200.0)
-    task_higher_priority = __create_default_task(deadline=50.0)
+    task_lower_priority = create_default_task(deadline=200.0)
+    task_higher_priority = create_default_task(deadline=50.0)
     task_graph = TaskGraph()
 
     # Create the WorkerPool.
@@ -206,8 +206,8 @@ def test_edf_scheduler_non_preemptive_higher_priority():
     edf_scheduler = EDFScheduler(preemptive=False)
 
     # Create the tasks and the TaskGraph.
-    task_lower_priority = __create_default_task(deadline=200.0)
-    task_higher_priority = __create_default_task(deadline=50.0)
+    task_lower_priority = create_default_task(deadline=200.0)
+    task_higher_priority = create_default_task(deadline=50.0)
     task_graph = TaskGraph()
 
     # Create the WorkerPool.
@@ -255,8 +255,8 @@ def test_edf_scheduler_preemptive_higher_priority():
     edf_scheduler = EDFScheduler(preemptive=True)
 
     # Create the tasks and the TaskGraph.
-    task_lower_priority = __create_default_task(deadline=200.0)
-    task_higher_priority = __create_default_task(deadline=50.0)
+    task_lower_priority = create_default_task(deadline=200.0)
+    task_higher_priority = create_default_task(deadline=50.0)
     task_graph = TaskGraph()
 
     # Create the WorkerPool.
@@ -308,12 +308,12 @@ def test_lsf_scheduler_success():
     lsf_scheduler = LSFScheduler()
 
     # Create the tasks and the TaskGraph.
-    task_cpu = __create_default_task(resource_requirements=Resources(
+    task_cpu = create_default_task(resource_requirements=Resources(
         resource_vector={Resource(name="CPU", _id="any"): 1}),
-                                     deadline=200.0)
-    task_gpu = __create_default_task(resource_requirements=Resources(
+                                   deadline=200.0)
+    task_gpu = create_default_task(resource_requirements=Resources(
         resource_vector={Resource(name="GPU", _id="any"): 1}),
-                                     deadline=50.0)
+                                   deadline=50.0)
     task_graph = TaskGraph()
 
     # Create the WorkerPool.
@@ -355,9 +355,9 @@ def test_lsf_scheduler_limited_resources():
     lsf_scheduler = LSFScheduler()
 
     # Create the tasks and the TaskGraph.
-    task_lower_priority = __create_default_task(deadline=200.0)
+    task_lower_priority = create_default_task(deadline=200.0)
     task_lower_priority.update_remaining_time(100.0)
-    task_higher_priority = __create_default_task(deadline=220.0)
+    task_higher_priority = create_default_task(deadline=220.0)
     task_higher_priority.update_remaining_time(150.0)
     task_graph = TaskGraph()
 

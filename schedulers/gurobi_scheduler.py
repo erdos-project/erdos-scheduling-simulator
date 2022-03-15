@@ -118,7 +118,7 @@ class GurobiScheduler(BaseScheduler):
         return tasks
 
     def schedule(self, sim_time: float, released_tasks: Sequence[Task],
-                 task_graph: TaskGraph, wps: WorkerPools):
+                 task_graph: TaskGraph, worker_pools: WorkerPools):
 
         def sum_costs(lst):
             return functools.reduce(lambda a, b: a + b, lst, 0)
@@ -126,9 +126,9 @@ class GurobiScheduler(BaseScheduler):
         self._time = sim_time
         self._released_tasks = released_tasks
         self._task_graph = task_graph
-        self._worker_pools = wps
+        self._worker_pools = worker_pools
         # TODO: We should get tasks that will be released later as well.
-        tasks = self._get_schedulable_tasks(released_tasks, wps)
+        tasks = self._get_schedulable_tasks(released_tasks, worker_pools)
 
         scheduler_start_time = time.time()
         s = gp.Model('RAP')
@@ -159,7 +159,7 @@ class GurobiScheduler(BaseScheduler):
             s.addConstr(task.deadline - start_time - task.runtime == cost_var)
 
         (res_type_to_id_range,
-         res_id_to_wp_id) = wps.get_resource_ilp_encoding()
+         res_id_to_wp_id) = worker_pools.get_resource_ilp_encoding()
         self._add_task_resource_constraints(s, tasks, res_type_to_id_range,
                                             placements)
         # TODO: This doesn't account for the task dependencies.

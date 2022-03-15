@@ -5,7 +5,8 @@ from schedulers import BaseScheduler
 from simulator import Event, EventType, EventQueue, Simulator
 from workload import Resource, Resources, TaskGraph, Job, TaskState
 from workers import Worker, WorkerPool
-from test_tasks import __create_default_task
+
+from tests.utils import create_default_task
 
 
 class MockScheduler(BaseScheduler):
@@ -82,7 +83,7 @@ def test_event_queue_two():
     event_queue.add_event(
         Event(event_type=EventType.TASK_RELEASE,
               time=3.0,
-              task=__create_default_task()))
+              task=create_default_task()))
     event_queue.add_event(
         Event(event_type=EventType.SCHEDULER_FINISHED, time=2.0))
     event_queue.add_event(Event(event_type=EventType.SCHEDULER_START,
@@ -196,7 +197,7 @@ def test_simulator_step():
                           job_graph=None)
 
     # Create, release and place a Task.
-    task = __create_default_task(runtime=3.0)
+    task = create_default_task(runtime=3.0)
     task.release(1.0)
     worker_pool.place_task(task)
     task.start(2.0)
@@ -264,15 +265,15 @@ def test_simulator_handle_event():
     return_value = simulator._Simulator__handle_event(event=Event(
         event_type=EventType.TASK_RELEASE,
         time=1.0,
-        task=__create_default_task()),
+        task=create_default_task()),
                                                       task_graph=None)
     assert not return_value, "Incorrect return value for event type."
     assert len(simulator._released_tasks) == 1,\
         "Incorrect number of available tasks."
 
     # Test the TASK_FINISHED event.
-    perception_task = __create_default_task(job=Job(name="Perception"))
-    planning_task = __create_default_task(job=Job(name="Planning"))
+    perception_task = create_default_task(job=Job(name="Perception"))
+    planning_task = create_default_task(job=Job(name="Planning"))
     task_graph = TaskGraph()
     task_graph.add_task(perception_task, [planning_task])
     perception_task.release(2.0)

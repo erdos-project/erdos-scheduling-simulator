@@ -5,7 +5,7 @@ import pytest
 
 from workload import Resource, Resources
 
-from tests.test_tasks import __create_default_task
+from tests.utils import create_default_task
 
 
 def test_resource_construction():
@@ -156,7 +156,7 @@ def test_allocation_of_resources():
     resources = Resources({cpu_resource_any: 10})
     assert resources.get_available_quantity(cpu_resource_any) == 10,\
         "Incorrect quantity of the CPU resource."
-    resources.allocate(cpu_resource_any, __create_default_task(), 5)
+    resources.allocate(cpu_resource_any, create_default_task(), 5)
     assert resources.get_available_quantity(cpu_resource_any) == 5,\
         "Incorrect quantity of the CPU resource."
 
@@ -166,7 +166,7 @@ def test_failed_allocation_of_resources():
     cpu_resource_any = Resource(name="CPU", _id="any")
     resources = Resources({cpu_resource_any: 10})
     with pytest.raises(ValueError):
-        resources.allocate(cpu_resource_any, __create_default_task(), 20)
+        resources.allocate(cpu_resource_any, create_default_task(), 20)
 
 
 def test_allocation_of_resources_complex():
@@ -177,7 +177,7 @@ def test_allocation_of_resources_complex():
     resources = Resources({cpu_resource_1: 5, cpu_resource_2: 5})
     assert resources.get_available_quantity(cpu_resource_any) == 10,\
         "Incorrect quantity of the CPU resource."
-    resources.allocate(cpu_resource_any, __create_default_task(), 6)
+    resources.allocate(cpu_resource_any, create_default_task(), 6)
     assert resources.get_available_quantity(cpu_resource_any) == 4,\
         "Incorrect quantity of the CPU resource."
     assert (resources.get_available_quantity(cpu_resource_1) == 0 or
@@ -205,7 +205,7 @@ def test_allocation_of_multiple_resources():
         Resources({
             cpu_resource_any: 5,
             gpu_resource_any: 5
-        }), __create_default_task())
+        }), create_default_task())
 
     assert resources.get_available_quantity(cpu_resource_any) == 5,\
         "Incorrect quantity of the CPU resource."
@@ -227,7 +227,7 @@ def test_correct_maintenance_of_allocated_resources():
     cpu_resource_any = Resource(name="CPU", _id="any")
     gpu_resource_any = Resource(name="GPU", _id="any")
 
-    task = __create_default_task()
+    task = create_default_task()
     resources.allocate(cpu_resource_any, task, 8)
     resources.allocate(gpu_resource_any, task, 5)
 
@@ -266,7 +266,7 @@ def test_deallocation_of_resources():
     cpu_resource_any = Resource(name="CPU", _id="any")
     gpu_resource_any = Resource(name="GPU", _id="any")
 
-    task = __create_default_task()
+    task = create_default_task()
     resources.allocate(cpu_resource_any, task, 8)
     resources.allocate(gpu_resource_any, task, 5)
 
@@ -303,7 +303,7 @@ def test_resources_copy():
     cpu_resource_any = Resource(name="CPU", _id="any")
     gpu_resource_any = Resource(name="GPU", _id="any")
 
-    task = __create_default_task()
+    task = create_default_task()
     resources.allocate(cpu_resource_any, task, 8)
     resources.allocate(gpu_resource_any, task, 5)
 
@@ -340,7 +340,7 @@ def test_resources_deepcopy():
     cpu_resource_any = Resource(name="CPU", _id="any")
     gpu_resource_any = Resource(name="GPU", _id="any")
 
-    task = __create_default_task()
+    task = create_default_task()
     resources.allocate(cpu_resource_any, task, 8)
     resources.allocate(gpu_resource_any, task, 5)
 
@@ -373,7 +373,7 @@ def test_resources_get_allocated_quantity():
     cpu_resource_any = Resource(name="CPU", _id="any")
     gpu_resource_any = Resource(name="GPU", _id="any")
 
-    task = __create_default_task()
+    task = create_default_task()
     resources.allocate(cpu_resource_any, task, 8)
 
     assert resources.get_available_quantity(cpu_resource_any) == 2,\
@@ -393,14 +393,14 @@ def test_resources_addition():
     cpu_resource_1 = Resource(name="CPU")
     gpu_resource_1 = Resource(name="GPU")
     resources_1 = Resources({cpu_resource_1: 10, gpu_resource_1: 10})
-    task_1 = __create_default_task()
+    task_1 = create_default_task()
     resources_1.allocate(cpu_resource_1, task_1, 5)
 
     # Construct the second set of Resources, and allocate some to a task.
     cpu_resource_2 = Resource(name="CPU")
     gpu_resource_2 = Resource(name="GPU")
     resources_2 = Resources({cpu_resource_2: 10, gpu_resource_2: 10})
-    task_2 = __create_default_task()
+    task_2 = create_default_task()
     resources_2.allocate(gpu_resource_2, task_2, 5)
 
     assert resources_1.get_available_quantity(cpu_resource_1) == 5,\
