@@ -29,6 +29,9 @@ class BaseScheduler(object):
             `task_placement` is a sequence of tuples depicting the
             (Task, ID of the Worker Pool where the task should be placed).
         """
+        # TODO: We should probably include the start time in the return as
+        # a scheduler may program a task to start at some time in the future
+        # (probably before the next scheduler run completes).
         raise NotImplementedError("The `schedule()` method has not been "
                                   "implemented.")
 
@@ -36,36 +39,34 @@ class BaseScheduler(object):
         raise NotImplementedError(
             "The `log()` method has not been implemented.")
 
-    def _verify_schedule(self, placements, dependency_matrix, start_times):
+    def _verify_schedule(self, task_graph, placements, start_times):
         # Check if each task's start time is greater than its release time.
         assert all([
-            start_time >= task.release_time
-            for start_time, (task, placement) in zip(start_times, placements)
+            start_times[task.id] >= task.release_time
+            for task, placement in placements
         ]), "not_valid_release_times"
 
         # Check if all tasks finished before the deadline.
-        assert all([
-            (task.deadline >= start_time + task.runtime)
-            for (task, placement), start_time in zip(placements, start_times)
-        ]), "doesn't finish before deadline"
+        assert all([(task.deadline >= start_times[task.id] + task.runtime)
+                    for task, placement in placements
+                    ]), "doesn't finish before deadline"
 
-        # Check if the task dependencies were satisfied.
-        for i, row_i in enumerate(dependency_matrix):
-            for j, col_j in enumerate(row_i):
-                if i != j and col_j:
-                    assert start_times[i] + placements[i][
-                        0].runtime <= start_times[
-                            j], f"not_valid_dependency{i}->{j}"
+        for task, placement in placements:
+            children = task_graph.get_children(task)
+            for child_task in children:
+                assert (
+                    start_times[task.id] + task.remaining_time <=
+                    start_times[child_task.id]
+                ), f"task dependency not valid{task.id}->{child_task.id}"
 
         # TODO: Check if resource requirements wever satisfied.
         for task, placement in placements:
             pass
 
         # Check if tasks overlapped on a resource.
-        placed_tasks = [
-            (placement, start_time, start_time + task.runtime)
-            for (task, placement), start_time in zip(placements, start_times)
-        ]
+        placed_tasks = [(placement, start_times[task.id],
+                         start_times[task.id] + task.runtime)
+                        for task, placement in placements]
         placed_tasks.sort()
         for t1, t2 in zip(placed_tasks, placed_tasks[1:]):
             if t1[0] == t2[0]:

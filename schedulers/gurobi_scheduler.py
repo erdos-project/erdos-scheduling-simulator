@@ -38,11 +38,16 @@ class GurobiScheduler(BaseScheduler):
         self._goal = goal
         self._enforce_deadlines = enforce_deadlines
         self._time = None
-        self._tasks = None
+        self._task_ids_to_task = {}
+        # Mapping from task id to the var storing the task start time.
+        self._task_ids_to_start_time = {}
+        # Mapping from task id to the var storing the task placement.
+        self._task_ids_to_placement = {}
+        # Mapping from task id to the var storing the cost of the placement.
+        self._task_ids_to_cost = {}
         self._task_graph = None
         self._worker_pools = None
-        self._placements = None
-        self._cost = None
+        self._placements = []
         # Set up the loggers.
         if _flags:
             self._logger = utils.setup_logging(name=self.__class__.__name__,
@@ -51,58 +56,73 @@ class GurobiScheduler(BaseScheduler):
         else:
             self._logger = utils.setup_logging(name=self.__class__.__name__)
 
-    def _add_task_dependency_constraints(self, s, dependency_matrix, times,
-                                         placements):
-        max_deadline = max([task.deadline for task in self._tasks])
-        for row_i in range(len(dependency_matrix)):
-            for col_j in range(len(dependency_matrix[0])):
-                # Dependent jobs need to finish before the next one.
-                if dependency_matrix[row_i][col_j]:
-                    s.addConstr(
-                        times[row_i] +
-                        self._tasks[row_i].remaining_time <= times[col_j])
-                if row_i < col_j:
-                    # Tasks using the same resources must not overlap.
-                    alpha = s.addVar(vtype=gp.GRB.BINARY,
-                                     name=f'alpha{row_i}_{col_j}')
-                    beta = s.addVar(vtype=gp.GRB.BINARY,
-                                    name=f'beta{row_i}_{col_j}')
-                    # pi > pj
-                    s.addConstr(-alpha * max_deadline - beta * max_deadline +
-                                1 <= placements[row_i] - placements[col_j])
-                    # pj > pi
-                    s.addConstr(alpha * max_deadline +
-                                (1 - beta) * max_deadline -
-                                1 >= placements[row_i] - placements[col_j])
-                    # tj - ti >= ei
-                    s.addConstr(
-                        times[col_j] -
-                        times[row_i] >= self._tasks[row_i].remaining_time -
-                        (1 - alpha) * max_deadline - beta * max_deadline)
-                    # ti - tj <= ej
-                    s.addConstr(
-                        times[row_i] -
-                        times[col_j] >= self._tasks[col_j].remaining_time -
-                        (1 - alpha) * max_deadline - (1 - beta) * max_deadline)
+    def _add_task_timing_constraints(self, s):
+        for task_id, task in self._task_ids_to_task.items():
+            start_time = self._task_ids_to_start_time[task_id]
+            if self._enforce_deadlines:
+                s.addConstr(start_time + task.remaining_time <= task.deadline)
+            # Start at or after release time.
+            s.addConstr(task.release_time <= start_time)
+            # Defines cost as slack deadline - finish time.
+            s.addConstr(task.deadline - start_time -
+                        task.remaining_time == self._task_ids_to_cost[task_id])
 
-    def _add_task_pinning_constraints(self, s, placements):
+    def _add_task_dependency_constraints(self, s):
+        for task_id, task in self._task_ids_to_task.items():
+            children = self._task_graph.get_children(task)
+            for child_task in children:
+                # Dependent tasks need to finish before the next one.
+                s.addConstr(
+                    self._task_ids_to_start_time[task_id] + task.remaining_time
+                    <= self._task_ids_to_start_time[child_task.id])
+
+    def _add_task_pinning_constraints(self, s):
         if not self._preemptive:
-            for i, task in enumerate(self._tasks):
+            for task_id, task in self._task_ids_to_task.items():
                 if task.state == TaskState.RUNNING:
                     # TODO: Incorrect! Placement must equate to resource id!
-                    s.add(placements[i] == 0)
+                    s.add(self._task_ids_to_placement[task_id] == 0)
 
-    def _add_task_resource_constraints(self, s, res_type_to_id_range,
-                                       placements):
+    def _add_task_resource_constraints(self, s, res_type_to_id_range):
         # Add constraints whether a task is placed on GPU or CPU.
         # from num_cpus to num_cpus to num_gpus.
-        for placement, task in zip(placements, self._tasks):
+        for task_id, task in self._task_ids_to_task.items():
             assert len(task.resource_requirements
                        ) <= 1, "Doesn't support multi-resource requirements"
             for resource in task.resource_requirements._resource_vector.keys():
                 (start_id, end_id) = res_type_to_id_range[resource.name]
-                s.addConstr(placement >= start_id)
-                s.addConstr(placement <= end_id - 1)
+                s.addConstr(self._task_ids_to_placement[task_id] >= start_id)
+                s.addConstr(self._task_ids_to_placement[task_id] <= end_id - 1)
+
+        # Tasks using the same resources must not overlap.
+        max_deadline = max(
+            [task.deadline for task in self._task_ids_to_task.values()])
+        for t1_id, task1 in self._task_ids_to_task.items():
+            for t2_id, task2 in self._task_ids_to_task.items():
+                if t2_id >= t1_id:
+                    continue
+                alpha = s.addVar(vtype=gp.GRB.BINARY,
+                                 name=f'alpha{t1_id}_{t2_id}')
+                beta = s.addVar(vtype=gp.GRB.BINARY,
+                                name=f'beta{t1_id}_{t2_id}')
+                # pi > pj
+                s.addConstr(-alpha * max_deadline - beta * max_deadline +
+                            1 <= self._task_ids_to_placement[t1_id] -
+                            self._task_ids_to_placement[t2_id])
+                # pj > pi
+                s.addConstr(alpha * max_deadline + (1 - beta) * max_deadline -
+                            1 >= self._task_ids_to_placement[t1_id] -
+                            self._task_ids_to_placement[t2_id])
+                # tj - ti >= ei
+                s.addConstr(self._task_ids_to_start_time[t2_id] -
+                            self._task_ids_to_start_time[t1_id] >=
+                            task1.remaining_time -
+                            (1 - alpha) * max_deadline - beta * max_deadline)
+                # ti - tj <= ej
+                s.addConstr(self._task_ids_to_start_time[t1_id] -
+                            self._task_ids_to_start_time[t2_id] >=
+                            task2.remaining_time - (1 - alpha) * max_deadline -
+                            (1 - beta) * max_deadline)
 
     def schedule(self, sim_time: float, task_graph: TaskGraph,
                  worker_pools: WorkerPools):
@@ -111,54 +131,42 @@ class GurobiScheduler(BaseScheduler):
             return functools.reduce(lambda a, b: a + b, lst, 0)
 
         self._time = sim_time
-        self._tasks = task_graph.get_released_tasks()
+        self._task_ids_to_task = {}
+        self._task_ids_to_start_time = {}
+        self._task_ids_to_placement = {}
+        self._task_ids_to_cost = {}
         self._task_graph = task_graph
         self._worker_pools = worker_pools
+
+        tasks = task_graph.get_released_tasks()
         # TODO: We should get tasks that will be released later as well.
         if self.preemptive:
             # Schedule placed tasks as well.
-            self._tasks.extend(worker_pools.get_placed_tasks())
+            tasks.extend(worker_pools.get_placed_tasks())
 
         scheduler_start_time = time.time()
         s = gp.Model('RAP')
         s.setParam("OptimalityTol", 1e-3)
 
         # We are solving for start_times and placements while minimizing costs.
-        start_times = [
-            s.addVar(vtype=gp.GRB.INTEGER, name=f't{i}')
-            for i in range(0, len(self._tasks))
-        ]
-        # Costs of gap.
-        costs = [
-            s.addVar(vtype=gp.GRB.INTEGER, name=f'c{i}')
-            for i in range(0, len(self._tasks))
-        ]
-        # Placement on CPU or GPU.
-        placements = [
-            s.addVar(vtype=gp.GRB.INTEGER, name=f'p{i}')
-            for i in range(0, len(self._tasks))
-        ]
-
-        for start_time, task, cost_var in zip(start_times, self._tasks, costs):
-            if self._enforce_deadlines:
-                s.addConstr(start_time + task.remaining_time <= task.deadline)
-            # Start at or after release time.
-            s.addConstr(task.release_time <= start_time)
-            # Defines cost as slack deadline - finish time.
-            s.addConstr(task.deadline - start_time -
-                        task.remaining_time == cost_var)
+        for task in tasks:
+            self._task_ids_to_task[task.id] = task
+            self._task_ids_to_start_time[task.id] = s.addVar(
+                vtype=gp.GRB.INTEGER, name=f't{task.id}')
+            self._task_ids_to_cost[task.id] = s.addVar(vtype=gp.GRB.INTEGER,
+                                                       name=f'c{task.id}')
+            self._task_ids_to_placement[task.id] = s.addVar(
+                vtype=gp.GRB.INTEGER, name=f'p{task.id}')
 
         (res_type_to_id_range,
          res_id_to_wp_id) = worker_pools.get_resource_ilp_encoding()
-        self._add_task_resource_constraints(s, res_type_to_id_range,
-                                            placements)
-        # TODO: This doesn't account for the task dependencies.
-        dependency_matrix = [[False] * len(self._tasks)] * len(self._tasks)
-        self._add_task_dependency_constraints(s, dependency_matrix,
-                                              start_times, placements)
-        self._add_task_pinning_constraints(s, placements)
+        self._add_task_timing_constraints(s)
+        self._add_task_resource_constraints(s, res_type_to_id_range)
+        self._add_task_dependency_constraints(s)
+        self._add_task_pinning_constraints(s)
 
-        s.setObjective(sum_costs(costs), gp.GRB.MAXIMIZE)
+        s.setObjective(sum_costs(self._task_ids_to_cost.values()),
+                       gp.GRB.MAXIMIZE)
         s.optimize()
         scheduler_end_time = time.time()
         self._runtime = scheduler_end_time - scheduler_start_time\
@@ -167,21 +175,26 @@ class GurobiScheduler(BaseScheduler):
         if s.status == gp.GRB.OPTIMAL:
             self._logger.debug(f"Found optimal value: {s.objVal}")
             self._placements = []
-            for task, start_time, placement in zip(self._tasks, start_times,
-                                                   placements):
-                if int(start_time.X) <= sim_time + self.runtime:
-                    # TODO: It only places tasks with a start time smaller
-                    # than the time at the end of the scheduler run.
-                    self._placements.append(
-                        (task, res_id_to_wp_id[int(placement.X)]))
+            for task_id, task in self._task_ids_to_task.items():
+                start_time = int(self._task_ids_to_start_time[task_id].X)
+                placement = res_id_to_wp_id[int(
+                    self._task_ids_to_placement[task_id].X)]
+                if start_time <= sim_time + self.runtime:
+                    # Only places tasks with a start time smaller than the
+                    # time at the end of the scheduler run.
+                    self._placements.append((task, placement))
                 else:
                     self._placements.append((task, None))
             self._cost = int(s.objVal)
-            self._verify_schedule(self._placements, dependency_matrix,
-                                  [int(st.X) for st in start_times])
+            start_times = {}
+            for task_id, st_var in self._task_ids_to_start_time.items():
+                start_times[task_id] = int(st_var.X)
+            self._verify_schedule(self._task_graph, self._placements,
+                                  start_times)
             return self.runtime, self._placements
         else:
-            self._placements = [(task, None) for task in self._tasks]
+            self._placements = [(task, None)
+                                for task in self._task_ids_to_task.values()]
             self._cost = sys.maxsize
             if s.status == gp.GRB.INFEASIBLE:
                 # TODO: Implement load shedding.
@@ -196,11 +209,11 @@ class GurobiScheduler(BaseScheduler):
             with open(self._flags.scheduler_log_file_name, 'wb') as log_file:
                 logged_data = {
                     'time': self._time,
-                    'tasks': self._tasks,
+                    'tasks': self._task_ids_to_task,
                     'task_graph': self._task_graph,
                     'worker_pools': self._worker_pools,
                     'runtime': self.runtime,
-                    'placements': self._placementsresult,
+                    'placements': self._placements,
                     'cost': self._cost
                 }
                 pickle.dump(logged_data, log_file)
