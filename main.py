@@ -19,7 +19,7 @@ flags.DEFINE_string('csv_file_name',
                     None,
                     'Name of the CSV file to log the results to.',
                     short_name="csv")
-flags.define_string('scheduler_log_file_name', None,
+flags.DEFINE_string('scheduler_log_file_name', None,
                     'Name of the file to log the scheduler runs.')
 flags.DEFINE_string('log_level', 'debug', 'Level of logging.')
 flags.DEFINE_string('graph_path', './data/pylot-complete-graph.dot',
@@ -69,7 +69,7 @@ flags.DEFINE_float(
     'scheduler_delay', 1.0,
     'The delay associated with invoking a scheduler after the '
     'release of a Task in the system.')
-flags.DEFINE_enum('ilp_goal', 'feasibility', ['feasibility', 'max_slack'],
+flags.DEFINE_enum('ilp_goal', 'max_slack', ['feasibility', 'max_slack'],
                   'Sets the goal of the ILP solver.')
 
 

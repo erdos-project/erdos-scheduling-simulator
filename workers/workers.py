@@ -5,7 +5,7 @@ from copy import copy, deepcopy
 from typing import Optional, Sequence, Type
 
 import utils
-from workload import Resource, Resources, Task, TaskState
+from workload import Resource, Resources, Task, TaskGraph, TaskState
 
 
 class Worker(object):
@@ -256,9 +256,7 @@ class WorkerPool(object):
         if self._scheduler is not None:
             # If a scheduler was provided, get a task placement from it.
             runtime, placement = self._scheduler.schedule(
-                [task],  # Only this task is available.
-                None,  # No task graph.
-                WorkerPools(self._workers))
+                TaskGraph(tasks={task: []})[task], WorkerPools(self._workers))
             # Add the runtime to the task start time.
             task._start_time += runtime
         else:

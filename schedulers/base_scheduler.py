@@ -9,7 +9,6 @@ class BaseScheduler(object):
     def schedule(
         self,
         sim_time: float,
-        released_tasks: Sequence[Task],
         task_graph: TaskGraph,
         worker_pools: 'WorkerPools',  # noqa: F821
         _flags: Optional['absl.flags'] = None
@@ -19,8 +18,6 @@ class BaseScheduler(object):
 
         Args:
             sim_time (`float`): The time at which the scheduler is invoked.
-            released_tasks (`Sequence[Task]`): The set of tasks released at
-                the invocation of the current run of the scheduler.
             task_graph (`TaskGraph`): The state of the TaskGraph at this
                 invocation including the future set of VIRTUAL tasks.
             worker_pools (`WorkerPools`): The set of worker pools to

@@ -194,7 +194,6 @@ class Simulator(object):
         self._last_scheduler_start_time = 0
         self._next_scheduler_event = None
         self._last_task_placement = []
-        self._released_tasks = []
         self._finished_tasks = 0
         self._missed_deadlines = 0
         self._scheduler_delay = _flags.scheduler_delay if _flags else 1
@@ -303,7 +302,6 @@ class Simulator(object):
             return True
         elif event.event_type == EventType.TASK_RELEASE:
             # Release a task for the scheduler.
-            self._released_tasks.append(event.task)
             self._logger.info(f"[{self._simulator_time}] Added the task from "
                               f"{event} to the released tasks.")
             self._csv_logger.debug(
@@ -356,8 +354,9 @@ class Simulator(object):
             currently_placed_tasks = []
             for worker_pool in self._worker_pools.values():
                 currently_placed_tasks.extend(worker_pool.get_placed_tasks())
+            released_tasks = task_graph.get_released_tasks()
             self._csv_logger.debug(
-                f"{event.time},SCHEDULER_START,{len(self._released_tasks)},"
+                f"{event.time},SCHEDULER_START,{len(released_tasks)},"
                 f"{len(currently_placed_tasks)}")
 
             # Execute the scheduler, and insert an event notifying the
@@ -366,7 +365,7 @@ class Simulator(object):
             self._next_scheduler_event = None
             self._logger.info(
                 f"[{event.time}] Running the scheduler with "
-                f"{len(self._released_tasks)} released tasks and "
+                f"{len(released_tasks)} released tasks and "
                 f"{len(currently_placed_tasks)} tasks already placed across "
                 f"{len(self._worker_pools)} worker pools.")
             sched_finished_event = self.__run_scheduler(event, task_graph)
@@ -394,10 +393,8 @@ class Simulator(object):
                 f"{event.time - self._last_scheduler_start_time},"
                 f"{num_placed},{num_unplaced}")
 
-            unplaced_tasks = []
             for task, placement in self._last_task_placement:
                 if placement is None:
-                    unplaced_tasks.append(task)
                     self._csv_logger.debug(
                         f"{event.time},TASK_SKIP,{task.id},{task.name}")
                     self._logger.warning(
@@ -424,13 +421,13 @@ class Simulator(object):
             self.__log_utilization(event.time)
 
             # Reset the available tasks and the last task placement.
-            self._released_tasks.extend(unplaced_tasks)
             self._last_task_placement = []
 
             # The scheduler has finished its execution, insert an event
             # for the next invocation of the scheduler.
             next_sched_event = self.__get_next_scheduler_event(
                 event,
+                task_graph,
                 self._scheduler_frequency,
                 self._last_scheduler_start_time,
                 self._loop_timeout,
@@ -471,6 +468,7 @@ class Simulator(object):
     def __get_next_scheduler_event(
             self,
             event: Event,
+            task_graph: TaskGraph,
             scheduler_frequency: float,
             last_scheduler_start_time: float,
             loop_timeout: float = float('inf'),
@@ -533,8 +531,8 @@ class Simulator(object):
         running_tasks = []
         for worker_pool in self._worker_pools.values():
             running_tasks.extend(worker_pool.get_placed_tasks())
-
-        if (len(self._released_tasks) == 0 and len(self._event_queue) == 0
+        released_tasks = task_graph.get_released_tasks()
+        if (len(released_tasks) == 0 and len(self._event_queue) == 0
                 and len(running_tasks) == 0):
             self._logger.info(
                 f"[{event.time}] There are no currently released tasks, "
@@ -584,11 +582,9 @@ class Simulator(object):
         if not (event.event_type == EventType.SCHEDULER_START):
             raise ValueError("Incorrect event type passed.")
         scheduler_runtime, task_placement = self._scheduler.schedule(
-            event.time, self._released_tasks, task_graph,
-            WorkerPools(self._worker_pools.values()))
+            event.time, task_graph, WorkerPools(self._worker_pools.values()))
         placement_time = event.time + scheduler_runtime
         self._last_task_placement = task_placement
-        self._released_tasks = []
 
         return Event(event_type=EventType.SCHEDULER_FINISHED,
                      time=placement_time)

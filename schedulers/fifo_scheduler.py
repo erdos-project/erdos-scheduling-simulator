@@ -26,17 +26,17 @@ class FIFOScheduler(BaseScheduler):
         self._preemptive = preemptive
         self._runtime = runtime
 
-    def schedule(self, sim_time: float, released_tasks: Sequence[Task],
-                 task_graph: TaskGraph, worker_pools: WorkerPools)\
-            -> (float, Sequence[Tuple[Task, str]]):
+    def schedule(
+            self, sim_time: float, task_graph: TaskGraph,
+            worker_pools: WorkerPools) -> (float, Sequence[Tuple[Task, str]]):
+        tasks = task_graph.get_released_tasks()
         # Create a virtual WorkerPool set to try scheduling decisions on.
         schedulable_worker_pools = copy(worker_pools)
 
         start_time = time.time()
         # Sort the tasks according to their release times, and place them on
         # the worker pools.
-        ordered_tasks = list(
-            sorted(released_tasks, key=attrgetter('release_time')))
+        ordered_tasks = list(sorted(tasks, key=attrgetter('release_time')))
 
         placements = []
         for task in ordered_tasks:

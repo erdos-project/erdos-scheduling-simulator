@@ -122,6 +122,7 @@ def test_failed_construction_of_scheduler_start_event():
     with pytest.raises(ValueError):
         simulator._Simulator__get_next_scheduler_event(
             event=Event(event_type=EventType.SCHEDULER_START, time=3.0),
+            task_graph=TaskGraph(),
             scheduler_frequency=-1.0,
             last_scheduler_start_time=2.0)
 
@@ -135,6 +136,7 @@ def test_construction_of_scheduler_start_event():
 
     simulator_start_event = simulator._Simulator__get_next_scheduler_event(
         event=Event(event_type=EventType.SCHEDULER_FINISHED, time=3.0),
+        task_graph=TaskGraph(),
         scheduler_frequency=-1.0,
         last_scheduler_start_time=1.0)
     assert simulator_start_event.time == 4.0,\
@@ -142,6 +144,7 @@ def test_construction_of_scheduler_start_event():
 
     simulator_start_event = simulator._Simulator__get_next_scheduler_event(
         event=Event(event_type=EventType.SCHEDULER_FINISHED, time=3.0),
+        task_graph=TaskGraph(),
         scheduler_frequency=5.0,
         last_scheduler_start_time=1.0)
     assert simulator_start_event.time == 6.0,\
@@ -149,6 +152,7 @@ def test_construction_of_scheduler_start_event():
 
     simulator_start_event = simulator._Simulator__get_next_scheduler_event(
         event=Event(event_type=EventType.SCHEDULER_FINISHED, time=7.0),
+        task_graph=TaskGraph(),
         scheduler_frequency=5.0,
         last_scheduler_start_time=1.0)
     assert simulator_start_event.time == 8.0,\
@@ -170,6 +174,7 @@ def test_simulator_loop_finish_event():
 
     simulator_start_event = simulator._Simulator__get_next_scheduler_event(
         event=Event(event_type=EventType.SCHEDULER_FINISHED, time=3.0),
+        task_graph=TaskGraph(),
         scheduler_frequency=-1.0,
         last_scheduler_start_time=1.0)
     assert simulator_start_event.event_type == EventType.SIMULATOR_END,\
@@ -184,7 +189,7 @@ def test_scheduler_invocation_by_simulator():
                           job_graph=None)
     scheduler_finished_event = simulator._Simulator__run_scheduler(
         event=Event(event_type=EventType.SCHEDULER_START, time=1.0),
-        task_graph=None,
+        task_graph=TaskGraph(),
     )
     assert scheduler_finished_event.time == 6.0, "Incorrect finish time."
 
@@ -256,20 +261,8 @@ def test_simulator_handle_event():
     # Test the SIMULATOR_END event.
     return_value = simulator._Simulator__handle_event(event=Event(
         event_type=EventType.SIMULATOR_END, time=1.0),
-                                                      task_graph=None)
+                                                      task_graph=TaskGraph())
     assert return_value, "Incorrect return value for event type."
-
-    # Test the TASK_RELEASE event.
-    assert len(simulator._released_tasks) == 0,\
-        "Incorrect number of available tasks."
-    return_value = simulator._Simulator__handle_event(event=Event(
-        event_type=EventType.TASK_RELEASE,
-        time=1.0,
-        task=create_default_task()),
-                                                      task_graph=None)
-    assert not return_value, "Incorrect return value for event type."
-    assert len(simulator._released_tasks) == 1,\
-        "Incorrect number of available tasks."
 
     # Test the TASK_FINISHED event.
     perception_task = create_default_task(job=Job(name="Perception"))
@@ -293,7 +286,7 @@ def test_simulator_handle_event():
         event_type=EventType.SCHEDULER_START,
         time=5.0,
     ),
-                                                      task_graph=None)
+                                                      task_graph=TaskGraph())
     assert not return_value, "Incorrect return value for event type."
     assert len(simulator._event_queue) == 4, "Incorrect length of EventQueue."
 
@@ -303,9 +296,7 @@ def test_simulator_handle_event():
         event_type=EventType.SCHEDULER_FINISHED,
         time=6.0,
     ),
-                                                      task_graph=None)
-    assert len(simulator._released_tasks) == 0,\
-        "Incorrect length of available tasks."
+                                                      task_graph=TaskGraph())
     assert len(simulator._event_queue) == 5, "Incorrect length of EventQueue."
     assert planning_task.state == TaskState.RUNNING, "Wrong task state."
     assert len(worker_pool.get_placed_tasks()) == 1,\
