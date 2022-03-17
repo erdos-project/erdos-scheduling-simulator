@@ -51,6 +51,7 @@ class GurobiScheduler(BaseScheduler):
         self._worker_pools = None
         self._placements = []
         # Set up the loggers.
+        self._flags = _flags
         if _flags:
             self._logger = utils.setup_logging(name=self.__class__.__name__,
                                                log_file=_flags.log_file_name,
@@ -211,7 +212,8 @@ class GurobiScheduler(BaseScheduler):
         return self.runtime, self._placements
 
     def log(self):
-        if self._flags.scheduler_log_file_name is not None:
+        if (self._flags is not None
+                and self._flags.scheduler_log_file_name is not None):
             with open(self._flags.scheduler_log_file_name, 'wb') as log_file:
                 logged_data = {
                     'time': self._time,
