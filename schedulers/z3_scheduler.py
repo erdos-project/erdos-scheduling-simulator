@@ -177,9 +177,12 @@ class Z3Scheduler(BaseScheduler):
                     str(s.model()[self._task_ids_to_start_time[task_id]]))
                 placement = res_id_to_wp_id[int(
                     str(s.model()[self._task_ids_to_placement[task_id]]))]
-                if start_time <= sim_time + self.runtime:
-                    # Only places tasks with a start time smaller than the
-                    # time at the end of the scheduler run.
+                if start_time <= sim_time + self.runtime * 2:
+                    # We only place the tasks with a start time earlier than
+                    # the estimated end time of the next scheduler run.
+                    # Therefore, a task can progress before the next scheduler
+                    # finishes. However, the next scheduler will assume that
+                    # the task is not running while considering for placement.
                     self._placements.append((task, placement))
                 else:
                     self._placements.append((task, None))

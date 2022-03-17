@@ -30,9 +30,6 @@ class BaseScheduler(object):
             `task_placement` is a sequence of tuples depicting the
             (Task, ID of the Worker Pool where the task should be placed).
         """
-        # TODO: We should probably include the start time in the return as
-        # a scheduler may program a task to start at some time in the future
-        # (probably before the next scheduler run completes).
         raise NotImplementedError("The `schedule()` method has not been "
                                   "implemented.")
 

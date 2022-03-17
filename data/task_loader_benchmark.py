@@ -25,7 +25,7 @@ class TaskLoaderBenchmark(object):
 
         self._jobs = [Job(name=f"Job_{index}") for index in range(0, num_jobs)]
         self._job_graph = JobGraph()
-        # TODO: Add job dependencies.
+        # Note: The jobs are independent.
         for job in self._jobs:
             self._job_graph.add_job(job, [])
         self._tasks = []

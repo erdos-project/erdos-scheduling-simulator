@@ -134,6 +134,7 @@ class GurobiScheduler(BaseScheduler):
             return functools.reduce(lambda a, b: a + b, lst, 0)
 
         self._time = sim_time
+        # Rest the state.
         self._task_ids_to_task = {}
         self._task_ids_to_start_time = {}
         self._task_ids_to_placement = {}
@@ -161,6 +162,7 @@ class GurobiScheduler(BaseScheduler):
 
         (res_type_to_id_range,
          res_id_to_wp_id) = worker_pools.get_resource_ilp_encoding()
+
         self._add_task_timing_constraints(s)
         self._add_task_resource_constraints(s, res_type_to_id_range)
         self._add_task_dependency_constraints(s)
@@ -176,23 +178,25 @@ class GurobiScheduler(BaseScheduler):
         if s.status == gp.GRB.OPTIMAL:
             self._logger.debug(f"Found optimal value: {s.objVal}")
             self._placements = []
+            self._cost = int(s.objVal)
             for task_id, task in self._task_ids_to_task.items():
                 start_time = int(self._task_ids_to_start_time[task_id].X)
                 placement = res_id_to_wp_id[int(
                     self._task_ids_to_placement[task_id].X)]
-                if start_time <= sim_time + self.runtime:
-                    # Only places tasks with a start time smaller than the
-                    # time at the end of the scheduler run.
+                if start_time <= sim_time + self.runtime * 2:
+                    # We only place the tasks with a start time earlier than
+                    # the estimated end time of the next scheduler run.
+                    # Therefore, a task can progress before the next scheduler
+                    # finishes. However, the next scheduler will assume that
+                    # the task is not running while considering for placement.
                     self._placements.append((task, placement))
                 else:
                     self._placements.append((task, None))
-            self._cost = int(s.objVal)
             start_times = {}
             for task_id, st_var in self._task_ids_to_start_time.items():
                 start_times[task_id] = int(st_var.X)
             self._verify_schedule(self._worker_pools, self._task_graph,
                                   self._placements, start_times)
-            return self.runtime, self._placements
         else:
             self._placements = [(task, None)
                                 for task in self._task_ids_to_task.values()]
@@ -200,10 +204,11 @@ class GurobiScheduler(BaseScheduler):
             if s.status == gp.GRB.INFEASIBLE:
                 # TODO: Implement load shedding.
                 self._logger.debug("Solver couldn't find a solution.")
-                return self.runtime, self._placements
             else:
                 self._logger.debug(f"Solver failed with status: {s.status}")
-                return self.runtime, self._placements
+        # Log the scheduler run.
+        self.log()
+        return self.runtime, self._placements
 
     def log(self):
         if self._flags.scheduler_log_file_name is not None:
