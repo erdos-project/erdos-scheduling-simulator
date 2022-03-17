@@ -1,4 +1,5 @@
 from typing import Optional, Sequence, Tuple
+from workers import WorkerPools
 from workload import Task, TaskGraph
 
 import absl  # noqa: F401
@@ -39,7 +40,8 @@ class BaseScheduler(object):
         raise NotImplementedError(
             "The `log()` method has not been implemented.")
 
-    def _verify_schedule(self, task_graph, placements, start_times):
+    def _verify_schedule(self, worker_pools: WorkerPools,
+                         task_graph: TaskGraph, placements, start_times):
         # Check if each task's start time is greater than its release time.
         assert all([
             start_times[task.id] >= task.release_time
@@ -59,9 +61,15 @@ class BaseScheduler(object):
                     start_times[child_task.id]
                 ), f"task dependency not valid{task.id}->{child_task.id}"
 
-        # TODO: Check if resource requirements wever satisfied.
+        # Check if resource requirements are satisfied.
+        # Note: We do not check if all tasks placed on a WorkerPool fit.
         for task, placement in placements:
-            pass
+            for wp in worker_pools._wps:
+                if placement == wp.id:
+
+                    assert wp.can_accomodate_task(
+                        task
+                    ), f"WorkerPool doesn't have resources for {task.id}"
 
         # Check if tasks overlapped on a resource.
         placed_tasks = [(placement, start_times[task.id],

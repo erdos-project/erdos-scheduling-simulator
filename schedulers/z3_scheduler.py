@@ -13,8 +13,8 @@ from z3 import Int, Solver, Implies, Or, unsat, Optimize
 
 import utils
 from schedulers import BaseScheduler
-from workload import TaskGraph, TaskState
 from workers import WorkerPools
+from workload import TaskGraph, TaskState
 
 
 class Z3Scheduler(BaseScheduler):
@@ -185,8 +185,8 @@ class Z3Scheduler(BaseScheduler):
             start_times = {}
             for task_id, st_var in self._task_ids_to_start_time.items():
                 start_times[task_id] = int(str(s.model()[st_var]))
-            self._verify_schedule(self._task_graph, self._placements,
-                                  start_times)
+            self._verify_schedule(self._worker_pools, self._task_graph,
+                                  self._placements, start_times)
         else:
             self._placements = [(task, None)
                                 for task in self._task_ids_to_task.values()]

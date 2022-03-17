@@ -11,8 +11,8 @@ import gurobipy as gp
 
 import utils
 from schedulers import BaseScheduler
-from workload import TaskGraph, TaskState
 from workers import WorkerPools
+from workload import TaskGraph, TaskState
 
 
 class GurobiScheduler(BaseScheduler):
@@ -189,8 +189,8 @@ class GurobiScheduler(BaseScheduler):
             start_times = {}
             for task_id, st_var in self._task_ids_to_start_time.items():
                 start_times[task_id] = int(st_var.X)
-            self._verify_schedule(self._task_graph, self._placements,
-                                  start_times)
+            self._verify_schedule(self._worker_pools, self._task_graph,
+                                  self._placements, start_times)
             return self.runtime, self._placements
         else:
             self._placements = [(task, None)
