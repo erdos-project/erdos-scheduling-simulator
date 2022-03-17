@@ -1,5 +1,7 @@
-import uuid
 import logging
+import uuid
+
+from collections import deque
 from enum import Enum
 from collections import namedtuple, defaultdict
 from typing import Mapping, Sequence, Optional, Union
@@ -521,7 +523,47 @@ class TaskGraph(object):
                 for task in self._task_graph:
                     if task.state == TaskState.RUNNING:
                         tasks.append(task)
-        # TODO: Should also return tasks will be released by time + horizon.
+        task_queue = deque([])
+        estimated_completion_time = {}
+        # Estimate the completion time of materialized tasks.
+        for task in self._task_graph:
+            if task.state == TaskState.RUNNING:
+                estimated_completion_time[task] = (task.start_time +
+                                                   task.remaining_time)
+            elif task.state == TaskState.COMPLETED:
+                estimated_completion_time[task] = task.completion_time
+            elif task.state in [
+                    TaskState.RELEASED, TaskState.PAUSED, TaskState.EVICTED
+            ]:
+                estimated_completion_time[task] = time + task.remaining_time
+            else:
+                continue
+            task_queue.append(task)
+
+        # Estimate the completion time of VIRTUAL tasks.
+        while len(task_queue) > 0:
+            task = task_queue.popleft()
+            completion_time = estimated_completion_time[task]
+            if completion_time > time + horizon:
+                # No point to visit its children.
+                continue
+            children = self.get_children(task)
+            for child_task in children:
+                child_completion_time = (completion_time +
+                                         child_task.remaining_time)
+                if (child_task not in estimated_completion_time
+                        or child_completion_time >
+                        estimated_completion_time[child_task]):
+                    estimated_completion_time[
+                        child_task] = child_completion_time
+                    task_queue.append(child_task)
+
+        # Add the tasks that are within the horizon.
+        for task in self._task_graph:
+            if task.state == TaskState.VIRTUAL:
+                if (task in estimated_completion_time
+                        and estimated_completion_time[task] < time + horizon):
+                    tasks.append(task)
         return tasks
 
     def release_tasks(self, time: Optional[float] = None) -> Sequence[Task]:
