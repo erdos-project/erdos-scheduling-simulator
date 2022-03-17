@@ -354,9 +354,11 @@ class Simulator(object):
             currently_placed_tasks = []
             for worker_pool in self._worker_pools.values():
                 currently_placed_tasks.extend(worker_pool.get_placed_tasks())
-            released_tasks = task_graph.get_released_tasks()
+            schedulable_tasks = task_graph.get_schedulable_tasks(
+                event.time, self._scheduler.scheduling_horizon,
+                self._scheduler.preemptive)
             self._csv_logger.debug(
-                f"{event.time},SCHEDULER_START,{len(released_tasks)},"
+                f"{event.time},SCHEDULER_START,{len(schedulable_tasks)},"
                 f"{len(currently_placed_tasks)}")
 
             # Execute the scheduler, and insert an event notifying the
@@ -365,7 +367,7 @@ class Simulator(object):
             self._next_scheduler_event = None
             self._logger.info(
                 f"[{event.time}] Running the scheduler with "
-                f"{len(released_tasks)} released tasks and "
+                f"{len(schedulable_tasks)} schedulable tasks and "
                 f"{len(currently_placed_tasks)} tasks already placed across "
                 f"{len(self._worker_pools)} worker pools.")
             sched_finished_event = self.__run_scheduler(event, task_graph)
@@ -376,7 +378,6 @@ class Simulator(object):
         elif event.event_type == EventType.SCHEDULER_FINISHED:
             # Place the task on the assigned worker pool, and reset the
             # available events to the tasks that could not be placed.
-            # TODO (Sukrit): Should these tasks be moved to a PAUSED state?
             self._logger.info(
                 f"[{event.time}] Finished executing the scheduler "
                 f"initiated at {self._last_scheduler_start_time}. "
@@ -531,11 +532,13 @@ class Simulator(object):
         running_tasks = []
         for worker_pool in self._worker_pools.values():
             running_tasks.extend(worker_pool.get_placed_tasks())
-        released_tasks = task_graph.get_released_tasks()
-        if (len(released_tasks) == 0 and len(self._event_queue) == 0
+        schedulable_tasks = task_graph.get_schedulable_tasks(
+            event.time, self._scheduler.scheduling_horizon,
+            self._scheduler.preemptive)
+        if (len(schedulable_tasks) == 0 and len(self._event_queue) == 0
                 and len(running_tasks) == 0):
             self._logger.info(
-                f"[{event.time}] There are no currently released tasks, "
+                f"[{event.time}] There are no currently schedulable tasks, "
                 f"no running tasks, and no events available in "
                 f"the event queue. Ending the loop.")
             return Event(event_type=EventType.SIMULATOR_END,

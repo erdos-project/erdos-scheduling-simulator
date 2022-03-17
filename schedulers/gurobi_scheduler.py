@@ -22,6 +22,7 @@ class GurobiScheduler(BaseScheduler):
                  runtime: float = -1.0,
                  goal: str = 'max_slack',
                  enforce_deadlines: bool = True,
+                 scheduling_horizon: float = 0,
                  _flags: Optional['absl.flags'] = None):
         """Constructs a Gurobi scheduler.
 
@@ -37,6 +38,7 @@ class GurobiScheduler(BaseScheduler):
             'Gurobi does not support feasibility checking.'
         self._goal = goal
         self._enforce_deadlines = enforce_deadlines
+        self._scheduling_horizon = scheduling_horizon
         self._time = None
         self._task_ids_to_task = {}
         # Mapping from task id to the var storing the task start time.
@@ -72,9 +74,10 @@ class GurobiScheduler(BaseScheduler):
             children = self._task_graph.get_children(task)
             for child_task in children:
                 # Dependent tasks need to finish before the next one.
-                s.addConstr(
-                    self._task_ids_to_start_time[task_id] + task.remaining_time
-                    <= self._task_ids_to_start_time[child_task.id])
+                if child_task.id in self._task_ids_to_start_time:
+                    s.addConstr(self._task_ids_to_start_time[task_id] +
+                                task.remaining_time <=
+                                self._task_ids_to_start_time[child_task.id])
 
     def _add_task_pinning_constraints(self, s):
         if not self._preemptive:
@@ -138,11 +141,9 @@ class GurobiScheduler(BaseScheduler):
         self._task_graph = task_graph
         self._worker_pools = worker_pools
 
-        tasks = task_graph.get_released_tasks()
-        # TODO: We should get tasks that will be released later as well.
-        if self.preemptive:
-            # Schedule placed tasks as well.
-            tasks.extend(worker_pools.get_placed_tasks())
+        tasks = task_graph.get_schedulable_tasks(sim_time,
+                                                 self.scheduling_horizon,
+                                                 self.preemptive, worker_pools)
 
         scheduler_start_time = time.time()
         s = gp.Model('RAP')
@@ -212,6 +213,7 @@ class GurobiScheduler(BaseScheduler):
                     'tasks': self._task_ids_to_task,
                     'task_graph': self._task_graph,
                     'worker_pools': self._worker_pools,
+                    'scheduling_horizon': self._scheduling_horizon,
                     'runtime': self.runtime,
                     'placements': self._placements,
                     'cost': self._cost
@@ -225,3 +227,7 @@ class GurobiScheduler(BaseScheduler):
     @property
     def runtime(self):
         return self._runtime
+
+    @property
+    def scheduling_horizon(self):
+        return self._scheduling_horizon

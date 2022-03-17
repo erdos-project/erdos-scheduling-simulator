@@ -217,23 +217,24 @@ def test_retrieval_of_children():
     assert id(children[0]) == id(child_task), "Incorrect child returned."
 
 
-def test_get_released_tasks():
-    """ Test that the correct set of released tasks are returned. """
+def test_get_schedulable_tasks():
+    """ Test that the correct set of schedulable tasks are returned. """
     default_task = create_default_task(job=Job(name="Perception"))
     child_task = create_default_task(job=Job(name="Planning"))
     task_graph = TaskGraph()
     task_graph.add_task(default_task, [child_task])
-    assert len(task_graph.get_released_tasks()) == 0,\
-        "Incorrect length of released tasks returned."
+    assert len(task_graph.get_schedulable_tasks(0)) == 0,\
+        "Incorrect length of schedulable tasks returned."
     default_task.release(2.0)
-    assert len(task_graph.get_released_tasks()) == 1,\
-        "Incorrect length of released tasks returned."
+    assert len(task_graph.get_schedulable_tasks(0)) == 1,\
+        "Incorrect length of schedulable tasks returned."
     child_task.release(3.0)
-    assert len(task_graph.get_released_tasks()) == 2,\
-        "Incorrect length of released tasks returned."
+    assert len(task_graph.get_schedulable_tasks(0)) == 2,\
+        "Incorrect length of schedulable tasks returned."
+    default_task.update_remaining_time(0.0)
     default_task.finish(4.0)
-    assert len(task_graph.get_released_tasks()) == 1,\
-        "Incorrect length of released tasks returned."
+    assert len(task_graph.get_schedulable_tasks(0)) == 1,\
+        "Incorrect length of schedulable tasks returned."
 
 
 def test_release_tasks():
@@ -246,7 +247,7 @@ def test_release_tasks():
     task_graph.add_task(perception_task, [prediction_task])
     task_graph.add_task(prediction_task, [planning_task])
     task_graph.add_task(localization_task)
-    assert len(task_graph.get_released_tasks()) == 0,\
+    assert len(task_graph.get_schedulable_tasks(0)) == 0,\
         "Incorrect length of released tasks returned."
 
     # Release all available tasks.
@@ -276,19 +277,19 @@ def test_task_completion_notification():
     task_graph.add_task(perception_task, [planning_task])
     task_graph.add_task(prediction_task, [planning_task])
 
-    released_tasks = task_graph.get_released_tasks()
+    released_tasks = task_graph.get_schedulable_tasks(0)
     assert len(released_tasks) == 0,\
         "Incorrect length of released tasks returned."
 
     perception_task.release(2.0)
-    released_tasks = task_graph.get_released_tasks()
+    released_tasks = task_graph.get_schedulable_tasks(0)
     assert len(released_tasks) == 1,\
         "Incorrect length of released tasks returned."
     assert released_tasks[0] == perception_task,\
         "Incorrect task released."
 
     prediction_task.release(2.0)
-    released_tasks = task_graph.get_released_tasks()
+    released_tasks = task_graph.get_schedulable_tasks(0)
     assert len(released_tasks) == 2,\
         "Incorrect length of released tasks returned."
     assert released_tasks[0] == perception_task,\
@@ -301,7 +302,7 @@ def test_task_completion_notification():
     perception_task.update_remaining_time(0)
     perception_task.finish(4.0)
     task_graph.notify_task_completion(perception_task, 4.0)
-    released_tasks = task_graph.get_released_tasks()
+    released_tasks = task_graph.get_schedulable_tasks(0)
     assert perception_task.is_complete(), "Task was not completed."
     assert len(released_tasks) == 1,\
         "Incorrect length of released tasks returned."
@@ -313,7 +314,7 @@ def test_task_completion_notification():
     prediction_task.update_remaining_time(0)
     prediction_task.finish(4.0)
     task_graph.notify_task_completion(prediction_task, 4.0)
-    released_tasks = task_graph.get_released_tasks()
+    released_tasks = task_graph.get_schedulable_tasks(0)
     assert prediction_task.is_complete(), "Task was not completed."
     assert len(released_tasks) == 1,\
         "Incorrect length of released tasks returned."

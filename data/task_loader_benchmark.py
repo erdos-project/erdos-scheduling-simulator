@@ -31,12 +31,16 @@ class TaskLoaderBenchmark(object):
         self._tasks = []
         # Creates a single task for each job.
         for index, job in enumerate(self._jobs):
-            # TODO: Some tasks should require GPUs.
+            if index % 2 == 0:
+                resource_requirements = Resources(
+                    resource_vector={Resource(name="CPU", _id="any"): 1})
+            else:
+                resource_requirements = Resources(
+                    resource_vector={Resource(name="GPU", _id="any"): 1})
             self._tasks.append(
                 Task(f"{job.name}_task_{index}",
                      job=job,
-                     resource_requirements=Resources(
-                         resource_vector={Resource(name="CPU", _id="any"): 1}),
+                     resource_requirements=resource_requirements,
                      runtime=_flags.task_runtime,
                      deadline=task_deadline,
                      timestamp=0,

@@ -47,6 +47,7 @@ class Worker(object):
             task (`Task`): The task to be placed on this `Worker`.
         """
         self._resources.allocate_multiple(task.resource_requirements, task)
+        task._worker_pool_id = self._id
         self._placed_tasks[task] = task.state
         self._logger.debug(f"Placed {task} on {self}")
 
@@ -67,6 +68,7 @@ class Worker(object):
 
         # Deallocate the resources and remove the placed task.
         self._resources.deallocate(task)
+        task._worker_pool_id = None
         del self._placed_tasks[task]
 
     def can_accomodate_task(self, task: Task) -> bool:
@@ -272,6 +274,7 @@ class WorkerPool(object):
         else:
             self._workers[placement].place_task(task)
             self._placed_tasks[task] = placement
+            task._worker_pool_id = placement
 
     def preempt_task(self, task: Task):
         """Preempts the given `Task` and frees the resources.
@@ -286,6 +289,7 @@ class WorkerPool(object):
         # Find the worker where the task was placed, preempt it from there,
         # and remove it from this worker pool's placed tasks.
         self._workers[self._placed_tasks[task]].preempt_task(task)
+        task._worker_pool_id = None
         del self._placed_tasks[task]
 
     def get_placed_tasks(self) -> Sequence[Task]:

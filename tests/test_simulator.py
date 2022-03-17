@@ -15,6 +15,8 @@ class MockScheduler(BaseScheduler):
     def __init__(self, runtime: float, placement):
         self._runtime = runtime
         self._task_placement = placement
+        self.preemptive = False
+        self.scheduling_horizon = 0
 
     def schedule(self,
                  sim_time=None,

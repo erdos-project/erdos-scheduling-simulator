@@ -99,11 +99,9 @@ def test_z3_scheduler_limited_resources():
                                           worker_pools=WorkerPools(
                                               [worker_pool]))
 
-    # TODO (Justin): No behavior for loadshedding
     assert all([placement is None for (_, placement) in placements
                 ]), "Doesn't detect workload is unschedulable."
 
-    # assert len(placements) == 2, "Incorrect length of task placements."
     # assert placements[1][0] == task_higher_priority,\
     #     "Incorrect task received in the placement."
     # assert placements[1][1] == worker_pool.id,\

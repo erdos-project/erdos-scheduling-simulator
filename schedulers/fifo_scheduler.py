@@ -25,11 +25,13 @@ class FIFOScheduler(BaseScheduler):
         assert not preemptive, "FIFO scheduler is not preemptive"
         self._preemptive = preemptive
         self._runtime = runtime
+        self._scheduling_horizon = 0
 
     def schedule(
             self, sim_time: float, task_graph: TaskGraph,
             worker_pools: WorkerPools) -> (float, Sequence[Tuple[Task, str]]):
-        tasks = task_graph.get_released_tasks()
+        tasks = task_graph.get_schedulable_tasks(sim_time, 0, self.preemptive,
+                                                 worker_pools)
         # Create a virtual WorkerPool set to try scheduling decisions on.
         schedulable_worker_pools = copy(worker_pools)
 
@@ -61,3 +63,7 @@ class FIFOScheduler(BaseScheduler):
     @property
     def runtime(self):
         return self._runtime
+
+    @property
+    def scheduling_horizon(self):
+        return self._scheduling_horizon

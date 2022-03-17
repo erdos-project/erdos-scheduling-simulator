@@ -27,6 +27,7 @@ class LSFScheduler(BaseScheduler):
                  _flags: Optional['absl.flags'] = None):
         self._preemptive = preemptive
         self._runtime = runtime
+        self._scheduling_horizon = 0
 
     def schedule(
             self, sim_time: float, task_graph: TaskGraph,
@@ -36,16 +37,12 @@ class LSFScheduler(BaseScheduler):
         """
         # Create the tasks to be scheduled, along with the state of the
         # WorkerPool to schedule them on based on preemptive or non-preemptive
+        tasks_to_be_scheduled = task_graph.get_schedulable_tasks(
+            sim_time, 0, self.preemptive, worker_pools)
         if self.preemptive:
-            # Collect all the currently placed tasks on the WorkerPool, along
-            # with the set of released tasks.
-            tasks_to_be_scheduled = task_graph.get_released_tasks()
-            tasks_to_be_scheduled.extend(worker_pools.get_placed_tasks())
             # Restart the state of the WorkerPool.
             schedulable_worker_pools = deepcopy(worker_pools)
         else:
-            # Collect the currently released tasks.
-            tasks_to_be_scheduled = task_graph.get_released_tasks()
             # Create a virtual WorkerPool set to try scheduling decisions on.
             schedulable_worker_pools = copy(worker_pools)
 
@@ -93,3 +90,7 @@ class LSFScheduler(BaseScheduler):
     @property
     def runtime(self):
         return self._runtime
+
+    @property
+    def scheduling_horizon(self):
+        return self._scheduling_horizon

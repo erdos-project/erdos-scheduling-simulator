@@ -91,6 +91,8 @@ class Task(object):
         self._remaining_time = runtime
         self._last_step_time = -1  # Time when this task was stepped through.
         self._state = TaskState.VIRTUAL
+        # ID of the worker on which the task is running.
+        self._worker_pool_id = None
 
     def release(self, time: Optional[float] = None):
         """Release the task and transition away from the virtual state.
@@ -352,6 +354,10 @@ class Task(object):
     def timestamp(self):
         return self._timestamp
 
+    @property
+    def worker_pool_id(self):
+        return self._worker_pool_id
+
 
 class TaskGraph(object):
     """A `TaskGraph` represents a directed graph of task dependencies that
@@ -486,17 +492,37 @@ class TaskGraph(object):
         else:
             return self.__parent_task_graph[task]
 
-    def get_released_tasks(self) -> Sequence[Task]:
-        """Retrieves the set of tasks that are available to run.
+    def get_schedulable_tasks(
+            self,
+            time: float,
+            horizon: float = 0,
+            preemption: bool = False,
+            worker_pools: 'WorkerPools' = None  # noqa: F821
+    ) -> Sequence[Task]:
+        """Retrieves the all the tasks that are in RELEASED, PAUSED, or
+        EVICTED state, and tasks that are expected to be released by
+        time + horizon.
 
         Returns:
-            A list of tasks that can be run (are in RELEASED state).
+            A list of tasks.
         """
-        released_tasks = []
+        tasks = []
         for task in self._task_graph:
-            if task.state == TaskState.RELEASED:
-                released_tasks.append(task)
-        return released_tasks
+            if (task.state == TaskState.RELEASED
+                    or task.state == TaskState.PAUSED
+                    or task.state == TaskState.EVICTED):
+                tasks.append(task)
+        if preemption:
+            if worker_pools:
+                # Adding the tasks placed on the given worker pool.
+                tasks.extend(worker_pools.get_placed_tasks())
+            else:
+                # No worker pool provided. Getting all RUNNING tasks.
+                for task in self._task_graph:
+                    if task.state == TaskState.RUNNING:
+                        tasks.append(task)
+        # TODO: Should also return tasks will be released by time + horizon.
+        return tasks
 
     def release_tasks(self, time: Optional[float] = None) -> Sequence[Task]:
         """Releases the set of tasks that have no dependencies and are thus
