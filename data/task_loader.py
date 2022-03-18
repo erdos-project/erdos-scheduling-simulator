@@ -62,25 +62,24 @@ class TaskLoader(object):
 
         # Create the Jobs from the profile path.
         self._jobs = TaskLoader._TaskLoader__create_jobs(profile_data)
-        self._logger.debug("Loaded {} Jobs from {}".format(
-            len(self._jobs), profile_path))
+        self._logger.debug(
+            f"Loaded {len(self._jobs)} Jobs from {profile_path}")
 
         # Read the DOT file and ensure that we have jobs for all the nodes.
         job_dot_graph = pydot.graph_from_dot_file(graph_path)[0]
-        self._logger.debug("The DOT graph has {} Jobs".format(
-            len(job_dot_graph.get_nodes())))
+        self._logger.debug(
+            f"The DOT graph has {len(job_dot_graph.get_nodes())} Jobs")
         if len(self._jobs) != len(job_dot_graph.get_nodes()):
-            raise ValueError("Mismatch between the Jobs from the DOT graph "
-                             "and the JSON profile. JSON profile had {} jobs "
-                             "and DOT graph had {} jobs.".format(
-                                 len(self._jobs),
-                                 len(job_dot_graph.get_nodes()),
-                             ))
+            raise ValueError(
+                f"Mismatch between the Jobs from the DOT graph and the JSON "
+                f"profile. JSON profile had {len(self._jobs)} jobs and DOT "
+                f"graph had {len(job_dot_graph.get_nodes())} jobs.")
+
         for node in job_dot_graph.get_nodes():
             node_label = node.get_label()
             if node_label not in self._jobs:
-                raise ValueError("{} found in DOT file, "
-                                 "but not in JSON profile.".format(node_label))
+                raise ValueError(
+                    f"{node_label} found in DOT file, but not in JSON.")
 
         # Create the JobGraph from the jobs and the DOT representation.
         self._job_graph = TaskLoader._TaskLoader__create_job_graph(
@@ -103,11 +102,13 @@ class TaskLoader(object):
                                           log_level=_flags.log_level)
         self._tasks = TaskLoader._TaskLoader__create_tasks(
             profile_data, self._jobs, self._resource_requirements,
-            max_timestamp, task_logger, _flags.deadline_variance)
+            max_timestamp, task_logger, _flags.scheduler_runtime,
+            _flags.deadline_variance)
+
         for task in self._tasks:
-            self._logger.debug("Loaded Task from JSON: {}".format(task))
-        self._logger.debug("Loaded {} Tasks from {}".format(
-            len(self._tasks), profile_path))
+            self._logger.debug(f"Loaded Task from JSON: {task}")
+        self._logger.debug(
+            f"Loaded {len(self._tasks)} Tasks from {profile_path}")
         self._grouped_tasks, self._task_graph = TaskLoader.\
             _TaskLoader__create_task_graph(self._tasks, self._job_graph)
         self._logger.debug("Finished creating TaskGraph from loaded tasks.")
@@ -189,6 +190,7 @@ class TaskLoader(object):
                        resources: Mapping[str, Sequence[Resources]],
                        max_timestamp: float = float('inf'),
                        logger: Optional[logging.Logger] = None,
+                       scheduler_runtime: Optional[float] = -1.0,
                        deadline_variance: Optional[float] = 0.0)\
             -> Sequence[Task]:
         """Creates a list of tasks from the given JSON entries.
@@ -204,6 +206,8 @@ class TaskLoader(object):
                 the JSON file.
             logger (`Optional[logging.Logger]`): The logger to pass to each
                 Task to enable logging of its execution.
+            scheduler_runtime (`Optional[float]`): The runtime to be assigned
+                to the scheduler.
             deadline_variance (`Optional[float]`): The % variance to add to
                 the assigned deadline for each task.
 
@@ -215,8 +219,18 @@ class TaskLoader(object):
         for entry in json_entries:
             if entry['args']['timestamp'] > max_timestamp:
                 continue
-            runtime_deadline = utils.fuzz_time(entry['dur'], deadline_variance)
-            deadline = entry['ts'] + runtime_deadline
+
+            if scheduler_runtime == -1:
+                # Scheduler runtime was not specified, fuzz the time according
+                # to the deadline_variance and the given duration.
+                runtime_deadline = utils.fuzz_time(entry['dur'],
+                                                   deadline_variance)
+                deadline = entry['ts'] + runtime_deadline
+            else:
+                # The scheduler runtime was specified, set the deadline
+                # according to the runtime.
+                deadline = entry['ts'] + entry['dur'] + scheduler_runtime + 1.0
+
             tasks.append(
                 Task(
                     name=entry['name'],
@@ -325,7 +339,7 @@ class TaskLoader(object):
         """Logs the statistics from the Tasks loaded by the TaskLoader. """
         for job, tasks in self._grouped_tasks.items():
             # Log the Job name.
-            self._logger.debug("Job: {}".format(job))
+            self._logger.debug(f"Job: {job}")
 
             # Group the tasks by their names.
             tasks_by_task_name = defaultdict(list)
@@ -335,7 +349,7 @@ class TaskLoader(object):
             # For each group, log the required statistics.
             for task_name, _tasks in tasks_by_task_name.items():
                 # Log the task name.
-                self._logger.debug("  Task: {}".format(task_name))
+                self._logger.debug(f"  Task: {task_name}")
 
                 # Log stats about the runtime of the tasks.
                 runtimes = list(map(attrgetter('runtime'), _tasks))
