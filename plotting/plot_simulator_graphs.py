@@ -8,7 +8,7 @@ import numpy as np
 
 from matplotlib.patches import Patch
 
-from data import *
+from data import Plotter
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string('csv_file', '../test.csv',
@@ -36,10 +36,11 @@ plt.rcParams['font.family'] = 'serif'
 axes_fontsize = 32
 
 
-def plot_utilization(plotter, figure_size=(14, 10), bar_width=0.30):
+def plot_utilization(plotter, figure_size=(14, 10), bar_width=1.0):
     # Plotting defaults.
-    hatches = ['//', '--', '**']
-    alphas = np.arange(0.2, 1.2, 0.2)
+    # hatches = ['//', '--', '**']
+    # alphas = np.arange(0.2, 1.2, 0.2)
+    resource_color = {'GPU': 'red', 'CPU': 'green'}
 
     # Worker Pool statistics
     worker_pool_stats = plotter.get_worker_pool_utilizations(FLAGS.csv_file)
@@ -50,7 +51,8 @@ def plot_utilization(plotter, figure_size=(14, 10), bar_width=0.30):
         for resource in stats.resource_utilizations.keys():
             resource_types.add(resource)
 
-    # Calculate the heights of utilization for each resource, after normalization.
+    # Calculate the heights of utilization for each resource, after
+    # normalization.
     resource_used_heights = {
         resource: [
             stat.resource_utilizations[resource][0] /
@@ -59,39 +61,47 @@ def plot_utilization(plotter, figure_size=(14, 10), bar_width=0.30):
         ]
         for resource in resource_types
     }
-    resource_free_heights = {
-        resource: [
-            stat.resource_utilizations[resource][1] /
-            sum(stat.resource_utilizations[resource])
-            for stat in worker_pool_stats
-        ]
-        for resource in resource_types
-    }
-    print(max(resource_used_heights['CPU']))
-    print(max(resource_used_heights['GPU']))
+    # resource_free_heights = {
+    #     resource: [
+    #         stat.resource_utilizations[resource][1] /
+    #         sum(stat.resource_utilizations[resource])
+    #         for stat in worker_pool_stats
+    #     ]
+    #     for resource in resource_types
+    # }
+
+    for resource_type in resource_types:
+        print('Max {} resource utilization {}'.format(
+            resource_type, max(resource_used_heights[resource_type])))
 
     # Plot a histogram with the results.
     fig = plt.figure(figsize=figure_size)
     x_vals = np.arange(1, len(worker_pool_stats) + 1)
-    resource_used_bars = [
+    _ = [
         plt.bar(
             x_vals + bar_width * i,
             resource_used_heights[resource_type],
             width=bar_width,
-            #edgecolor='black',
-            #hatch=hatches[i],
+            # edgecolor='black',
+            # hatch=hatches[i],
             alpha=0.4,
-            color='red',
+            color=resource_color[resource_type],
         ) for i, resource_type in enumerate(resource_types)
     ]
 
-    plt.xlabel('Worker pool utilization at each scheduler invocation',
-               fontsize=axes_fontsize)
+    plt.xlabel('Scheduler run number', fontsize=axes_fontsize)
     plt.ylabel('Normalized utilization', fontsize=axes_fontsize)
     # Set the y limits so we can visualize the legend.
     ax = fig.gca()
     ax.set_ylim(0, 1.01)
     plt.yticks([0, 0.5, 1.0])
+
+    legend_elements = [
+        Patch(facecolor=resource_color[resource_type],
+              label='{}'.format(resource_type))
+        for resource_type in resource_types
+    ]
+    plt.legend(handles=legend_elements, prop={'size': 28}, framealpha=0)
     plt.savefig(FLAGS.utilization_timeline_plot_name, bbox_inches='tight')
 
 
@@ -101,10 +111,11 @@ def plot_scheduler_info(plotter, figure_size=(14, 10)):
     runtimes = list(map(attrgetter('runtime'), scheduler_invocations))
     start_times = list(map(attrgetter('start_time'), scheduler_invocations))
     # Plot a timelapse of the runtime of the scheduler.
-    fig = plt.figure(figsize=figure_size)
-    plt.plot(runtimes, marker='o')
-    plt.xlabel('Timeline', fontsize=axes_fontsize)
-    plt.ylabel('Runtime [ms]', fontsize=axes_fontsize)
+    plt.figure(figsize=figure_size)
+    plt.plot(start_times, runtimes, marker='o')
+    plt.xlim(0, max(start_times))
+    plt.xlabel('Timeline [ms]', fontsize=axes_fontsize)
+    plt.ylabel('Scheduler Runtime [ms]', fontsize=axes_fontsize)
     plt.savefig(FLAGS.scheduler_runtime_timeline_plot_name,
                 bbox_inches='tight')
 
@@ -113,9 +124,10 @@ def plot_scheduler_info(plotter, figure_size=(14, 10)):
     pdf = count / sum(count)
     cdf = np.cumsum(pdf)
 
-    fig = plt.figure(figsize=figure_size)
+    plt.figure(figsize=figure_size)
     plt.plot(bin_count[1:], cdf, label='CDF')
-    plt.xlabel('Runtime [ms]', fontsize=axes_fontsize)
+    plt.xlim(0, max(runtimes))
+    plt.xlabel('Scheduler Runtime [ms]', fontsize=axes_fontsize)
     plt.ylabel('CDF', fontsize=axes_fontsize)
     plt.legend(prop={'size': 28})
     plt.savefig(FLAGS.scheduler_runtime_cdf_plot_name, bbox_inches='tight')
@@ -134,23 +146,23 @@ def plot_task_info(plotter, figure_size=(14, 10)):
     ]
 
     # Plot a histogram with the results.
-    fig = plt.figure(figsize=figure_size)
+    plt.figure(figsize=figure_size)
     x_vals = np.arange(1, len(scheduler_invocations) + 1)
 
-    placed_task_bar = plt.bar(
+    _ = plt.bar(
         x_vals,
         placed_task_heights,
-        #edgecolor='black',
-        #hatch='//',
+        # edgecolor='black',
+        # hatch='//',
         alpha=0.4,
         color='green')
 
-    unplaced_task_bar = plt.bar(
+    _ = plt.bar(
         x_vals,
         unplaced_task_heights,
         bottom=placed_task_heights,
-        #edgecolor='black',
-        #hatch='**',
+        # edgecolor='black',
+        # hatch='**',
         alpha=0.4,
         color='red')
 
@@ -193,7 +205,7 @@ def main(argv):
     figure_size = (14, 10)
     # Load the events from the CSV file into the Plotter class.
     plotter = Plotter(csv_paths=[FLAGS.csv_file])
-    events = plotter._events[FLAGS.csv_file]
+    # events = plotter._events[FLAGS.csv_file]
 
     print('Simulation end time: {}'.format(
         plotter.get_simulator_end_time(FLAGS.csv_file)))
