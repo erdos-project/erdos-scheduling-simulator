@@ -225,14 +225,15 @@ def test_get_schedulable_tasks():
     assert len(task_graph.get_schedulable_tasks(0)) == 0,\
         "Incorrect length of schedulable tasks returned."
     default_task.release(2)
-    assert len(task_graph.get_schedulable_tasks(0)) == 1,\
+    assert len(task_graph.get_schedulable_tasks(2)) == 1,\
         "Incorrect length of schedulable tasks returned."
     child_task.release(3)
-    assert len(task_graph.get_schedulable_tasks(0)) == 2,\
+    assert len(task_graph.get_schedulable_tasks(3)) == 2,\
         "Incorrect length of schedulable tasks returned."
+    default_task.start(3)
     default_task.update_remaining_time(0)
     default_task.finish(4)
-    assert len(task_graph.get_schedulable_tasks(0)) == 1,\
+    assert len(task_graph.get_schedulable_tasks(4)) == 1,\
         "Incorrect length of schedulable tasks returned."
 
 
@@ -281,14 +282,14 @@ def test_task_completion_notification():
         "Incorrect length of released tasks returned."
 
     perception_task.release(2)
-    released_tasks = task_graph.get_schedulable_tasks(0)
+    released_tasks = task_graph.get_schedulable_tasks(2)
     assert len(released_tasks) == 1,\
         "Incorrect length of released tasks returned."
     assert released_tasks[0] == perception_task,\
         "Incorrect task released."
 
     prediction_task.release(2)
-    released_tasks = task_graph.get_schedulable_tasks(0)
+    released_tasks = task_graph.get_schedulable_tasks(2)
     assert len(released_tasks) == 2,\
         "Incorrect length of released tasks returned."
     assert released_tasks[0] == perception_task,\
@@ -301,7 +302,7 @@ def test_task_completion_notification():
     perception_task.update_remaining_time(0)
     perception_task.finish(4)
     task_graph.notify_task_completion(perception_task, 4)
-    released_tasks = task_graph.get_schedulable_tasks(0)
+    released_tasks = task_graph.get_schedulable_tasks(4)
     assert perception_task.is_complete(), "Task was not completed."
     assert len(released_tasks) == 1,\
         "Incorrect length of released tasks returned."
@@ -313,7 +314,7 @@ def test_task_completion_notification():
     prediction_task.update_remaining_time(0)
     prediction_task.finish(4)
     task_graph.notify_task_completion(prediction_task, 4)
-    released_tasks = task_graph.get_schedulable_tasks(0)
+    released_tasks = task_graph.get_schedulable_tasks(4)
     assert prediction_task.is_complete(), "Task was not completed."
     assert len(released_tasks) == 1,\
         "Incorrect length of released tasks returned."
@@ -389,10 +390,6 @@ def test_task_graph_index_failure():
     assert len(task_graph) == 6, "Incorrect length of TaskGraph."
     assert task_graph._max_timestamp == 1,\
         "Incorrect maximum timestamp maintained in the TaskGraph."
-
-    # Slice the TaskGraph.
-    with pytest.raises(ValueError):
-        task_graph[5]
 
 
 def test_task_graph_slice_success():
