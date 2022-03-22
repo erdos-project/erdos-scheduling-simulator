@@ -13,9 +13,6 @@ from schedulers import BaseScheduler
 from workers import WorkerPools
 from workload import TaskGraph, TaskState
 
-# from z3 import If, BitVec, Bool, UGE, ULT, BitVecVal
-
-
 
 class Z3Scheduler(BaseScheduler):
 

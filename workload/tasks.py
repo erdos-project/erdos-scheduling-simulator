@@ -123,7 +123,8 @@ class Task(object):
             `ValueError` if Task is not in `RELEASED`/`PAUSED` state yet.
         """
         if self.state not in (TaskState.RELEASED, TaskState.PAUSED):
-            raise ValueError("Only RELEASED or PAUSED tasks can be started.")
+            raise ValueError(f"Only RELEASED or PAUSED tasks can be started. "
+                             f"Task is in state {self.state}")
         if time is None and self._start_time == -1:
             raise ValueError("Start time should be specified either while "
                              "creating the Task or when starting it.")
@@ -508,7 +509,8 @@ class TaskGraph(object):
         """
         tasks = []
         for task in self._task_graph:
-            if (task.state == TaskState.RELEASED
+            if ((task.state == TaskState.RELEASED
+                 and task.release_time <= time + horizon)
                     or task.state == TaskState.PAUSED
                     or task.state == TaskState.EVICTED):
                 tasks.append(task)
@@ -525,13 +527,11 @@ class TaskGraph(object):
         estimated_completion_time = {}
         # Estimate the completion time of materialized tasks.
         for task in self._task_graph:
-            if task.state == TaskState.RUNNING:
-                estimated_completion_time[task] = (task.start_time +
-                                                   task.remaining_time)
-            elif task.state == TaskState.COMPLETED:
+            if task.state == TaskState.COMPLETED:
                 estimated_completion_time[task] = task.completion_time
             elif task.state in [
-                    TaskState.RELEASED, TaskState.PAUSED, TaskState.EVICTED
+                    TaskState.RUNNING, TaskState.RELEASED, TaskState.PAUSED,
+                    TaskState.EVICTED
             ]:
                 estimated_completion_time[task] = time + task.remaining_time
             else:
@@ -542,11 +542,12 @@ class TaskGraph(object):
         while len(task_queue) > 0:
             task = task_queue.popleft()
             completion_time = estimated_completion_time[task]
-            if completion_time > time + horizon:
-                # No point to visit its children.
-                continue
             children = self.get_children(task)
             for child_task in children:
+                if child_task.state != TaskState.VIRTUAL:
+                    # Can skip the task because we've already set its
+                    # completion time.
+                    continue
                 child_completion_time = (completion_time +
                                          child_task.remaining_time)
                 if (child_task not in estimated_completion_time
