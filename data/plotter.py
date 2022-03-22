@@ -290,10 +290,6 @@ class Plotter(object):
                 missed_deadline_events.append(event)
         return missed_deadline_events
 
-    def plot_scheduler_runtime(self):
-        """ Plots a CDF of the runtime of the scheduler. """
-        pass
-
     def plot_scheduler_invocations(self):
         """Plots the invocation of the scheduler along with the number of tasks
         to schedule and the tasks that were placed and unplaced. """

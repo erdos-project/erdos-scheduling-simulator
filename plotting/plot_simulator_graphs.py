@@ -11,9 +11,11 @@ from data import Plotter
 FLAGS = flags.FLAGS
 flags.DEFINE_string('csv_file', '../test.csv',
                     'CSV file containing experiment logs')
-flags.DEFINE_bool('plot_scheduler_info', True, 'Plot scheduling runtime')
-flags.DEFINE_bool('plot_utilization', True, 'Plot resource utilization')
-flags.DEFINE_bool('plot_task_info', True, 'Plot task placement info')
+flags.DEFINE_bool('plot_scheduler_runtime', False, 'Plot scheduling runtime')
+flags.DEFINE_bool('plot_utilization', False, 'Plot resource utilization')
+flags.DEFINE_bool('plot_task_info', False, 'Plot task placement info')
+flags.DEFINE_bool('plot_task_slack', False, 'Plot task slack')
+flags.DEFINE_bool('plot_task_start_delay', False, 'Plot task start delay')
 flags.DEFINE_string('utilization_timeline_plot_name',
                     'utilization_bar_chart.png',
                     'The filename of the utilization timeline plot')
@@ -26,12 +28,16 @@ flags.DEFINE_string('scheduler_runtime_cdf_plot_name',
 flags.DEFINE_string('task_placement_bar_chart_plot_name',
                     'tasks_placed_bar_chart.png',
                     'The filename of the task placement bar char plot')
+flags.DEFINE_string('task_slack_plot_name', 'task_slack.png',
+                    'The filename of the task slack plot')
+flags.DEFINE_string('task_start_delay_plot_name', 'task_start_delay.png',
+                    'The filename of the task start delay plot')
 
 matplotlib.rcParams.update({'font.size': 16, 'figure.autolayout': True})
 matplotlib.rcParams['xtick.labelsize'] = 26
 matplotlib.rcParams['ytick.labelsize'] = 26
 plt.rcParams['font.family'] = 'serif'
-axes_fontsize = 32
+axes_fontsize = 16
 
 
 def plot_utilization(plotter, figure_size=(14, 10), bar_width=1.0):
@@ -103,7 +109,7 @@ def plot_utilization(plotter, figure_size=(14, 10), bar_width=1.0):
     plt.savefig(FLAGS.utilization_timeline_plot_name, bbox_inches='tight')
 
 
-def plot_scheduler_info(plotter, figure_size=(14, 10)):
+def plot_scheduler_runtime(plotter, figure_size=(14, 10)):
     # Retrieve the runtime of the scheduler invocations.
     scheduler_invocations = plotter.get_scheduler_invocations(FLAGS.csv_file)
     runtimes = list(map(attrgetter('runtime'), scheduler_invocations))
@@ -182,11 +188,26 @@ def plot_task_info(plotter, figure_size=(14, 10)):
     plt.legend(handles=legend_elements, prop={'size': 28}, framealpha=0)
     plt.savefig(FLAGS.task_placement_bar_chart_plot_name, bbox_inches='tight')
 
+
+def plot_task_slack(plotter, figure_size=(14, 10)):
     # Plot a histogram of the slack from the deadline for the tasks.
     tasks = plotter.get_tasks(FLAGS.csv_file)
-
     slack = [task.deadline - task.completion_time for task in tasks]
-    plt.hist(slack, density=True, bins=10)
+    plt.xlim(min(slack), max(slack))
+    plt.xlabel('Task Slack', fontsize=axes_fontsize)
+    plt.ylabel('Relative Frequency', fontsize=axes_fontsize)
+    plt.hist(slack, density=True, bins=100)
+    plt.savefig(FLAGS.task_slack_plot_name, bbox_inches='tight')
+
+
+def plot_task_start_delay(plotter, figure_size=(14, 10)):
+    tasks = plotter.get_tasks(FLAGS.csv_file)
+    start_delay = [task.start_time - task.release_time for task in tasks]
+    plt.xlim(min(start_delay), max(start_delay))
+    plt.xlabel('Task Start Delay', fontsize=axes_fontsize)
+    plt.ylabel('Relative Frequency', fontsize=axes_fontsize)
+    plt.hist(start_delay, density=True, bins=100)
+    plt.savefig(FLAGS.task_start_delay_plot_name, bbox_inches='tight')
 
 
 def task_stats(tasks):
@@ -215,10 +236,14 @@ def main(argv):
 
     if FLAGS.plot_utilization:
         plot_utilization(plotter, figure_size)
-    if FLAGS.plot_scheduler_info:
-        plot_scheduler_info(plotter, figure_size)
+    if FLAGS.plot_scheduler_runtime:
+        plot_scheduler_runtime(plotter, figure_size)
     if FLAGS.plot_task_info:
         plot_task_info(plotter, figure_size)
+    if FLAGS.plot_task_slack:
+        plot_task_slack(plotter, figure_size)
+    if FLAGS.plot_task_start_delay:
+        plot_task_start_delay(plotter, figure_size)
 
 
 if __name__ == '__main__':
