@@ -1,12 +1,12 @@
-import pytest
 from typing import Sequence
 
-from schedulers import BaseScheduler
-from simulator import Event, EventType, EventQueue, Simulator
-from workload import Resource, Resources, TaskGraph, Job, TaskState
-from workers import Worker, WorkerPool
+import pytest
 
+from schedulers import BaseScheduler
+from simulator import Event, EventQueue, EventType, Simulator
 from tests.utils import create_default_task
+from workers import Worker, WorkerPool
+from workload import Job, Resource, Resources, TaskGraph, TaskState
 
 
 class MockScheduler(BaseScheduler):

@@ -1,7 +1,7 @@
-import uuid
 import logging
-from copy import copy
+import uuid
 from collections import defaultdict
+from copy import copy
 from functools import total_ordering
 from typing import Mapping, Optional
 

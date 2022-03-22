@@ -1,7 +1,7 @@
-import uuid
 import logging
-from operator import attrgetter
+import uuid
 from copy import copy, deepcopy
+from operator import attrgetter
 from typing import Optional, Sequence, Type
 
 import utils

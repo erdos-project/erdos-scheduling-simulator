@@ -1,12 +1,10 @@
 import functools
 import pickle
-import time
 import sys
-
+import time
 from typing import Optional
 
 import absl  # noqa: F401
-
 import gurobipy as gp
 
 import utils

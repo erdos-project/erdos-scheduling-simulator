@@ -1,14 +1,14 @@
 import heapq
 from enum import Enum
 from operator import attrgetter
-from typing import Type, Sequence, Optional
+from typing import Optional, Sequence, Type
 
 import absl  # noqa: F401
 
 import utils
-from workers import WorkerPool, WorkerPools
-from workload import JobGraph, TaskGraph, Task, Resource, Resources
 from schedulers import BaseScheduler
+from workers import WorkerPool, WorkerPools
+from workload import JobGraph, Resource, Resources, Task, TaskGraph
 
 
 class EventType(Enum):

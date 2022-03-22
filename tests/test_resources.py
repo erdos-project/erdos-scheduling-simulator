@@ -3,9 +3,8 @@ from copy import copy, deepcopy
 
 import pytest
 
-from workload import Resource, Resources
-
 from tests.utils import create_default_task
+from workload import Resource, Resources
 
 
 def test_resource_construction():

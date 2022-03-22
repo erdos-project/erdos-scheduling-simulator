@@ -1,7 +1,6 @@
 from data import TaskLoader, TaskLoaderJSON, WorkerLoaderJSON
-from workload import Job, Resource, Resources
-
 from tests.test_tasks import create_default_task
+from workload import Job, Resource, Resources
 
 
 def test_create_jobs():

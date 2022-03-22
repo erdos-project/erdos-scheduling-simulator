@@ -1,10 +1,8 @@
 import logging
 import uuid
-
-from collections import deque
+from collections import defaultdict, deque, namedtuple
 from enum import Enum
-from collections import namedtuple, defaultdict
-from typing import Mapping, Sequence, Optional, Union
+from typing import Mapping, Optional, Sequence, Union
 
 import utils
 from workload import Job, Resources

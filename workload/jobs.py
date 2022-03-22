@@ -1,6 +1,6 @@
 import uuid
 from collections import defaultdict
-from typing import Mapping, Sequence, Optional
+from typing import Mapping, Optional, Sequence
 
 
 class Job(object):

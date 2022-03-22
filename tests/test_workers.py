@@ -2,10 +2,9 @@ from copy import copy, deepcopy
 
 import pytest
 
+from tests.utils import create_default_task
 from workers import Worker, WorkerPool
 from workload import Resource, Resources
-
-from tests.utils import create_default_task
 
 
 def test_worker_construction():

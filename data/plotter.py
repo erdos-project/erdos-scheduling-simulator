@@ -1,7 +1,7 @@
 import csv
 import uuid
-from typing import Optional, Sequence, Mapping
-from collections import namedtuple, defaultdict
+from collections import defaultdict, namedtuple
+from typing import Mapping, Optional, Sequence
 
 import absl  # noqa: F401
 

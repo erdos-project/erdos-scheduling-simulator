@@ -1,13 +1,13 @@
 import time
-from operator import attrgetter
 from copy import copy, deepcopy
+from operator import attrgetter
 from typing import Optional, Sequence, Tuple
 
 import absl  # noqa: F401
 
 from schedulers import BaseScheduler
-from workload import Task, TaskGraph
 from workers import WorkerPools
+from workload import Task, TaskGraph
 
 
 class EDFScheduler(BaseScheduler):

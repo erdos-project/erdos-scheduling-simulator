@@ -1,11 +1,9 @@
-from absl import app, flags
-
 from operator import attrgetter
 
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-
+from absl import app, flags
 from matplotlib.patches import Patch
 
 from data import Plotter

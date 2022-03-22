@@ -1,20 +1,20 @@
 import functools
 import pickle
-import time
 import sys
-
-import absl  # noqa: F401
-
+import time
 # from math import ceil, log2
 from typing import Optional
 
-from z3 import Int, Solver, Implies, Or, unsat, Optimize
-# from z3 import If, BitVec, Bool, UGE, ULT, BitVecVal
+import absl  # noqa: F401
+from z3 import Implies, Int, Optimize, Or, Solver, unsat
 
 import utils
 from schedulers import BaseScheduler
 from workers import WorkerPools
 from workload import TaskGraph, TaskState
+
+# from z3 import If, BitVec, Bool, UGE, ULT, BitVecVal
+
 
 
 class Z3Scheduler(BaseScheduler):

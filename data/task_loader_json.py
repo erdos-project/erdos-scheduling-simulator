@@ -3,14 +3,14 @@ import logging
 from collections import defaultdict
 from operator import attrgetter
 from random import choice
-from typing import Sequence, Mapping, Tuple, Optional
+from typing import Mapping, Optional, Sequence, Tuple
 
 import absl  # noqa: F401
 import pydot
 
 import utils
 from data import TaskLoader
-from workload import Job, Task, Resource, Resources, JobGraph, TaskGraph
+from workload import Job, JobGraph, Resource, Resources, Task, TaskGraph
 
 
 class TaskLoaderJSON(object):

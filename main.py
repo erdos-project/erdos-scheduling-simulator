@@ -1,8 +1,8 @@
 from absl import app, flags
 
 import utils
-from data import TaskLoaderBenchmark, TaskLoaderJSON, WorkerLoaderBenchmark, \
-    WorkerLoaderJSON
+from data import (TaskLoaderBenchmark, TaskLoaderJSON, WorkerLoaderBenchmark,
+                  WorkerLoaderJSON)
 from schedulers import EDFScheduler, GurobiScheduler, LSFScheduler, Z3Scheduler
 from simulator import Simulator
 

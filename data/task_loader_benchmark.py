@@ -4,7 +4,7 @@ import absl  # noqa: F401
 
 import utils
 from data import TaskLoader
-from workload import Job, Task, Resource, Resources, JobGraph, TaskGraph
+from workload import Job, JobGraph, Resource, Resources, Task, TaskGraph
 
 
 class TaskLoaderBenchmark(object):

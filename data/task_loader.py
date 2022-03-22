@@ -2,7 +2,7 @@ from collections import defaultdict
 from operator import attrgetter
 from typing import Sequence
 
-from workload import Job, Task, JobGraph, TaskGraph
+from workload import Job, JobGraph, Task, TaskGraph
 
 
 class TaskLoader(object):

@@ -1,9 +1,9 @@
 from logging import raiseExceptions
-from workload import TaskGraph, Resource, Resources
-from schedulers import EDFScheduler, GurobiScheduler, LSFScheduler, Z3Scheduler
-from workers import Worker, WorkerPool, WorkerPools
 
+from schedulers import EDFScheduler, GurobiScheduler, LSFScheduler, Z3Scheduler
 from tests.utils import create_default_task
+from workers import Worker, WorkerPool, WorkerPools
+from workload import Resource, Resources, TaskGraph
 
 
 def test_z3_scheduler_success():

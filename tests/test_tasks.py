@@ -1,8 +1,7 @@
 import pytest
 
-from workload import Job, TaskState, TaskGraph
-
 from tests.utils import create_default_task
+from workload import Job, TaskGraph, TaskState
 
 
 def test_successful_task_creation():

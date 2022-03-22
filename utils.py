@@ -1,6 +1,6 @@
-import random
 import logging
-from typing import Sequence, Optional
+import random
+from typing import Optional, Sequence
 
 import numpy as np
 

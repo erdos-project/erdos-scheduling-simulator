@@ -1,5 +1,5 @@
 import json
-from typing import Optional, Sequence, Mapping, Type
+from typing import Mapping, Optional, Sequence, Type
 
 import absl  # noqa: F401
 
