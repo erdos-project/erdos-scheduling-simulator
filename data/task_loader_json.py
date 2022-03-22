@@ -1,5 +1,6 @@
 import json
 import logging
+import sys
 from collections import defaultdict
 from operator import attrgetter
 from random import choice
@@ -30,7 +31,7 @@ class TaskLoaderJSON(object):
                  graph_path: str,
                  profile_path: str,
                  resource_path: str,
-                 max_timestamp: int = float('inf'),
+                 max_timestamp: int = sys.maxsize,
                  _flags: Optional['absl.flags'] = None):
         # Set up the logger.
         if _flags:
@@ -186,9 +187,9 @@ class TaskLoaderJSON(object):
     def __create_tasks(json_entries: Sequence[Mapping[str, str]],
                        jobs: Mapping[str, Job],
                        resources: Mapping[str, Sequence[Resources]],
-                       max_timestamp: float = float('inf'),
+                       max_timestamp: int = sys.maxsize,
                        logger: Optional[logging.Logger] = None,
-                       deadline_variance: Optional[float] = 0.0)\
+                       deadline_variance: Optional[int] = 0)\
             -> Sequence[Task]:
         """Creates a list of tasks from the given JSON entries.
 
@@ -203,7 +204,7 @@ class TaskLoaderJSON(object):
                 the JSON file.
             logger (`Optional[logging.Logger]`): The logger to pass to each
                 Task to enable logging of its execution.
-            deadline_variance (`Optional[float]`): The % variance to add to
+            deadline_variance (`Optional[int]`): The % variance to add to
                 the assigned deadline for each task.
 
         Returns:
@@ -214,6 +215,7 @@ class TaskLoaderJSON(object):
         for entry in json_entries:
             if entry['args']['timestamp'] > max_timestamp:
                 continue
+            # All times are in microseconds.
             runtime_deadline = utils.fuzz_time(entry['dur'], deadline_variance)
             deadline = entry['ts'] + runtime_deadline
             tasks.append(

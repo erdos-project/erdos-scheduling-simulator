@@ -1,3 +1,5 @@
+import sys
+
 from absl import app, flags
 
 import utils
@@ -34,10 +36,10 @@ flags.DEFINE_bool('stats', False,
                   'Print the statistics from the tasks loaded.')
 
 # Benchmark related flags.
-flags.DEFINE_integer('benchmark_task_runtime', 15,
-                     'Estimated runtime of benchmark tasks.')
-flags.DEFINE_integer('benchmark_task_deadline', 500,
-                     'Deadline of benchmark tasks.')
+flags.DEFINE_integer('benchmark_task_runtime', 15000,
+                     'Estimated runtime of benchmark tasks (in us).')
+flags.DEFINE_integer('benchmark_task_deadline', 500000,
+                     'Deadline of benchmark tasks (in us).')
 flags.DEFINE_integer('benchmark_num_gpus', 2,
                      'Number of GPUs available for benchmarking.')
 flags.DEFINE_integer('benchmark_num_cpus', 10,
@@ -48,14 +50,14 @@ flags.DEFINE_integer('max_timestamp',
                      None,
                      'Maximum timestamp of tasks to load from the JSON file.',
                      short_name="max")
-flags.DEFINE_float(
-    'deadline_variance', 0.0,
+flags.DEFINE_integer(
+    'deadline_variance', 0,
     'The % variance to allocate to the assigned deadline for each task.')
-flags.DEFINE_float(
-    'runtime_variance', 0.0,
+flags.DEFINE_integer(
+    'runtime_variance', 0,
     'The % variance to allocate to the assigned runtime for each task.')
-flags.DEFINE_float(
-    'timestamp_difference', -1.0,
+flags.DEFINE_integer(
+    'timestamp_difference', -1,
     'The difference to keep between the source Jobs of successive timestamps.')
 
 # Scheduler related flags.
@@ -63,11 +65,12 @@ flags.DEFINE_enum('scheduler', 'edf', ['edf', 'lsf', 'gurobi', 'z3'],
                   'The scheduler to use for this execution.')
 flags.DEFINE_bool('preemption', False,
                   'Enable preemption of running tasks in the scheduler.')
-flags.DEFINE_float('scheduler_runtime', -1.0,
-                   'The runtime to assign to each scheduler invocation.')
-flags.DEFINE_float(
-    'scheduler_delay', 1.0,
-    'The delay associated with invoking a scheduler after the '
+flags.DEFINE_integer(
+    'scheduler_runtime', -1,
+    'The runtime (in us) to assign to each scheduler invocation.')
+flags.DEFINE_integer(
+    'scheduler_delay', 1,
+    'The delay (in us) associated with invoking a scheduler after the '
     'release of a Task in the system.')
 flags.DEFINE_enum('ilp_goal', 'max_slack', ['feasibility', 'max_slack'],
                   'Sets the goal of the ILP solver.')
@@ -87,7 +90,7 @@ def main(args):
 
     # Load the data.
     max_timestamp = FLAGS.max_timestamp if FLAGS.max_timestamp is not None\
-        else float('inf')
+        else sys.max_size
     if FLAGS.execution_mode == 'replay':
         task_loader = TaskLoaderJSON(graph_path=FLAGS.graph_path,
                                      profile_path=FLAGS.profile_path,
@@ -103,7 +106,7 @@ def main(args):
             _flags=FLAGS)
 
     # Dilate the time if needed.
-    if FLAGS.timestamp_difference != -1.0:
+    if FLAGS.timestamp_difference != -1:
         task_loader.get_task_graph().dilate(FLAGS.timestamp_difference)
 
     if FLAGS.stats:

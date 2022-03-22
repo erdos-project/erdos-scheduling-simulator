@@ -1,3 +1,4 @@
+import sys
 from typing import Optional, Sequence
 
 import absl  # noqa: F401
@@ -10,10 +11,10 @@ from workload import Job, JobGraph, Resource, Resources, Task, TaskGraph
 class TaskLoaderBenchmark(object):
 
     def __init__(self,
-                 max_timestamp: int = float('inf'),
+                 max_timestamp: int = sys.maxsize,
                  num_jobs: int = 5,
-                 task_runtime: int = 15,
-                 task_deadline: int = 500,
+                 task_runtime: int = 15000,
+                 task_deadline: int = 500000,
                  _flags: Optional['absl.flags'] = None):
         # Set up the logger.
         if _flags:
@@ -37,6 +38,7 @@ class TaskLoaderBenchmark(object):
             else:
                 resource_requirements = Resources(
                     resource_vector={Resource(name="GPU", _id="any"): 1})
+            # All times are in us.
             self._tasks.append(
                 Task(f"{job.name}_task_{index}",
                      job=job,

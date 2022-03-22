@@ -6,8 +6,8 @@ def create_default_task(
     job=Job(name="Perception"),
     resource_requirements=Resources(
         resource_vector={Resource(name="CPU", _id="any"): 1}),
-    runtime=1.0,
-    deadline=10.0,
+    runtime=1,
+    deadline=10,
     timestamp=0,
     release_time=-1,
     start_time=-1,

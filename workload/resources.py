@@ -232,7 +232,7 @@ class Resources(object):
                     f"{task}")
             self.allocate(resource, task, quantity)
 
-    def get_available_quantity(self, resource: Resource) -> int:
+    def get_available_quantity(self, resource: Resource) -> float:
         """Provides the quantity of the available resources of the given type.
 
         If the resource has a specific `id`, then the quantity of that resource
@@ -252,7 +252,7 @@ class Resources(object):
                 resource_quantity += _quantity
         return resource_quantity
 
-    def get_allocated_quantity(self, resource: Resource) -> int:
+    def get_allocated_quantity(self, resource: Resource) -> float:
         """Get the quantity of the given `resource` that has been allocated.
 
         Args:

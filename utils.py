@@ -64,14 +64,14 @@ def setup_csv_logging(name: str, log_file: str) -> logging.Logger:
                          log_level="debug")
 
 
-def fuzz_time(time: float,
-              variance: float,
-              positive: Optional[bool] = True) -> float:
+def fuzz_time(time: int,
+              variance: int,
+              positive: Optional[bool] = True) -> int:
     """Fuzz the given `time` according to the provided `variance`.
 
     Args:
-        time (`float`): The time to fuzz.
-        variance (`float`): The % variance to fuzz `time` by.
+        time (`int`): The time to fuzz.
+        variance (`int`): The % variance to fuzz `time` by.
         positive (`Optional[bool]`): If True, the fuzzing only increases the
             time.
 
@@ -79,21 +79,22 @@ def fuzz_time(time: float,
         The fuzzed time according to the given variance.
     """
     if positive:
-        return random.uniform(time, time + (time * abs(variance) / 100.0))
+        return int(random.uniform(time, time + (time * abs(variance) / 100.0)))
     else:
         return max(
             0,
-            random.uniform(time - (time * abs(variance) / 100.0),
-                           time + (time * abs(variance) / 100.0)))
+            int(
+                random.uniform(time - time * abs(variance) / 100.0,
+                               time + time * abs(variance) / 100.0)))
 
 
-def log_statistics(data: Sequence[float],
+def log_statistics(data: Sequence[int],
                    logger: logging.Logger,
                    offset: Optional[str] = "    "):
     """Logs the required statistics from the given data.
 
     Args:
-        data (`Sequence[float]`): The data to print the statistics from.
+        data (`Sequence[int]`): The data to print the statistics from.
         logger (`logging.Logger`): The logger to use for logging the stats.
         offset (`Optional[str]`): The space offset to use for logging.
     """

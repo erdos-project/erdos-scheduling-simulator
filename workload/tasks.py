@@ -1,4 +1,5 @@
 import logging
+import sys
 import uuid
 from collections import defaultdict, deque, namedtuple
 from enum import Enum
@@ -35,19 +36,19 @@ class Task(object):
         job (`Job`): The job that created this particular task.
         resource_requirements (`Resources`): The set of resources required by
             this task.
-        release_time (`float`): The time at which the task was released by the
-            job.
-        runtime (`float`): The expected runtime of this task.
-        deadline (`float`): The deadline by which the task should complete.
+        release_time (`int`): The time at which the task was released by the
+            job (in us).
+        runtime (`int`): The expected runtime (in us) of this task.
+        deadline (`int`): The deadline by which the task should complete.
         state (`TaskState`): Defines the state of the task.
         timestamp (`int`): The timestamp for the Task (single dimension).
-        start_time (`float`): The time at which the task was started (only
-            available if state != TaskState.RELEASED, -1 otherwise)
-        remaining_time (`float`): The time remaining to finish the completion
-            of the task.
-        completion_time (`float`): The time at which the task completed / was
-            preempted (only available if state is either EVICTED / COMPLETED,
-            -1 otherwise)
+        start_time (`int`): The time (in us) at which the task was started
+            (only available if state != TaskState.RELEASED, -1 otherwise)
+        remaining_time (`int`): The time (in us) remaining to finish the
+            completion of the task.
+        completion_time (`int`): The time (in us) at which the task completed
+            / was preempted (only available if state is either
+            EVICTED / COMPLETED, -1 otherwise)
         _logger(`Optional[logging.Logger]`): The logger to use to log the
             results of the execution.
     """
@@ -56,12 +57,12 @@ class Task(object):
                  name: str,
                  job: Job,
                  resource_requirements: Resources,
-                 runtime: float,
-                 deadline: float,
+                 runtime: int,
+                 deadline: int,
                  timestamp: int = None,
-                 release_time: Optional[float] = -1,
-                 start_time: Optional[float] = -1,
-                 completion_time: Optional[float] = -1,
+                 release_time: Optional[int] = -1,
+                 start_time: Optional[int] = -1,
+                 completion_time: Optional[int] = -1,
                  _logger: Optional[logging.Logger] = None):
         # Set up the logger.
         if _logger:
@@ -94,12 +95,13 @@ class Task(object):
         # ID of the worker on which the task is running.
         self._worker_pool_id = None
 
-    def release(self, time: Optional[float] = None):
+    def release(self, time: Optional[int] = None):
         """Release the task and transition away from the virtual state.
 
         Args:
-            time (`Optional[float]`): The simulation time at which to release
-                the task. If None, should be specified at task construction.
+            time (`Optional[int]`): The simulation time (in us) at which to
+                release the task. If None, should be specified at task
+                construction.
         """
         self._logger.debug(f"Transitioning {self} to {TaskState.RELEASED}")
         if time is None and self._release_time == -1:
@@ -111,15 +113,14 @@ class Task(object):
         self._release_time = time if time is not None else self._release_time
         self._state = TaskState.RELEASED
 
-    def start(self,
-              time: Optional[float] = None,
-              variance: Optional[float] = 0.0):
+    def start(self, time: Optional[int] = None, variance: Optional[int] = 0):
         """Begins the execution of the task at the given simulator time.
 
         Args:
-            time (`Optional[float]`): The simulation time at which to begin the
-                task. If None, should be specified at task construction.
-            variance (`Optional[float]`): The percentage variation to add to
+            time (`Optional[int]`): The simulation time (in us) at which to
+                begin the task. If None, should be specified at task
+                construction.
+            variance (`Optional[int]`): The percentage variation to add to
                 the runtime of the task.
 
         Raises:
@@ -141,12 +142,13 @@ class Task(object):
         self._state = TaskState.RUNNING
         self.update_remaining_time(remaining_time)
 
-    def step(self, current_time: float, step_size: float = 1) -> bool:
+    def step(self, current_time: int, step_size: int = 1) -> bool:
         """Steps the task for the given `step_size` (default 1 time step).
 
         Args:
-            current_time (`float`): The current time of the simulator loop.
-            step_size (`float`): The amount of time for which to step the task.
+            current_time (`in`): The current time of the simulator (in us).
+            step_size (`int`): The amount of time (in us) for which to step
+                the task.
 
         Returns:
             `True` if the task has finished execution, `False` otherwise.
@@ -175,11 +177,12 @@ class Task(object):
                 f"Remaining execution time: {self._remaining_time}")
             return False
 
-    def pause(self, time: float):
+    def pause(self, time: int):
         """Pauses the execution of the task at the given simulation time.
 
         Args:
-            time (`float`): The simulation time at which to pause the task.
+            time (`int`): The simulation time (in us) at which to pause the
+                task.
 
         Raises:
             `ValueError` if task is not RUNNING.
@@ -191,11 +194,12 @@ class Task(object):
         self._paused_times.append(Paused(time, -1))
         self._state = TaskState.PAUSED
 
-    def resume(self, time: float):
+    def resume(self, time: int):
         """Continues the execution of the task at the given simulation time.
 
         Args:
-            time (`float`): The simulation time at which to restart the task.
+            time (`int`): The simulation time (in us) at which to restart the
+                task.
 
         Raises:
             `ValueError` if task is not PAUSED.
@@ -210,13 +214,14 @@ class Task(object):
         self._last_step_time = time
         self._state = TaskState.RUNNING
 
-    def finish(self, time: float):
+    def finish(self, time: int):
         """Completes the execution of the task at the given simulation time.
 
         If the remaining time is not 0, the task is considered to be preempted.
 
         Args:
-            time (`float`): The simulation time at which the task was finished.
+            time (`int`): The simulation time (in us) at which the task was
+                finished.
         """
         if self.state not in [TaskState.RUNNING, TaskState.PAUSED]:
             raise ValueError(
@@ -230,12 +235,13 @@ class Task(object):
         # TODO (Sukrit): We should notify the `Job` of the completion of this
         # particular task, so it can release new tasks to the scheduler.
 
-    def update_remaining_time(self, time: float):
+    def update_remaining_time(self, time: int):
         """Updates the remaining time of the task to simulate any runtime
         variabilities.
 
         Args:
-            time (`float`): The new remaining time to update the task with.
+            time (`int`): The new remaining time (in us) to update the task
+                with.
 
         Raises:
             `ValueError` if the task is COMPLETED / EVICTED, or time < 0.
@@ -248,11 +254,12 @@ class Task(object):
                              "remaining time.")
         self._remaining_time = time
 
-    def update_deadline(self, new_deadline: float):
+    def update_deadline(self, new_deadline: int):
         """Updates the deadline of the task to simulate any dynamic deadlines.
 
         Args:
-            new_deadline (`float`): The new deadline to update the task with.
+            new_deadline (`int`): The new deadline (in us) to update the task
+                with.
 
         Raises:
             `ValueError` if the new_deadline < 0.
@@ -378,7 +385,7 @@ class TaskGraph(object):
     def __init__(self, tasks: Optional[Mapping[Task, Sequence[Task]]] = {}):
         self._task_graph = defaultdict(list)
         self.__parent_task_graph = defaultdict(list)
-        self._max_timestamp = float('-inf')
+        self._max_timestamp = -sys.maxsize
 
         # Maintain the child and parent abstractions from the given taskset.
         for task, children in tasks.items():
@@ -401,7 +408,7 @@ class TaskGraph(object):
             for child in _children:
                 self.add_child(task, child)
 
-    def notify_task_completion(self, task: Task, finish_time: float) ->\
+    def notify_task_completion(self, task: Task, finish_time: int) ->\
             Sequence[Task]:
         """Notify the completion of the task.
 
@@ -410,7 +417,7 @@ class TaskGraph(object):
 
         Args:
             task (`Task`): The task that has finished execution.
-            finish_time (`float`): The time at which the task finished.
+            finish_time (`int`): The time (in us) at which the task finished.
 
         Returns:
             The set of tasks released by the completion of this task.
@@ -501,8 +508,8 @@ class TaskGraph(object):
 
     def get_schedulable_tasks(
             self,
-            time: float,
-            horizon: float = 0,
+            time: int,
+            horizon: int = 0,
             preemption: bool = False,
             worker_pools: 'WorkerPools' = None  # noqa: F821
     ) -> Sequence[Task]:
@@ -571,14 +578,14 @@ class TaskGraph(object):
                     tasks.append(task)
         return tasks
 
-    def release_tasks(self, time: Optional[float] = None) -> Sequence[Task]:
+    def release_tasks(self, time: Optional[int] = None) -> Sequence[Task]:
         """Releases the set of tasks that have no dependencies and are thus
         available to run.
 
         Args:
-            time (`Optional[float]`): The simulation time at which to release
-                the task. If None, the time should have been specified at task
-                construction time.
+            time (`Optional[int]`): The simulation time (inus) at which to
+                release the task. If None, the time should have been specified
+                at task construction time.
 
         Returns:
             A list of tasks that can be run (are in RELEASED state).
@@ -687,7 +694,7 @@ class TaskGraph(object):
         """
         return list(filter(self.is_source_task, self._task_graph.keys()))
 
-    def dilate(self, difference: float):
+    def dilate(self, difference: int):
         """Dilate the time between occurrence of events of successive
         logical timestamps according to the given difference.
 
@@ -701,7 +708,7 @@ class TaskGraph(object):
         time of the actual tasks.
 
         Args:
-            difference (`float`): The time difference to keep between the
+            difference (`int`): The time difference (in us) to keep between the
                 occurrence of two source Tasks of different timestamps.
         """
         for parent_graph, child_graph in zip(self[0:], self[1:]):

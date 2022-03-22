@@ -14,8 +14,8 @@ def test_successful_task_creation():
 def test_successful_task_release():
     """ Test that release() transitions the task to a RELEASED state. """
     default_task = create_default_task()
-    default_task.release(2.0)
-    assert default_task.release_time == 2.0, "Incorrect release time for Task."
+    default_task.release(2)
+    assert default_task.release_time == 2, "Incorrect release time for Task."
     assert default_task.state == TaskState.RELEASED,\
         "Incorrect state for Task."
 
@@ -29,9 +29,9 @@ def test_failed_task_release_without_release_time():
 
 def test_successful_task_release_without_release_time():
     """ Test that a task release without release time succeeds. """
-    default_task = create_default_task(release_time=2.0)
+    default_task = create_default_task(release_time=2)
     default_task.release()
-    assert default_task.release_time == 2.0, "Incorrect release time for Task."
+    assert default_task.release_time == 2, "Incorrect release time for Task."
     assert default_task.state == TaskState.RELEASED,\
         "Incorrect state for Task."
 
@@ -39,11 +39,11 @@ def test_successful_task_release_without_release_time():
 def test_successful_task_start():
     """ Test that a task is successfully started. """
     default_task = create_default_task()
-    default_task.release(2.0)
-    default_task.start(3.0)
-    assert default_task.start_time == 3.0, "Incorrect start time for Task."
+    default_task.release(2)
+    default_task.start(3)
+    assert default_task.start_time == 3, "Incorrect start time for Task."
     assert default_task.state == TaskState.RUNNING, "Incorrect state for Task."
-    assert default_task._remaining_time == 1.0,\
+    assert default_task._remaining_time == 1,\
         "Incorrect remaining time for Task."
 
 
@@ -51,16 +51,16 @@ def test_failed_task_start():
     """ Test that a task fails to start from an incorrect state."""
     default_task = create_default_task()
     with pytest.raises(ValueError):
-        default_task.start(3.0)
+        default_task.start(3)
 
 
 def test_task_runtime_variability():
     """ Test that the runtime of the task can be varied upon its start. """
     default_task = create_default_task()
-    default_task.release(2.0)
-    assert default_task.remaining_time == 1.0,\
+    default_task.release(2)
+    assert default_task.remaining_time == 1,\
         "Incorrect initial remaining time for the Task."
-    default_task.start(3.0, variance=50.0)
+    default_task.start(3, variance=50)
     assert 0 <= default_task.remaining_time <= 1.50,\
         "Incorrect remaining time for the Task."
 
@@ -68,9 +68,9 @@ def test_task_runtime_variability():
 def test_successful_task_pause():
     """ Test that a task can be paused successfully. """
     default_task = create_default_task()
-    default_task.release(2.0)
-    default_task.start(3.0)
-    default_task.pause(4.0)
+    default_task.release(2)
+    default_task.start(3)
+    default_task.pause(4)
     assert default_task.state == TaskState.PAUSED, "Incorrect state for Task."
 
 
@@ -78,35 +78,35 @@ def test_failed_task_pause():
     """ Test that a Task cannot be PAUSED from a non-RUNNING state. """
     default_task = create_default_task()
     with pytest.raises(ValueError):
-        default_task.pause(4.0)
+        default_task.pause(4)
 
 
 def test_successful_task_resume():
     """ Test that a task can be resumed successfully. """
     default_task = create_default_task()
-    default_task.release(2.0)
-    default_task.start(3.0)
-    default_task.pause(4.0)
-    default_task.resume(5.0)
+    default_task.release(2)
+    default_task.start(3)
+    default_task.pause(4)
+    default_task.resume(5)
     assert default_task.state == TaskState.RUNNING, "Incorrect state for Task."
 
 
 def test_failed_task_resume():
     """ Test that a Task cannot be resumed from a non-paused state. """
     default_task = create_default_task()
-    default_task.release(2.0)
-    default_task.start(3.0)
+    default_task.release(2)
+    default_task.start(3)
     with pytest.raises(ValueError):
-        default_task.resume(4.0)
+        default_task.resume(4)
 
 
 def test_task_completion():
     """ Test that a Task can be completed successfully. """
     default_task = create_default_task()
-    default_task.release(2.0)
-    default_task.start(3.0)
+    default_task.release(2)
+    default_task.start(3)
     default_task._remaining_time = 0
-    default_task.finish(4.0)
+    default_task.finish(4)
     assert default_task.state == TaskState.COMPLETED,\
         "Incorrect state for Task."
 
@@ -114,49 +114,49 @@ def test_task_completion():
 def test_task_eviction():
     """ Test that a Task can be evicted successfully. """
     default_task = create_default_task()
-    default_task.release(2.0)
-    default_task.start(3.0)
-    default_task.finish(4.0)
+    default_task.release(2)
+    default_task.start(3)
+    default_task.finish(4)
     assert default_task.state == TaskState.EVICTED,\
         "Incorrect state for Task."
 
 
 def test_task_step_one():
     """ Test that a step() reduces the available time for a Task. """
-    default_task = create_default_task(runtime=2.0)
-    default_task.release(2.0)
-    default_task.start(3.0)
-    assert default_task._remaining_time == 2.0,\
+    default_task = create_default_task(runtime=2)
+    default_task.release(2)
+    default_task.start(3)
+    assert default_task._remaining_time == 2,\
         "Incorrect remaining time for the Task."
-    default_task.step(3.0)
-    assert default_task._remaining_time == 1.0,\
+    default_task.step(3)
+    assert default_task._remaining_time == 1,\
         "Incorrect remaining time for the Task."
-    assert default_task._last_step_time == 4.0,\
+    assert default_task._last_step_time == 4,\
         "Incorrect last step time in the Task."
-    default_task.step(4.0)
-    assert default_task._remaining_time == 0.0,\
+    default_task.step(4)
+    assert default_task._remaining_time == 0,\
         "Incorrect remaining time for the Task."
     assert default_task.is_complete(), "Expected the Task to be finished."
 
 
 def test_task_step_two():
     """ Test that a step() works correctly with different step sizes. """
-    default_task = create_default_task(runtime=10.0)
-    default_task.release(2.0)
-    default_task.start(5.0)
-    assert default_task._remaining_time == 10.0,\
+    default_task = create_default_task(runtime=10)
+    default_task.release(2)
+    default_task.start(5)
+    assert default_task._remaining_time == 10,\
         "Incorrect remaining time for the Task."
-    default_task.step(3.0, 1.0)
-    assert default_task._remaining_time == 10.0,\
+    default_task.step(3, 1)
+    assert default_task._remaining_time == 10,\
         "Incorrect remaining time for the Task."
-    default_task.step(4.0, 2.0)
-    assert default_task._remaining_time == 9.0,\
+    default_task.step(4, 2)
+    assert default_task._remaining_time == 9,\
         "Incorrect remaining time for the Task."
-    default_task.step(6.0, 3.0)
-    assert default_task._remaining_time == 6.0,\
+    default_task.step(6, 3)
+    assert default_task._remaining_time == 6,\
         "Incorrect remaining time for the Task."
-    default_task.step(9.0, 9.0)
-    assert default_task._remaining_time == 0.0,\
+    default_task.step(9, 9)
+    assert default_task._remaining_time == 0,\
         "Incorrect remaining time for the Task."
     assert default_task.is_complete(), "Expected the Task to be finished."
 
@@ -164,10 +164,10 @@ def test_task_step_two():
 def test_fail_step_non_running():
     """ Test that the step() method fails when the task is not running. """
     default_task = create_default_task()
-    default_task.release(2.0)
-    default_task.start(3.0)
-    default_task.pause(4.0)
-    assert not default_task.step(5.0),\
+    default_task.release(2)
+    default_task.start(3)
+    default_task.pause(4)
+    assert not default_task.step(5),\
         "Task should not be completed from a PAUSED state."
 
 
@@ -224,14 +224,14 @@ def test_get_schedulable_tasks():
     task_graph.add_task(default_task, [child_task])
     assert len(task_graph.get_schedulable_tasks(0)) == 0,\
         "Incorrect length of schedulable tasks returned."
-    default_task.release(2.0)
+    default_task.release(2)
     assert len(task_graph.get_schedulable_tasks(0)) == 1,\
         "Incorrect length of schedulable tasks returned."
-    child_task.release(3.0)
+    child_task.release(3)
     assert len(task_graph.get_schedulable_tasks(0)) == 2,\
         "Incorrect length of schedulable tasks returned."
-    default_task.update_remaining_time(0.0)
-    default_task.finish(4.0)
+    default_task.update_remaining_time(0)
+    default_task.finish(4)
     assert len(task_graph.get_schedulable_tasks(0)) == 1,\
         "Incorrect length of schedulable tasks returned."
 
@@ -250,7 +250,7 @@ def test_release_tasks():
         "Incorrect length of released tasks returned."
 
     # Release all available tasks.
-    released_tasks = task_graph.release_tasks(1.0)
+    released_tasks = task_graph.release_tasks(1)
     assert len(released_tasks) == 2, "Incorrect number of released tasks."
     assert released_tasks == [perception_task, localization_task],\
         "Incorrect tasks released by the API."
@@ -280,14 +280,14 @@ def test_task_completion_notification():
     assert len(released_tasks) == 0,\
         "Incorrect length of released tasks returned."
 
-    perception_task.release(2.0)
+    perception_task.release(2)
     released_tasks = task_graph.get_schedulable_tasks(0)
     assert len(released_tasks) == 1,\
         "Incorrect length of released tasks returned."
     assert released_tasks[0] == perception_task,\
         "Incorrect task released."
 
-    prediction_task.release(2.0)
+    prediction_task.release(2)
     released_tasks = task_graph.get_schedulable_tasks(0)
     assert len(released_tasks) == 2,\
         "Incorrect length of released tasks returned."
@@ -297,10 +297,10 @@ def test_task_completion_notification():
         "Incorrect task released."
 
     # Run and finish the execution of Perception.
-    perception_task.start(3.0)
+    perception_task.start(3)
     perception_task.update_remaining_time(0)
-    perception_task.finish(4.0)
-    task_graph.notify_task_completion(perception_task, 4.0)
+    perception_task.finish(4)
+    task_graph.notify_task_completion(perception_task, 4)
     released_tasks = task_graph.get_schedulable_tasks(0)
     assert perception_task.is_complete(), "Task was not completed."
     assert len(released_tasks) == 1,\
@@ -309,10 +309,10 @@ def test_task_completion_notification():
         "Incorrect task released."
 
     # Run and finish the execution of Prediction.
-    prediction_task.start(3.0)
+    prediction_task.start(3)
     prediction_task.update_remaining_time(0)
-    prediction_task.finish(4.0)
-    task_graph.notify_task_completion(prediction_task, 4.0)
+    prediction_task.finish(4)
+    task_graph.notify_task_completion(prediction_task, 4)
     released_tasks = task_graph.get_schedulable_tasks(0)
     assert prediction_task.is_complete(), "Task was not completed."
     assert len(released_tasks) == 1,\
@@ -392,7 +392,7 @@ def test_task_graph_index_failure():
 
     # Slice the TaskGraph.
     with pytest.raises(ValueError):
-        task_graph[5.0]
+        task_graph[5]
 
 
 def test_task_graph_slice_success():
@@ -579,35 +579,35 @@ def test_task_time_dilation():
     localization_task_0 = create_default_task(name="Localization_Watermark",
                                               job=Job(name="Localization"),
                                               timestamp=0,
-                                              release_time=5.0)
+                                              release_time=5)
     localization_task_1 = create_default_task(name="Localization_Watermark",
                                               job=Job(name="Localization"),
                                               timestamp=1,
-                                              release_time=120.0)
+                                              release_time=120)
     perception_task_0 = create_default_task(name="Perception_Watermark",
                                             job=Job(name="Perception"),
                                             timestamp=0,
-                                            release_time=0.0)
+                                            release_time=0)
     perception_task_1 = create_default_task(name="Perception_Watermark",
                                             job=Job(name="Perception"),
                                             timestamp=1,
-                                            release_time=100.0)
+                                            release_time=100)
     prediction_task_0 = create_default_task(name="Prediction_Watermark",
                                             job=Job(name="Prediction"),
                                             timestamp=0,
-                                            release_time=10.0)
+                                            release_time=10)
     prediction_task_1 = create_default_task(name="Prediction_Watermark",
                                             job=Job(name="Prediction"),
                                             timestamp=1,
-                                            release_time=150.0)
+                                            release_time=150)
     planning_task_0 = create_default_task(name="Planning_Watermark",
                                           job=Job(name="Planning"),
                                           timestamp=0,
-                                          release_time=50.0)
+                                          release_time=50)
     planning_task_1 = create_default_task(name="Planning_Watermark",
                                           job=Job(name="Planning"),
                                           timestamp=1,
-                                          release_time=190.0)
+                                          release_time=190)
 
     # Create the TaskGraph.
     task_graph = TaskGraph(
@@ -626,20 +626,20 @@ def test_task_time_dilation():
         })
 
     # Check that time dilation works correctly.
-    task_graph.dilate(50.0)
-    assert localization_task_0.release_time == 5.0,\
+    task_graph.dilate(50)
+    assert localization_task_0.release_time == 5,\
         "Incorrect release time for Localization task [timestamp=0]"
-    assert localization_task_1.release_time == 55.0,\
+    assert localization_task_1.release_time == 55,\
         "Incorrect release time for Localization task [timestamp=1]"
-    assert perception_task_0.release_time == 0.0,\
+    assert perception_task_0.release_time == 0,\
         "Incorrect release time for Perception task [timestamp=0]"
-    assert perception_task_1.release_time == 50.0,\
+    assert perception_task_1.release_time == 50,\
         "Incorrect release time for Perception task [timestamp=1]"
-    assert prediction_task_0.release_time == 10.0,\
+    assert prediction_task_0.release_time == 10,\
         "Incorrect release time for Prediction task [timestamp=0]"
     assert prediction_task_1.release_time == 92.5,\
         "Incorrect release time for Prediction task [timestamp=1]"
-    assert planning_task_0.release_time == 50.0,\
+    assert planning_task_0.release_time == 50,\
         "Incorrect release time for Planning task [timestamp=0]"
     assert planning_task_1.release_time == 132.5,\
         "Incorrect release time for Planning task [timestamp=1]"

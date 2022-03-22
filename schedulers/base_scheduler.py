@@ -10,16 +10,16 @@ class BaseScheduler(object):
 
     def schedule(
         self,
-        sim_time: float,
+        sim_time: int,
         task_graph: TaskGraph,
         worker_pools: 'WorkerPools',  # noqa: F821
         _flags: Optional['absl.flags'] = None
-    ) -> (float, Sequence[Tuple[Task, str]]):
+    ) -> (int, Sequence[Tuple[Task, str]]):
         """ Abstract method to be implemented by derived classes to allow the
         scheduling of tasks.
 
         Args:
-            sim_time (`float`): The time at which the scheduler is invoked.
+            sim_time (`int`): The time in us at which the scheduler is invoked.
             task_graph (`TaskGraph`): The state of the TaskGraph at this
                 invocation including the future set of VIRTUAL tasks.
             worker_pools (`WorkerPools`): The set of worker pools to
@@ -27,7 +27,7 @@ class BaseScheduler(object):
 
         Returns:
             (scheduler_runtime, task_placement) where `scheduler_runtime` is a
-            `float` depicting the runtime of the scheduler, and
+            `int` depicting the runtime of the scheduler (in us), and
             `task_placement` is a sequence of tuples depicting the
             (Task, ID of the Worker Pool where the task should be placed).
         """

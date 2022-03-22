@@ -178,9 +178,9 @@ def test_worker_preempt_task_success():
         "Incorrect number of GPU resources available."
 
     # Run the task.
-    task.release(1.0)
-    task.start(2.0)
-    task.pause(3.0)
+    task.release(1)
+    task.start(2)
+    task.pause(3)
 
     # Preempt the task and ensure correct resources.
     worker.preempt_task(task)
@@ -205,25 +205,25 @@ def test_worker_step_tasks():
     )
     task_one = create_default_task(resource_requirements=Resources(
         resource_vector={Resource(name="CPU", _id="any"): 1}),
-                                   runtime=3.0)
+                                   runtime=3)
     task_two = create_default_task(resource_requirements=Resources(
         resource_vector={Resource(name="GPU", _id="any"): 1}),
-                                   runtime=3.0)
+                                   runtime=3)
 
     # Place the tasks.
     worker.place_task(task_one)
     worker.place_task(task_two)
 
     # Release and start the tasks.
-    task_one.release(2.0)
-    task_one.start(3.0)
-    task_two.release(2.0)
-    task_two.start(3.0)
+    task_one.release(2)
+    task_one.start(3)
+    task_two.release(2)
+    task_two.start(3)
 
     # Step through the Worker's tasks.
-    worker.step(3.0)
-    worker.step(4.0)
-    worker.step(5.0)
+    worker.step(3)
+    worker.step(4)
+    worker.step(5)
 
     # Ensure that the tasks are finished.
     assert task_one.is_complete(), "Task should have been completed."
@@ -351,7 +351,7 @@ def test_worker_pool_step():
     task_one = create_default_task(
         resource_requirements=Resources(
             resource_vector={Resource(name="CPU", _id="any"): 1}),
-        runtime=3.0,
+        runtime=3,
     )
     worker_pool.place_task(task_one)
 
@@ -362,7 +362,7 @@ def test_worker_pool_step():
     task_two = create_default_task(
         resource_requirements=Resources(
             resource_vector={Resource(name="CPU", _id="any"): 1}),
-        runtime=5.0,
+        runtime=5,
     )
     worker_pool.place_task(task_two)
 
@@ -370,23 +370,23 @@ def test_worker_pool_step():
         "Incorrect number of placed tasks."
 
     # Release and start the two tasks.
-    task_one.release(2.0)
-    task_two.release(2.0)
-    task_one.start(3.0)
-    task_two.start(3.0)
+    task_one.release(2)
+    task_two.release(2)
+    task_one.start(3)
+    task_two.start(3)
 
     # Step through the WorkerPool and ensure that the correct completed tasks
     # are returned at the correct simulation time.
-    completed_tasks = worker_pool.step(3.0)
+    completed_tasks = worker_pool.step(3)
     assert len(completed_tasks) == 0, "Incorrect number of completed tasks."
-    completed_tasks = worker_pool.step(4.0)
+    completed_tasks = worker_pool.step(4)
     assert len(completed_tasks) == 0, "Incorrect number of completed tasks."
-    completed_tasks = worker_pool.step(5.0)
+    completed_tasks = worker_pool.step(5)
     assert len(completed_tasks) == 1, "Incorrect number of completed tasks."
     assert completed_tasks[0] == task_one, "Incorrect completed task."
-    completed_tasks = worker_pool.step(6.0)
+    completed_tasks = worker_pool.step(6)
     assert len(completed_tasks) == 0, "Incorrect number of completed tasks."
-    completed_tasks = worker_pool.step(7.0)
+    completed_tasks = worker_pool.step(7)
     assert len(completed_tasks) == 1, "Incorrect number of completed tasks."
     assert completed_tasks[0] == task_two, "Incorrect completed task."
 
@@ -416,7 +416,7 @@ def test_copy_worker_pool():
     task_one = create_default_task(
         resource_requirements=Resources(
             resource_vector={Resource(name="CPU", _id="any"): 1}),
-        runtime=3.0,
+        runtime=3,
     )
     worker_pool.place_task(task_one)
 
@@ -462,7 +462,7 @@ def test_deepcopy_worker_pool():
     task_one = create_default_task(
         resource_requirements=Resources(
             resource_vector={Resource(name="CPU", _id="any"): 1}),
-        runtime=3.0,
+        runtime=3,
     )
     worker_pool.place_task(task_one)
 

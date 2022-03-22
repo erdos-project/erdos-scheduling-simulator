@@ -94,14 +94,14 @@ class Worker(object):
             placed_tasks.append(task)
         return placed_tasks
 
-    def step(self, current_time: float, step_size: float = 1.0) -> \
+    def step(self, current_time: int, step_size: int = 1) -> \
             Sequence[Task]:
         """Steps all the tasks of this `Worker` by the given `step_size`.
 
         Args:
-            current_time (`float`): The current time of the simulator loop.
-            step_size (`float`): The amount of time for which to step the
-                tasks.
+            current_time (`int`): The current time of the simulator (in us).
+            step_size (`int`): The amount of time for which to step the
+                tasks (in us).
 
         Returns:
             A set of tasks that have been completed.
@@ -257,10 +257,10 @@ class WorkerPool(object):
         placement = None
         if self._scheduler is not None:
             # If a scheduler was provided, get a task placement from it.
-            runtime, placement = self._scheduler.schedule(
+            runtime_us, placement = self._scheduler.schedule(
                 TaskGraph(tasks={task: []})[task], WorkerPools(self._workers))
             # Add the runtime to the task start time.
-            task._start_time += runtime
+            task._start_time += runtime_us
         else:
             # If there was no scheduler, find the first worker that can
             # accomodate the task given its resource requirements.
@@ -300,14 +300,14 @@ class WorkerPool(object):
         """
         return list(self._placed_tasks.keys())
 
-    def step(self, current_time: float, step_size: float = 1.0) ->\
+    def step(self, current_time: int, step_size: int = 1) ->\
             Sequence[Task]:
         """Steps all the tasks of this `WorkerPool` by the given `step_size`.
 
         Args:
-            current_time (`float`): The current time of the simulator loop.
-            step_size (`float`): The amount of time for which to step the
-                workers.
+            current_time (`int`): The current time of the simulator  (in us).
+            step_size (`int`): The amount of time for which to step the
+                workers (in us).
 
         Returns:
             The set of tasks that have finished execution.
@@ -339,14 +339,14 @@ class WorkerPool(object):
             worker.can_accomodate_task(task)
             for worker in self._workers.values())
 
-    def log_utilization(self, csv_logger: logging.Logger, sim_time: float):
+    def log_utilization(self, csv_logger: logging.Logger, sim_time: int):
         """Logs the utilization of the resources of a particular WorkerPool.
 
         Args:
             csv_logger (`logging.Logger`): The logger to utilize to log the
                 resource utilization.
-            sim_time (`float`): The simulation time at which the utilization
-                is logged.
+            sim_time (`int`): The simulation time at which the utilization
+                is logged (in us).
         """
         # Add the resources of all the workers in this pool.
         final_resources = Resources(_logger=logging.getLogger('dummy'))

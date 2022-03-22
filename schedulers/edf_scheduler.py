@@ -16,21 +16,21 @@ class EDFScheduler(BaseScheduler):
     Args:
         preemptive (`bool`): If `True`, the EDF scheduler can preempt the tasks
             that are currently running.
-        runtime (`float`): The runtime to return to the simulator. If -1, the
-            scheduler returns the actual runtime.
+        runtime (`int`): The runtime to return to the simulator (in us). If -1,
+            the scheduler returns the actual runtime.
     """
 
     def __init__(self,
                  preemptive: bool = False,
-                 runtime: float = -1.0,
+                 runtime: int = -1,
                  _flags: Optional['absl.flags'] = None):
         self._preemptive = preemptive
         self._runtime = runtime
         self._scheduling_horizon = 0
 
     def schedule(
-            self, sim_time: float, task_graph: TaskGraph,
-            worker_pools: WorkerPools) -> (float, Sequence[Tuple[Task, str]]):
+            self, sim_time: int, task_graph: TaskGraph,
+            worker_pools: WorkerPools) -> (int, Sequence[Tuple[Task, str]]):
         """Implements the BaseScheduler's schedule() method using the EDF
         algorithm for scheduling the released tasks across the worker_pools.
         """
@@ -71,9 +71,10 @@ class EDFScheduler(BaseScheduler):
                 placements.append((task, None))
 
         end_time = time.time()
+        self._runtime = int((end_time - start_time) *
+                            1000000) if self.runtime == -1 else self.runtime
 
-        return (end_time - start_time if self.runtime == -1 else self.runtime,
-                placements)
+        return self.runtime, placements
 
     @property
     def preemptive(self):

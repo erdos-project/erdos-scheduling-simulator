@@ -14,13 +14,13 @@ class FIFOScheduler(BaseScheduler):
     """Implements the FIFO scheduling algorithm.
 
     Args:
-        runtime (`float`): The runtime to return to the simulator. If -1, the
-            scheduler returns the actual runtime.
+        runtime (`int`): The runtime to return to the simulator (in us). If -1,
+            the scheduler returns the actual runtime.
     """
 
     def __init__(self,
                  preemptive: bool = False,
-                 runtime: float = -1.0,
+                 runtime: int = -1,
                  _flags: Optional['absl.flags'] = None):
         assert not preemptive, "FIFO scheduler is not preemptive"
         self._preemptive = preemptive
@@ -28,8 +28,8 @@ class FIFOScheduler(BaseScheduler):
         self._scheduling_horizon = 0
 
     def schedule(
-            self, sim_time: float, task_graph: TaskGraph,
-            worker_pools: WorkerPools) -> (float, Sequence[Tuple[Task, str]]):
+            self, sim_time: int, task_graph: TaskGraph,
+            worker_pools: WorkerPools) -> (int, Sequence[Tuple[Task, str]]):
         tasks = task_graph.get_schedulable_tasks(sim_time, 0, self.preemptive,
                                                  worker_pools)
         # Create a virtual WorkerPool set to try scheduling decisions on.
@@ -53,8 +53,10 @@ class FIFOScheduler(BaseScheduler):
                 placements.append((task, None))
 
         end_time = time.time()
-        return (end_time - start_time if self.runtime == -1 else self.runtime,
-                placements)
+        self._runtime = int((end_time - start_time) *
+                            1000000) if self.runtime == -1 else self.runtime
+
+        return self.runtime, placements
 
     @property
     def preemptive(self):

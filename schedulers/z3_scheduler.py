@@ -18,10 +18,10 @@ class Z3Scheduler(BaseScheduler):
 
     def __init__(self,
                  preemptive: bool = False,
-                 runtime: float = -1.0,
+                 runtime: int = -1,
                  goal: str = 'max_slack',
                  enforce_deadlines: bool = True,
-                 scheduling_horizon: float = 0,
+                 scheduling_horizon: int = 0,
                  _flags: Optional['absl.flags'] = None):
         """Constructs a Z3 scheduler.
 
@@ -109,7 +109,7 @@ class Z3Scheduler(BaseScheduler):
                         self._task_ids_to_placement[t1_id] ==
                         self._task_ids_to_placement[t2_id], Or(disjoint)))
 
-    def schedule(self, sim_time: float, task_graph: TaskGraph,
+    def schedule(self, sim_time: int, task_graph: TaskGraph,
                  worker_pools: WorkerPools):
 
         def sum_costs(lst):
@@ -151,8 +151,8 @@ class Z3Scheduler(BaseScheduler):
 
         schedulable = s.check()
         scheduler_end_time = time.time()
-        self._runtime = scheduler_end_time - scheduler_start_time\
-            if self.runtime == -1 else self.runtime
+        self._runtime = int((scheduler_end_time - scheduler_start_time) *
+                            1000000) if self.runtime == -1 else self.runtime
 
         # if self._flags.ilp_log_dir is not None:
         #     log_dir = self._flags.ilp_log_dir + f"{self._goal}.smt"

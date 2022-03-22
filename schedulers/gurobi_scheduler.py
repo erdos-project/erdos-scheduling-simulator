@@ -17,10 +17,10 @@ class GurobiScheduler(BaseScheduler):
 
     def __init__(self,
                  preemptive: bool = False,
-                 runtime: float = -1.0,
+                 runtime: int = -1,
                  goal: str = 'max_slack',
                  enforce_deadlines: bool = True,
-                 scheduling_horizon: float = 0,
+                 scheduling_horizon: int = 0,
                  _flags: Optional['absl.flags'] = None):
         """Constructs a Gurobi scheduler.
 
@@ -126,7 +126,7 @@ class GurobiScheduler(BaseScheduler):
                             task2.remaining_time - (1 - alpha) * max_deadline -
                             (1 - beta) * max_deadline)
 
-    def schedule(self, sim_time: float, task_graph: TaskGraph,
+    def schedule(self, sim_time: int, task_graph: TaskGraph,
                  worker_pools: WorkerPools):
 
         def sum_costs(lst):
@@ -171,8 +171,8 @@ class GurobiScheduler(BaseScheduler):
                        gp.GRB.MAXIMIZE)
         s.optimize()
         scheduler_end_time = time.time()
-        self._runtime = scheduler_end_time - scheduler_start_time\
-            if self.runtime == -1 else self.runtime
+        self._runtime = int((scheduler_end_time - scheduler_start_time) *
+                            1000000) if self.runtime == -1 else self.runtime
 
         if s.status == gp.GRB.OPTIMAL:
             self._logger.debug(f"Found optimal value: {s.objVal}")

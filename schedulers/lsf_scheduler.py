@@ -17,21 +17,21 @@ class LSFScheduler(BaseScheduler):
     Args:
         preemptive (`bool`): If `true`, the LSF scheduler can preempt the tasks
             that are currently running.
-        runtime (`float`): The runtime to return to the simulator. If -1, the
-            scheduler returns the actual runtime.
+        runtime (`int`): The runtime to return to the simulator (in us). If -1,
+            the scheduler returns the actual runtime.
     """
 
     def __init__(self,
                  preemptive: bool = False,
-                 runtime: float = -1.0,
+                 runtime: int = -1,
                  _flags: Optional['absl.flags'] = None):
         self._preemptive = preemptive
         self._runtime = runtime
         self._scheduling_horizon = 0
 
     def schedule(
-            self, sim_time: float, task_graph: TaskGraph,
-            worker_pools: WorkerPools) -> (float, Sequence[Tuple[Task, str]]):
+            self, sim_time: int, task_graph: TaskGraph,
+            worker_pools: WorkerPools) -> (int, Sequence[Tuple[Task, str]]):
         """Implements the BaseScheduler's schedule() method using the LSF
         algorithm for scheduling the released tasks across the worker_pools.
         """
@@ -67,19 +67,21 @@ class LSFScheduler(BaseScheduler):
                 placements.append((task, None))
 
         end_time = time.time()
+        self._runtime = int((end_time - start_time) *
+                            1000000) if self.runtime == -1 else self.runtime
 
-        return (end_time - start_time if self.runtime == -1 else self.runtime,
-                placements)
+        return self.runtime, placements
 
-    def slack(self, sim_time: float, task: Task) -> float:
+    def slack(self, sim_time: int, task: Task) -> int:
         """Defines the Slack used by the scheduler to order the events.
 
         Args:
-            sim_time (`float`): The time at which the scheduler was invoked.
+            sim_time (`int`): The time in us at which the scheduler was
+                invoked.
             task (`Task`): The Task to calculate the slack of.
 
         Returns:
-            A `float` value depicting the slack of the task.
+            A `int` value depicting the slack of the task.
         """
         return task.deadline - sim_time - task.remaining_time
 

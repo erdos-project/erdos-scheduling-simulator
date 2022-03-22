@@ -34,8 +34,8 @@ flags.DEFINE_string('task_start_delay_plot_name', 'task_start_delay.png',
                     'The filename of the task start delay plot')
 
 matplotlib.rcParams.update({'font.size': 16, 'figure.autolayout': True})
-matplotlib.rcParams['xtick.labelsize'] = 26
-matplotlib.rcParams['ytick.labelsize'] = 26
+matplotlib.rcParams['xtick.labelsize'] = 16
+matplotlib.rcParams['ytick.labelsize'] = 16
 plt.rcParams['font.family'] = 'serif'
 axes_fontsize = 16
 
@@ -116,8 +116,10 @@ def plot_scheduler_runtime(plotter, figure_size=(14, 10)):
     start_times = list(map(attrgetter('start_time'), scheduler_invocations))
     # Plot a timelapse of the runtime of the scheduler.
     plt.figure(figsize=figure_size)
-    plt.plot(start_times, runtimes, marker='o')
-    plt.xlim(0, max(start_times))
+    plt.plot([start_time / 1000 for start_time in start_times],
+             [runtime / 1000 for runtime in runtimes],
+             marker='o')
+    plt.xlim(0, int(max(start_times) / 1000))
     plt.xlabel('Timeline [ms]', fontsize=axes_fontsize)
     plt.ylabel('Scheduler Runtime [ms]', fontsize=axes_fontsize)
     plt.savefig(FLAGS.scheduler_runtime_timeline_plot_name,
@@ -171,7 +173,7 @@ def plot_task_info(plotter, figure_size=(14, 10)):
         color='red')
 
     # Add the axis labels.
-    plt.xlabel('Timeline', fontsize=axes_fontsize)
+    plt.xlabel('Scheduler Run', fontsize=axes_fontsize)
     plt.ylabel('Placed and Unplaced Tasks', fontsize=axes_fontsize)
 
     # Add the yticks
@@ -191,20 +193,23 @@ def plot_task_info(plotter, figure_size=(14, 10)):
 
 def plot_task_slack(plotter, figure_size=(14, 10)):
     # Plot a histogram of the slack from the deadline for the tasks.
+    plt.figure(figsize=figure_size)
     tasks = plotter.get_tasks(FLAGS.csv_file)
-    slack = [task.deadline - task.completion_time for task in tasks]
+    slack = [(task.deadline - task.completion_time) / 1000 for task in tasks]
     plt.xlim(min(slack), max(slack))
-    plt.xlabel('Task Slack', fontsize=axes_fontsize)
+    plt.xlabel('Task Slack [ms]', fontsize=axes_fontsize)
     plt.ylabel('Relative Frequency', fontsize=axes_fontsize)
     plt.hist(slack, density=True, bins=100)
     plt.savefig(FLAGS.task_slack_plot_name, bbox_inches='tight')
 
 
 def plot_task_start_delay(plotter, figure_size=(14, 10)):
+    plt.figure(figsize=figure_size)
     tasks = plotter.get_tasks(FLAGS.csv_file)
-    start_delay = [task.start_time - task.release_time for task in tasks]
+    start_delay = [(task.start_time - task.release_time) / 1000
+                   for task in tasks]
     plt.xlim(min(start_delay), max(start_delay))
-    plt.xlabel('Task Start Delay', fontsize=axes_fontsize)
+    plt.xlabel('Task Start Delay [ms]', fontsize=axes_fontsize)
     plt.ylabel('Relative Frequency', fontsize=axes_fontsize)
     plt.hist(start_delay, density=True, bins=100)
     plt.savefig(FLAGS.task_start_delay_plot_name, bbox_inches='tight')
