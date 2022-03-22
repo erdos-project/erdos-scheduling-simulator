@@ -14,7 +14,7 @@ def create_default_task(
     completion_time=-1,
 ):
     """ Helper function to create a default task. """
-    return Task(name=name if name else "{}_Task".format(job.name),
+    return Task(name=name if name else f"{job.name}_Task",
                 job=job,
                 resource_requirements=resource_requirements,
                 runtime=runtime,

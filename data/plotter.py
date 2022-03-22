@@ -3,7 +3,7 @@ import uuid
 from typing import Optional, Sequence, Mapping
 from collections import namedtuple, defaultdict
 
-import absl
+import absl  # noqa: F401
 
 
 # Types for Objects in the simulation.

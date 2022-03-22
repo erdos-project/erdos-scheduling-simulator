@@ -41,11 +41,10 @@ def __create_default_worker_pool(
     """ Creates an instance of WorkerPool with a given set of resources. """
     workers = []
     for index, _resources in enumerate(resources):
-        workers.append(
-            Worker(
-                name="Worker_{}".format(index),
-                resources=_resources,
-            ))
+        workers.append(Worker(
+            name=f"Worker_{index}",
+            resources=_resources,
+        ))
     return WorkerPool(name="WorkerPool_Test", workers=workers)
 
 
