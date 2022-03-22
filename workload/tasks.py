@@ -105,6 +105,9 @@ class Task(object):
         if time is None and self._release_time == -1:
             raise ValueError("Release time should be specified either while "
                              "creating the Task or when releasing it.")
+        if self.state != TaskState.VIRTUAL:
+            raise ValueError(
+                f"Cannot release {self.id} which is in state {self.state}")
         self._release_time = time if time is not None else self._release_time
         self._state = TaskState.RELEASED
 
@@ -182,7 +185,7 @@ class Task(object):
             `ValueError` if task is not RUNNING.
         """
         if self.state != TaskState.RUNNING:
-            raise ValueError("Task is not RUNNING right now.")
+            raise ValueError(f"Task {self.id} is not RUNNING right now.")
         self._logger.debug(
             f"Transitioning {self} to {TaskState.PAUSED} at time {time}")
         self._paused_times.append(Paused(time, -1))
@@ -198,7 +201,7 @@ class Task(object):
             `ValueError` if task is not PAUSED.
         """
         if self.state != TaskState.PAUSED:
-            raise ValueError("Task is not PAUSED right now.")
+            raise ValueError(f"Task {self.id} is not PAUSED right now.")
         self._logger.debug(
             f"Transitioning {self} which was PAUSED at "
             f"{self._paused_times[-1].pause_time} to {TaskState.RUNNING} at "
@@ -215,6 +218,9 @@ class Task(object):
         Args:
             time (`float`): The simulation time at which the task was finished.
         """
+        if self.state not in [TaskState.RUNNING, TaskState.PAUSED]:
+            raise ValueError(
+                f"Task {self.id} is not RUNNING or PAUSED right now.")
         self._completion_time = time
         if self._remaining_time == 0:
             self._state = TaskState.COMPLETED
@@ -235,8 +241,8 @@ class Task(object):
             `ValueError` if the task is COMPLETED / EVICTED, or time < 0.
         """
         if self.is_complete():
-            raise ValueError("The remaining time of COMPLETED/EVICTED "
-                             "tasks cannot be updated.")
+            raise ValueError(f"The remaining time of COMPLETED/EVICTED "
+                             f"task {self.id} cannot be updated.")
         if time < 0:
             raise ValueError("Trying to set a negative value for "
                              "remaining time.")
