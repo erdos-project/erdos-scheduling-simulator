@@ -54,10 +54,11 @@ class BaseScheduler(object):
         for task, placement in placements:
             children = task_graph.get_children(task)
             for child_task in children:
-                assert (
-                    start_times[task.id] + task.remaining_time <=
-                    start_times[child_task.id]
-                ), f"task dependency not valid{task.id}->{child_task.id}"
+                if child_task.id in start_times:
+                    assert (
+                        start_times[task.id] + task.remaining_time <=
+                        start_times[child_task.id]
+                    ), f"task dependency not valid{task.id}->{child_task.id}"
 
         # Check if resource requirements are satisfied.
         # Note: We do not check if all tasks placed on a WorkerPool fit.
@@ -70,9 +71,11 @@ class BaseScheduler(object):
                     ), f"WorkerPool doesn't have resources for {task.id}"
 
         # Check if tasks overlapped on a resource.
-        placed_tasks = [(placement, start_times[task.id],
-                         start_times[task.id] + task.runtime)
-                        for task, placement in placements]
+        placed_tasks = []
+        for task, placement in placements:
+            if placement:
+                placed_tasks.append((placement, start_times[task.id],
+                                     start_times[task.id] + task.runtime))
         placed_tasks.sort()
         for t1, t2 in zip(placed_tasks, placed_tasks[1:]):
             if t1[0] == t2[0]:

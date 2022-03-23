@@ -87,12 +87,16 @@ class Z3Scheduler(BaseScheduler):
         # Add constraints whether a task is placed on GPU or CPU.
         # from num_cpus to num_cpus to num_gpus.
         for task_id, task in self._task_ids_to_task.items():
-            assert len(task.resource_requirements
-                       ) <= 1, "Doesn't support multi-resource requirements"
-            for resource in task.resource_requirements._resource_vector.keys():
-                (start_id, end_id) = res_type_to_id_range[resource.name]
-                s.add(self._task_ids_to_placement[task_id] >= start_id)
-                s.add(self._task_ids_to_placement[task_id] < end_id)
+            if len(task.resource_requirements) > 1:
+                self._logger.error(
+                    "Scheduler doesn't support multi-resource requirements")
+            # for res in task.resource_requirements._resource_vector.keys():
+            # TODO: Add constraints for all resources once multi-dimensional
+            # requirements are supported.
+            resource = next(iter(task.resource_requirements._resource_vector))
+            (start_id, end_id) = res_type_to_id_range[resource.name]
+            s.add(self._task_ids_to_placement[task_id] >= start_id)
+            s.add(self._task_ids_to_placement[task_id] < end_id)
 
         for t1_id, task1 in self._task_ids_to_task.items():
             for t2_id, task2 in self._task_ids_to_task.items():
@@ -113,7 +117,7 @@ class Z3Scheduler(BaseScheduler):
                  worker_pools: WorkerPools):
 
         def sum_costs(lst):
-            return functools.reduce(lambda a, b: a + b, lst, 0)
+            return functools.reduce(lambda a, b: a + b, lst, Int(0))
 
         self._time = sim_time
         self._task_ids_to_task = {}

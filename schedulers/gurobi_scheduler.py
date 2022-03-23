@@ -89,14 +89,20 @@ class GurobiScheduler(BaseScheduler):
         # Add constraints whether a task is placed on GPU or CPU.
         # from num_cpus to num_cpus to num_gpus.
         for task_id, task in self._task_ids_to_task.items():
-            assert len(task.resource_requirements
-                       ) <= 1, "Doesn't support multi-resource requirements"
-            for resource in task.resource_requirements._resource_vector.keys():
-                (start_id, end_id) = res_type_to_id_range[resource.name]
-                s.addConstr(self._task_ids_to_placement[task_id] >= start_id)
-                s.addConstr(self._task_ids_to_placement[task_id] <= end_id - 1)
+            if len(task.resource_requirements) > 1:
+                self._logger.error(
+                    "Scheduler doesn't support multi-resource requirements")
+            # for res in task.resource_requirements._resource_vector.keys():
+            # TODO: Add constraints for all resources once multi-dimensional
+            # requirements are supported.
+            resource = next(iter(task.resource_requirements._resource_vector))
+            (start_id, end_id) = res_type_to_id_range[resource.name]
+            s.addConstr(self._task_ids_to_placement[task_id] >= start_id)
+            s.addConstr(self._task_ids_to_placement[task_id] <= end_id - 1)
 
         # Tasks using the same resources must not overlap.
+        if len(self._task_ids_to_task) == 0:
+            return
         max_deadline = max(
             [task.deadline for task in self._task_ids_to_task.values()])
         for t1_id, task1 in self._task_ids_to_task.items():
