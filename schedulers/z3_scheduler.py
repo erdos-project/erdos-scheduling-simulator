@@ -26,9 +26,16 @@ class Z3Scheduler(BaseScheduler):
         """Constructs a Z3 scheduler.
 
         Args:
+            preemptive (`bool`): If `True`, the Z3 scheduler can preempt
+                the tasks that are currently running.
+            runtime (`int`): The runtime to return to the simulator (in us).
+                If -1, the scheduler returns the actual runtime.
             goal (`str`): Goal of the scheduler run.
             enforce_deadlines (`bool`): Deadlines must be met or else the
                 schedule will return None.
+            scheduling_horizon (`int`): The scheduler will try to place
+                tasks that are within the scheduling horizon (in us) using
+                estimated task release times.
         """
         self._preemptive = preemptive
         self._runtime = runtime

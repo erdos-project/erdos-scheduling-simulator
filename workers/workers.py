@@ -443,7 +443,7 @@ class WorkerPool(object):
 
 
 class WorkerPools(object):
-    """A as a collection of `WorkerPool`s."""
+    """A collection of `WorkerPool`s."""
 
     def __init__(self, worker_pools: Sequence[WorkerPool]):
         self._wps = worker_pools

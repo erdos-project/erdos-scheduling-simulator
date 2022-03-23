@@ -1,4 +1,3 @@
-import sys
 from typing import Optional, Sequence
 
 import absl  # noqa: F401
@@ -9,9 +8,16 @@ from workload import Job, JobGraph, Resource, Resources, Task, TaskGraph
 
 
 class TaskLoaderBenchmark(object):
+    """Generates a synthetic task workload.
+
+    Args:
+        num_jobs (`int`): Number of jobs in the benchmark.
+        task_runtime (`int`): Runtime (in us) of benchmark tasks.
+        task_deadline (`int`): Relative deadline (in us) of benchmark tasks.
+        _flags (`absl.flags`): The flags used to initialize the app, if any.
+    """
 
     def __init__(self,
-                 max_timestamp: int = sys.maxsize,
                  num_jobs: int = 5,
                  task_runtime: int = 15000,
                  task_deadline: int = 500000,
@@ -58,7 +64,7 @@ class TaskLoaderBenchmark(object):
         Returns:
             The set of `Job`s loaded.
         """
-        self._jobs
+        return self._jobs
 
     def get_job_graph(self) -> JobGraph:
         """Retrieve the constructed `JobGraph`.

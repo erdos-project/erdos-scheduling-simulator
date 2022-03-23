@@ -25,6 +25,8 @@ class FIFOScheduler(BaseScheduler):
         assert not preemptive, "FIFO scheduler is not preemptive"
         self._preemptive = preemptive
         self._runtime = runtime
+        # The scheduler only places tasks that have been released. Hence,
+        # scheduling horizon is 0.
         self._scheduling_horizon = 0
 
     def schedule(

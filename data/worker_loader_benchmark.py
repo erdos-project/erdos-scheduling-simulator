@@ -9,6 +9,15 @@ from workload import Resource, Resources
 
 
 class WorkerLoaderBenchmark(object):
+    """Creates a Worker for a synthetic benchmark.
+
+    Args:
+        scheduler (`Optional[Type[BaseScheduler]]`): The scheduler to use for
+            scheduling the tasks across the Workers of a WorkerPool.
+        num_cpus (`int`): Number of CPUs the worker has.
+        num_gpus (`int`): Number of GPUs the worker has.
+        _flags (`absl.flags`): The flags used to initialize the app, if any.
+    """
 
     def __init__(self,
                  scheduler: Type[BaseScheduler],

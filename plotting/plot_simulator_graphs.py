@@ -7,6 +7,7 @@ from absl import app, flags
 from matplotlib.patches import Patch
 
 from data import Plotter
+from utils import log_statistics, setup_logging
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string('csv_file', '../test.csv',
@@ -41,36 +42,7 @@ matplotlib.rcParams['ytick.labelsize'] = 16
 plt.rcParams['font.family'] = 'serif'
 axes_fontsize = 16
 
-
-def print_stats(vals):
-    print("Number of values {}".format(len(vals)))
-    avg = np.mean(vals)
-    print('AVG: {}'.format(avg))
-    median = np.median(vals)
-    print('MEDIAN: {}'.format(median))
-    min_val = np.min(vals)
-    print('MIN: {}'.format(min_val))
-    max_val = np.max(vals)
-    print('MAX: {}'.format(max_val))
-    stddev = np.std(vals)
-    print('STDDEV: {}'.format(stddev))
-    print('PERCENTILES:')
-    perc1 = np.percentile(vals, 1)
-    print('  1st: {}'.format(perc1))
-    perc10 = np.percentile(vals, 10)
-    print(' 10th: {}'.format(perc10))
-    perc25 = np.percentile(vals, 25)
-    print(' 25th: {}'.format(perc25))
-    perc50 = np.percentile(vals, 50)
-    print(' 50th: {}'.format(perc50))
-    perc75 = np.percentile(vals, 75)
-    print(' 75th: {}'.format(perc75))
-    perc90 = np.percentile(vals, 90)
-    print(' 90th: {}'.format(perc90))
-    perc99 = np.percentile(vals, 99)
-    print(' 99th: {}'.format(perc99))
-    perc999 = np.percentile(vals, 99.9)
-    print(' 99.9th: {}'.format(perc999))
+logger = setup_logging('plotting')
 
 
 def plot_utilization(plotter, figure_size=(14, 10), bar_width=1.0):
@@ -108,7 +80,7 @@ def plot_utilization(plotter, figure_size=(14, 10), bar_width=1.0):
     # }
 
     for resource_type in resource_types:
-        print('Max {} resource utilization {}'.format(
+        logger.debug('Max {} resource utilization {}'.format(
             resource_type, max(resource_used_heights[resource_type])))
 
     # Plot a histogram with the results.
@@ -149,8 +121,8 @@ def plot_scheduler_runtime(plotter, figure_size=(14, 10)):
     runtimes_ms = [runtime / 1000 for runtime in runtimes]
     start_times = list(map(attrgetter('start_time'), scheduler_invocations))
     start_times_ms = [start_time / 1000 for start_time in start_times]
-    print('================== Scheduler runtime [ms] ==================')
-    print_stats(runtimes_ms)
+    logger.debug('================= Scheduler runtime [ms] =================')
+    log_statistics(runtimes_ms, logger)
     # Plot a timelapse of the runtime of the scheduler.
     plt.figure(figsize=figure_size)
     plt.plot(start_times_ms, runtimes_ms, marker='o')
@@ -207,10 +179,10 @@ def plot_task_info(plotter, figure_size=(14, 10)):
         alpha=0.4,
         color='red')
 
-    print('================== Num placed tasks ==================')
-    print_stats(placed_task_heights)
-    print('================== Num unplaced tasks ==================')
-    print_stats(unplaced_task_heights)
+    logger.debug('================== Num placed tasks ==================')
+    log_statistics(placed_task_heights, logger)
+    logger.debug('================== Num unplaced tasks ==================')
+    log_statistics(unplaced_task_heights, logger)
 
     # Add the axis labels.
     plt.xlabel('Scheduler Run', fontsize=axes_fontsize)
@@ -236,8 +208,8 @@ def plot_task_slack(plotter, figure_size=(14, 10)):
     plt.figure(figsize=figure_size)
     tasks = plotter.get_tasks(FLAGS.csv_file)
     slack = [(task.deadline - task.completion_time) / 1000 for task in tasks]
-    print('================== Task slack [ms] ==================')
-    print_stats(slack)
+    logger.debug('================== Task slack [ms] ==================')
+    log_statistics(slack, logger)
     plt.xlim(min(slack), max(slack))
     plt.xlabel('Task Slack [ms]', fontsize=axes_fontsize)
     plt.ylabel('Relative Frequency', fontsize=axes_fontsize)
@@ -252,8 +224,8 @@ def plot_task_placement_delay(plotter, figure_size=(14, 10)):
         (placement.simulator_time - placement.task.release_time) / 1000
         for placement in task_placements
     ]
-    print('================== Task placement delay [ms] ==================')
-    print_stats(placement_delay)
+    logger.debug('================ Task placement delay [ms] ================')
+    log_statistics(placement_delay, logger)
     plt.xlim(min(placement_delay), max(placement_delay))
     plt.xlabel('Task Placement Delay [ms]', fontsize=axes_fontsize)
     plt.ylabel('Relative Frequency', fontsize=axes_fontsize)
@@ -263,11 +235,11 @@ def plot_task_placement_delay(plotter, figure_size=(14, 10)):
 
 def task_stats(tasks):
     for task in tasks:
-        print("Task Name: {}\n\tRelease Time: {}\n\t".format(
+        logger.debug("Task Name: {}\n\tRelease Time: {}\n\t".format(
             task.task_name, task.release_time))
-        print("Completion Time: {}\n\tDeadline: {}\n\t".format(
+        logger.debug("Completion Time: {}\n\tDeadline: {}\n\t".format(
             task.completion_time, task.deadline))
-        print("Runtime: {}\n\tSlack: {}".format(
+        logger.debug("Runtime: {}\n\tSlack: {}".format(
             task.runtime, task.deadline - task.completion_time))
 
 
@@ -277,13 +249,15 @@ def main(argv):
     plotter = Plotter(csv_paths=[FLAGS.csv_file])
     # events = plotter._events[FLAGS.csv_file]
 
-    print('Simulation end time: {}'.format(
+    logger.debug('Simulation end time: {}'.format(
         plotter.get_simulator_end_time(FLAGS.csv_file)))
-    print('Number of tasks: {}'.format(len(plotter.get_tasks(FLAGS.csv_file))))
+    logger.debug('Number of tasks: {}'.format(
+        len(plotter.get_tasks(FLAGS.csv_file))))
 
     # Missed deadline statistics
     missed_deadline_events = plotter.get_missed_deadline_events(FLAGS.csv_file)
-    print('Number of missed deadlines: {}'.format(len(missed_deadline_events)))
+    logger.debug('Number of missed deadlines: {}'.format(
+        len(missed_deadline_events)))
 
     if FLAGS.plot_utilization:
         plot_utilization(plotter, figure_size)

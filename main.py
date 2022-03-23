@@ -89,9 +89,9 @@ def main(args):
     logger.info("Resource File: %s", FLAGS.resource_path)
 
     # Load the data.
-    max_timestamp = FLAGS.max_timestamp if FLAGS.max_timestamp is not None\
-        else sys.max_size
     if FLAGS.execution_mode == 'replay':
+        max_timestamp = FLAGS.max_timestamp if FLAGS.max_timestamp is not None\
+            else sys.max_size
         task_loader = TaskLoaderJSON(graph_path=FLAGS.graph_path,
                                      profile_path=FLAGS.profile_path,
                                      resource_path=FLAGS.resource_path,
@@ -99,7 +99,6 @@ def main(args):
                                      _flags=FLAGS)
     elif FLAGS.execution_mode == 'benchmark':
         task_loader = TaskLoaderBenchmark(
-            max_timestamp,
             num_jobs=5,
             task_runtime=FLAGS.benchmark_task_runtime,
             task_deadline=FLAGS.benchmark_task_deadline,

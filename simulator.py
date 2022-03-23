@@ -401,7 +401,8 @@ class Simulator(object):
             for task, placement in self._last_task_placement:
                 if placement is None:
                     self._csv_logger.debug(
-                        f"{event.time},TASK_SKIP,{task.id},{task.name}")
+                        f"{event.time},TASK_SKIP,{task.name},{task.timestamp},"
+                        f"{task.id}")
                     self._logger.warning(
                         f"[{event.time}] Failed to place {task}")
                     self._logger.info("The Worker Pools are: ")

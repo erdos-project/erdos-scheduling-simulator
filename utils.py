@@ -1,6 +1,6 @@
 import logging
 from random import Random
-from typing import Optional, Sequence
+from typing import Optional
 
 import numpy as np
 
@@ -89,7 +89,7 @@ def fuzz_time(rng: Random,
                             time + time * abs(variance) / 100.0)))
 
 
-def log_statistics(data: Sequence[int],
+def log_statistics(data,
                    logger: logging.Logger,
                    offset: Optional[str] = "    "):
     """Logs the required statistics from the given data.
