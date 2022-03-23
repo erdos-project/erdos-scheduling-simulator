@@ -1,2 +1,5 @@
 *~
 *.pyc
+
+# Configuration files
+.pre-commit-config.yaml
