@@ -6,7 +6,7 @@ from workload import Job, JobGraph
 
 
 def test_job_construction():
-    """ Test that a Job is correctly constructed. """
+    """Test that a Job is correctly constructed."""
     job = Job(name="Perception")
     assert job.name == "Perception", "Job has the wrong name."
     try:
@@ -16,7 +16,7 @@ def test_job_construction():
 
 
 def test_job_equivalence():
-    """ Test that two Jobs with the same ID are equivalent. """
+    """Test that two Jobs with the same ID are equivalent."""
     job_1, job_2 = Job(name="Perception"), Job(name="Planning")
     assert job_1 == job_1, "Job is not equivalent to itself."
     assert job_2 == job_2, "Job is not equivalent to itself."
@@ -24,13 +24,13 @@ def test_job_equivalence():
 
 
 def test_empty_jobgraph_construction():
-    """ Test that an empty JobGraph is correctly constructed. """
+    """Test that an empty JobGraph is correctly constructed."""
     job_graph = JobGraph()
     assert len(job_graph) == 0, "Default JobGraph should have 0 length."
 
 
 def test_job_addition_with_no_children():
-    """ Test that the addition of a Job to the graph works. """
+    """Test that the addition of a Job to the graph works."""
     job_graph = JobGraph()
     assert len(job_graph) == 0, "JobGraph has incorrect length."
     job_graph.add_job(Job(name="Planning"))
@@ -38,7 +38,7 @@ def test_job_addition_with_no_children():
 
 
 def test_job_addition_with_children():
-    """ Test that the addition of a Job with children to the graph works. """
+    """Test that the addition of a Job with children to the graph works."""
     job_graph = JobGraph()
     assert len(job_graph) == 0, "JobGraph has incorrect length."
     job_1, job_2 = Job(name="Perception"), Job(name="Planning")
@@ -47,7 +47,7 @@ def test_job_addition_with_children():
 
 
 def test_successful_retrieval_of_children():
-    """ Test that the correct children are returned by the JobGraph. """
+    """Test that the correct children are returned by the JobGraph."""
     job_graph = JobGraph()
     job_1, job_2 = Job(name="Perception"), Job(name="Planning")
     job_graph.add_job(job_1, [job_2])
@@ -57,7 +57,7 @@ def test_successful_retrieval_of_children():
 
 
 def test_successful_retrieval_of_parents():
-    """ Test that the correct parents are returned by the JobGraph. """
+    """Test that the correct parents are returned by the JobGraph."""
     job_graph = JobGraph()
     job_1, job_2 = Job(name="Perception"), Job(name="Planning")
     job_graph.add_job(job_1, [job_2])
@@ -67,7 +67,7 @@ def test_successful_retrieval_of_parents():
 
 
 def test_failed_retrieval_of_children():
-    """ Test that retrieving children of a non-existent job fails. """
+    """Test that retrieving children of a non-existent job fails."""
     job_graph = JobGraph()
     job = Job(name="Perception")
     with pytest.raises(ValueError):
@@ -75,7 +75,7 @@ def test_failed_retrieval_of_children():
 
 
 def test_addition_of_child_to_job():
-    """ Test the successful addition of a child to a job. """
+    """Test the successful addition of a child to a job."""
     job_graph = JobGraph()
     job_1, job_2 = Job(name="Perception"), Job(name="Planning")
     job_graph.add_job(job_1, [])
@@ -88,7 +88,7 @@ def test_addition_of_child_to_job():
 
 
 def test_failed_addition_of_child_to_job():
-    """ Test that addition of a child to a non-existent job fails. """
+    """Test that addition of a child to a non-existent job fails."""
     job_graph = JobGraph()
     job_1, job_2 = Job(name="Perception"), Job(name="Planning")
     with pytest.raises(ValueError):

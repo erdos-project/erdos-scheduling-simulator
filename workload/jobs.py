@@ -98,8 +98,7 @@ class JobGraph(object):
             A Sequence[Job] containing the children of the given job.
         """
         if job not in self._job_graph:
-            raise ValueError(
-                f"No job with the ID: {job.id} exists in the graph")
+            raise ValueError(f"No job with the ID: {job.id} exists in the graph")
         return self._job_graph[job]
 
     def get_parents(self, job: Job) -> Sequence[Job]:

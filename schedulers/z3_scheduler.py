@@ -2,6 +2,7 @@ import functools
 import pickle
 import sys
 import time
+
 # from math import ceil, log2
 from typing import Optional
 
@@ -15,14 +16,15 @@ from workload import TaskGraph, TaskState
 
 
 class Z3Scheduler(BaseScheduler):
-
-    def __init__(self,
-                 preemptive: bool = False,
-                 runtime: int = -1,
-                 goal: str = 'max_slack',
-                 enforce_deadlines: bool = True,
-                 scheduling_horizon: int = 0,
-                 _flags: Optional['absl.flags'] = None):
+    def __init__(
+        self,
+        preemptive: bool = False,
+        runtime: int = -1,
+        goal: str = "max_slack",
+        enforce_deadlines: bool = True,
+        scheduling_horizon: int = 0,
+        _flags: Optional["absl.flags"] = None,
+    ):
         """Constructs a Z3 scheduler.
 
         Args:
@@ -56,9 +58,11 @@ class Z3Scheduler(BaseScheduler):
         # Set up the logger.
         self._flags = _flags
         if _flags:
-            self._logger = utils.setup_logging(name=self.__class__.__name__,
-                                               log_file=_flags.log_file_name,
-                                               log_level=_flags.log_level)
+            self._logger = utils.setup_logging(
+                name=self.__class__.__name__,
+                log_file=_flags.log_file_name,
+                log_level=_flags.log_level,
+            )
         else:
             self._logger = utils.setup_logging(name=self.__class__.__name__)
 
@@ -70,8 +74,10 @@ class Z3Scheduler(BaseScheduler):
             # Start at or after release time.
             s.add(task.release_time <= start_time)
             # Defines cost as slack deadline - finish time.
-            s.add(task.deadline - start_time -
-                  task.remaining_time == self._task_ids_to_cost[task_id])
+            s.add(
+                task.deadline - start_time - task.remaining_time
+                == self._task_ids_to_cost[task_id]
+            )
 
     def _add_task_dependency_constraints(self, s):
         for task_id, task in self._task_ids_to_task.items():
@@ -79,9 +85,10 @@ class Z3Scheduler(BaseScheduler):
             for child_task in children:
                 # Dependent tasks need to finish before the next one.
                 if child_task.id in self._task_ids_to_start_time:
-                    s.add(self._task_ids_to_start_time[task_id] +
-                          task.remaining_time <= self._task_ids_to_start_time[
-                              child_task.id])
+                    s.add(
+                        self._task_ids_to_start_time[task_id] + task.remaining_time
+                        <= self._task_ids_to_start_time[child_task.id]
+                    )
 
     def _add_task_pinning_constraints(self, s):
         if not self._preemptive:
@@ -96,7 +103,8 @@ class Z3Scheduler(BaseScheduler):
         for task_id, task in self._task_ids_to_task.items():
             if len(task.resource_requirements) > 1:
                 self._logger.error(
-                    "Scheduler doesn't support multi-resource requirements")
+                    "Scheduler doesn't support multi-resource requirements"
+                )
             # for res in task.resource_requirements._resource_vector.keys():
             # TODO: Add constraints for all resources once multi-dimensional
             # requirements are supported.
@@ -113,16 +121,17 @@ class Z3Scheduler(BaseScheduler):
                     self._task_ids_to_start_time[t1_id] + task1.remaining_time
                     <= self._task_ids_to_start_time[t2_id],
                     self._task_ids_to_start_time[t2_id] + task2.remaining_time
-                    <= self._task_ids_to_start_time[t1_id]
+                    <= self._task_ids_to_start_time[t1_id],
                 ]
                 s.add(
                     Implies(
-                        self._task_ids_to_placement[t1_id] ==
-                        self._task_ids_to_placement[t2_id], Or(disjoint)))
+                        self._task_ids_to_placement[t1_id]
+                        == self._task_ids_to_placement[t2_id],
+                        Or(disjoint),
+                    )
+                )
 
-    def schedule(self, sim_time: int, task_graph: TaskGraph,
-                 worker_pools: WorkerPools):
-
+    def schedule(self, sim_time: int, task_graph: TaskGraph, worker_pools: WorkerPools):
         def sum_costs(lst):
             return functools.reduce(lambda a, b: a + b, lst, Int(0))
 
@@ -134,36 +143,41 @@ class Z3Scheduler(BaseScheduler):
         self._task_graph = task_graph
         self._worker_pools = worker_pools
 
-        tasks = task_graph.get_schedulable_tasks(sim_time,
-                                                 self.scheduling_horizon,
-                                                 self.preemptive, worker_pools)
+        tasks = task_graph.get_schedulable_tasks(
+            sim_time, self.scheduling_horizon, self.preemptive, worker_pools
+        )
 
         scheduler_start_time = time.time()
-        if self._goal != 'feasibility':
+        if self._goal != "feasibility":
             s = Optimize()
         else:
             s = Solver()
 
         for task in tasks:
             self._task_ids_to_task[task.id] = task
-            self._task_ids_to_start_time[task.id] = Int(f't{task.id}')
-            self._task_ids_to_cost[task.id] = Int(f'c{task.id}')
-            self._task_ids_to_placement[task.id] = Int(f'p{task.id}')
+            self._task_ids_to_start_time[task.id] = Int(f"t{task.id}")
+            self._task_ids_to_cost[task.id] = Int(f"c{task.id}")
+            self._task_ids_to_placement[task.id] = Int(f"p{task.id}")
 
-        (res_type_to_id_range,
-         res_id_to_wp_id) = worker_pools.get_resource_ilp_encoding()
+        (
+            res_type_to_id_range,
+            res_id_to_wp_id,
+        ) = worker_pools.get_resource_ilp_encoding()
         self._add_task_timing_constraints(s)
         self._add_task_resource_constraints(s, res_type_to_id_range)
         self._add_task_dependency_constraints(s)
         self._add_task_pinning_constraints(s)
 
-        if self._goal != 'feasibility':
+        if self._goal != "feasibility":
             result = s.maximize(sum_costs(self._task_ids_to_cost.values()))
 
         schedulable = s.check()
         scheduler_end_time = time.time()
-        self._runtime = int((scheduler_end_time - scheduler_start_time) *
-                            1000000) if self.runtime == -1 else self.runtime
+        self._runtime = (
+            int((scheduler_end_time - scheduler_start_time) * 1000000)
+            if self.runtime == -1
+            else self.runtime
+        )
 
         # if self._flags.ilp_log_dir is not None:
         #     log_dir = self._flags.ilp_log_dir + f"{self._goal}.smt"
@@ -175,16 +189,15 @@ class Z3Scheduler(BaseScheduler):
         self._cost = sys.maxsize
         self._logger.debug(f"Solver found {schedulable} solution")
         if schedulable != unsat:
-            if self._goal != 'feasibility':
+            if self._goal != "feasibility":
                 self._cost = s.lower(result)
-                self._logger.debug(
-                    f"Solver found solution with cost {self._cost}")
+                self._logger.debug(f"Solver found solution with cost {self._cost}")
             self._placements = []
             for task_id, task in self._task_ids_to_task.items():
-                start_time = int(
-                    str(s.model()[self._task_ids_to_start_time[task_id]]))
-                placement = res_id_to_wp_id[int(
-                    str(s.model()[self._task_ids_to_placement[task_id]]))]
+                start_time = int(str(s.model()[self._task_ids_to_start_time[task_id]]))
+                placement = res_id_to_wp_id[
+                    int(str(s.model()[self._task_ids_to_placement[task_id]]))
+                ]
                 if start_time <= sim_time + self.runtime * 2:
                     # We only place the tasks with a start time earlier than
                     # the estimated end time of the next scheduler run.
@@ -197,28 +210,29 @@ class Z3Scheduler(BaseScheduler):
             start_times = {}
             for task_id, st_var in self._task_ids_to_start_time.items():
                 start_times[task_id] = int(str(s.model()[st_var]))
-            self._verify_schedule(self._worker_pools, self._task_graph,
-                                  self._placements, start_times)
+            self._verify_schedule(
+                self._worker_pools, self._task_graph, self._placements, start_times
+            )
         else:
-            self._placements = [(task, None)
-                                for task in self._task_ids_to_task.values()]
+            self._placements = [
+                (task, None) for task in self._task_ids_to_task.values()
+            ]
         # Log the scheduler run.
         self.log()
         return self.runtime, self._placements
 
     def log(self):
-        if (self._flags is not None
-                and self._flags.scheduler_log_file_name is not None):
-            with open(self._flags.scheduler_log_file_name, 'wb') as log_file:
+        if self._flags is not None and self._flags.scheduler_log_file_name is not None:
+            with open(self._flags.scheduler_log_file_name, "wb") as log_file:
                 logged_data = {
-                    'time': self._time,
-                    'tasks': self._task_ids_to_task,
-                    'task_graph': self._task_graph,
-                    'worker_pools': self._worker_pools,
-                    'scheduling_horizon': self._scheduling_horizon,
-                    'runtime': self.runtime,
-                    'placements': self._placements,
-                    'cost': self._cost
+                    "time": self._time,
+                    "tasks": self._task_ids_to_task,
+                    "task_graph": self._task_graph,
+                    "worker_pools": self._worker_pools,
+                    "scheduling_horizon": self._scheduling_horizon,
+                    "runtime": self.runtime,
+                    "placements": self._placements,
+                    "cost": self._cost,
                 }
                 pickle.dump(logged_data, log_file)
 

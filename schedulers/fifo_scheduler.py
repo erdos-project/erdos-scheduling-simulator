@@ -18,10 +18,12 @@ class FIFOScheduler(BaseScheduler):
             the scheduler returns the actual runtime.
     """
 
-    def __init__(self,
-                 preemptive: bool = False,
-                 runtime: int = -1,
-                 _flags: Optional['absl.flags'] = None):
+    def __init__(
+        self,
+        preemptive: bool = False,
+        runtime: int = -1,
+        _flags: Optional["absl.flags"] = None,
+    ):
         assert not preemptive, "FIFO scheduler is not preemptive"
         self._preemptive = preemptive
         self._runtime = runtime
@@ -30,17 +32,18 @@ class FIFOScheduler(BaseScheduler):
         self._scheduling_horizon = 0
 
     def schedule(
-            self, sim_time: int, task_graph: TaskGraph,
-            worker_pools: WorkerPools) -> (int, Sequence[Tuple[Task, str]]):
-        tasks = task_graph.get_schedulable_tasks(sim_time, 0, self.preemptive,
-                                                 worker_pools)
+        self, sim_time: int, task_graph: TaskGraph, worker_pools: WorkerPools
+    ) -> (int, Sequence[Tuple[Task, str]]):
+        tasks = task_graph.get_schedulable_tasks(
+            sim_time, 0, self.preemptive, worker_pools
+        )
         # Create a virtual WorkerPool set to try scheduling decisions on.
         schedulable_worker_pools = copy(worker_pools)
 
         start_time = time.time()
         # Sort the tasks according to their release times, and place them on
         # the worker pools.
-        ordered_tasks = list(sorted(tasks, key=attrgetter('release_time')))
+        ordered_tasks = list(sorted(tasks, key=attrgetter("release_time")))
 
         placements = []
         for task in ordered_tasks:
@@ -55,8 +58,11 @@ class FIFOScheduler(BaseScheduler):
                 placements.append((task, None))
 
         end_time = time.time()
-        self._runtime = int((end_time - start_time) *
-                            1000000) if self.runtime == -1 else self.runtime
+        self._runtime = (
+            int((end_time - start_time) * 1000000)
+            if self.runtime == -1
+            else self.runtime
+        )
 
         return self.runtime, placements
 

@@ -17,16 +17,20 @@ class TaskLoaderBenchmark(object):
         _flags (`absl.flags`): The flags used to initialize the app, if any.
     """
 
-    def __init__(self,
-                 num_jobs: int = 5,
-                 task_runtime: int = 15000,
-                 task_deadline: int = 500000,
-                 _flags: Optional['absl.flags'] = None):
+    def __init__(
+        self,
+        num_jobs: int = 5,
+        task_runtime: int = 15000,
+        task_deadline: int = 500000,
+        _flags: Optional["absl.flags"] = None,
+    ):
         # Set up the logger.
         if _flags:
-            self._logger = utils.setup_logging(name=self.__class__.__name__,
-                                               log_file=_flags.log_file_name,
-                                               log_level=_flags.log_level)
+            self._logger = utils.setup_logging(
+                name=self.__class__.__name__,
+                log_file=_flags.log_file_name,
+                log_level=_flags.log_level,
+            )
         else:
             self._logger = utils.setup_logging(name=self.__class__.__name__)
 
@@ -40,23 +44,30 @@ class TaskLoaderBenchmark(object):
         for index, job in enumerate(self._jobs):
             if index % 2 == 0:
                 resource_requirements = Resources(
-                    resource_vector={Resource(name="CPU", _id="any"): 1})
+                    resource_vector={Resource(name="CPU", _id="any"): 1}
+                )
             else:
                 resource_requirements = Resources(
-                    resource_vector={Resource(name="GPU", _id="any"): 1})
+                    resource_vector={Resource(name="GPU", _id="any"): 1}
+                )
             # All times are in us.
             self._tasks.append(
-                Task(f"{job.name}_task_{index}",
-                     job=job,
-                     resource_requirements=resource_requirements,
-                     runtime=_flags.task_runtime,
-                     deadline=task_deadline,
-                     timestamp=0,
-                     release_time=0,
-                     start_time=-1,
-                     completion_time=-1))
-        self._grouped_tasks, self._task_graph = TaskLoader.\
-            _TaskLoader__create_task_graph(self._tasks, self._job_graph)
+                Task(
+                    f"{job.name}_task_{index}",
+                    job=job,
+                    resource_requirements=resource_requirements,
+                    runtime=_flags.task_runtime,
+                    deadline=task_deadline,
+                    timestamp=0,
+                    release_time=0,
+                    start_time=-1,
+                    completion_time=-1,
+                )
+            )
+        (
+            self._grouped_tasks,
+            self._task_graph,
+        ) = TaskLoader._TaskLoader__create_task_graph(self._tasks, self._job_graph)
 
     def get_jobs(self) -> Sequence[Job]:
         """Retrieve the set of `Job`s loaded.

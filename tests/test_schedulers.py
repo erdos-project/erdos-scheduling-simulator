@@ -16,13 +16,19 @@ def test_z3_scheduler_success():
     z3_scheduler = Z3Scheduler()
 
     # Create the tasks and the TaskGraph.
-    task_cpu = create_default_task(resource_requirements=Resources(
-        resource_vector={Resource(name="CPU", _id="any"): 1}),
-                                   deadline=200)
+    task_cpu = create_default_task(
+        resource_requirements=Resources(
+            resource_vector={Resource(name="CPU", _id="any"): 1}
+        ),
+        deadline=200,
+    )
     task_cpu.release(1)
-    task_gpu = create_default_task(resource_requirements=Resources(
-        resource_vector={Resource(name="GPU", _id="any"): 1}),
-                                   deadline=50)
+    task_gpu = create_default_task(
+        resource_requirements=Resources(
+            resource_vector={Resource(name="GPU", _id="any"): 1}
+        ),
+        deadline=50,
+    )
     task_gpu.release(1)
     task_graph = TaskGraph(tasks={task_cpu: [], task_gpu: []})
 
@@ -49,15 +55,19 @@ def test_z3_scheduler_success():
     assert len(placements) == 2, "Incorrect length of task placements."
 
     if placements[1][0] == task_gpu and placements[0][0] == task_cpu:
-        assert placements[1][1] == worker_pool_two.id,\
-            "Incorrect placement of the task on the WorkerPool."
-        assert placements[0][1] == worker_pool_one.id,\
-            "Incorrect placement of the task on the WorkerPool."
+        assert (
+            placements[1][1] == worker_pool_two.id
+        ), "Incorrect placement of the task on the WorkerPool."
+        assert (
+            placements[0][1] == worker_pool_one.id
+        ), "Incorrect placement of the task on the WorkerPool."
     elif placements[0][0] == task_gpu and placements[1][0] == task_cpu:
-        assert placements[0][1] == worker_pool_two.id,\
-            "Incorrect placement of the task on the WorkerPool."
-        assert placements[1][1] == worker_pool_one.id,\
-            "Incorrect placement of the task on the WorkerPool."
+        assert (
+            placements[0][1] == worker_pool_two.id
+        ), "Incorrect placement of the task on the WorkerPool."
+        assert (
+            placements[1][1] == worker_pool_one.id
+        ), "Incorrect placement of the task on the WorkerPool."
     else:
         raiseExceptions(
             "Incorrect placements: two tasks arent the same as the ones placed"
@@ -78,29 +88,23 @@ def test_z3_scheduler_limited_resources():
     task_higher_priority = create_default_task(deadline=220)
     task_higher_priority.update_remaining_time(150)
     task_higher_priority.release(50)
-    task_graph = TaskGraph(tasks={
-        task_lower_priority: [],
-        task_higher_priority: []
-    })
+    task_graph = TaskGraph(tasks={task_lower_priority: [], task_higher_priority: []})
 
     # Create the WorkerPool.
     worker = Worker(
         name="Worker",
-        resources=Resources({
-            Resource(name="CPU"): 1,
-            Resource(name="GPU"): 1
-        }),
+        resources=Resources({Resource(name="CPU"): 1, Resource(name="GPU"): 1}),
     )
     worker_pool = WorkerPool(name="WorkerPool", workers=[worker])
 
     # Schedule the tasks.
-    _, placements = z3_scheduler.schedule(50,
-                                          task_graph=task_graph,
-                                          worker_pools=WorkerPools(
-                                              [worker_pool]))
+    _, placements = z3_scheduler.schedule(
+        50, task_graph=task_graph, worker_pools=WorkerPools([worker_pool])
+    )
 
-    assert all([placement is None for (_, placement) in placements
-                ]), "Doesn't detect workload is unschedulable."
+    assert all(
+        [placement is None for (_, placement) in placements]
+    ), "Doesn't detect workload is unschedulable."
 
     # assert placements[1][0] == task_higher_priority,\
     #     "Incorrect task received in the placement."
@@ -121,13 +125,19 @@ def test_gurobi_scheduler_success():
     scheduler = GurobiScheduler()
 
     # Create the tasks and the TaskGraph.
-    task_cpu = create_default_task(resource_requirements=Resources(
-        resource_vector={Resource(name="CPU", _id="any"): 1}),
-                                   deadline=200)
+    task_cpu = create_default_task(
+        resource_requirements=Resources(
+            resource_vector={Resource(name="CPU", _id="any"): 1}
+        ),
+        deadline=200,
+    )
     task_cpu.release(1)
-    task_gpu = create_default_task(resource_requirements=Resources(
-        resource_vector={Resource(name="GPU", _id="any"): 1}),
-                                   deadline=50)
+    task_gpu = create_default_task(
+        resource_requirements=Resources(
+            resource_vector={Resource(name="GPU", _id="any"): 1}
+        ),
+        deadline=50,
+    )
     task_gpu.release(1)
     task_graph = TaskGraph(tasks={task_cpu: [], task_gpu: []})
 
@@ -154,15 +164,19 @@ def test_gurobi_scheduler_success():
     assert len(placements) == 2, "Incorrect length of task placements."
 
     if placements[1][0] == task_gpu and placements[0][0] == task_cpu:
-        assert placements[1][1] == worker_pool_two.id,\
-            "Incorrect placement of the task on the WorkerPool."
-        assert placements[0][1] == worker_pool_one.id,\
-            "Incorrect placement of the task on the WorkerPool."
+        assert (
+            placements[1][1] == worker_pool_two.id
+        ), "Incorrect placement of the task on the WorkerPool."
+        assert (
+            placements[0][1] == worker_pool_one.id
+        ), "Incorrect placement of the task on the WorkerPool."
     elif placements[0][0] == task_gpu and placements[1][0] == task_cpu:
-        assert placements[0][1] == worker_pool_two.id,\
-            "Incorrect placement of the task on the WorkerPool."
-        assert placements[1][1] == worker_pool_one.id,\
-            "Incorrect placement of the task on the WorkerPool."
+        assert (
+            placements[0][1] == worker_pool_two.id
+        ), "Incorrect placement of the task on the WorkerPool."
+        assert (
+            placements[1][1] == worker_pool_one.id
+        ), "Incorrect placement of the task on the WorkerPool."
     else:
         raiseExceptions(
             "Incorrect placements: two tasks arent the same as the ones placed"
@@ -183,28 +197,23 @@ def test_gurobi_scheduler_limited_resources():
     task_higher_priority = create_default_task(deadline=220)
     task_higher_priority.release(50)
     task_higher_priority.update_remaining_time(150)
-    task_graph = TaskGraph(tasks={
-        task_lower_priority: [],
-        task_higher_priority: []
-    })
+    task_graph = TaskGraph(tasks={task_lower_priority: [], task_higher_priority: []})
 
     # Create the WorkerPool.
     worker = Worker(
         name="Worker",
-        resources=Resources({
-            Resource(name="CPU"): 1,
-            Resource(name="GPU"): 1
-        }),
+        resources=Resources({Resource(name="CPU"): 1, Resource(name="GPU"): 1}),
     )
     worker_pool = WorkerPool(name="WorkerPool", workers=[worker])
 
     # Schedule the tasks.
-    _, placements = scheduler.schedule(50,
-                                       task_graph=task_graph,
-                                       worker_pools=WorkerPools([worker_pool]))
+    _, placements = scheduler.schedule(
+        50, task_graph=task_graph, worker_pools=WorkerPools([worker_pool])
+    )
 
-    assert all([placement is None for (_, placement) in placements
-                ]), "Doesn't detect workload is unschedulable."
+    assert all(
+        [placement is None for (_, placement) in placements]
+    ), "Doesn't detect workload is unschedulable."
 
 
 def test_edf_scheduler_success():
@@ -216,13 +225,19 @@ def test_edf_scheduler_success():
     edf_scheduler = EDFScheduler()
 
     # Create the tasks and the TaskGraph.
-    task_cpu = create_default_task(resource_requirements=Resources(
-        resource_vector={Resource(name="CPU", _id="any"): 1}),
-                                   deadline=200)
+    task_cpu = create_default_task(
+        resource_requirements=Resources(
+            resource_vector={Resource(name="CPU", _id="any"): 1}
+        ),
+        deadline=200,
+    )
     task_cpu.release(1)
-    task_gpu = create_default_task(resource_requirements=Resources(
-        resource_vector={Resource(name="GPU", _id="any"): 1}),
-                                   deadline=50)
+    task_gpu = create_default_task(
+        resource_requirements=Resources(
+            resource_vector={Resource(name="GPU", _id="any"): 1}
+        ),
+        deadline=50,
+    )
     task_gpu.release(1)
     task_graph = TaskGraph(tasks={task_cpu: [], task_gpu: []})
 
@@ -245,14 +260,14 @@ def test_edf_scheduler_success():
         worker_pools=WorkerPools([worker_pool_one, worker_pool_two]),
     )
     assert len(placements) == 2, "Incorrect length of task placements."
-    assert placements[0][0] == task_gpu,\
-        "Incorrect task received in the placement."
-    assert placements[0][1] == worker_pool_two.id,\
-        "Incorrect placement of the task on the WorkerPool."
-    assert placements[1][0] == task_cpu,\
-        "Incorrect task received in the placement."
-    assert placements[1][1] == worker_pool_one.id,\
-        "Incorrect placement of the task on the WorkerPool."
+    assert placements[0][0] == task_gpu, "Incorrect task received in the placement."
+    assert (
+        placements[0][1] == worker_pool_two.id
+    ), "Incorrect placement of the task on the WorkerPool."
+    assert placements[1][0] == task_cpu, "Incorrect task received in the placement."
+    assert (
+        placements[1][1] == worker_pool_one.id
+    ), "Incorrect placement of the task on the WorkerPool."
 
 
 def test_edf_scheduler_limited_resources():
@@ -268,18 +283,12 @@ def test_edf_scheduler_limited_resources():
     task_lower_priority.release(1)
     task_higher_priority = create_default_task(deadline=50)
     task_higher_priority.release(1)
-    task_graph = TaskGraph(tasks={
-        task_lower_priority: [],
-        task_higher_priority: []
-    })
+    task_graph = TaskGraph(tasks={task_lower_priority: [], task_higher_priority: []})
 
     # Create the WorkerPool.
     worker = Worker(
         name="Worker",
-        resources=Resources({
-            Resource(name="CPU"): 1,
-            Resource(name="GPU"): 1
-        }),
+        resources=Resources({Resource(name="CPU"): 1, Resource(name="GPU"): 1}),
     )
     worker_pool = WorkerPool(name="WorkerPool", workers=[worker])
 
@@ -290,14 +299,18 @@ def test_edf_scheduler_limited_resources():
         worker_pools=WorkerPools([worker_pool]),
     )
     assert len(placements) == 2, "Incorrect length of task placements."
-    assert placements[0][0] == task_higher_priority,\
-        "Incorrect task received in the placement."
-    assert placements[0][1] == worker_pool.id,\
-        "Incorrect placement of the task on the WorkerPool."
-    assert placements[1][0] == task_lower_priority,\
-        "Incorrect task received in the placement."
-    assert placements[1][1] is None,\
-        "Incorrect placement of the task on the WorkerPool."
+    assert (
+        placements[0][0] == task_higher_priority
+    ), "Incorrect task received in the placement."
+    assert (
+        placements[0][1] == worker_pool.id
+    ), "Incorrect placement of the task on the WorkerPool."
+    assert (
+        placements[1][0] == task_lower_priority
+    ), "Incorrect task received in the placement."
+    assert (
+        placements[1][1] is None
+    ), "Incorrect placement of the task on the WorkerPool."
 
 
 def test_edf_scheduler_non_preemptive_higher_priority():
@@ -312,45 +325,36 @@ def test_edf_scheduler_non_preemptive_higher_priority():
     task_lower_priority = create_default_task(deadline=200)
     task_lower_priority.release(1)
     task_higher_priority = create_default_task(deadline=50)
-    task_graph = TaskGraph(tasks={
-        task_lower_priority: [],
-        task_higher_priority: []
-    })
+    task_graph = TaskGraph(tasks={task_lower_priority: [], task_higher_priority: []})
 
     # Create the WorkerPool.
     worker = Worker(
         name="Worker",
-        resources=Resources({
-            Resource(name="CPU"): 1,
-            Resource(name="GPU"): 1
-        }),
+        resources=Resources({Resource(name="CPU"): 1, Resource(name="GPU"): 1}),
     )
     worker_pool = WorkerPool(name="WorkerPool", workers=[worker])
 
     # Schedule the lower priority task.
-    _, placements = edf_scheduler.schedule(1,
-                                           task_graph=task_graph,
-                                           worker_pools=WorkerPools(
-                                               [worker_pool]))
+    _, placements = edf_scheduler.schedule(
+        1, task_graph=task_graph, worker_pools=WorkerPools([worker_pool])
+    )
     for (task, placement) in placements:
         if task == task_higher_priority:
-            assert placement is None,\
-                "Incorrect placement of the high priority task."
+            assert placement is None, "Incorrect placement of the high priority task."
         elif task == task_lower_priority:
-            assert placement == worker_pool.id,\
-                "Incorrect placement of the low priority task."
+            assert (
+                placement == worker_pool.id
+            ), "Incorrect placement of the low priority task."
     worker_pool.place_task(task_lower_priority)
 
     task_higher_priority.release(2)
     # Schedule the higher priority task.
-    _, placements = edf_scheduler.schedule(2,
-                                           task_graph=task_graph,
-                                           worker_pools=WorkerPools(
-                                               [worker_pool]))
+    _, placements = edf_scheduler.schedule(
+        2, task_graph=task_graph, worker_pools=WorkerPools([worker_pool])
+    )
     for (task, placement) in placements:
         if task == task_higher_priority:
-            assert placement is None,\
-                "Incorrect placement of the high priority task."
+            assert placement is None, "Incorrect placement of the high priority task."
 
 
 def test_edf_scheduler_preemptive_higher_priority():
@@ -365,47 +369,39 @@ def test_edf_scheduler_preemptive_higher_priority():
     task_lower_priority = create_default_task(deadline=200)
     task_lower_priority.release(1)
     task_higher_priority = create_default_task(deadline=50)
-    task_graph = TaskGraph(tasks={
-        task_lower_priority: [],
-        task_higher_priority: []
-    })
+    task_graph = TaskGraph(tasks={task_lower_priority: [], task_higher_priority: []})
 
     # Create the WorkerPool.
     worker = Worker(
         name="Worker",
-        resources=Resources({
-            Resource(name="CPU"): 1,
-            Resource(name="GPU"): 1
-        }),
+        resources=Resources({Resource(name="CPU"): 1, Resource(name="GPU"): 1}),
     )
     worker_pool = WorkerPool(name="WorkerPool", workers=[worker])
 
     # Schedule the lower priority task.
-    _, placements = edf_scheduler.schedule(1,
-                                           task_graph=task_graph,
-                                           worker_pools=WorkerPools(
-                                               [worker_pool]))
+    _, placements = edf_scheduler.schedule(
+        1, task_graph=task_graph, worker_pools=WorkerPools([worker_pool])
+    )
     for (task, placement) in placements:
         if task == task_higher_priority:
-            assert placement is None,\
-                "Incorrect placement of the high priority task."
+            assert placement is None, "Incorrect placement of the high priority task."
         elif task == task_lower_priority:
-            assert placement == worker_pool.id,\
-                "Incorrect placement of the low priority task."
+            assert (
+                placement == worker_pool.id
+            ), "Incorrect placement of the low priority task."
     worker_pool.place_task(task_lower_priority)
     task_higher_priority.release(2)
     # # Schedule the higher priority task.
-    _, placements = edf_scheduler.schedule(2,
-                                           task_graph=task_graph,
-                                           worker_pools=WorkerPools(
-                                               [worker_pool]))
+    _, placements = edf_scheduler.schedule(
+        2, task_graph=task_graph, worker_pools=WorkerPools([worker_pool])
+    )
     for (task, placement) in placements:
         if task == task_lower_priority:
-            assert placement is None,\
-                "Incorrect placement of the low priority task."
+            assert placement is None, "Incorrect placement of the low priority task."
         elif task == task_higher_priority:
-            assert placement == worker_pool.id,\
-                "Incorrect placement of the high priority task."
+            assert (
+                placement == worker_pool.id
+            ), "Incorrect placement of the high priority task."
 
 
 def test_lsf_scheduler_success():
@@ -417,13 +413,19 @@ def test_lsf_scheduler_success():
     lsf_scheduler = LSFScheduler()
 
     # Create the tasks and the TaskGraph.
-    task_cpu = create_default_task(resource_requirements=Resources(
-        resource_vector={Resource(name="CPU", _id="any"): 1}),
-                                   deadline=200)
+    task_cpu = create_default_task(
+        resource_requirements=Resources(
+            resource_vector={Resource(name="CPU", _id="any"): 1}
+        ),
+        deadline=200,
+    )
     task_cpu.release(1)
-    task_gpu = create_default_task(resource_requirements=Resources(
-        resource_vector={Resource(name="GPU", _id="any"): 1}),
-                                   deadline=50)
+    task_gpu = create_default_task(
+        resource_requirements=Resources(
+            resource_vector={Resource(name="GPU", _id="any"): 1}
+        ),
+        deadline=50,
+    )
     task_gpu.release(1)
     task_graph = TaskGraph(tasks={task_cpu: [], task_gpu: []})
 
@@ -446,14 +448,14 @@ def test_lsf_scheduler_success():
         worker_pools=WorkerPools([worker_pool_one, worker_pool_two]),
     )
     assert len(placements) == 2, "Incorrect length of task placements."
-    assert placements[0][0] == task_gpu,\
-        "Incorrect task received in the placement."
-    assert placements[0][1] == worker_pool_two.id,\
-        "Incorrect placement of the task on the WorkerPool."
-    assert placements[1][0] == task_cpu,\
-        "Incorrect task received in the placement."
-    assert placements[1][1] == worker_pool_one.id,\
-        "Incorrect placement of the task on the WorkerPool."
+    assert placements[0][0] == task_gpu, "Incorrect task received in the placement."
+    assert (
+        placements[0][1] == worker_pool_two.id
+    ), "Incorrect placement of the task on the WorkerPool."
+    assert placements[1][0] == task_cpu, "Incorrect task received in the placement."
+    assert (
+        placements[1][1] == worker_pool_one.id
+    ), "Incorrect placement of the task on the WorkerPool."
 
 
 def test_lsf_scheduler_limited_resources():
@@ -471,32 +473,29 @@ def test_lsf_scheduler_limited_resources():
     task_higher_priority = create_default_task(deadline=220)
     task_higher_priority.release(50)
     task_higher_priority.update_remaining_time(150)
-    task_graph = TaskGraph(tasks={
-        task_lower_priority: [],
-        task_higher_priority: []
-    })
+    task_graph = TaskGraph(tasks={task_lower_priority: [], task_higher_priority: []})
 
     # Create the WorkerPool.
     worker = Worker(
         name="Worker",
-        resources=Resources({
-            Resource(name="CPU"): 1,
-            Resource(name="GPU"): 1
-        }),
+        resources=Resources({Resource(name="CPU"): 1, Resource(name="GPU"): 1}),
     )
     worker_pool = WorkerPool(name="WorkerPool", workers=[worker])
 
     # Schedule the tasks.
-    _, placements = lsf_scheduler.schedule(50,
-                                           task_graph=task_graph,
-                                           worker_pools=WorkerPools(
-                                               [worker_pool]))
+    _, placements = lsf_scheduler.schedule(
+        50, task_graph=task_graph, worker_pools=WorkerPools([worker_pool])
+    )
     assert len(placements) == 2, "Incorrect length of task placements."
-    assert placements[0][0] == task_higher_priority,\
-        "Incorrect task received in the placement."
-    assert placements[0][1] == worker_pool.id,\
-        "Incorrect placement of the task on the WorkerPool."
-    assert placements[1][0] == task_lower_priority,\
-        "Incorrect task received in the placement."
-    assert placements[1][1] is None,\
-        "Incorrect placement of the task on the WorkerPool."
+    assert (
+        placements[0][0] == task_higher_priority
+    ), "Incorrect task received in the placement."
+    assert (
+        placements[0][1] == worker_pool.id
+    ), "Incorrect placement of the task on the WorkerPool."
+    assert (
+        placements[1][0] == task_lower_priority
+    ), "Incorrect task received in the placement."
+    assert (
+        placements[1][1] is None
+    ), "Incorrect placement of the task on the WorkerPool."
