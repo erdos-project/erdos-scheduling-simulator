@@ -38,6 +38,16 @@ class BaseScheduler(object):
         raise NotImplementedError(
             "The `log()` method has not been implemented.")
 
+    @property
+    def preemptive(self):
+        raise NotImplementedError(
+            "The `preemptive` property has not been implemented.")
+
+    @property
+    def scheduling_horizon(self):
+        raise NotImplementedError(
+            "The `scheduling_horizon` property has not been implemented.")
+
     def _verify_schedule(self, worker_pools: WorkerPools,
                          task_graph: TaskGraph, placements, start_times):
         # Check if each task's start time is greater than its release time.
