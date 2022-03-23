@@ -15,7 +15,8 @@ flags.DEFINE_bool('plot_scheduler_runtime', False, 'Plot scheduling runtime')
 flags.DEFINE_bool('plot_utilization', False, 'Plot resource utilization')
 flags.DEFINE_bool('plot_task_info', False, 'Plot task placement info')
 flags.DEFINE_bool('plot_task_slack', False, 'Plot task slack')
-flags.DEFINE_bool('plot_task_start_delay', False, 'Plot task start delay')
+flags.DEFINE_bool('plot_task_placement_delay', False,
+                  'Plot task placement delay')
 flags.DEFINE_string('utilization_timeline_plot_name',
                     'utilization_bar_chart.png',
                     'The filename of the utilization timeline plot')
@@ -30,7 +31,8 @@ flags.DEFINE_string('task_placement_bar_chart_plot_name',
                     'The filename of the task placement bar char plot')
 flags.DEFINE_string('task_slack_plot_name', 'task_slack.png',
                     'The filename of the task slack plot')
-flags.DEFINE_string('task_start_delay_plot_name', 'task_start_delay.png',
+flags.DEFINE_string('task_placement_delay_plot_name',
+                    'task_placement_delay.png',
                     'The filename of the task start delay plot')
 
 matplotlib.rcParams.update({'font.size': 16, 'figure.autolayout': True})
@@ -38,6 +40,37 @@ matplotlib.rcParams['xtick.labelsize'] = 16
 matplotlib.rcParams['ytick.labelsize'] = 16
 plt.rcParams['font.family'] = 'serif'
 axes_fontsize = 16
+
+
+def print_stats(vals):
+    print("Number of values {}".format(len(vals)))
+    avg = np.mean(vals)
+    print('AVG: {}'.format(avg))
+    median = np.median(vals)
+    print('MEDIAN: {}'.format(median))
+    min_val = np.min(vals)
+    print('MIN: {}'.format(min_val))
+    max_val = np.max(vals)
+    print('MAX: {}'.format(max_val))
+    stddev = np.std(vals)
+    print('STDDEV: {}'.format(stddev))
+    print('PERCENTILES:')
+    perc1 = np.percentile(vals, 1)
+    print('  1st: {}'.format(perc1))
+    perc10 = np.percentile(vals, 10)
+    print(' 10th: {}'.format(perc10))
+    perc25 = np.percentile(vals, 25)
+    print(' 25th: {}'.format(perc25))
+    perc50 = np.percentile(vals, 50)
+    print(' 50th: {}'.format(perc50))
+    perc75 = np.percentile(vals, 75)
+    print(' 75th: {}'.format(perc75))
+    perc90 = np.percentile(vals, 90)
+    print(' 90th: {}'.format(perc90))
+    perc99 = np.percentile(vals, 99)
+    print(' 99th: {}'.format(perc99))
+    perc999 = np.percentile(vals, 99.9)
+    print(' 99.9th: {}'.format(perc999))
 
 
 def plot_utilization(plotter, figure_size=(14, 10), bar_width=1.0):
@@ -113,20 +146,22 @@ def plot_scheduler_runtime(plotter, figure_size=(14, 10)):
     # Retrieve the runtime of the scheduler invocations.
     scheduler_invocations = plotter.get_scheduler_invocations(FLAGS.csv_file)
     runtimes = list(map(attrgetter('runtime'), scheduler_invocations))
+    runtimes_ms = [runtime / 1000 for runtime in runtimes]
     start_times = list(map(attrgetter('start_time'), scheduler_invocations))
+    start_times_ms = [start_time / 1000 for start_time in start_times]
+    print('================== Scheduler runtime [ms] ==================')
+    print_stats(runtimes_ms)
     # Plot a timelapse of the runtime of the scheduler.
     plt.figure(figsize=figure_size)
-    plt.plot([start_time / 1000 for start_time in start_times],
-             [runtime / 1000 for runtime in runtimes],
-             marker='o')
-    plt.xlim(0, int(max(start_times) / 1000))
+    plt.plot(start_times_ms, runtimes_ms, marker='o')
+    plt.xlim(0, int(max(start_times_ms)))
     plt.xlabel('Timeline [ms]', fontsize=axes_fontsize)
     plt.ylabel('Scheduler Runtime [ms]', fontsize=axes_fontsize)
     plt.savefig(FLAGS.scheduler_runtime_timeline_plot_name,
                 bbox_inches='tight')
 
     # Plot the CDF of the runtime of the scheduler invocations.
-    count, bin_count = np.histogram(runtimes, bins=100)
+    count, bin_count = np.histogram(runtimes_ms, bins=100)
     pdf = count / sum(count)
     cdf = np.cumsum(pdf)
 
@@ -172,6 +207,11 @@ def plot_task_info(plotter, figure_size=(14, 10)):
         alpha=0.4,
         color='red')
 
+    print('================== Num placed tasks ==================')
+    print_stats(placed_task_heights)
+    print('================== Num unplaced tasks ==================')
+    print_stats(unplaced_task_heights)
+
     # Add the axis labels.
     plt.xlabel('Scheduler Run', fontsize=axes_fontsize)
     plt.ylabel('Placed and Unplaced Tasks', fontsize=axes_fontsize)
@@ -196,6 +236,8 @@ def plot_task_slack(plotter, figure_size=(14, 10)):
     plt.figure(figsize=figure_size)
     tasks = plotter.get_tasks(FLAGS.csv_file)
     slack = [(task.deadline - task.completion_time) / 1000 for task in tasks]
+    print('================== Task slack [ms] ==================')
+    print_stats(slack)
     plt.xlim(min(slack), max(slack))
     plt.xlabel('Task Slack [ms]', fontsize=axes_fontsize)
     plt.ylabel('Relative Frequency', fontsize=axes_fontsize)
@@ -203,16 +245,20 @@ def plot_task_slack(plotter, figure_size=(14, 10)):
     plt.savefig(FLAGS.task_slack_plot_name, bbox_inches='tight')
 
 
-def plot_task_start_delay(plotter, figure_size=(14, 10)):
+def plot_task_placement_delay(plotter, figure_size=(14, 10)):
     plt.figure(figsize=figure_size)
-    tasks = plotter.get_tasks(FLAGS.csv_file)
-    start_delay = [(task.start_time - task.release_time) / 1000
-                   for task in tasks]
-    plt.xlim(min(start_delay), max(start_delay))
-    plt.xlabel('Task Start Delay [ms]', fontsize=axes_fontsize)
+    task_placements = plotter.get_task_placements(FLAGS.csv_file)
+    placement_delay = [
+        (placement.simulator_time - placement.task.release_time) / 1000
+        for placement in task_placements
+    ]
+    print('================== Task placement delay [ms] ==================')
+    print_stats(placement_delay)
+    plt.xlim(min(placement_delay), max(placement_delay))
+    plt.xlabel('Task Placement Delay [ms]', fontsize=axes_fontsize)
     plt.ylabel('Relative Frequency', fontsize=axes_fontsize)
-    plt.hist(start_delay, density=True, bins=100)
-    plt.savefig(FLAGS.task_start_delay_plot_name, bbox_inches='tight')
+    plt.hist(placement_delay, density=True, bins=100)
+    plt.savefig(FLAGS.task_placement_delay_plot_name, bbox_inches='tight')
 
 
 def task_stats(tasks):
@@ -247,8 +293,8 @@ def main(argv):
         plot_task_info(plotter, figure_size)
     if FLAGS.plot_task_slack:
         plot_task_slack(plotter, figure_size)
-    if FLAGS.plot_task_start_delay:
-        plot_task_start_delay(plotter, figure_size)
+    if FLAGS.plot_task_placement_delay:
+        plot_task_placement_delay(plotter, figure_size)
 
 
 if __name__ == '__main__':

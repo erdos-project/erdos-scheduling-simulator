@@ -3,7 +3,7 @@ import logging
 import sys
 from collections import defaultdict
 from operator import attrgetter
-from random import choice
+from random import Random
 from typing import Mapping, Optional, Sequence, Tuple
 
 import absl  # noqa: F401
@@ -103,7 +103,7 @@ class TaskLoaderJSON(object):
                                           log_level=_flags.log_level)
         self._tasks = TaskLoaderJSON._TaskLoaderJSON__create_tasks(
             profile_data, self._jobs, self._resource_requirements,
-            max_timestamp, task_logger, _flags.deadline_variance)
+            max_timestamp, task_logger, _flags.deadline_variance, Random(42))
         for task in self._tasks:
             self._logger.debug(f"Loaded Task from JSON: {task}")
         self._logger.debug(
@@ -189,7 +189,8 @@ class TaskLoaderJSON(object):
                        resources: Mapping[str, Sequence[Resources]],
                        max_timestamp: int = sys.maxsize,
                        logger: Optional[logging.Logger] = None,
-                       deadline_variance: Optional[int] = 0)\
+                       deadline_variance: Optional[int] = 0,
+                       rng: Random = Random())\
             -> Sequence[Task]:
         """Creates a list of tasks from the given JSON entries.
 
@@ -216,13 +217,14 @@ class TaskLoaderJSON(object):
             if entry['args']['timestamp'] > max_timestamp:
                 continue
             # All times are in microseconds.
-            runtime_deadline = utils.fuzz_time(entry['dur'], deadline_variance)
+            runtime_deadline = utils.fuzz_time(rng, entry['dur'],
+                                               deadline_variance)
             deadline = entry['ts'] + runtime_deadline
             tasks.append(
                 Task(
                     name=entry['name'],
                     job=jobs[entry['pid']],
-                    resource_requirements=choice(resources[entry['name']]),
+                    resource_requirements=rng.choice(resources[entry['name']]),
                     runtime=entry['dur'],
                     deadline=deadline,
                     timestamp=entry['args']['timestamp'],

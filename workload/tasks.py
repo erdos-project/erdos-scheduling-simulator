@@ -3,6 +3,7 @@ import sys
 import uuid
 from collections import defaultdict, deque, namedtuple
 from enum import Enum
+from random import Random
 from typing import Mapping, Optional, Sequence, Union
 
 import utils
@@ -113,7 +114,10 @@ class Task(object):
         self._release_time = time if time is not None else self._release_time
         self._state = TaskState.RELEASED
 
-    def start(self, time: Optional[int] = None, variance: Optional[int] = 0):
+    def start(self,
+              time: Optional[int] = None,
+              variance: Optional[int] = 0,
+              rng: Random = Random()):
         """Begins the execution of the task at the given simulator time.
 
         Args:
@@ -133,11 +137,13 @@ class Task(object):
             raise ValueError("Start time should be specified either while "
                              "creating the Task or when starting it.")
 
-        remaining_time = utils.fuzz_time(self._remaining_time, variance)
+        remaining_time = utils.fuzz_time(rng, self._remaining_time, variance)
         self._logger.debug(
             f"Transitioning {self} to {TaskState.RUNNING} at time {time} "
             f"with the remaining time {remaining_time}")
         self._start_time = time if time is not None else self._start_time
+        assert self._start_time >= self._release_time, \
+            f"Task {self.id} start time must be greater than release time"
         self._last_step_time = time
         self._state = TaskState.RUNNING
         self.update_remaining_time(remaining_time)

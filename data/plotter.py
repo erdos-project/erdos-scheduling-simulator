@@ -258,6 +258,23 @@ class Plotter(object):
                 tasks.append(event.task)
         return tasks
 
+    def get_task_placements(self, csv_path: str) -> Sequence[TaskPlacement]:
+        """Retrives the task placements events.
+
+        Args:
+            csv_path (`str`): The path to the CSV file whose tasks need to
+                be retrieved.
+
+        Returns:
+            A `Sequence[TaskPlacement]` that contains the task placements,
+            ordered by their placement time.
+        """
+        task_placements = []
+        for event in self._events[csv_path]:
+            if type(event) == TaskPlacement:
+                task_placements.append(event)
+        return task_placements
+
     def get_simulator_end_time(self, csv_path: str) -> int:
         """Retrieves the time at which the simulator ended.
 

@@ -1,5 +1,5 @@
 import logging
-import random
+from random import Random
 from typing import Optional, Sequence
 
 import numpy as np
@@ -64,7 +64,8 @@ def setup_csv_logging(name: str, log_file: str) -> logging.Logger:
                          log_level="debug")
 
 
-def fuzz_time(time: int,
+def fuzz_time(rng: Random,
+              time: int,
               variance: int,
               positive: Optional[bool] = True) -> int:
     """Fuzz the given `time` according to the provided `variance`.
@@ -79,13 +80,13 @@ def fuzz_time(time: int,
         The fuzzed time according to the given variance.
     """
     if positive:
-        return int(random.uniform(time, time + (time * abs(variance) / 100.0)))
+        return int(rng.uniform(time, time + (time * abs(variance) / 100.0)))
     else:
         return max(
             0,
             int(
-                random.uniform(time - time * abs(variance) / 100.0,
-                               time + time * abs(variance) / 100.0)))
+                rng.uniform(time - time * abs(variance) / 100.0,
+                            time + time * abs(variance) / 100.0)))
 
 
 def log_statistics(data: Sequence[int],

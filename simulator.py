@@ -2,6 +2,7 @@ import heapq
 import sys
 from enum import Enum
 from operator import attrgetter
+from random import Random
 from typing import Optional, Sequence, Type
 
 import absl  # noqa: F401
@@ -171,6 +172,8 @@ class Simulator(object):
             self._logger = utils.setup_logging(name=self.__class__.__name__)
             self._csv_logger = utils.setup_csv_logging(
                 name=self.__class__.__name__, log_file=None)
+
+        self._rng = Random(42)
 
         self._worker_pools = {
             worker_pool.id: worker_pool
@@ -413,7 +416,7 @@ class Simulator(object):
                     worker_pool = self._worker_pools[placement]
                     # Initialize the task at the given placement time, and
                     # place it on the WorkerPool.
-                    task.start(event.time, self._runtime_variance)
+                    task.start(event.time, self._runtime_variance, self._rng)
                     worker_pool.place_task(task)
                     self._logger.info(
                         f"[{event.time}] Placed {task} on {worker_pool}")

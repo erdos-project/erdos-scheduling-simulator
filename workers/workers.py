@@ -110,6 +110,7 @@ class Worker(object):
         # Invoke the step() method on all the tasks.
         for task in self._placed_tasks:
             if task.state != TaskState.RUNNING:
+                self._logger.debug(f"Skipping stepping for task {task}.")
                 continue
             self._logger.debug(f"Stepping through the execution of {task} for "
                                f"{step_size} steps from time {current_time}.")
