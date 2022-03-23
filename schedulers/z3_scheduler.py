@@ -1,24 +1,60 @@
 import functools
-from z3 import Int, Solver, Implies, Or, unsat, Optimize, IntVal
-# from z3 import If, BitVec, Bool, UGE, ULT, BitVecVal
+import pickle
+import sys
 import time
-
 # from math import ceil, log2
-from typing import Dict, List, Optional
+from typing import Optional
+
+import absl  # noqa: F401
+from z3 import Implies, Int, Optimize, Or, Solver, unsat
 
 import utils
-from schedulers.ilp_scheduler import ILPScheduler
+from schedulers import BaseScheduler
+from workers import WorkerPools
+from workload import TaskGraph, TaskState
 
 
-class Z3Scheduler(ILPScheduler):
+class Z3Scheduler(BaseScheduler):
 
     def __init__(self,
                  preemptive: bool = False,
-                 runtime: float = -1.0,
+                 runtime: int = -1,
+                 goal: str = 'max_slack',
+                 enforce_deadlines: bool = True,
+                 scheduling_horizon: int = 0,
                  _flags: Optional['absl.flags'] = None):
+        """Constructs a Z3 scheduler.
+
+        Args:
+            preemptive (`bool`): If `True`, the Z3 scheduler can preempt
+                the tasks that are currently running.
+            runtime (`int`): The runtime to return to the simulator (in us).
+                If -1, the scheduler returns the actual runtime.
+            goal (`str`): Goal of the scheduler run.
+            enforce_deadlines (`bool`): Deadlines must be met or else the
+                schedule will return None.
+            scheduling_horizon (`int`): The scheduler will try to place
+                tasks that are within the scheduling horizon (in us) using
+                estimated task release times.
+        """
         self._preemptive = preemptive
         self._runtime = runtime
+        self._goal = goal
+        self._enforce_deadlines = enforce_deadlines
+        self._scheduling_horizon = scheduling_horizon
+        self._time = None
+        self._task_ids_to_task = {}
+        # Mapping from task id to the var storing the task start time.
+        self._task_ids_to_start_time = {}
+        # Mapping from task id to the var storing the task placement.
+        self._task_ids_to_placement = {}
+        # Mapping from task id to the var storing the cost of the placement.
+        self._task_ids_to_cost = {}
+        self._task_graph = None
+        self._worker_pools = None
+        self._placements = []
         # Set up the logger.
+        self._flags = _flags
         if _flags:
             self._logger = utils.setup_logging(name=self.__class__.__name__,
                                                log_file=_flags.log_file_name,
@@ -26,180 +62,174 @@ class Z3Scheduler(ILPScheduler):
         else:
             self._logger = utils.setup_logging(name=self.__class__.__name__)
 
-    def schedule(self,
-                 resource_requirement: List[List[bool]],
-                 release_times: List[int],
-                 absolute_deadlines: List[int],
-                 expected_runtimes: List[int],
-                 dependency_matrix,
-                 pinned_tasks: List[int],
-                 num_tasks: int,
-                 num_resources: Dict[str, int],
-                 bits=None,
-                 goal='max_slack',
-                 enforce_deadline=True,
-                 log_dir=None):
-        """Runs scheduling using Z3.
+    def _add_task_timing_constraints(self, s):
+        for task_id, task in self._task_ids_to_task.items():
+            start_time = self._task_ids_to_start_time[task_id]
+            if self._enforce_deadlines:
+                s.add(start_time + task.remaining_time <= task.deadline)
+            # Start at or after release time.
+            s.add(task.release_time <= start_time)
+            # Defines cost as slack deadline - finish time.
+            s.add(task.deadline - start_time -
+                  task.remaining_time == self._task_ids_to_cost[task_id])
 
-        Args:
-            resource_requirement: List[List[bool]], List of lists of booleans,
-                where each sublist is a list of booleans indicating whether a
-                task conforms to a resource type.
-            release_times (`List[int]`): List of ints, one for each task,
-                indicating the release time of the task.
-            absolute_deadlines (`List[int]`): List of ints, one for each task,
-                indicating the absolute deadline of the task.
-            expected_runtimes (`List[int]`): List of ints, one for each task,
-                indicating the expected runtime of the task.
-            dependency_matrix (`List[List[bool]]`): List of lists of booleans,
-                one for each task, indicating whether task i must finish
-                before task j starts.
-            pinned_tasks (`List[int]`): List of ints, one for each task,
-                indicating the hardware index if a task is pinned to that
-                resource (or already running there).
-            num_tasks (`int`): Number of tasks.
-            num_resources (`List[int]`): Number of resources.
-            bits (`int`): Number of bits to use for the ILP.
-            goal (`str`): Goal of the scheduler run.
-            enforce_deadline (`bool`): Deadline must be met or else the
-                schedule will return None.
-            log_dir (`str`): Directory to write the ILP to.
-        """
+    def _add_task_dependency_constraints(self, s):
+        for task_id, task in self._task_ids_to_task.items():
+            children = self._task_graph.get_children(task)
+            for child_task in children:
+                # Dependent tasks need to finish before the next one.
+                if child_task.id in self._task_ids_to_start_time:
+                    s.add(self._task_ids_to_start_time[task_id] +
+                          task.remaining_time <= self._task_ids_to_start_time[
+                              child_task.id])
 
-        num_resources_ub = [
-            sum(num_resources[0:i + 1]) for i in range(len(num_resources))
-        ]
-        num_resources_lb = [0] + [
-            sum(num_resources[0:i + 1]) for i in range(len(num_resources) - 1)
-        ]
+    def _add_task_pinning_constraints(self, s):
+        if not self._preemptive:
+            for task_id, task in self._task_ids_to_task.items():
+                if task.state == TaskState.RUNNING:
+                    # TODO: Incorrect! Placement must equate to resource id!
+                    s.add(self._task_ids_to_placement[task_id] == 0)
 
-        def safe_resource_index(resource_requirement: List[bool]):
-            # check that there's only one True
-            compats = [r for r in resource_requirement if r]
-            if len(compats) > 1:
-                raise Exception("More than one compatible resource")
-            if len(compats) == 0:
-                raise Exception("No compatible resource")
-            return resource_requirement.index(True)
+    def _add_task_resource_constraints(self, s, res_type_to_id_range):
+        # Add constraints whether a task is placed on GPU or CPU.
+        # from num_cpus to num_cpus to num_gpus.
+        for task_id, task in self._task_ids_to_task.items():
+            if len(task.resource_requirements) > 1:
+                self._logger.error(
+                    "Scheduler doesn't support multi-resource requirements")
+            # for res in task.resource_requirements._resource_vector.keys():
+            # TODO: Add constraints for all resources once multi-dimensional
+            # requirements are supported.
+            resource = next(iter(task.resource_requirements._resource_vector))
+            (start_id, end_id) = res_type_to_id_range[resource.name]
+            s.add(self._task_ids_to_placement[task_id] >= start_id)
+            s.add(self._task_ids_to_placement[task_id] < end_id)
 
-        def MySum(lst):
-            return functools.reduce(lambda a, b: a + b, lst, 0)
+        for t1_id, task1 in self._task_ids_to_task.items():
+            for t2_id, task2 in self._task_ids_to_task.items():
+                if t2_id >= t1_id:
+                    continue
+                disjoint = [
+                    self._task_ids_to_start_time[t1_id] + task1.remaining_time
+                    <= self._task_ids_to_start_time[t2_id],
+                    self._task_ids_to_start_time[t2_id] + task2.remaining_time
+                    <= self._task_ids_to_start_time[t1_id]
+                ]
+                s.add(
+                    Implies(
+                        self._task_ids_to_placement[t1_id] ==
+                        self._task_ids_to_placement[t2_id], Or(disjoint)))
 
-        # Add new constraint node 'new_node' with attribute 'attr'
-        # e.g. call add_relation(G, 'ub_a', {'rel:'<', 'num':5}, ['a'])
-        #  to add constraint (a < 5)
+    def schedule(self, sim_time: int, task_graph: TaskGraph,
+                 worker_pools: WorkerPools):
 
-        # bits = ceil(log2(num_gpus + num_cpus))
+        def sum_costs(lst):
+            return functools.reduce(lambda a, b: a + b, lst, Int(0))
 
-        start_time = time.time()
-        times = [Int(f't{i}')
-                 for i in range(0, num_tasks)]  # Time when execution starts
-        costs = [Int(f'c{i}') for i in range(0, num_tasks)]  # Costs of gap
-        placements = [Int(f'p{i}')
-                      for i in range(0, num_tasks)]  # placement on CPU or GPU
+        self._time = sim_time
+        self._task_ids_to_task = {}
+        self._task_ids_to_start_time = {}
+        self._task_ids_to_placement = {}
+        self._task_ids_to_cost = {}
+        self._task_graph = task_graph
+        self._worker_pools = worker_pools
 
-        if goal != 'feasibility':
+        tasks = task_graph.get_schedulable_tasks(sim_time,
+                                                 self.scheduling_horizon,
+                                                 self.preemptive, worker_pools)
+
+        scheduler_start_time = time.time()
+        if self._goal != 'feasibility':
             s = Optimize()
         else:
             s = Solver()
 
-        # Add constraints
-        for i, (t, r, e, d, c) in enumerate(
-                zip(times, release_times, expected_runtimes,
-                    absolute_deadlines, costs)):
-            # Finish before deadline.
-            if enforce_deadline:
-                s.add(t + e <= d)
-            # Start at or after release time.
-            s.add(r <= t)
-            s.add(c == d - e - t)
+        for task in tasks:
+            self._task_ids_to_task[task.id] = task
+            self._task_ids_to_start_time[task.id] = Int(f't{task.id}')
+            self._task_ids_to_cost[task.id] = Int(f'c{task.id}')
+            self._task_ids_to_placement[task.id] = Int(f'p{task.id}')
 
-        for i, (p, res_req) in enumerate(zip(placements,
-                                             resource_requirement)):
-            resource_index = safe_resource_index(
-                res_req)  # convert bool vec to int index
-            s.add(p >= num_resources_lb[resource_index],
-                  p < num_resources_ub[resource_index])
+        (res_type_to_id_range,
+         res_id_to_wp_id) = worker_pools.get_resource_ilp_encoding()
+        self._add_task_timing_constraints(s)
+        self._add_task_resource_constraints(s, res_type_to_id_range)
+        self._add_task_dependency_constraints(s)
+        self._add_task_pinning_constraints(s)
 
-            # Legacy code for converting to bitvec to speed up solving if the
-            # number of a particular resource is small.
-            # placements[i] = Bool(f'p{i}')
-            # gpu_bits = ceil(log2(num_gpus))
-            # placements[i] = BitVecVal(num_cpus, gpu_bits)
-            # s.add(UGE(p , BitVecVal(num_cpus, gpu_bits)), ULT(p ,
-            #       BitVecVal(num_gpus + num_cpus, gpu_bits)))
-            # elif res_req == [False,True]:
-            #     s.add(p >= num_resources_lb, p < num_resources_ub)
-            # cpu_bits = ceil(log2(num_cpus))
-            # placements[i] = BitVecVal(num_cpus, cpu_bits)
-            # First half is num_cpus.
-            # s.add(UGE(p, BitVecVal(0, cpu_bits)),
-            #       ULT (p , BitVecVal(num_cpus, cpu_bits)))
-            # else:
-            #     raise ValueError("Tasks are only allowed on one resource")
-
-        for row_i in range(len(dependency_matrix)):
-            for col_j in range(len(dependency_matrix[0])):
-                disjoint = [
-                    times[row_i] + expected_runtimes[row_i] <= times[col_j],
-                    times[col_j] + expected_runtimes[col_j] <= times[row_i]
-                ]
-                if dependency_matrix[row_i][col_j]:
-                    s.add(
-                        disjoint[0]
-                    )  # dependent jobs need to finish before the next one
-
-                if row_i != col_j:  # and row_i < col_j ?
-                    # if needs_gpu[row_i]:
-                    #     i_val = If(placements[row_i],IntVal(10),IntVal(11))
-                    # else:
-                    i_val = placements[row_i]
-                    # if needs_gpu[col_j]:
-                    #     j_val = If(placements[col_j],IntVal(10),IntVal(11))
-                    # else:
-                    j_val = placements[col_j]
-                    # Cannot overlap if on the same hardware.
-                    # ITE(placements[row_i],10,11)) == \
-                    #    ITE(placements[col_j], 10,11))
-                    # Implies(placements[row_i] == placements[col_j],
-                    #         Or(disjoint))
-                    s.add(Implies(i_val == j_val, Or(disjoint)))
-
-        for i, pin in enumerate(pinned_tasks):
-            if pin:
-                s.add(placements[i] == IntVal(pin))
-                # TODO: wrong
-
-        if goal != 'feasibility':
-            result = s.maximize(MySum(costs))
-
-        if log_dir is not None:
-            log_dir = log_dir + f"{goal}.smt"
-            with open(log_dir, "w") as outfile:
-                outfile.write(s.sexpr())
-                if goal == 'feasibility':
-                    outfile.write("(check-sat)")
+        if self._goal != 'feasibility':
+            result = s.maximize(sum_costs(self._task_ids_to_cost.values()))
 
         schedulable = s.check()
-        end_time = time.time()
-        runtime = end_time - start_time
-        cost = None
-        if goal != 'feasibility':
-            cost = s.lower(result)
-            self._logger.debug(cost)
-        self._logger.debug(schedulable)
-        if schedulable != unsat:
-            # placements = [
-            #     int(str(s.model()[p])) if not needs_gpu[i] else
-            #     (10 if bool(s.model()[p]) else 11)
-            #     for i, p in enumerate(placements)
-            # ]
-            placements = [
-                int(str(s.model()[p])) for i, p in enumerate(placements)
-            ]
+        scheduler_end_time = time.time()
+        self._runtime = int((scheduler_end_time - scheduler_start_time) *
+                            1000000) if self.runtime == -1 else self.runtime
 
-            outputs = [int(str(s.model()[t]))
-                       for t in times], [p for p in placements]
-            self._logger.debug(outputs)
-            return outputs, cost, runtime
-        return (None, None), None, runtime
+        # if self._flags.ilp_log_dir is not None:
+        #     log_dir = self._flags.ilp_log_dir + f"{self._goal}.smt"
+        #     with open(log_dir, "w") as outfile:
+        #         outfile.write(s.sexpr())
+        #         if self._goal == 'feasibility':
+        #             outfile.write("(check-sat)")
+
+        self._cost = sys.maxsize
+        self._logger.debug(f"Solver found {schedulable} solution")
+        if schedulable != unsat:
+            if self._goal != 'feasibility':
+                self._cost = s.lower(result)
+                self._logger.debug(
+                    f"Solver found solution with cost {self._cost}")
+            self._placements = []
+            for task_id, task in self._task_ids_to_task.items():
+                start_time = int(
+                    str(s.model()[self._task_ids_to_start_time[task_id]]))
+                placement = res_id_to_wp_id[int(
+                    str(s.model()[self._task_ids_to_placement[task_id]]))]
+                if start_time <= sim_time + self.runtime * 2:
+                    # We only place the tasks with a start time earlier than
+                    # the estimated end time of the next scheduler run.
+                    # Therefore, a task can progress before the next scheduler
+                    # finishes. However, the next scheduler will assume that
+                    # the task is not running while considering for placement.
+                    self._placements.append((task, placement))
+                else:
+                    self._placements.append((task, None))
+            start_times = {}
+            for task_id, st_var in self._task_ids_to_start_time.items():
+                start_times[task_id] = int(str(s.model()[st_var]))
+            self._verify_schedule(self._worker_pools, self._task_graph,
+                                  self._placements, start_times)
+        else:
+            self._placements = [(task, None)
+                                for task in self._task_ids_to_task.values()]
+        # Log the scheduler run.
+        self.log()
+        return self.runtime, self._placements
+
+    def log(self):
+        if (self._flags is not None
+                and self._flags.scheduler_log_file_name is not None):
+            with open(self._flags.scheduler_log_file_name, 'wb') as log_file:
+                logged_data = {
+                    'time': self._time,
+                    'tasks': self._task_ids_to_task,
+                    'task_graph': self._task_graph,
+                    'worker_pools': self._worker_pools,
+                    'scheduling_horizon': self._scheduling_horizon,
+                    'runtime': self.runtime,
+                    'placements': self._placements,
+                    'cost': self._cost
+                }
+                pickle.dump(logged_data, log_file)
+
+    @property
+    def preemptive(self):
+        return self._preemptive
+
+    @property
+    def runtime(self):
+        return self._runtime
+
+    @property
+    def scheduling_horizon(self):
+        return self._scheduling_horizon

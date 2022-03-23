@@ -1,8 +1,10 @@
-import uuid
 import logging
+import sys
+import uuid
+from collections import defaultdict, deque, namedtuple
 from enum import Enum
-from collections import namedtuple, defaultdict
-from typing import Mapping, Sequence, Optional, Union
+from random import Random
+from typing import Mapping, Optional, Sequence, Union
 
 import utils
 from workload import Job, Resources
@@ -35,19 +37,19 @@ class Task(object):
         job (`Job`): The job that created this particular task.
         resource_requirements (`Resources`): The set of resources required by
             this task.
-        release_time (`float`): The time at which the task was released by the
-            job.
-        runtime (`float`): The expected runtime of this task.
-        deadline (`float`): The deadline by which the task should complete.
+        release_time (`int`): The time at which the task was released by the
+            job (in us).
+        runtime (`int`): The expected runtime (in us) of this task.
+        deadline (`int`): The deadline by which the task should complete.
         state (`TaskState`): Defines the state of the task.
         timestamp (`int`): The timestamp for the Task (single dimension).
-        start_time (`float`): The time at which the task was started (only
-            available if state != TaskState.RELEASED, -1 otherwise)
-        remaining_time (`float`): The time remaining to finish the completion
-            of the task.
-        completion_time (`float`): The time at which the task completed / was
-            preempted (only available if state is either EVICTED / COMPLETED,
-            -1 otherwise)
+        start_time (`int`): The time (in us) at which the task was started
+            (only available if state != TaskState.RELEASED, -1 otherwise)
+        remaining_time (`int`): The time (in us) remaining to finish the
+            completion of the task.
+        completion_time (`int`): The time (in us) at which the task completed
+            / was preempted (only available if state is either
+            EVICTED / COMPLETED, -1 otherwise)
         _logger(`Optional[logging.Logger]`): The logger to use to log the
             results of the execution.
     """
@@ -56,12 +58,12 @@ class Task(object):
                  name: str,
                  job: Job,
                  resource_requirements: Resources,
-                 runtime: float,
-                 deadline: float,
+                 runtime: int,
+                 deadline: int,
                  timestamp: int = None,
-                 release_time: Optional[float] = -1,
-                 start_time: Optional[float] = -1,
-                 completion_time: Optional[float] = -1,
+                 release_time: Optional[int] = -1,
+                 start_time: Optional[int] = -1,
+                 completion_time: Optional[int] = -1,
                  _logger: Optional[logging.Logger] = None):
         # Set up the logger.
         if _logger:
@@ -91,56 +93,68 @@ class Task(object):
         self._remaining_time = runtime
         self._last_step_time = -1  # Time when this task was stepped through.
         self._state = TaskState.VIRTUAL
+        # ID of the worker on which the task is running.
+        self._worker_pool_id = None
 
-    def release(self, time: Optional[float] = None):
+    def release(self, time: Optional[int] = None):
         """Release the task and transition away from the virtual state.
 
         Args:
-            time (`Optional[float]`): The simulation time at which to release
-                the task. If None, should be specified at task construction.
+            time (`Optional[int]`): The simulation time (in us) at which to
+                release the task. If None, should be specified at task
+                construction.
         """
         self._logger.debug(f"Transitioning {self} to {TaskState.RELEASED}")
         if time is None and self._release_time == -1:
             raise ValueError("Release time should be specified either while "
                              "creating the Task or when releasing it.")
+        if self.state != TaskState.VIRTUAL:
+            raise ValueError(
+                f"Cannot release {self.id} which is in state {self.state}")
         self._release_time = time if time is not None else self._release_time
         self._state = TaskState.RELEASED
 
     def start(self,
-              time: Optional[float] = None,
-              variance: Optional[float] = 0.0):
+              time: Optional[int] = None,
+              variance: Optional[int] = 0,
+              rng: Random = Random()):
         """Begins the execution of the task at the given simulator time.
 
         Args:
-            time (`Optional[float]`): The simulation time at which to begin the
-                task. If None, should be specified at task construction.
-            variance (`Optional[float]`): The percentage variation to add to
+            time (`Optional[int]`): The simulation time (in us) at which to
+                begin the task. If None, should be specified at task
+                construction.
+            variance (`Optional[int]`): The percentage variation to add to
                 the runtime of the task.
 
         Raises:
             `ValueError` if Task is not in `RELEASED`/`PAUSED` state yet.
         """
         if self.state not in (TaskState.RELEASED, TaskState.PAUSED):
-            raise ValueError("Only RELEASED or PAUSED tasks can be started.")
+            raise ValueError(f"Only RELEASED or PAUSED tasks can be started. "
+                             f"Task is in state {self.state}")
         if time is None and self._start_time == -1:
             raise ValueError("Start time should be specified either while "
                              "creating the Task or when starting it.")
 
-        remaining_time = utils.fuzz_time(self._remaining_time, variance)
+        remaining_time = utils.fuzz_time(rng, self._remaining_time, variance)
         self._logger.debug(
             f"Transitioning {self} to {TaskState.RUNNING} at time {time} "
             f"with the remaining time {remaining_time}")
         self._start_time = time if time is not None else self._start_time
+        assert self._start_time >= self._release_time, \
+            f"Task {self.id} start time must be greater than release time"
         self._last_step_time = time
         self._state = TaskState.RUNNING
         self.update_remaining_time(remaining_time)
 
-    def step(self, current_time: float, step_size: float = 1) -> bool:
+    def step(self, current_time: int, step_size: int = 1) -> bool:
         """Steps the task for the given `step_size` (default 1 time step).
 
         Args:
-            current_time (`float`): The current time of the simulator loop.
-            step_size (`float`): The amount of time for which to step the task.
+            current_time (`in`): The current time of the simulator (in us).
+            step_size (`int`): The amount of time (in us) for which to step
+                the task.
 
         Returns:
             `True` if the task has finished execution, `False` otherwise.
@@ -169,33 +183,35 @@ class Task(object):
                 f"Remaining execution time: {self._remaining_time}")
             return False
 
-    def pause(self, time: float):
+    def pause(self, time: int):
         """Pauses the execution of the task at the given simulation time.
 
         Args:
-            time (`float`): The simulation time at which to pause the task.
+            time (`int`): The simulation time (in us) at which to pause the
+                task.
 
         Raises:
             `ValueError` if task is not RUNNING.
         """
         if self.state != TaskState.RUNNING:
-            raise ValueError("Task is not RUNNING right now.")
+            raise ValueError(f"Task {self.id} is not RUNNING right now.")
         self._logger.debug(
             f"Transitioning {self} to {TaskState.PAUSED} at time {time}")
         self._paused_times.append(Paused(time, -1))
         self._state = TaskState.PAUSED
 
-    def resume(self, time: float):
+    def resume(self, time: int):
         """Continues the execution of the task at the given simulation time.
 
         Args:
-            time (`float`): The simulation time at which to restart the task.
+            time (`int`): The simulation time (in us) at which to restart the
+                task.
 
         Raises:
             `ValueError` if task is not PAUSED.
         """
         if self.state != TaskState.PAUSED:
-            raise ValueError("Task is not PAUSED right now.")
+            raise ValueError(f"Task {self.id} is not PAUSED right now.")
         self._logger.debug(
             f"Transitioning {self} which was PAUSED at "
             f"{self._paused_times[-1].pause_time} to {TaskState.RUNNING} at "
@@ -204,14 +220,18 @@ class Task(object):
         self._last_step_time = time
         self._state = TaskState.RUNNING
 
-    def finish(self, time: float):
+    def finish(self, time: int):
         """Completes the execution of the task at the given simulation time.
 
         If the remaining time is not 0, the task is considered to be preempted.
 
         Args:
-            time (`float`): The simulation time at which the task was finished.
+            time (`int`): The simulation time (in us) at which the task was
+                finished.
         """
+        if self.state not in [TaskState.RUNNING, TaskState.PAUSED]:
+            raise ValueError(
+                f"Task {self.id} is not RUNNING or PAUSED right now.")
         self._completion_time = time
         if self._remaining_time == 0:
             self._state = TaskState.COMPLETED
@@ -221,29 +241,31 @@ class Task(object):
         # TODO (Sukrit): We should notify the `Job` of the completion of this
         # particular task, so it can release new tasks to the scheduler.
 
-    def update_remaining_time(self, time: float):
+    def update_remaining_time(self, time: int):
         """Updates the remaining time of the task to simulate any runtime
         variabilities.
 
         Args:
-            time (`float`): The new remaining time to update the task with.
+            time (`int`): The new remaining time (in us) to update the task
+                with.
 
         Raises:
             `ValueError` if the task is COMPLETED / EVICTED, or time < 0.
         """
         if self.is_complete():
-            raise ValueError("The remaining time of COMPLETED/EVICTED "
-                             "tasks cannot be updated.")
+            raise ValueError(f"The remaining time of COMPLETED/EVICTED "
+                             f"task {self.id} cannot be updated.")
         if time < 0:
             raise ValueError("Trying to set a negative value for "
                              "remaining time.")
         self._remaining_time = time
 
-    def update_deadline(self, new_deadline: float):
+    def update_deadline(self, new_deadline: int):
         """Updates the deadline of the task to simulate any dynamic deadlines.
 
         Args:
-            new_deadline (`float`): The new deadline to update the task with.
+            new_deadline (`int`): The new deadline (in us) to update the task
+                with.
 
         Raises:
             `ValueError` if the new_deadline < 0.
@@ -352,6 +374,10 @@ class Task(object):
     def timestamp(self):
         return self._timestamp
 
+    @property
+    def worker_pool_id(self):
+        return self._worker_pool_id
+
 
 class TaskGraph(object):
     """A `TaskGraph` represents a directed graph of task dependencies that
@@ -365,7 +391,7 @@ class TaskGraph(object):
     def __init__(self, tasks: Optional[Mapping[Task, Sequence[Task]]] = {}):
         self._task_graph = defaultdict(list)
         self.__parent_task_graph = defaultdict(list)
-        self._max_timestamp = float('-inf')
+        self._max_timestamp = -sys.maxsize
 
         # Maintain the child and parent abstractions from the given taskset.
         for task, children in tasks.items():
@@ -388,7 +414,7 @@ class TaskGraph(object):
             for child in _children:
                 self.add_child(task, child)
 
-    def notify_task_completion(self, task: Task, finish_time: float) ->\
+    def notify_task_completion(self, task: Task, finish_time: int) ->\
             Sequence[Task]:
         """Notify the completion of the task.
 
@@ -397,7 +423,7 @@ class TaskGraph(object):
 
         Args:
             task (`Task`): The task that has finished execution.
-            finish_time (`float`): The time at which the task finished.
+            finish_time (`int`): The time (in us) at which the task finished.
 
         Returns:
             The set of tasks released by the completion of this task.
@@ -486,26 +512,86 @@ class TaskGraph(object):
         else:
             return self.__parent_task_graph[task]
 
-    def get_released_tasks(self) -> Sequence[Task]:
-        """Retrieves the set of tasks that are available to run.
+    def get_schedulable_tasks(
+            self,
+            time: int,
+            horizon: int = 0,
+            preemption: bool = False,
+            worker_pools: 'WorkerPools' = None  # noqa: F821
+    ) -> Sequence[Task]:
+        """Retrieves the all the tasks that are in RELEASED, PAUSED, or
+        EVICTED state, and tasks that are expected to be released by
+        time + horizon.
 
         Returns:
-            A list of tasks that can be run (are in RELEASED state).
+            A list of tasks.
         """
-        released_tasks = []
+        tasks = []
         for task in self._task_graph:
-            if task.state == TaskState.RELEASED:
-                released_tasks.append(task)
-        return released_tasks
+            if ((task.state == TaskState.RELEASED
+                 and task.release_time <= time + horizon)
+                    or task.state == TaskState.PAUSED
+                    or task.state == TaskState.EVICTED):
+                tasks.append(task)
+        if preemption:
+            if worker_pools:
+                # Adding the tasks placed on the given worker pool.
+                tasks.extend(worker_pools.get_placed_tasks())
+            else:
+                # No worker pool provided. Getting all RUNNING tasks.
+                for task in self._task_graph:
+                    if task.state == TaskState.RUNNING:
+                        tasks.append(task)
+        task_queue = deque([])
+        estimated_completion_time = {}
+        # Estimate the completion time of materialized tasks.
+        for task in self._task_graph:
+            if task.state == TaskState.COMPLETED:
+                estimated_completion_time[task] = task.completion_time
+            elif task.state in [
+                    TaskState.RUNNING, TaskState.RELEASED, TaskState.PAUSED,
+                    TaskState.EVICTED
+            ]:
+                estimated_completion_time[task] = time + task.remaining_time
+            else:
+                continue
+            task_queue.append(task)
 
-    def release_tasks(self, time: Optional[float] = None) -> Sequence[Task]:
+        # Estimate the completion time of VIRTUAL tasks.
+        while len(task_queue) > 0:
+            task = task_queue.popleft()
+            completion_time = estimated_completion_time[task]
+            children = self.get_children(task)
+            for child_task in children:
+                if child_task.state != TaskState.VIRTUAL:
+                    # Can skip the task because we've already set its
+                    # completion time.
+                    continue
+                child_completion_time = (completion_time +
+                                         child_task.remaining_time)
+                if (child_task not in estimated_completion_time
+                        or child_completion_time >
+                        estimated_completion_time[child_task]):
+                    estimated_completion_time[
+                        child_task] = child_completion_time
+                    task_queue.append(child_task)
+
+        # Add the tasks that are within the horizon.
+        for task in self._task_graph:
+            if task.state == TaskState.VIRTUAL:
+                if (task in estimated_completion_time
+                        and estimated_completion_time[task] < time + horizon):
+                    tasks.append(task)
+        return tasks
+
+    def release_tasks(self, time: Optional[int] = None) -> Sequence[Task]:
         """Releases the set of tasks that have no dependencies and are thus
         available to run.
 
         Args:
-            time (`Optional[float]`): The simulation time at which to release
-                the task. If None, the time should have been specified at task
-                construction time.
+            time (`Optional[int]`): The simulation time (inus) at which to
+                release the task. If None, the time should have been specified
+                at task construction time.
 
         Returns:
             A list of tasks that can be run (are in RELEASED state).
@@ -614,7 +700,7 @@ class TaskGraph(object):
         """
         return list(filter(self.is_source_task, self._task_graph.keys()))
 
-    def dilate(self, difference: float):
+    def dilate(self, difference: int):
         """Dilate the time between occurrence of events of successive
         logical timestamps according to the given difference.
 
@@ -628,7 +714,7 @@ class TaskGraph(object):
         time of the actual tasks.
 
         Args:
-            difference (`float`): The time difference to keep between the
+            difference (`int`): The time difference (in us) to keep between the
                 occurrence of two source Tasks of different timestamps.
         """
         for parent_graph, child_graph in zip(self[0:], self[1:]):

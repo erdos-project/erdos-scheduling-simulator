@@ -1,11 +1,11 @@
-import uuid
 import logging
-from operator import attrgetter
+import uuid
 from copy import copy, deepcopy
+from operator import attrgetter
 from typing import Optional, Sequence, Type
 
 import utils
-from workload import Resource, Resources, Task, TaskState
+from workload import Resource, Resources, Task, TaskGraph, TaskState
 
 
 class Worker(object):
@@ -47,6 +47,7 @@ class Worker(object):
             task (`Task`): The task to be placed on this `Worker`.
         """
         self._resources.allocate_multiple(task.resource_requirements, task)
+        task._worker_pool_id = self._id
         self._placed_tasks[task] = task.state
         self._logger.debug(f"Placed {task} on {self}")
 
@@ -67,6 +68,7 @@ class Worker(object):
 
         # Deallocate the resources and remove the placed task.
         self._resources.deallocate(task)
+        task._worker_pool_id = None
         del self._placed_tasks[task]
 
     def can_accomodate_task(self, task: Task) -> bool:
@@ -92,14 +94,14 @@ class Worker(object):
             placed_tasks.append(task)
         return placed_tasks
 
-    def step(self, current_time: float, step_size: float = 1.0) -> \
+    def step(self, current_time: int, step_size: int = 1) -> \
             Sequence[Task]:
         """Steps all the tasks of this `Worker` by the given `step_size`.
 
         Args:
-            current_time (`float`): The current time of the simulator loop.
-            step_size (`float`): The amount of time for which to step the
-                tasks.
+            current_time (`int`): The current time of the simulator (in us).
+            step_size (`int`): The amount of time for which to step the
+                tasks (in us).
 
         Returns:
             A set of tasks that have been completed.
@@ -108,6 +110,7 @@ class Worker(object):
         # Invoke the step() method on all the tasks.
         for task in self._placed_tasks:
             if task.state != TaskState.RUNNING:
+                self._logger.debug(f"Skipping stepping for task {task}.")
                 continue
             self._logger.debug(f"Stepping through the execution of {task} for "
                                f"{step_size} steps from time {current_time}.")
@@ -255,12 +258,10 @@ class WorkerPool(object):
         placement = None
         if self._scheduler is not None:
             # If a scheduler was provided, get a task placement from it.
-            runtime, placement = self._scheduler.schedule(
-                [task],  # Only this task is available.
-                None,  # No task graph.
-                self._workers)
+            runtime_us, placement = self._scheduler.schedule(
+                TaskGraph(tasks={task: []})[task], WorkerPools(self._workers))
             # Add the runtime to the task start time.
-            task._start_time += runtime
+            task._start_time += runtime_us
         else:
             # If there was no scheduler, find the first worker that can
             # accomodate the task given its resource requirements.
@@ -274,6 +275,7 @@ class WorkerPool(object):
         else:
             self._workers[placement].place_task(task)
             self._placed_tasks[task] = placement
+            task._worker_pool_id = placement
 
     def preempt_task(self, task: Task):
         """Preempts the given `Task` and frees the resources.
@@ -288,6 +290,7 @@ class WorkerPool(object):
         # Find the worker where the task was placed, preempt it from there,
         # and remove it from this worker pool's placed tasks.
         self._workers[self._placed_tasks[task]].preempt_task(task)
+        task._worker_pool_id = None
         del self._placed_tasks[task]
 
     def get_placed_tasks(self) -> Sequence[Task]:
@@ -298,14 +301,14 @@ class WorkerPool(object):
         """
         return list(self._placed_tasks.keys())
 
-    def step(self, current_time: float, step_size: float = 1.0) ->\
+    def step(self, current_time: int, step_size: int = 1) ->\
             Sequence[Task]:
         """Steps all the tasks of this `WorkerPool` by the given `step_size`.
 
         Args:
-            current_time (`float`): The current time of the simulator loop.
-            step_size (`float`): The amount of time for which to step the
-                workers.
+            current_time (`int`): The current time of the simulator  (in us).
+            step_size (`int`): The amount of time for which to step the
+                workers (in us).
 
         Returns:
             The set of tasks that have finished execution.
@@ -337,14 +340,14 @@ class WorkerPool(object):
             worker.can_accomodate_task(task)
             for worker in self._workers.values())
 
-    def log_utilization(self, csv_logger: logging.Logger, sim_time: float):
+    def log_utilization(self, csv_logger: logging.Logger, sim_time: int):
         """Logs the utilization of the resources of a particular WorkerPool.
 
         Args:
             csv_logger (`logging.Logger`): The logger to utilize to log the
                 resource utilization.
-            sim_time (`float`): The simulation time at which the utilization
-                is logged.
+            sim_time (`int`): The simulation time at which the utilization
+                is logged (in us).
         """
         # Add the resources of all the workers in this pool.
         final_resources = Resources(_logger=logging.getLogger('dummy'))
@@ -436,4 +439,60 @@ class WorkerPool(object):
         )
         instance._id = uuid.UUID(self.id)
         memo[id(self)] = instance
+        return instance
+
+
+class WorkerPools(object):
+    """A collection of `WorkerPool`s."""
+
+    def __init__(self, worker_pools: Sequence[WorkerPool]):
+        self._wps = worker_pools
+
+    def get_placed_tasks(self):
+        placed_tasks = []
+        for wp in self._wps:
+            placed_tasks.extend(wp.get_placed_tasks())
+        return placed_tasks
+
+    def get_resource_ilp_encoding(self):
+        """Constructs a map from resource name to (resource_start_id,
+        resource_end_id) and a map from worker pool id to resource_id.
+
+        The resource_start_id and resource_end_id are derived based on the
+        available quantify of the given resource.
+        """
+        # Unique list of resource names -- not relying on set stability.
+        resource_names = list({
+            r.name
+            for wp in self._wps for r in wp.resources._resource_vector.keys()
+        })
+        # Uniquify scrambles the order.
+        resource_names.sort()
+
+        res_type_to_id_range = {}
+        res_id_to_wp_id = {}
+        start_range_id = 0
+        for res_name in resource_names:
+            cur_range_id = start_range_id
+            for wp in self._wps:
+                res_available = wp.resources.get_available_quantity(
+                    Resource(name=res_name, _id="any"))
+                for res_id in range(cur_range_id,
+                                    cur_range_id + res_available):
+                    res_id_to_wp_id[res_id] = wp.id
+                cur_range_id += res_available
+            res_type_to_id_range[res_name] = (start_range_id, cur_range_id)
+            start_range_id = cur_range_id
+        return res_type_to_id_range, res_id_to_wp_id
+
+    def __copy__(self):
+        cls = self.__class__
+        instance = cls.__new__(cls)
+        cls.__init__(instance, [copy(wp) for wp in self._wps])
+        return instance
+
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        instance = cls.__new__(cls)
+        cls.__init__(instance, [deepcopy(wp) for wp in self._wps])
         return instance

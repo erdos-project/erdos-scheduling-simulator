@@ -1,11 +1,13 @@
 import time
-from operator import attrgetter
 from copy import copy, deepcopy
+from operator import attrgetter
 from typing import Optional, Sequence, Tuple
 
+import absl  # noqa: F401
+
 from schedulers import BaseScheduler
+from workers import WorkerPools
 from workload import Task, TaskGraph
-from workers import WorkerPool
 
 
 class EDFScheduler(BaseScheduler):
@@ -14,42 +16,36 @@ class EDFScheduler(BaseScheduler):
     Args:
         preemptive (`bool`): If `True`, the EDF scheduler can preempt the tasks
             that are currently running.
-        runtime (`float`): The runtime to return to the simulator. If -1, the
-            scheduler returns the actual runtime.
+        runtime (`int`): The runtime to return to the simulator (in us). If -1,
+            the scheduler returns the actual runtime.
     """
 
     def __init__(self,
                  preemptive: bool = False,
-                 runtime: float = -1.0,
+                 runtime: int = -1,
                  _flags: Optional['absl.flags'] = None):
         self._preemptive = preemptive
         self._runtime = runtime
+        # The scheduler only places tasks that have been released. Hence,
+        # scheduling horizon is 0.
+        self._scheduling_horizon = 0
 
-    def schedule(self, sim_time: float, released_tasks: Sequence[Task],
-                 task_graph: TaskGraph, worker_pools: Sequence[WorkerPool])\
-            -> (float, Sequence[Tuple[Task, str]]):
+    def schedule(
+            self, sim_time: int, task_graph: TaskGraph,
+            worker_pools: WorkerPools) -> (int, Sequence[Tuple[Task, str]]):
         """Implements the BaseScheduler's schedule() method using the EDF
-        algorithm for scheduling the given released_tasks across the
-        worker_pools.
+        algorithm for scheduling the released tasks across the worker_pools.
         """
         # Create the tasks to be scheduled, along with the state of the
         # WorkerPool to schedule them on based on preemptive or non-preemptive
+        tasks_to_be_scheduled = task_graph.get_schedulable_tasks(
+            sim_time, 0, self.preemptive, worker_pools)
         if self.preemptive:
-            # Collect all the currently placed tasks on the WorkerPool, along
-            # with the set of released tasks.
-            # TODO (Sukrit): Should we check if they are currently running?
-            tasks_to_be_scheduled = [task for task in released_tasks]
-            for worker_pool in worker_pools:
-                tasks_to_be_scheduled.extend(worker_pool.get_placed_tasks())
-
             # Restart the state of the WorkerPool.
-            schedulable_worker_pools = [deepcopy(w) for w in worker_pools]
+            schedulable_worker_pools = deepcopy(worker_pools)
         else:
-            # Collect the currently released tasks.
-            tasks_to_be_scheduled = [task for task in released_tasks]
-
             # Create a virtual WorkerPool set to try scheduling decisions on.
-            schedulable_worker_pools = [copy(w) for w in worker_pools]
+            schedulable_worker_pools = copy(worker_pools)
 
         # Sort the tasks according to their deadlines, and place them on the
         # worker pools.
@@ -66,7 +62,7 @@ class EDFScheduler(BaseScheduler):
         placements = []
         for task in ordered_tasks:
             is_task_placed = False
-            for worker_pool in schedulable_worker_pools:
+            for worker_pool in schedulable_worker_pools._wps:
                 if worker_pool.can_accomodate_task(task):
                     worker_pool.place_task(task)
                     is_task_placed = True
@@ -77,9 +73,10 @@ class EDFScheduler(BaseScheduler):
                 placements.append((task, None))
 
         end_time = time.time()
+        self._runtime = int((end_time - start_time) *
+                            1000000) if self.runtime == -1 else self.runtime
 
-        return (end_time - start_time if self.runtime == -1 else self.runtime,
-                placements)
+        return self.runtime, placements
 
     @property
     def preemptive(self):
@@ -88,3 +85,7 @@ class EDFScheduler(BaseScheduler):
     @property
     def runtime(self):
         return self._runtime
+
+    @property
+    def scheduling_horizon(self):
+        return self._scheduling_horizon

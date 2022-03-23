@@ -1,12 +1,11 @@
-from data import TaskLoader, WorkerLoader
+from data import TaskLoader, TaskLoaderJSON, WorkerLoaderJSON
+from tests.test_tasks import create_default_task
 from workload import Job, Resource, Resources
-
-from tests.test_tasks import __create_default_task
 
 
 def test_create_jobs():
-    """ Tests the __create_jobs method of the TaskLoader. """
-    jobs = TaskLoader._TaskLoader__create_jobs([
+    """ Tests the __create_jobs method of the TaskLoaderJSON. """
+    jobs = TaskLoaderJSON._TaskLoaderJSON__create_jobs([
         {
             "pid": "perception_operator"
         },
@@ -23,8 +22,8 @@ def test_create_jobs():
 
 
 def test_create_resources():
-    """ Tests the __create_resources method of the TaskLoader. """
-    resources = TaskLoader._TaskLoader__create_resources([
+    """ Tests the __create_resources method of the TaskLoaderJSON. """
+    resources = TaskLoaderJSON._TaskLoaderJSON__create_resources([
         {
             "name": "perception_operator",
             "resource_requirements": [{
@@ -63,7 +62,7 @@ def test_create_resources():
 
 
 def test_create_tasks():
-    """ Tests the __create_tasks method of the TaskLoader. """
+    """ Tests the __create_tasks method of the TaskLoaderJSON. """
     json_entries = [{
         "name": "perception_operator.on_watermark",
         "pid": "perception_operator",
@@ -81,7 +80,8 @@ def test_create_tasks():
             Resources(resource_vector={Resource(name="CPU", _id="any"): 1}),
         ]
     }
-    tasks = TaskLoader._TaskLoader__create_tasks(json_entries, jobs, resources)
+    tasks = TaskLoaderJSON._TaskLoaderJSON__create_tasks(
+        json_entries, jobs, resources)
 
     assert len(tasks) == 1, "Incorrect number of Tasks returned."
     assert tasks[0].name == "perception_operator.on_watermark",\
@@ -93,7 +93,7 @@ def test_create_tasks():
 
 
 def test_create_jobgraph():
-    """ Tests the construction of a JobGraph by the TaskLoader. """
+    """ Tests the construction of a JobGraph by the TaskLoaderJSON. """
     jobs = {
         "perception_operator": Job(name="perception_operator"),
         "prediction_operator": Job(name="prediction_operator"),
@@ -104,7 +104,7 @@ def test_create_jobgraph():
         ("perception_operator", "planning_operator"),
         ("prediction_operator", "planning_operator"),
     ]
-    job_graph = TaskLoader._TaskLoader__create_job_graph(jobs, edges)
+    job_graph = TaskLoaderJSON._TaskLoaderJSON__create_job_graph(jobs, edges)
 
     assert len(job_graph) == 3, "Incorrect length for JobGraph."
     assert len(job_graph.get_children(jobs["perception_operator"])) == 2,\
@@ -116,7 +116,7 @@ def test_create_jobgraph():
 
 
 def test_create_taskgraph():
-    """ Tests the construction of a TaskGraph by the TaskLoader. """
+    """ Tests the construction of a TaskGraph by the TaskLoaderJSON. """
     # Create the JobGraph first.
     jobs = {
         "perception_operator": Job(name="perception_operator"),
@@ -128,19 +128,19 @@ def test_create_taskgraph():
         ("perception_operator", "planning_operator"),
         ("prediction_operator", "planning_operator"),
     ]
-    job_graph = TaskLoader._TaskLoader__create_job_graph(jobs, edges)
+    job_graph = TaskLoaderJSON._TaskLoaderJSON__create_job_graph(jobs, edges)
 
     # Create a list of Tasks to be put into a graph.
     tasks = [
-        __create_default_task(job=jobs["perception_operator"], timestamp=1),
-        __create_default_task(job=jobs["perception_operator"], timestamp=2),
-        __create_default_task(job=jobs["perception_operator"], timestamp=3),
-        __create_default_task(job=jobs["prediction_operator"], timestamp=1),
-        __create_default_task(job=jobs["prediction_operator"], timestamp=2),
-        __create_default_task(job=jobs["prediction_operator"], timestamp=3),
-        __create_default_task(job=jobs["planning_operator"], timestamp=1),
-        __create_default_task(job=jobs["planning_operator"], timestamp=2),
-        __create_default_task(job=jobs["planning_operator"], timestamp=3),
+        create_default_task(job=jobs["perception_operator"], timestamp=1),
+        create_default_task(job=jobs["perception_operator"], timestamp=2),
+        create_default_task(job=jobs["perception_operator"], timestamp=3),
+        create_default_task(job=jobs["prediction_operator"], timestamp=1),
+        create_default_task(job=jobs["prediction_operator"], timestamp=2),
+        create_default_task(job=jobs["prediction_operator"], timestamp=3),
+        create_default_task(job=jobs["planning_operator"], timestamp=1),
+        create_default_task(job=jobs["planning_operator"], timestamp=2),
+        create_default_task(job=jobs["planning_operator"], timestamp=3),
     ]
 
     # Create a TaskGraph using the jobs and the list of tasks.
@@ -168,9 +168,9 @@ def test_create_taskgraph():
 
 
 def test_create_worker_pool():
-    """ Tests the construction of the WorkerPool by the WorkerLoader. """
+    """ Tests the construction of the WorkerPool by the WorkerLoaderJSON. """
     # Create a test WorkerPool topology.
-    worker_pools = WorkerLoader._WorkerLoader__create_worker_pools(
+    worker_pools = WorkerLoaderJSON._WorkerLoaderJSON__create_worker_pools(
         [{
             "name":
             "WorkerPool_1_1",

@@ -1,48 +1,73 @@
-from typing import List
+import time
+from copy import copy
+from operator import attrgetter
+from typing import Optional, Sequence, Tuple
+
+import absl  # noqa: F401
 
 from schedulers import BaseScheduler
+from workers import WorkerPools
 from workload import Task, TaskGraph
 
 
-# TODO (Sukrit): This Scheduler does not correspond to the base Scheduler
-# interface. Fix this once the interface is defined.
 class FIFOScheduler(BaseScheduler):
+    """Implements the FIFO scheduling algorithm.
+
+    Args:
+        runtime (`int`): The runtime to return to the simulator (in us). If -1,
+            the scheduler returns the actual runtime.
+    """
 
     def __init__(self,
-                 num_cpus: int,
-                 num_gpus: int,
-                 tasks_list: List[Task],
-                 lattice: TaskGraph,
-                 gpu_exact_match: bool = False):
-        super().__init__(num_cpus, num_gpus, tasks_list, lattice)
-        self.gpu_exact_match = gpu_exact_match
+                 preemptive: bool = False,
+                 runtime: int = -1,
+                 _flags: Optional['absl.flags'] = None):
+        assert not preemptive, "FIFO scheduler is not preemptive"
+        self._preemptive = preemptive
+        self._runtime = runtime
+        # The scheduler only places tasks that have been released. Hence,
+        # scheduling horizon is 0.
+        self._scheduling_horizon = 0
 
-    def schedule(self, workload, resources):
-        num_gpus = resources.num_gpus
-        num_cpus = resources.num_cpus
-        running_tasks = resources.running_tasks
-        needs_gpu = workload.needs_gpu
+    def schedule(
+            self, sim_time: int, task_graph: TaskGraph,
+            worker_pools: WorkerPools) -> (int, Sequence[Tuple[Task, str]]):
+        tasks = task_graph.get_schedulable_tasks(sim_time, 0, self.preemptive,
+                                                 worker_pools)
+        # Create a virtual WorkerPool set to try scheduling decisions on.
+        schedulable_worker_pools = copy(worker_pools)
 
-        gpu_pool = list(range(num_gpus))
-        cpu_pool = list(range(num_gpus,
-                              num_cpus + num_gpus))  # cpus indexed after gpus
-        placements = running_tasks
-        assignment = [0 if (t is not None) else None for t in running_tasks]
-        gpu_pool = [i for i in gpu_pool if i not in running_tasks]
-        cpu_pool = [i for i in cpu_pool if i not in running_tasks]
+        start_time = time.time()
+        # Sort the tasks according to their release times, and place them on
+        # the worker pools.
+        ordered_tasks = list(sorted(tasks, key=attrgetter('release_time')))
 
-        for i, gpu in enumerate(needs_gpu):
-            if gpu:
-                if len(gpu_pool) > 0 and running_tasks[i] is None:
-                    w_idx = gpu_pool.pop(0)
-                    placements[i] = w_idx
-                    assignment[i] = 0
-            else:
-                if len(cpu_pool) > 0 and running_tasks[i] is None:
-                    w_idx = cpu_pool.pop(0)
-                    placements[i] = w_idx
-                    assignment[i] = 0
-            if len(gpu_pool) + len(cpu_pool) == 0:
-                break
+        placements = []
+        for task in ordered_tasks:
+            task_placed = False
+            for worker_pool in schedulable_worker_pools._wps:
+                if worker_pool.can_acommodate_task(task):
+                    worker_pool.place_task(task)
+                    task_placed = True
+                    placements.append((task, worker_pool.id))
+                    break
+            if not task_placed:
+                placements.append((task, None))
 
-        return placements, assignment
+        end_time = time.time()
+        self._runtime = int((end_time - start_time) *
+                            1000000) if self.runtime == -1 else self.runtime
+
+        return self.runtime, placements
+
+    @property
+    def preemptive(self):
+        return self._preemptive
+
+    @property
+    def runtime(self):
+        return self._runtime
+
+    @property
+    def scheduling_horizon(self):
+        return self._scheduling_horizon

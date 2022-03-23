@@ -1,9 +1,9 @@
 import csv
 import uuid
-from typing import Optional, Sequence, Mapping
-from collections import namedtuple, defaultdict
+from collections import defaultdict, namedtuple
+from typing import Mapping, Optional, Sequence
 
-import absl
+import absl  # noqa: F401
 
 
 # Types for Objects in the simulation.
@@ -13,15 +13,16 @@ class Task(object):
                  task_name: str,
                  timestamp: int,
                  task_id: uuid.UUID,
-                 release_time: float,
-                 runtime: float,
-                 deadline: float,
-                 start_time: float = -1.0,
-                 completion_time: float = -1.0,
+                 release_time: int,
+                 runtime: int,
+                 deadline: int,
+                 start_time: int = -1,
+                 completion_time: int = -1,
                  missed_deadline: bool = False):
         self.task_name = task_name
         self.timestamp = timestamp
         self.id = task_id
+        # All times are in microseconds.
         self.release_time = release_time
         self.runtime = runtime
         self.deadline = deadline
@@ -107,53 +108,52 @@ class Plotter(object):
             for reading in csv_readings:
                 if reading[1] == "SIMULATOR_START":
                     events.append(
-                        SimulatorStart(start_time=float(reading[0]),
+                        SimulatorStart(start_time=int(reading[0]),
                                        total_tasks=int(reading[2])))
                 elif reading[1] == "SIMULATOR_END":
                     events.append(
-                        SimulatorEnd(end_time=float(reading[0]),
-                                     finished_tasks=float(reading[2]),
-                                     missed_deadlines=float(reading[3])))
+                        SimulatorEnd(end_time=int(reading[0]),
+                                     finished_tasks=int(reading[2]),
+                                     missed_deadlines=int(reading[3])))
                 elif reading[1] == "TASK_RELEASE":
                     task = Task(
                         task_name=reading[2],
                         timestamp=int(reading[3]),
                         task_id=uuid.UUID(reading[7]),
-                        release_time=float(reading[4]),
-                        runtime=float(reading[5]),
-                        deadline=float(reading[6]),
+                        release_time=int(reading[4]),
+                        runtime=int(reading[5]),
+                        deadline=int(reading[6]),
                     )
                     tasks_memo[reading[7]] = task
                     events.append(
-                        TaskRelease(simulator_time=float(reading[0]),
-                                    task=task))
+                        TaskRelease(simulator_time=int(reading[0]), task=task))
                 elif reading[1] == "TASK_FINISHED":
                     task = tasks_memo[reading[6]]
-                    task.completion_time = float(reading[4])
+                    task.completion_time = int(reading[4])
                     events.append(
-                        TaskFinished(simulator_time=float(reading[0]),
+                        TaskFinished(simulator_time=int(reading[0]),
                                      task=task))
                 elif reading[1] == "MISSED_DEADLINE":
                     task = tasks_memo[reading[5]]
                     task.missed_deadline = True
                     events.append(
-                        MissedDeadline(simulator_time=float(reading[0]),
+                        MissedDeadline(simulator_time=int(reading[0]),
                                        task=task))
                 elif reading[1] == "SCHEDULER_START":
                     events.append(
-                        SchedulerStart(simulator_time=float(reading[0]),
-                                       released_tasks=float(reading[2]),
-                                       placed_tasks=float(reading[3])))
+                        SchedulerStart(simulator_time=int(reading[0]),
+                                       released_tasks=int(reading[2]),
+                                       placed_tasks=int(reading[3])))
                 elif reading[1] == "SCHEDULER_FINISHED":
                     events.append(
-                        SchedulerFinished(simulator_time=float(reading[0]),
-                                          runtime=float(reading[2]),
-                                          placed_tasks=float(reading[3]),
-                                          unplaced_tasks=float(reading[4])))
+                        SchedulerFinished(simulator_time=int(reading[0]),
+                                          runtime=int(reading[2]),
+                                          placed_tasks=int(reading[3]),
+                                          unplaced_tasks=int(reading[4])))
                 elif reading[1] == "WORKER_POOL_UTILIZATION":
                     events.append(
                         WorkerPoolUtilization(
-                            simulator_time=float(reading[0]),
+                            simulator_time=int(reading[0]),
                             resource_name=reading[2],
                             allocated_quantity=float(reading[3]),
                             available_quantity=float(reading[4])))
@@ -164,7 +164,7 @@ class Plotter(object):
                 elif reading[1] == "TASK_PLACEMENT":
                     events.append(
                         TaskPlacement(
-                            simulator_time=float(reading[0]),
+                            simulator_time=int(reading[0]),
                             task=tasks_memo[reading[4]],
                             worker_pool=worker_pool_memo[reading[5]]))
                 else:
@@ -258,7 +258,24 @@ class Plotter(object):
                 tasks.append(event.task)
         return tasks
 
-    def get_simulator_end_time(self, csv_path: str) -> float:
+    def get_task_placements(self, csv_path: str) -> Sequence[TaskPlacement]:
+        """Retrives the task placements events.
+
+        Args:
+            csv_path (`str`): The path to the CSV file whose tasks need to
+                be retrieved.
+
+        Returns:
+            A `Sequence[TaskPlacement]` that contains the task placements,
+            ordered by their placement time.
+        """
+        task_placements = []
+        for event in self._events[csv_path]:
+            if type(event) == TaskPlacement:
+                task_placements.append(event)
+        return task_placements
+
+    def get_simulator_end_time(self, csv_path: str) -> int:
         """Retrieves the time at which the simulator ended.
 
         Args:
@@ -289,10 +306,6 @@ class Plotter(object):
             if type(event) == MissedDeadline:
                 missed_deadline_events.append(event)
         return missed_deadline_events
-
-    def plot_scheduler_runtime(self):
-        """ Plots a CDF of the runtime of the scheduler. """
-        pass
 
     def plot_scheduler_invocations(self):
         """Plots the invocation of the scheduler along with the number of tasks
