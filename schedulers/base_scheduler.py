@@ -7,15 +7,14 @@ from workload import Task, TaskGraph
 
 
 class BaseScheduler(object):
-
     def schedule(
         self,
         sim_time: int,
         task_graph: TaskGraph,
-        worker_pools: 'WorkerPools',  # noqa: F821
-        _flags: Optional['absl.flags'] = None
+        worker_pools: "WorkerPools",  # noqa: F821
+        _flags: Optional["absl.flags"] = None,
     ) -> (int, Sequence[Tuple[Task, str]]):
-        """ Abstract method to be implemented by derived classes to allow the
+        """Abstract method to be implemented by derived classes to allow the
         scheduling of tasks.
 
         Args:
@@ -31,43 +30,49 @@ class BaseScheduler(object):
             `task_placement` is a sequence of tuples depicting the
             (Task, ID of the Worker Pool where the task should be placed).
         """
-        raise NotImplementedError("The `schedule()` method has not been "
-                                  "implemented.")
+        raise NotImplementedError(
+            "The `schedule()` method has not been " "implemented."
+        )
 
     def log(self):
-        raise NotImplementedError(
-            "The `log()` method has not been implemented.")
+        raise NotImplementedError("The `log()` method has not been implemented.")
 
     @property
     def preemptive(self):
-        raise NotImplementedError(
-            "The `preemptive` property has not been implemented.")
+        raise NotImplementedError("The `preemptive` property has not been implemented.")
 
     @property
     def scheduling_horizon(self):
         raise NotImplementedError(
-            "The `scheduling_horizon` property has not been implemented.")
+            "The `scheduling_horizon` property has not been implemented."
+        )
 
-    def _verify_schedule(self, worker_pools: WorkerPools,
-                         task_graph: TaskGraph, placements, start_times):
+    def _verify_schedule(
+        self, worker_pools: WorkerPools, task_graph: TaskGraph, placements, start_times
+    ):
         # Check if each task's start time is greater than its release time.
-        assert all([
-            start_times[task.id] >= task.release_time
-            for task, placement in placements
-        ]), "not_valid_release_times"
+        assert all(
+            [
+                start_times[task.id] >= task.release_time
+                for task, placement in placements
+            ]
+        ), "not_valid_release_times"
 
         # Check if all tasks finished before the deadline.
-        assert all([(task.deadline >= start_times[task.id] + task.runtime)
-                    for task, placement in placements
-                    ]), "doesn't finish before deadline"
+        assert all(
+            [
+                (task.deadline >= start_times[task.id] + task.runtime)
+                for task, placement in placements
+            ]
+        ), "doesn't finish before deadline"
 
         for task, placement in placements:
             children = task_graph.get_children(task)
             for child_task in children:
                 if child_task.id in start_times:
                     assert (
-                        start_times[task.id] + task.remaining_time <=
-                        start_times[child_task.id]
+                        start_times[task.id] + task.remaining_time
+                        <= start_times[child_task.id]
                     ), f"task dependency not valid{task.id}->{child_task.id}"
 
         # Check if resource requirements are satisfied.
@@ -84,8 +89,13 @@ class BaseScheduler(object):
         placed_tasks = []
         for task, placement in placements:
             if placement:
-                placed_tasks.append((placement, start_times[task.id],
-                                     start_times[task.id] + task.runtime))
+                placed_tasks.append(
+                    (
+                        placement,
+                        start_times[task.id],
+                        start_times[task.id] + task.runtime,
+                    )
+                )
         placed_tasks.sort()
         for t1, t2 in zip(placed_tasks, placed_tasks[1:]):
             if t1[0] == t2[0]:

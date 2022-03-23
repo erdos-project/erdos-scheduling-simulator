@@ -4,74 +4,67 @@ from workload import Job, Resource, Resources
 
 
 def test_create_jobs():
-    """ Tests the __create_jobs method of the TaskLoaderJSON. """
-    jobs = TaskLoaderJSON._TaskLoaderJSON__create_jobs([
-        {
-            "pid": "perception_operator"
-        },
-        {
-            "pid": "prediction_operator"
-        },
-        {
-            "pid": "planning_operator"
-        },
-    ])
+    """Tests the __create_jobs method of the TaskLoaderJSON."""
+    jobs = TaskLoaderJSON._TaskLoaderJSON__create_jobs(
+        [
+            {"pid": "perception_operator"},
+            {"pid": "prediction_operator"},
+            {"pid": "planning_operator"},
+        ]
+    )
     assert len(jobs) == 3, "Incorrect number of Jobs returned."
-    assert jobs["perception_operator"].name == "perception_operator",\
-        "Incorrect Job returned."
+    assert (
+        jobs["perception_operator"].name == "perception_operator"
+    ), "Incorrect Job returned."
 
 
 def test_create_resources():
-    """ Tests the __create_resources method of the TaskLoaderJSON. """
-    resources = TaskLoaderJSON._TaskLoaderJSON__create_resources([
-        {
-            "name": "perception_operator",
-            "resource_requirements": [{
-                "CPU:any": 1
-            }],
-        },
-        {
-            "name": "prediction_operator",
-            "resource_requirements": [{
-                "CPU:any": 1,
-                "GPU:any": 1
-            }],
-        },
-        {
-            "name":
-            "planning_operator",
-            "resource_requirements": [
-                {
-                    "CPU:any": 2
-                },
-                {
-                    "CPU:any": 1,
-                    "GPU:any": 1
-                },
-            ]
-        },
-    ])
+    """Tests the __create_resources method of the TaskLoaderJSON."""
+    resources = TaskLoaderJSON._TaskLoaderJSON__create_resources(
+        [
+            {
+                "name": "perception_operator",
+                "resource_requirements": [{"CPU:any": 1}],
+            },
+            {
+                "name": "prediction_operator",
+                "resource_requirements": [{"CPU:any": 1, "GPU:any": 1}],
+            },
+            {
+                "name": "planning_operator",
+                "resource_requirements": [
+                    {"CPU:any": 2},
+                    {"CPU:any": 1, "GPU:any": 1},
+                ],
+            },
+        ]
+    )
 
     assert len(resources) == 3, "Incorrect number of Resources returned."
-    assert len(resources['perception_operator']) == 1,\
-        "Incorrect number of Resources returned."
-    assert len(resources['prediction_operator']) == 1,\
-        "Incorrect number of Resources returned."
-    assert len(resources['planning_operator']) == 2,\
-        "Incorrect number of Resources returned."
+    assert (
+        len(resources["perception_operator"]) == 1
+    ), "Incorrect number of Resources returned."
+    assert (
+        len(resources["prediction_operator"]) == 1
+    ), "Incorrect number of Resources returned."
+    assert (
+        len(resources["planning_operator"]) == 2
+    ), "Incorrect number of Resources returned."
 
 
 def test_create_tasks():
-    """ Tests the __create_tasks method of the TaskLoaderJSON. """
-    json_entries = [{
-        "name": "perception_operator.on_watermark",
-        "pid": "perception_operator",
-        "args": {
-            "timestamp": 1,
-        },
-        "dur": 100,
-        "ts": 50,
-    }]
+    """Tests the __create_tasks method of the TaskLoaderJSON."""
+    json_entries = [
+        {
+            "name": "perception_operator.on_watermark",
+            "pid": "perception_operator",
+            "args": {
+                "timestamp": 1,
+            },
+            "dur": 100,
+            "ts": 50,
+        }
+    ]
     jobs = {
         "perception_operator": Job(name="perception_operator"),
     }
@@ -80,20 +73,21 @@ def test_create_tasks():
             Resources(resource_vector={Resource(name="CPU", _id="any"): 1}),
         ]
     }
-    tasks = TaskLoaderJSON._TaskLoaderJSON__create_tasks(
-        json_entries, jobs, resources)
+    tasks = TaskLoaderJSON._TaskLoaderJSON__create_tasks(json_entries, jobs, resources)
 
     assert len(tasks) == 1, "Incorrect number of Tasks returned."
-    assert tasks[0].name == "perception_operator.on_watermark",\
-        "Incorrect name returned for the Task."
+    assert (
+        tasks[0].name == "perception_operator.on_watermark"
+    ), "Incorrect name returned for the Task."
     assert tasks[0].runtime == 100, "Incorrect runtime returned for the Task."
     assert tasks[0].timestamp == 1, "Incorrect timestamp for the Task."
-    assert jobs["perception_operator"] == tasks[0].job,\
-        "Incorrect Job returned for the Task."
+    assert (
+        jobs["perception_operator"] == tasks[0].job
+    ), "Incorrect Job returned for the Task."
 
 
 def test_create_jobgraph():
-    """ Tests the construction of a JobGraph by the TaskLoaderJSON. """
+    """Tests the construction of a JobGraph by the TaskLoaderJSON."""
     jobs = {
         "perception_operator": Job(name="perception_operator"),
         "prediction_operator": Job(name="prediction_operator"),
@@ -107,16 +101,19 @@ def test_create_jobgraph():
     job_graph = TaskLoaderJSON._TaskLoaderJSON__create_job_graph(jobs, edges)
 
     assert len(job_graph) == 3, "Incorrect length for JobGraph."
-    assert len(job_graph.get_children(jobs["perception_operator"])) == 2,\
-        "Incorrect length of children for Job."
-    assert len(job_graph.get_children(jobs["prediction_operator"])) == 1,\
-        "Incorrect length of children for Job."
-    assert len(job_graph.get_children(jobs["planning_operator"])) == 0,\
-        "Incorrect length of children for Job."
+    assert (
+        len(job_graph.get_children(jobs["perception_operator"])) == 2
+    ), "Incorrect length of children for Job."
+    assert (
+        len(job_graph.get_children(jobs["prediction_operator"])) == 1
+    ), "Incorrect length of children for Job."
+    assert (
+        len(job_graph.get_children(jobs["planning_operator"])) == 0
+    ), "Incorrect length of children for Job."
 
 
 def test_create_taskgraph():
-    """ Tests the construction of a TaskGraph by the TaskLoaderJSON. """
+    """Tests the construction of a TaskGraph by the TaskLoaderJSON."""
     # Create the JobGraph first.
     jobs = {
         "perception_operator": Job(name="perception_operator"),
@@ -153,44 +150,55 @@ def test_create_taskgraph():
 
     parents_perception_task_3 = task_graph.get_parents(tasks[2])
     assert len(parents_perception_task_3) == 1, "Incorrect length for parents."
-    assert set(parents_perception_task_3) == {tasks[1]},\
-        "Incorrect parents for the task."
+    assert set(parents_perception_task_3) == {
+        tasks[1]
+    }, "Incorrect parents for the task."
 
     parents_prediction_task = task_graph.get_parents(tasks[5])
     assert len(parents_prediction_task) == 2, "Incorrect length for parents."
-    assert set(parents_prediction_task) == {tasks[2], tasks[4]},\
-        "Incorrect parents for the task."
+    assert set(parents_prediction_task) == {
+        tasks[2],
+        tasks[4],
+    }, "Incorrect parents for the task."
 
     parents_planning_task = task_graph.get_parents(tasks[8])
     assert len(parents_planning_task) == 3, "Incorrect length for parents."
-    assert set(parents_planning_task) == {tasks[2], tasks[5], tasks[7]},\
-        "Incorrect parents for the task."
+    assert set(parents_planning_task) == {
+        tasks[2],
+        tasks[5],
+        tasks[7],
+    }, "Incorrect parents for the task."
 
 
 def test_create_worker_pool():
-    """ Tests the construction of the WorkerPool by the WorkerLoaderJSON. """
+    """Tests the construction of the WorkerPool by the WorkerLoaderJSON."""
     # Create a test WorkerPool topology.
     worker_pools = WorkerLoaderJSON._WorkerLoaderJSON__create_worker_pools(
-        [{
-            "name":
-            "WorkerPool_1_1",
-            "workers": [{
-                "name": "Worker_1_1",
-                "resources": [{
-                    "name": "CPU",
-                    "quantity": 5
-                }]
-            }]
-        }],
-        scheduler=None)
+        [
+            {
+                "name": "WorkerPool_1_1",
+                "workers": [
+                    {
+                        "name": "Worker_1_1",
+                        "resources": [{"name": "CPU", "quantity": 5}],
+                    }
+                ],
+            }
+        ],
+        scheduler=None,
+    )
 
     assert len(worker_pools) == 1, "Incorrect number of WorkerPools returned."
-    assert worker_pools[0].name == "WorkerPool_1_1",\
-        "Incorrect name for the WorkerPool."
-    assert len(worker_pools[0]) == 1,\
-        "Incorrect number of Workers in WorkerPool."
-    assert worker_pools[0].workers[0].name == "Worker_1_1",\
-        "Incorrect name for the Worker."
-    assert worker_pools[0].workers[0].resources.get_available_quantity(
-            Resource(name="CPU", _id="any")) == 5,\
-        "Incorrect quantity of CPU resources in the Worker."
+    assert (
+        worker_pools[0].name == "WorkerPool_1_1"
+    ), "Incorrect name for the WorkerPool."
+    assert len(worker_pools[0]) == 1, "Incorrect number of Workers in WorkerPool."
+    assert (
+        worker_pools[0].workers[0].name == "Worker_1_1"
+    ), "Incorrect name for the Worker."
+    assert (
+        worker_pools[0]
+        .workers[0]
+        .resources.get_available_quantity(Resource(name="CPU", _id="any"))
+        == 5
+    ), "Incorrect quantity of CPU resources in the Worker."

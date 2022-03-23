@@ -22,10 +22,9 @@ class Worker(object):
             results of the execution.
     """
 
-    def __init__(self,
-                 name: str,
-                 resources: Resources,
-                 _logger: Optional[logging.Logger] = None):
+    def __init__(
+        self, name: str, resources: Resources, _logger: Optional[logging.Logger] = None
+    ):
         # Set up the logger.
         if _logger:
             self._logger = _logger
@@ -94,8 +93,7 @@ class Worker(object):
             placed_tasks.append(task)
         return placed_tasks
 
-    def step(self, current_time: int, step_size: int = 1) -> \
-            Sequence[Task]:
+    def step(self, current_time: int, step_size: int = 1) -> Sequence[Task]:
         """Steps all the tasks of this `Worker` by the given `step_size`.
 
         Args:
@@ -112,8 +110,10 @@ class Worker(object):
             if task.state != TaskState.RUNNING:
                 self._logger.debug(f"Skipping stepping for task {task}.")
                 continue
-            self._logger.debug(f"Stepping through the execution of {task} for "
-                               f"{step_size} steps from time {current_time}.")
+            self._logger.debug(
+                f"Stepping through the execution of {task} for "
+                f"{step_size} steps from time {current_time}."
+            )
             if task.step(current_time, step_size):
                 self._logger.debug(f"{task} finished execution on {self}.")
                 completed_tasks.append(task)
@@ -125,7 +125,7 @@ class Worker(object):
         return completed_tasks
 
     def __copy__(self):
-        """ A copy of the Worker uses the same ID, and copies the resource
+        """A copy of the Worker uses the same ID, and copies the resource
         allocations of self.
 
         This is used by the schedulers to try scheduling decisions on a version
@@ -134,10 +134,12 @@ class Worker(object):
         """
         cls = self.__class__
         instance = cls.__new__(cls)
-        cls.__init__(instance,
-                     name=self.name,
-                     resources=copy(self.resources),
-                     _logger=self._logger)
+        cls.__init__(
+            instance,
+            name=self.name,
+            resources=copy(self.resources),
+            _logger=self._logger,
+        )
         instance._id = uuid.UUID(self.id)
 
         # Copy the placed tasks.
@@ -147,7 +149,7 @@ class Worker(object):
         return instance
 
     def __deepcopy__(self, memo):
-        """ A deepcopy of the Worker uses the same ID, and resets the resources
+        """A deepcopy of the Worker uses the same ID, and resets the resources
         to the initial state, thus undoing the effects of task placement.
 
         This is used by the schedulers to try scheduling decisions on the
@@ -156,10 +158,12 @@ class Worker(object):
         """
         cls = self.__class__
         instance = cls.__new__(cls)
-        cls.__init__(instance,
-                     name=self.name,
-                     resources=deepcopy(self.resources),
-                     _logger=self._logger)
+        cls.__init__(
+            instance,
+            name=self.name,
+            resources=deepcopy(self.resources),
+            _logger=self._logger,
+        )
         instance._id = uuid.UUID(self.id)
         memo[id(self)] = instance
         return instance
@@ -177,8 +181,7 @@ class Worker(object):
         return self._resources
 
     def __str__(self):
-        return (f"Worker(name={self.name}, id={self.id}, "
-                f"resources={self.resources})")
+        return f"Worker(name={self.name}, id={self.id}, " f"resources={self.resources})"
 
     def __repr__(self):
         return str(self)
@@ -209,11 +212,12 @@ class WorkerPool(object):
     """
 
     def __init__(
-            self,
-            name: str,
-            workers: Optional[Sequence[Worker]] = [],
-            scheduler: Optional[Type['BaseScheduler']] = None,  # noqa
-            _logger: Optional[logging.Logger] = None):
+        self,
+        name: str,
+        workers: Optional[Sequence[Worker]] = [],
+        scheduler: Optional[Type["BaseScheduler"]] = None,  # noqa
+        _logger: Optional[logging.Logger] = None,
+    ):
         # Set up the logger.
         if _logger:
             self._logger = _logger
@@ -236,7 +240,8 @@ class WorkerPool(object):
             if worker.id in self._workers:
                 self._logger.info(
                     f"Skipping addition of {worker} since it already "
-                    f"exists in {self}")
+                    f"exists in {self}"
+                )
             else:
                 self._logger.debug(f"Adding {worker} to {self}")
                 self._workers[worker.id] = worker
@@ -259,7 +264,8 @@ class WorkerPool(object):
         if self._scheduler is not None:
             # If a scheduler was provided, get a task placement from it.
             runtime_us, placement = self._scheduler.schedule(
-                TaskGraph(tasks={task: []})[task], WorkerPools(self._workers))
+                TaskGraph(tasks={task: []})[task], WorkerPools(self._workers)
+            )
             # Add the runtime to the task start time.
             task._start_time += runtime_us
         else:
@@ -301,8 +307,7 @@ class WorkerPool(object):
         """
         return list(self._placed_tasks.keys())
 
-    def step(self, current_time: int, step_size: int = 1) ->\
-            Sequence[Task]:
+    def step(self, current_time: int, step_size: int = 1) -> Sequence[Task]:
         """Steps all the tasks of this `WorkerPool` by the given `step_size`.
 
         Args:
@@ -318,7 +323,8 @@ class WorkerPool(object):
         for _, worker in self._workers.items():
             self._logger.debug(
                 f"Stepping through the execution of {worker} for {step_size} "
-                f"steps from time {current_time}")
+                f"steps from time {current_time}"
+            )
             completed_tasks.extend(worker.step(current_time, step_size))
 
         # Delete the completed tasks from the set of placed tasks.
@@ -337,8 +343,8 @@ class WorkerPool(object):
             `True` if the task can be placed, `False` otherwise.
         """
         return any(
-            worker.can_accomodate_task(task)
-            for worker in self._workers.values())
+            worker.can_accomodate_task(task) for worker in self._workers.values()
+        )
 
     def log_utilization(self, csv_logger: logging.Logger, sim_time: int):
         """Logs the utilization of the resources of a particular WorkerPool.
@@ -350,20 +356,21 @@ class WorkerPool(object):
                 is logged (in us).
         """
         # Add the resources of all the workers in this pool.
-        final_resources = Resources(_logger=logging.getLogger('dummy'))
+        final_resources = Resources(_logger=logging.getLogger("dummy"))
         for worker in self._workers.values():
             final_resources += worker.resources
 
         # Log the utilization from the final set of resources.
         for resource_name in set(
-                map(attrgetter('name'),
-                    final_resources._resource_vector.keys())):
+            map(attrgetter("name"), final_resources._resource_vector.keys())
+        ):
             resource = Resource(name=resource_name, _id="any")
             csv_logger.debug(
                 f"{sim_time},WORKER_POOL_UTILIZATION,{self.name},"
                 f"{self.id},{resource_name},"
                 f"{final_resources.get_allocated_quantity(resource)},"
-                f"{final_resources.get_available_quantity(resource)}")
+                f"{final_resources.get_available_quantity(resource)}"
+            )
 
     @property
     def name(self):
@@ -395,7 +402,7 @@ class WorkerPool(object):
         return len(self._workers)
 
     def __copy__(self):
-        """ A copy of the WorkerPool uses the same ID, and copies the state of
+        """A copy of the WorkerPool uses the same ID, and copies the state of
         the Workers, along with their current resource usage and placed tasks.
 
         This is used by the schedulers to try scheduling decisions on a version
@@ -420,7 +427,7 @@ class WorkerPool(object):
         return instance
 
     def __deepcopy__(self, memo):
-        """ A deepcopy of the WorkerPool uses the same ID, and resets the
+        """A deepcopy of the WorkerPool uses the same ID, and resets the
         Workers to the initial state, thus undoing the effects of the task
         placement.
 
@@ -462,10 +469,9 @@ class WorkerPools(object):
         available quantify of the given resource.
         """
         # Unique list of resource names -- not relying on set stability.
-        resource_names = list({
-            r.name
-            for wp in self._wps for r in wp.resources._resource_vector.keys()
-        })
+        resource_names = list(
+            {r.name for wp in self._wps for r in wp.resources._resource_vector.keys()}
+        )
         # Uniquify scrambles the order.
         resource_names.sort()
 
@@ -476,9 +482,9 @@ class WorkerPools(object):
             cur_range_id = start_range_id
             for wp in self._wps:
                 res_available = wp.resources.get_available_quantity(
-                    Resource(name=res_name, _id="any"))
-                for res_id in range(cur_range_id,
-                                    cur_range_id + res_available):
+                    Resource(name=res_name, _id="any")
+                )
+                for res_id in range(cur_range_id, cur_range_id + res_available):
                     res_id_to_wp_id[res_id] = wp.id
                 cur_range_id += res_available
             res_type_to_id_range[res_name] = (start_range_id, cur_range_id)

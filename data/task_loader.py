@@ -9,8 +9,7 @@ class TaskLoader(object):
     """Base class for task data loaders."""
 
     @staticmethod
-    def __create_task_graph(tasks: Sequence[Task], job_graph: JobGraph)\
-            -> TaskGraph:
+    def __create_task_graph(tasks: Sequence[Task], job_graph: JobGraph) -> TaskGraph:
         """Constructs the `TaskGraph` from the given set of tasks and their
         job order defined by the `job_graph`.
 
@@ -31,8 +30,7 @@ class TaskLoader(object):
         for task in tasks:
             grouped_tasks[task.job.name].append(task)
         for job_name, tasks in grouped_tasks.items():
-            grouped_tasks[job_name] = list(
-                sorted(tasks, key=attrgetter('timestamp')))
+            grouped_tasks[job_name] = list(sorted(tasks, key=attrgetter("timestamp")))
 
         # Add all the grouped tasks to the TaskGraph with dependencies on the
         # task of the previous timestamp, and parents from the Job with the
@@ -53,9 +51,12 @@ class TaskLoader(object):
                 for parent_job in parent_jobs:
                     parent_task_same_timestamp = list(
                         filter(
-                            lambda parent_task:
-                            (parent_task.timestamp == task.timestamp),
-                            grouped_tasks[parent_job.name]))
+                            lambda parent_task: (
+                                parent_task.timestamp == task.timestamp
+                            ),
+                            grouped_tasks[parent_job.name],
+                        )
+                    )
 
                     # There can be multiple different tasks for the message
                     # and watermark callbacks from the parent Job, and we add
@@ -71,8 +72,7 @@ class TaskLoader(object):
         Returns:
             The set of `Job`s loaded.
         """
-        raise NotImplementedError(
-            "The `get_jobs()` method has not been implemented.")
+        raise NotImplementedError("The `get_jobs()` method has not been implemented.")
 
     def get_job_graph(self) -> JobGraph:
         """Retrieve the constructed `JobGraph`.
@@ -81,7 +81,8 @@ class TaskLoader(object):
             The `JobGraph` constructed by the TaskLoader.
         """
         raise NotImplementedError(
-            "The `get_job_graph()` method has not been implemented.")
+            "The `get_job_graph()` method has not been implemented."
+        )
 
     def get_tasks(self) -> Sequence[Task]:
         """Retrieve the set of `Task`s loaded by the TaskLoader.
@@ -89,8 +90,7 @@ class TaskLoader(object):
         Returns:
             The set of `Task`s loaded by the TaskLoader.
         """
-        raise NotImplementedError(
-            "The `get_tasks()` method has not been implemented.")
+        raise NotImplementedError("The `get_tasks()` method has not been implemented.")
 
     def get_task_graph(self) -> TaskGraph:
         """Retrieve the `TaskGraph` constructed by the TaskLoader.
@@ -99,4 +99,5 @@ class TaskLoader(object):
             The `TaskGraph` constructed by the TaskLoader.
         """
         raise NotImplementedError(
-            "The `get_task_graph()` method has not been implemented.")
+            "The `get_task_graph()` method has not been implemented."
+        )
