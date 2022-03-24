@@ -114,6 +114,12 @@ flags.DEFINE_integer(
     "The delay (in us) associated with invoking a scheduler after the "
     "release of a Task in the system.",
 )
+flags.DEFINE_integer(
+    "scheduling_horizon",
+    0,
+    "The scheduler places tasks that are estimated to be released "
+    "within the tine horizon (in us)",
+)
 flags.DEFINE_enum(
     "ilp_goal",
     "max_slack",
@@ -178,6 +184,8 @@ def main(args):
             preemptive=FLAGS.preemption,
             runtime=FLAGS.scheduler_runtime,
             goal=FLAGS.ilp_goal,
+            enforce_deadlines=False,
+            scheduling_horizon=FLAGS.scheduling_horizon,
             _flags=FLAGS,
         )
     elif FLAGS.scheduler == "z3":
@@ -185,6 +193,8 @@ def main(args):
             preemptive=FLAGS.preemption,
             runtime=FLAGS.scheduler_runtime,
             goal=FLAGS.ilp_goal,
+            enforce_deadlines=False,
+            scheduling_horizon=FLAGS.scheduling_horizon,
             _flags=FLAGS,
         )
     else:
