@@ -9,7 +9,7 @@
     {
         "name": "center_camera_location_finder_history_operator.on_watermark",
         "resource_requirements": [{
-            "CPU:any": 1
+            "CPU:any": 4
         }]
     },
 
@@ -38,7 +38,7 @@
     {
         "name": "front_center_lidar_operator.process_point_clouds",
         "resource_requirements": [{
-            "CPU:any": 1
+            "CPU:any": 2
         }]
     },
 
@@ -67,7 +67,8 @@
     {
         "name": "linear_prediction_operator.generate_predicted_trajectories",
         "resource_requirements": [{
-            "CPU:any": 1
+            "CPU:any": 1,
+            "GPU:any": 1
         }]
     },
 
@@ -102,7 +103,7 @@
     {
         "name": "planning_operator.on_watermark",
         "resource_requirements": [{
-            "CPU:any": 1
+            "CPU:any": 8
         }]
     },
 
@@ -123,7 +124,8 @@
     {
         "name": "tracker_sort.on_watermark",
         "resource_requirements": [{
-            "CPU:any": 1
+            "CPU:any": 2,
+            "GPU:any": 1
         }]
     },
 

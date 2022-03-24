@@ -7,11 +7,11 @@
                 "resources": [
                     {
                         "name": "CPU",
-                        "quantity": 5
+                        "quantity": 4
                     },
                     {
                         "name": "GPU",
-                        "quantity": 3
+                        "quantity": 2
                     }
                 ]
             },
@@ -21,7 +21,7 @@
                 "resources": [
                     {
                         "name": "CPU",
-                        "quantity": 10
+                        "quantity": 4
                     }
                 ]
             }
@@ -36,7 +36,7 @@
                 "resources": [
                     {
                         "name": "GPU",
-                        "quantity": 5
+                        "quantity": 1
                     }
                 ]
             },
@@ -46,11 +46,11 @@
                 "resources": [
                     {
                         "name": "GPU",
-                        "quantity": 3
+                        "quantity": 1
                     },
                     {
                         "name": "CPU",
-                        "quantity": 2
+                        "quantity": 8
                     }
                 ]
             }

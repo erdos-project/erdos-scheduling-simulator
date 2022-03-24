@@ -215,7 +215,7 @@ class TaskLoaderJSON(object):
 
         Args:
             json_entries (`Sequence[Mapping[str, str]]`): The JSON entries
-            retrieved from the profile file.
+                retrieved from the profile file.
             jobs (`Mapping[str, Job]`): A mapping from the name of the jobs
                 to a `Job` instance.
             resources (`Mapping[str, Sequence[Resources]]`): The set of
