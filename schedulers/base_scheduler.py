@@ -1,3 +1,5 @@
+import heapq
+from copy import deepcopy
 from typing import Optional, Sequence, Tuple
 
 import absl  # noqa: F401
@@ -66,6 +68,7 @@ class BaseScheduler(object):
             ]
         ), "doesn't finish before deadline"
 
+        # Check if task dependencies are satisfied.
         for task, placement in placements:
             children = task_graph.get_children(task)
             for child_task in children:
@@ -76,27 +79,23 @@ class BaseScheduler(object):
                     ), f"task dependency not valid{task.id}->{child_task.id}"
 
         # Check if resource requirements are satisfied.
-        # Note: We do not check if all tasks placed on a WorkerPool fit.
-        for task, placement in placements:
-            for wp in worker_pools._wps:
-                if placement == wp.id:
-
-                    assert wp.can_accomodate_task(
-                        task
-                    ), f"WorkerPool doesn't have resources for {task.id}"
-
-        # Check if tasks overlapped on a resource.
         placed_tasks = []
         for task, placement in placements:
-            if placement:
-                placed_tasks.append(
-                    (
-                        placement,
-                        start_times[task.id],
-                        start_times[task.id] + task.runtime,
-                    )
-                )
+            if placement is not None:
+                placed_tasks.append((start_times[task.id], placement, task))
         placed_tasks.sort()
-        for t1, t2 in zip(placed_tasks, placed_tasks[1:]):
-            if t1[0] == t2[0]:
-                assert t1[2] <= t2[1], f"overlapping_tasks_on_{t1[0]}"
+        wps = deepcopy(worker_pools)
+        id_to_wp = {wp.id: wp for wp in wps._wps}
+        # A heap storing the task in order of their completion time.
+        task_completion = []
+        for start_time, wp_id, task in placed_tasks:
+            # Remove task that finished before start_time.
+            while len(task_completion) > 0 and start_time >= task_completion[0][0]:
+                (end_time, wp_id, task) = heapq.heappop(task_completion)
+                id_to_wp[wp_id].remove_task(task)
+            wp = id_to_wp[wp_id]
+            assert wp.can_accomodate_task(
+                task
+            ), f"WorkerPool {wp.id} doesn't have resources for {task.id}"
+            wp.place_task(task)
+            heapq.heappush(task_completion, (start_time + task.runtime, wp_id, task))

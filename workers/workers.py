@@ -50,6 +50,20 @@ class Worker(object):
         self._placed_tasks[task] = task.state
         self._logger.debug(f"Placed {task} on {self}")
 
+    def remove_task(self, task: Task):
+        """Removes the task from this `Worker`.
+
+        Args:
+            task (`Task`): The task to be placed on this `Worker`.
+        Raises:
+            `ValueError` if the task was not placed on this worker.
+        """
+        if task not in self._placed_tasks:
+            raise ValueError("The task was not placed on this Worker.")
+        # Deallocate the resources and remove the placed task.
+        self._resources.deallocate(task)
+        del self._placed_tasks[task]
+
     def preempt_task(self, task: Task):
         """Preempts the given `Task` and frees the resources.
 
@@ -120,8 +134,7 @@ class Worker(object):
 
         # Delete the completed tasks from the set of placed tasks.
         for completed_task in completed_tasks:
-            self._resources.deallocate(completed_task)
-            del self._placed_tasks[completed_task]
+            self.remove_task(task)
         return completed_tasks
 
     def __copy__(self):
@@ -328,8 +341,10 @@ class WorkerPool(object):
             completed_tasks.extend(worker.step(current_time, step_size))
 
         # Delete the completed tasks from the set of placed tasks.
-        for completed_task in completed_tasks:
-            del self._placed_tasks[completed_task]
+        for task in completed_tasks:
+            # We do not need to remove the task from the worker because it was
+            # already removed while the worker stepped.
+            del self._placed_tasks[task]
         return completed_tasks
 
     def can_accomodate_task(self, task: Task) -> bool:

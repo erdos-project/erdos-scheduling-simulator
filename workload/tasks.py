@@ -41,7 +41,7 @@ class Task(object):
         release_time (`int`): The time at which the task was released by the
             job (in us).
         runtime (`int`): The expected runtime (in us) of this task.
-        deadline (`int`): The deadline by which the task should complete.
+        deadline (`int`): The absolute deadline by which the task should complete.
         state (`TaskState`): Defines the state of the task.
         timestamp (`int`): The timestamp for the Task (single dimension).
         start_time (`int`): The time (in us) at which the task was started
@@ -277,10 +277,10 @@ class Task(object):
         self._remaining_time = time
 
     def update_deadline(self, new_deadline: int):
-        """Updates the deadline of the task to simulate any dynamic deadlines.
+        """Updates the absolute deadline of the task to simulate any dynamic deadlines.
 
         Args:
-            new_deadline (`int`): The new deadline (in us) to update the task
+            new_deadline (`int`): The new aboslute deadline (in us) to update the task
                 with.
 
         Raises:
