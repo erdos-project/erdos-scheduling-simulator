@@ -1,4 +1,5 @@
 import logging
+import random
 import uuid
 from collections import defaultdict
 from copy import copy
@@ -29,7 +30,9 @@ class Resource(object):
         if _id is not None and _id != "any":
             raise ValueError("The acceptable values of _id are None / 'any'")
         self._name = name
-        self._id = uuid.uuid4() if _id is None else _id
+        self._id = (
+            uuid.UUID(int=random.getrandbits(128), version=4) if _id is None else _id
+        )
 
     @property
     def name(self):

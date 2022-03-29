@@ -1,9 +1,9 @@
 import logging
+import random
 import sys
 import uuid
 from collections import defaultdict, deque, namedtuple
 from enum import Enum
-from random import Random
 from typing import Mapping, Optional, Sequence, Union
 
 import utils
@@ -80,7 +80,7 @@ class Task(object):
         self._expected_runtime = runtime
         self._deadline = deadline
         self._timestamp = timestamp
-        self._id = uuid.uuid4()
+        self._id = uuid.UUID(int=random.getrandbits(128), version=4)
 
         # The timestamps maintained for each state of the task.
         # (VIRTUAL -> RELEASED)
@@ -122,7 +122,6 @@ class Task(object):
         self,
         time: Optional[int] = None,
         variance: Optional[int] = 0,
-        rng: Random = Random(),
     ):
         """Begins the execution of the task at the given simulator time.
 
@@ -147,7 +146,7 @@ class Task(object):
                 "creating the Task or when starting it."
             )
 
-        remaining_time = utils.fuzz_time(rng, self._remaining_time, variance)
+        remaining_time = utils.fuzz_time(self._remaining_time, variance)
         self._logger.debug(
             f"Transitioning {self} to {TaskState.RUNNING} at time {time} "
             f"with the remaining time {remaining_time}"

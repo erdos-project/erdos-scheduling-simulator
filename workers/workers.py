@@ -1,4 +1,5 @@
 import logging
+import random
 import uuid
 from copy import copy, deepcopy
 from operator import attrgetter
@@ -32,7 +33,7 @@ class Worker(object):
             self._logger = utils.setup_logging(name=self.__class__.__name__)
 
         self._name = name
-        self._id = uuid.uuid4()
+        self._id = uuid.UUID(int=random.getrandbits(128), version=4)
         self._resources = resources
         self._placed_tasks = {}  # Mapping[Task, TaskState]
 
@@ -240,7 +241,7 @@ class WorkerPool(object):
         self._name = name
         self._workers = {worker.id: worker for worker in workers}
         self._scheduler = scheduler
-        self._id = uuid.uuid4()
+        self._id = uuid.UUID(int=random.getrandbits(128), version=4)
         self._placed_tasks = {}  # Mapping[Task, str] from task to worker ID.
 
     def add_workers(self, workers: Sequence[Worker]):

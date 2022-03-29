@@ -17,6 +17,7 @@ def test_z3_scheduler_success():
 
     # Create the tasks and the TaskGraph.
     task_cpu = create_default_task(
+        name="cpu_task",
         resource_requirements=Resources(
             resource_vector={Resource(name="CPU", _id="any"): 1}
         ),
@@ -24,6 +25,7 @@ def test_z3_scheduler_success():
     )
     task_cpu.release(1)
     task_gpu = create_default_task(
+        name="gpu_task",
         resource_requirements=Resources(
             resource_vector={Resource(name="GPU", _id="any"): 1}
         ),
@@ -82,10 +84,10 @@ def test_z3_scheduler_limited_resources():
     z3_scheduler = Z3Scheduler()
 
     # Create the tasks and the TaskGraph.
-    task_lower_priority = create_default_task(deadline=200)
+    task_lower_priority = create_default_task(name="task_low_priority", deadline=200)
     task_lower_priority.update_remaining_time(100)
     task_lower_priority.release(50)
-    task_higher_priority = create_default_task(deadline=220)
+    task_higher_priority = create_default_task(name="task_high_priority", deadline=220)
     task_higher_priority.update_remaining_time(150)
     task_higher_priority.release(50)
     task_graph = TaskGraph(tasks={task_lower_priority: [], task_higher_priority: []})
@@ -126,6 +128,7 @@ def test_gurobi_scheduler_success():
 
     # Create the tasks and the TaskGraph.
     task_cpu = create_default_task(
+        name="cpu_task",
         resource_requirements=Resources(
             resource_vector={Resource(name="CPU", _id="any"): 1}
         ),
@@ -133,6 +136,7 @@ def test_gurobi_scheduler_success():
     )
     task_cpu.release(1)
     task_gpu = create_default_task(
+        name="gpu_task",
         resource_requirements=Resources(
             resource_vector={Resource(name="GPU", _id="any"): 1}
         ),
@@ -191,10 +195,10 @@ def test_gurobi_scheduler_limited_resources():
     scheduler = GurobiScheduler()
 
     # Create the tasks and the TaskGraph.
-    task_lower_priority = create_default_task(deadline=200)
+    task_lower_priority = create_default_task(name="task_low_priority", deadline=200)
     task_lower_priority.release(50)
     task_lower_priority.update_remaining_time(100)
-    task_higher_priority = create_default_task(deadline=220)
+    task_higher_priority = create_default_task(name="task_high_priority", deadline=220)
     task_higher_priority.release(50)
     task_higher_priority.update_remaining_time(150)
     task_graph = TaskGraph(tasks={task_lower_priority: [], task_higher_priority: []})
@@ -226,6 +230,7 @@ def test_edf_scheduler_success():
 
     # Create the tasks and the TaskGraph.
     task_cpu = create_default_task(
+        name="cpu_task",
         resource_requirements=Resources(
             resource_vector={Resource(name="CPU", _id="any"): 1}
         ),
@@ -233,6 +238,7 @@ def test_edf_scheduler_success():
     )
     task_cpu.release(1)
     task_gpu = create_default_task(
+        name="gpu_task",
         resource_requirements=Resources(
             resource_vector={Resource(name="GPU", _id="any"): 1}
         ),
@@ -279,9 +285,9 @@ def test_edf_scheduler_limited_resources():
     edf_scheduler = EDFScheduler()
 
     # Create the tasks and the TaskGraph.
-    task_lower_priority = create_default_task(deadline=200)
+    task_lower_priority = create_default_task(name="task_low_priority", deadline=200)
     task_lower_priority.release(1)
-    task_higher_priority = create_default_task(deadline=50)
+    task_higher_priority = create_default_task(name="task_high_priority", deadline=50)
     task_higher_priority.release(1)
     task_graph = TaskGraph(tasks={task_lower_priority: [], task_higher_priority: []})
 
@@ -322,9 +328,9 @@ def test_edf_scheduler_non_preemptive_higher_priority():
     edf_scheduler = EDFScheduler(preemptive=False)
 
     # Create the tasks and the TaskGraph.
-    task_lower_priority = create_default_task(deadline=200)
+    task_lower_priority = create_default_task(name="task_low_priority", deadline=200)
     task_lower_priority.release(1)
-    task_higher_priority = create_default_task(deadline=50)
+    task_higher_priority = create_default_task(name="task_high_priority", deadline=50)
     task_graph = TaskGraph(tasks={task_lower_priority: [], task_higher_priority: []})
 
     # Create the WorkerPool.
@@ -366,9 +372,9 @@ def test_edf_scheduler_preemptive_higher_priority():
     edf_scheduler = EDFScheduler(preemptive=True)
 
     # Create the tasks and the TaskGraph.
-    task_lower_priority = create_default_task(deadline=200)
+    task_lower_priority = create_default_task(name="task_low_priority", deadline=200)
     task_lower_priority.release(1)
-    task_higher_priority = create_default_task(deadline=50)
+    task_higher_priority = create_default_task(name="task_high_priority", deadline=50)
     task_graph = TaskGraph(tasks={task_lower_priority: [], task_higher_priority: []})
 
     # Create the WorkerPool.
@@ -414,6 +420,7 @@ def test_lsf_scheduler_success():
 
     # Create the tasks and the TaskGraph.
     task_cpu = create_default_task(
+        name="cpu_task",
         resource_requirements=Resources(
             resource_vector={Resource(name="CPU", _id="any"): 1}
         ),
@@ -421,6 +428,7 @@ def test_lsf_scheduler_success():
     )
     task_cpu.release(1)
     task_gpu = create_default_task(
+        name="gpu_task",
         resource_requirements=Resources(
             resource_vector={Resource(name="GPU", _id="any"): 1}
         ),
@@ -467,10 +475,10 @@ def test_lsf_scheduler_limited_resources():
     lsf_scheduler = LSFScheduler()
 
     # Create the tasks and the TaskGraph.
-    task_lower_priority = create_default_task(deadline=200)
+    task_lower_priority = create_default_task(name="task_low_priority", deadline=200)
     task_lower_priority.release(50)
     task_lower_priority.update_remaining_time(100)
-    task_higher_priority = create_default_task(deadline=220)
+    task_higher_priority = create_default_task(name="task_high_priority", deadline=220)
     task_higher_priority.release(50)
     task_higher_priority.update_remaining_time(150)
     task_graph = TaskGraph(tasks={task_lower_priority: [], task_higher_priority: []})

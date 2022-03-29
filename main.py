@@ -1,3 +1,4 @@
+import random
 import sys
 
 from absl import app, flags
@@ -132,6 +133,7 @@ def main(args):
     """Main loop that loads the data from the given profile paths, and
     runs the Simulator on the data with the given scheduler.
     """
+    random.seed(42)
     logger = utils.setup_logging(
         name=__name__, log_file=FLAGS.log_file_name, log_level=FLAGS.log_level
     )

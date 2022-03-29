@@ -1,3 +1,4 @@
+import random
 import uuid
 from collections import defaultdict
 from typing import Mapping, Optional, Sequence
@@ -18,7 +19,7 @@ class Job(object):
 
     def __init__(self, name: str):
         self._name = name
-        self._id = uuid.uuid4()
+        self._id = uuid.UUID(int=random.getrandbits(128), version=4)
 
     @property
     def name(self):

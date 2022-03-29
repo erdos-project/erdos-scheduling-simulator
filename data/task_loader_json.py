@@ -1,9 +1,9 @@
 import json
 import logging
+import random
 import sys
 from collections import defaultdict
 from operator import attrgetter
-from random import Random
 from typing import Mapping, Optional, Sequence, Tuple
 
 import absl  # noqa: F401
@@ -116,7 +116,6 @@ class TaskLoaderJSON(object):
             max_timestamp,
             task_logger,
             _flags.deadline_variance,
-            Random(42),
         )
         for task in self._tasks:
             self._logger.debug(f"Loaded Task from JSON: {task}")
@@ -209,7 +208,6 @@ class TaskLoaderJSON(object):
         max_timestamp: int = sys.maxsize,
         logger: Optional[logging.Logger] = None,
         deadline_variance: Optional[int] = 0,
-        rng: Random = Random(),
     ) -> Sequence[Task]:
         """Creates a list of tasks from the given JSON entries.
 
@@ -236,13 +234,13 @@ class TaskLoaderJSON(object):
             if entry["args"]["timestamp"] > max_timestamp:
                 continue
             # All times are in microseconds.
-            runtime_deadline = utils.fuzz_time(rng, entry["dur"], deadline_variance)
+            runtime_deadline = utils.fuzz_time(entry["dur"], deadline_variance)
             deadline = entry["ts"] + runtime_deadline
             tasks.append(
                 Task(
                     name=entry["name"],
                     job=jobs[entry["pid"]],
-                    resource_requirements=rng.choice(resources[entry["name"]]),
+                    resource_requirements=random.choice(resources[entry["name"]]),
                     runtime=entry["dur"],
                     deadline=deadline,
                     timestamp=entry["args"]["timestamp"],
