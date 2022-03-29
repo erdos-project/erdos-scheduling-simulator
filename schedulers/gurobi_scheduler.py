@@ -117,12 +117,12 @@ class GurobiScheduler(BaseScheduler):
         if len(self._task_ids_to_task) == 0:
             return
         max_deadline = max([task.deadline for task in self._task_ids_to_task.values()])
-        for t1_id, task1 in self._task_ids_to_task.items():
-            for t2_id, task2 in self._task_ids_to_task.items():
-                if t2_id >= t1_id:
-                    continue
-                alpha = s.addVar(vtype=gp.GRB.BINARY, name=f"alpha{t1_id}_{t2_id}")
-                betas = s.addVars(2, vtype=gp.GRB.BINARY, name=f"beta{t1_id}_{t2_id}")
+        for index1, (t1_id, task1) in enumerate(self._task_ids_to_task.items()):
+            for index2, (t2_id, task2) in enumerate(self._task_ids_to_task.items()):
+                if index2 >= index1:
+                    break
+                alpha = s.addVar(vtype=gp.GRB.INTEGER, name=f"alpha_{t1_id}_{t2_id}")
+                betas = s.addVars(2, vtype=gp.GRB.BINARY, name=f"beta_{t1_id}_{t2_id}")
                 # Helper variable which is 0 if the tasks have been placed on the same
                 # resource.
                 s.addConstr(
@@ -173,19 +173,22 @@ class GurobiScheduler(BaseScheduler):
 
         scheduler_start_time = time.time()
         s = gp.Model("RAP")
-        s.setParam("OptimalityTol", 1e-3)
+        s.Params.OptimalityTol = 0.01
+        s.Params.IntFeasTol = 0.1
+        # Sets the solver method to concurrent and deterministic.
+        # s.Params.Method = 4
 
         # We are solving for start_times and placements while minimizing costs.
         for task in tasks:
             self._task_ids_to_task[task.id] = task
             self._task_ids_to_start_time[task.id] = s.addVar(
-                vtype=gp.GRB.INTEGER, name=f"t{task.id}"
+                vtype=gp.GRB.INTEGER, name=f"t_{task.id}"
             )
             self._task_ids_to_cost[task.id] = s.addVar(
-                vtype=gp.GRB.INTEGER, name=f"c{task.id}"
+                vtype=gp.GRB.INTEGER, name=f"c_{task.id}"
             )
             self._task_ids_to_placement[task.id] = s.addVar(
-                vtype=gp.GRB.INTEGER, name=f"p{task.id}"
+                vtype=gp.GRB.INTEGER, name=f"p_{task.id}"
             )
 
         (
@@ -234,11 +237,21 @@ class GurobiScheduler(BaseScheduler):
             if s.status == gp.GRB.INFEASIBLE:
                 # TODO: Implement load shedding.
                 self._logger.debug("Solver couldn't find a solution.")
+                self.log_solver_internal(s)
             else:
                 self._logger.debug(f"Solver failed with status: {s.status}")
+                self.log_solver_internal(s)
         # Log the scheduler run.
         self.log()
         return self.runtime, self._placements
+
+    def log_solver_internal(self, s):
+        self._logger.debug("Solver model: {s.display()}")
+        s.computeIIS()
+        self._logger.debug("The following constraint(s) cannot be satisfied:")
+        for c in s.getConstrs():
+            if c.IISConstr:
+                self._logger.debug(f"Constraint: {c}")
 
     def log(self):
         if self._flags is not None and self._flags.scheduler_log_file_name is not None:

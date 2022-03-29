@@ -113,10 +113,10 @@ class Z3Scheduler(BaseScheduler):
             s.add(self._task_ids_to_placement[task_id] >= start_id)
             s.add(self._task_ids_to_placement[task_id] < end_id)
 
-        for t1_id, task1 in self._task_ids_to_task.items():
-            for t2_id, task2 in self._task_ids_to_task.items():
-                if t2_id >= t1_id:
-                    continue
+        for index1, (t1_id, task1) in enumerate(self._task_ids_to_task.items()):
+            for index2, (t2_id, task2) in enumerate(self._task_ids_to_task.items()):
+                if index2 >= index1:
+                    break
                 disjoint = [
                     self._task_ids_to_start_time[t1_id] + task1.remaining_time
                     <= self._task_ids_to_start_time[t2_id],
