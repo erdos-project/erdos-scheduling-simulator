@@ -103,7 +103,7 @@ def test_z3_scheduler_limited_resources():
     )
 
     assert all(
-        [placement is None for (_, placement) in placements]
+        [placement is None for (_, placement, _) in placements]
     ), "Doesn't detect workload is unschedulable."
 
     # assert placements[1][0] == task_higher_priority,\
@@ -166,17 +166,17 @@ def test_gurobi_scheduler_success():
     if placements[1][0] == task_gpu and placements[0][0] == task_cpu:
         assert (
             placements[1][1] == worker_pool_two.id
-        ), "Incorrect placement of the task on the WorkerPool."
+        ), "Incorrect placement of the GPU task on the WorkerPool."
         assert (
             placements[0][1] == worker_pool_one.id
-        ), "Incorrect placement of the task on the WorkerPool."
+        ), "Incorrect placement of the CPU task on the WorkerPool."
     elif placements[0][0] == task_gpu and placements[1][0] == task_cpu:
         assert (
             placements[0][1] == worker_pool_two.id
-        ), "Incorrect placement of the task on the WorkerPool."
+        ), "Incorrect placement of the GPU task on the WorkerPool."
         assert (
             placements[1][1] == worker_pool_one.id
-        ), "Incorrect placement of the task on the WorkerPool."
+        ), "Incorrect placement of the CPU task on the WorkerPool."
     else:
         raiseExceptions(
             "Incorrect placements: two tasks arent the same as the ones placed"
@@ -212,7 +212,7 @@ def test_gurobi_scheduler_limited_resources():
     )
 
     assert all(
-        [placement is None for (_, placement) in placements]
+        [placement is None for (_, placement, _) in placements]
     ), "Doesn't detect workload is unschedulable."
 
 
@@ -338,7 +338,7 @@ def test_edf_scheduler_non_preemptive_higher_priority():
     _, placements = edf_scheduler.schedule(
         1, task_graph=task_graph, worker_pools=WorkerPools([worker_pool])
     )
-    for (task, placement) in placements:
+    for (task, placement, _) in placements:
         if task == task_higher_priority:
             assert placement is None, "Incorrect placement of the high priority task."
         elif task == task_lower_priority:
@@ -352,7 +352,7 @@ def test_edf_scheduler_non_preemptive_higher_priority():
     _, placements = edf_scheduler.schedule(
         2, task_graph=task_graph, worker_pools=WorkerPools([worker_pool])
     )
-    for (task, placement) in placements:
+    for (task, placement, _) in placements:
         if task == task_higher_priority:
             assert placement is None, "Incorrect placement of the high priority task."
 
@@ -382,7 +382,7 @@ def test_edf_scheduler_preemptive_higher_priority():
     _, placements = edf_scheduler.schedule(
         1, task_graph=task_graph, worker_pools=WorkerPools([worker_pool])
     )
-    for (task, placement) in placements:
+    for (task, placement, _) in placements:
         if task == task_higher_priority:
             assert placement is None, "Incorrect placement of the high priority task."
         elif task == task_lower_priority:
@@ -395,7 +395,7 @@ def test_edf_scheduler_preemptive_higher_priority():
     _, placements = edf_scheduler.schedule(
         2, task_graph=task_graph, worker_pools=WorkerPools([worker_pool])
     )
-    for (task, placement) in placements:
+    for (task, placement, _) in placements:
         if task == task_lower_priority:
             assert placement is None, "Incorrect placement of the low priority task."
         elif task == task_higher_priority:

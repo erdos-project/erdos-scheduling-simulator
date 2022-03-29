@@ -133,7 +133,7 @@ class Worker(object):
                 completed_tasks.append(task)
 
         # Delete the completed tasks from the set of placed tasks.
-        for completed_task in completed_tasks:
+        for task in completed_tasks:
             self.remove_task(task)
         return completed_tasks
 
@@ -295,6 +295,20 @@ class WorkerPool(object):
             self._workers[placement].place_task(task)
             self._placed_tasks[task] = placement
             task._worker_pool_id = placement
+
+    def remove_task(self, task: Task):
+        """Removes the task from this `WorkerPool`.
+
+        Args:
+            task (`Task`): The task to be placed on this `WorkerPool`.
+        Raises:
+            `ValueError` if the task was not placed on this worker pool.
+        """
+        if task not in self._placed_tasks:
+            raise ValueError("The task was not placed on this WorkerPool.")
+        # Deallocate the resources and remove the placed task.
+        self._workers[self._placed_tasks[task]].remove_task(task)
+        del self._placed_tasks[task]
 
     def preempt_task(self, task: Task):
         """Preempts the given `Task` and frees the resources.

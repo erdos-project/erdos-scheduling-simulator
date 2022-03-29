@@ -220,18 +220,15 @@ class GurobiScheduler(BaseScheduler):
                     # Therefore, a task can progress before the next scheduler
                     # finishes. However, the next scheduler will assume that
                     # the task is not running while considering for placement.
-                    self._placements.append((task, placement))
+                    self._placements.append((task, placement, start_time))
                 else:
-                    self._placements.append((task, None))
-            start_times = {}
-            for task_id, st_var in self._task_ids_to_start_time.items():
-                start_times[task_id] = int(st_var.X)
+                    self._placements.append((task, None, None))
             self._verify_schedule(
-                self._worker_pools, self._task_graph, self._placements, start_times
+                self._worker_pools, self._task_graph, self._placements
             )
         else:
             self._placements = [
-                (task, None) for task in self._task_ids_to_task.values()
+                (task, None, None) for task in self._task_ids_to_task.values()
             ]
             self._cost = sys.maxsize
             if s.status == gp.GRB.INFEASIBLE:

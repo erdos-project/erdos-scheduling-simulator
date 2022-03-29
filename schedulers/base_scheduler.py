@@ -27,10 +27,10 @@ class BaseScheduler(object):
                 do the placement across.
 
         Returns:
-            (scheduler_runtime, task_placement) where `scheduler_runtime` is a
-            `int` depicting the runtime of the scheduler (in us), and
-            `task_placement` is a sequence of tuples depicting the
-            (Task, ID of the Worker Pool where the task should be placed).
+            (scheduler_runtime, task_placement) where `scheduler_runtime` is a `int`
+            depicting the runtime of the scheduler (in us), and `task_placement` is
+            a sequence of tuples depicting the (Task, ID of the Worker Pool where
+            the task should be placed, Start time of the task (in us)).
         """
         raise NotImplementedError(
             "The `schedule()` method has not been " "implemented."
@@ -50,40 +50,40 @@ class BaseScheduler(object):
         )
 
     def _verify_schedule(
-        self, worker_pools: WorkerPools, task_graph: TaskGraph, placements, start_times
+        self, worker_pools: WorkerPools, task_graph: TaskGraph, placements
     ):
         # Check if each task's start time is greater than its release time.
         assert all(
             [
-                start_times[task.id] >= task.release_time
-                for task, placement in placements
+                start_time >= task.release_time
+                for task, placement, start_time in placements
             ]
         ), "not_valid_release_times"
 
         # Check if all tasks finished before the deadline.
         assert all(
             [
-                (task.deadline >= start_times[task.id] + task.runtime)
-                for task, placement in placements
+                (task.deadline >= start_time + task.runtime)
+                for task, placement, start_time in placements
             ]
         ), "doesn't finish before deadline"
 
         # Check if task dependencies are satisfied.
-        for task, placement in placements:
+        start_times = {task.id: start_time for task, _, start_time in placements}
+        for task, placement, start_time in placements:
             children = task_graph.get_children(task)
             for child_task in children:
                 if child_task.id in start_times:
                     assert (
-                        start_times[task.id] + task.remaining_time
-                        <= start_times[child_task.id]
+                        start_time + task.remaining_time <= start_times[child_task.id]
                     ), f"task dependency not valid{task.id}->{child_task.id}"
 
         # Check if resource requirements are satisfied.
         placed_tasks = []
-        for task, placement in placements:
+        for task, placement, start_time in placements:
             if placement is not None:
-                placed_tasks.append((start_times[task.id], placement, task))
-        placed_tasks.sort()
+                placed_tasks.append((start_time, placement, task))
+        placed_tasks.sort(key=lambda e: e[0])
         wps = deepcopy(worker_pools)
         id_to_wp = {wp.id: wp for wp in wps._wps}
         # A heap storing the task in order of their completion time.
