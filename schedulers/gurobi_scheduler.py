@@ -122,34 +122,36 @@ class GurobiScheduler(BaseScheduler):
                 if t2_id >= t1_id:
                     continue
                 alpha = s.addVar(vtype=gp.GRB.BINARY, name=f"alpha{t1_id}_{t2_id}")
-                beta = s.addVar(vtype=gp.GRB.BINARY, name=f"beta{t1_id}_{t2_id}")
-                # pi > pj
+                betas = s.addVars(2, vtype=gp.GRB.BINARY, name=f"beta{t1_id}_{t2_id}")
+                # Helper variable which is 0 if the tasks have been placed on the same
+                # resource.
                 s.addConstr(
-                    -alpha * max_deadline - beta * max_deadline + 1
-                    <= self._task_ids_to_placement[t1_id]
+                    alpha
+                    == self._task_ids_to_placement[t1_id]
                     - self._task_ids_to_placement[t2_id]
                 )
-                # pj > pi
+                # If the tasks use the same resource, then they must not overlap.
+                # We uses a helper binary variable to capture the two cases:
+                # 1) t1 completes before t2
+                # 2) t2 completes before t1
+                s.addConstr(betas[0] + betas[1] == 1)
                 s.addConstr(
-                    alpha * max_deadline + (1 - beta) * max_deadline - 1
-                    >= self._task_ids_to_placement[t1_id]
-                    - self._task_ids_to_placement[t2_id]
+                    (alpha == 0)
+                    >> (
+                        self._task_ids_to_start_time[t2_id]
+                        - self._task_ids_to_start_time[t1_id]
+                        - task1.remaining_time
+                        >= 0 - max_deadline * (1 - betas[0])
+                    )
                 )
-                # tj - ti >= ei
                 s.addConstr(
-                    self._task_ids_to_start_time[t2_id]
-                    - self._task_ids_to_start_time[t1_id]
-                    >= task1.remaining_time
-                    - (1 - alpha) * max_deadline
-                    - beta * max_deadline
-                )
-                # ti - tj <= ej
-                s.addConstr(
-                    self._task_ids_to_start_time[t1_id]
-                    - self._task_ids_to_start_time[t2_id]
-                    >= task2.remaining_time
-                    - (1 - alpha) * max_deadline
-                    - (1 - beta) * max_deadline
+                    (alpha == 0)
+                    >> (
+                        self._task_ids_to_start_time[t1_id]
+                        - self._task_ids_to_start_time[t2_id]
+                        - task2.remaining_time
+                        >= 0 - max_deadline * (1 - betas[1])
+                    )
                 )
 
     def schedule(self, sim_time: int, task_graph: TaskGraph, worker_pools: WorkerPools):

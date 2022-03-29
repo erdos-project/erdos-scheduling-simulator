@@ -67,7 +67,7 @@
     {
         "name": "linear_prediction_operator.generate_predicted_trajectories",
         "resource_requirements": [{
-            "CPU:any": 1,
+            "CPU:any": 1
         }]
     },
 
@@ -123,7 +123,7 @@
     {
         "name": "tracker_sort.on_watermark",
         "resource_requirements": [{
-            "CPU:any": 1,
+            "CPU:any": 1
         }]
     },
 
