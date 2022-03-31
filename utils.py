@@ -25,6 +25,9 @@ def setup_logging(
         A `logging.Logger` instance that can be used to log the required
         information.
     """
+    logger = logging.getLogger(name)
+    if logger.handlers:
+        return logger
     # Set the file to log to.
     if log_file is None:
         handler = logging.StreamHandler()
@@ -34,7 +37,6 @@ def setup_logging(
     # Create the logger.
     formatter = logging.Formatter(fmt=fmt, datefmt=date_fmt)
     handler.setFormatter(formatter)
-    logger = logging.getLogger(name)
     logger.addHandler(handler)
 
     # Set the logger properties.
