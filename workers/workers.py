@@ -507,19 +507,21 @@ class WorkerPools(object):
 
         res_type_to_id_range = {}
         res_id_to_wp_id = {}
+        res_id_to_wp_index = {}
         start_range_id = 0
         for res_name in resource_names:
             cur_range_id = start_range_id
-            for wp in self._wps:
+            for index, wp in enumerate(self._wps):
                 res_available = wp.resources.get_available_quantity(
                     Resource(name=res_name, _id="any")
                 )
                 for res_id in range(cur_range_id, cur_range_id + res_available):
                     res_id_to_wp_id[res_id] = wp.id
+                    res_id_to_wp_index[res_id] = index
                 cur_range_id += res_available
             res_type_to_id_range[res_name] = (start_range_id, cur_range_id)
             start_range_id = cur_range_id
-        return res_type_to_id_range, res_id_to_wp_id
+        return res_type_to_id_range, res_id_to_wp_id, res_id_to_wp_index
 
     def __copy__(self):
         cls = self.__class__

@@ -162,6 +162,7 @@ class Z3Scheduler(BaseScheduler):
         (
             res_type_to_id_range,
             res_id_to_wp_id,
+            _,
         ) = worker_pools.get_resource_ilp_encoding()
         self._add_task_timing_constraints(s)
         self._add_task_resource_constraints(s, res_type_to_id_range)

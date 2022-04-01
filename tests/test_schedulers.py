@@ -135,15 +135,18 @@ def test_gurobi_scheduler_success():
         deadline=200,
     )
     task_cpu.release(1)
-    task_gpu = create_default_task(
+    task_cpu_gpu = create_default_task(
         name="gpu_task",
         resource_requirements=Resources(
-            resource_vector={Resource(name="GPU", _id="any"): 1}
+            resource_vector={
+                Resource(name="CPU", _id="any"): 1,
+                Resource(name="GPU", _id="any"): 1,
+            }
         ),
         deadline=50,
     )
-    task_gpu.release(1)
-    task_graph = TaskGraph(tasks={task_cpu: [], task_gpu: []})
+    task_cpu_gpu.release(1)
+    task_graph = TaskGraph(tasks={task_cpu: [], task_cpu_gpu: []})
 
     # Create the WorkerPool.
     worker_one = Worker(
@@ -154,7 +157,7 @@ def test_gurobi_scheduler_success():
 
     worker_two = Worker(
         name="Worker",
-        resources=Resources({Resource(name="GPU"): 1}),
+        resources=Resources({Resource(name="CPU"): 1, Resource(name="GPU"): 1}),
     )
     worker_pool_two = WorkerPool(name="WorkerPool_2", workers=[worker_two])
 
@@ -167,17 +170,17 @@ def test_gurobi_scheduler_success():
 
     assert len(placements) == 2, "Incorrect length of task placements."
 
-    if placements[1][0] == task_gpu and placements[0][0] == task_cpu:
+    if placements[1][0] == task_cpu_gpu and placements[0][0] == task_cpu:
         assert (
             placements[1][1] == worker_pool_two.id
-        ), "Incorrect placement of the GPU task on the WorkerPool."
+        ), "Incorrect placement of the CPU & GPU task on the WorkerPool."
         assert (
             placements[0][1] == worker_pool_one.id
         ), "Incorrect placement of the CPU task on the WorkerPool."
-    elif placements[0][0] == task_gpu and placements[1][0] == task_cpu:
+    elif placements[0][0] == task_cpu_gpu and placements[1][0] == task_cpu:
         assert (
             placements[0][1] == worker_pool_two.id
-        ), "Incorrect placement of the GPU task on the WorkerPool."
+        ), "Incorrect placement of the CPU & GPU task on the WorkerPool."
         assert (
             placements[1][1] == worker_pool_one.id
         ), "Incorrect placement of the CPU task on the WorkerPool."
