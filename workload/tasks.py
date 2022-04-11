@@ -463,9 +463,16 @@ class TaskGraph(object):
         for child in self.get_children(task):
             if all(map(lambda task: task.is_complete(), self.get_parents(child))):
                 if child.release_time == -1:
+                    # If the child does not have a release time, then set it to now,
+                    # which is the time of the completion of the last parent task.
                     child.release(finish_time)
                 else:
-                    child.release()
+                    parents = self.__parent_task_graph[task]
+                    earliest_release = child.release_time
+                    # Update the task's release time if parent tasks delayed it.
+                    for parent in parents:
+                        earliest_release = max(earliest_release, parent.completion_time)
+                    child.release(earliest_release)
                 released_tasks.append(child)
         return released_tasks
 
@@ -769,7 +776,7 @@ class TaskGraph(object):
 
             # Calculate the average of the offsets of the source tasks and
             # offset the remainder of the tasks by the average.
-            average_offset = sum(offsets) / len(offsets)
+            average_offset = int(sum(offsets) / len(offsets))
             for task in child_graph._task_graph:
                 if not child_graph.is_source_task(task):
                     task._release_time -= average_offset
