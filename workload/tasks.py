@@ -467,7 +467,7 @@ class TaskGraph(object):
                     # which is the time of the completion of the last parent task.
                     child.release(finish_time)
                 else:
-                    parents = self.__parent_task_graph[task]
+                    parents = self.__parent_task_graph[child]
                     earliest_release = child.release_time
                     # Update the task's release time if parent tasks delayed it.
                     for parent in parents:

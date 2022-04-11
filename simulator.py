@@ -292,6 +292,9 @@ class Simulator(object):
         self._logger.info(
             f"[{self._simulator_time}] Received {event} from " "the event queue."
         )
+        assert (
+            event.time >= self._simulator_time
+        ), f"Simulator cannot move time from {self._simulator_time} to {event.time}"
         # Advance the clock until the occurrence of this event.
         self.__step(step_size=event.time - self._simulator_time)
 
@@ -475,6 +478,7 @@ class Simulator(object):
         self._logger.info(
             f"[{self._simulator_time}] Stepping for {step_size} timesteps."
         )
+        assert step_size >= 0, f"Simulator cannot step backwards {step_size}"
         completed_tasks = []
         for worker_pool in self._worker_pools.values():
             completed_tasks.extend(worker_pool.step(self._simulator_time, step_size))
