@@ -1,16 +1,18 @@
 import csv
 import uuid
 from collections import defaultdict, namedtuple
+from functools import total_ordering
 from typing import Mapping, Optional, Sequence
 
 import absl  # noqa: F401
 
 
 # Types for Objects in the simulation.
+@total_ordering
 class Task(object):
     def __init__(
         self,
-        task_name: str,
+        name: str,
         timestamp: int,
         task_id: uuid.UUID,
         release_time: int,
@@ -20,7 +22,7 @@ class Task(object):
         completion_time: int = -1,
         missed_deadline: bool = False,
     ):
-        self.task_name = task_name
+        self.name = name
         self.timestamp = timestamp
         self.id = task_id
         # All times are in microseconds.
@@ -32,10 +34,25 @@ class Task(object):
         self.missed_deadline = missed_deadline
 
     def __str__(self):
-        return f"Task(name={self.task_name}, timestamp={self.timestamp})"
+        return f"Task(name={self.name}, timestamp={self.timestamp})"
 
     def __repr__(self):
         return str(self)
+
+    def __lt__(self, other):
+        if self == other:
+            return False
+        if self.timestamp > other.timestamp:
+            return False
+        elif self.timestamp == other.timestamp:
+            if self.release_time > other.release_time:
+                return False
+            elif self.release_time == other.release_time:
+                return self.runtime <= other.runtime
+        return True
+
+    def __eq__(self, other):
+        return self.id == other.id
 
 
 WorkerPool = namedtuple("WorkerPool", ["name", "id"])
@@ -132,7 +149,7 @@ class Plotter(object):
                     )
                 elif reading[1] == "TASK_RELEASE":
                     task = Task(
-                        task_name=reading[2],
+                        name=reading[2],
                         timestamp=int(reading[3]),
                         task_id=uuid.UUID(reading[7]),
                         release_time=int(reading[4]),

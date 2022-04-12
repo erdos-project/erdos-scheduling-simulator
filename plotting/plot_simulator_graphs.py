@@ -1,4 +1,5 @@
 import sys
+from collections import defaultdict
 from operator import attrgetter
 
 import matplotlib
@@ -22,6 +23,11 @@ flags.DEFINE_bool("plot_utilization", False, "Plot resource utilization")
 flags.DEFINE_bool("plot_task_placement_stats", False, "Plot task placement stats")
 flags.DEFINE_bool("plot_task_slack", False, "Plot task slack")
 flags.DEFINE_bool("plot_task_placement_delay", False, "Plot task placement delay")
+flags.DEFINE_bool(
+    "plot_inter_task_time",
+    False,
+    "Plot histogram of time difference between task releases",
+)
 flags.DEFINE_string(
     "utilization_timeline_plot_name",
     "utilization_bar_chart.png",
@@ -264,6 +270,33 @@ def plot_task_placement_stats(plotter, csv_file, scheduler_name, figure_size=(14
     )
 
 
+def plot_inter_task_time(plotter, csv_file, scheduler_name, figure_size=(14, 10)):
+    plt.figure(figsize=figure_size)
+    tasks = plotter.get_tasks(csv_file)
+    task_map = defaultdict(list)
+    for task in tasks:
+        task_map[task.name].append(task)
+
+    inter_release_times = []
+    labels = []
+    for task_name, tasks in task_map.items():
+        sorted_tasks = sorted(tasks)
+        last_release = sorted_tasks[0].release_time
+        task_inter_release_time = []
+        for index in range(1, len(tasks)):
+            task_inter_release_time.append(
+                (sorted_tasks[index].release_time - last_release) / 1000
+            )
+            last_release = sorted_tasks[index].release_time
+        labels.append(task_name)
+        inter_release_times.append(task_inter_release_time)
+
+    plt.xlabel("Inter-Task Time [ms]", fontsize=axes_fontsize)
+    plt.hist(inter_release_times, label=labels, density=False, bins=100)
+    plt.legend(frameon=False)
+    plt.savefig(scheduler_name + "_inter_task_time.png", bbox_inches="tight")
+
+
 def plot_task_slack(plotter, csv_file, scheduler_name, figure_size=(14, 10)):
     # Plot a histogram of the slack from the deadline for the tasks.
     plt.figure(figsize=figure_size)
@@ -327,9 +360,7 @@ def plot_task_placement_delay(plotter, figure_size=(14, 10)):
 
 def task_stats(tasks):
     for task in tasks:
-        logger.debug(
-            f"Task Name: {task.task_name}\n\tRelease Time: {task.release_time}\n\t"
-        )
+        logger.debug(f"Task Name: {task.name}\n\tRelease Time: {task.release_time}\n\t")
         logger.debug(
             f"Completion Time: {task.completion_time}\n\tDeadline: {task.deadline}\n\t"
         )
@@ -367,6 +398,8 @@ def main(argv):
             )
         if FLAGS.plot_task_slack:
             plot_task_slack(plotter, csv_file, FLAGS.csv_labels[i], figure_size)
+        if FLAGS.plot_inter_task_time:
+            plot_inter_task_time(plotter, csv_file, FLAGS.csv_labels[i], figure_size)
 
     if FLAGS.plot_scheduler_runtime:
         plot_scheduler_runtime(plotter, figure_size)
