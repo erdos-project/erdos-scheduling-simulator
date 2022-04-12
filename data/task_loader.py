@@ -37,9 +37,10 @@ class TaskLoader(object):
         # same timestamp.
         task_graph = defaultdict(list)
         for job_name, tasks in grouped_tasks.items():
-            # Add a dependency to the task with the next timestamp.
             for task, child_task in zip(tasks, tasks[1:]):
-                task_graph[task].append(child_task)
+                # Add a dependency to the task with the next timestamp.
+                if not task.job.pipelined:
+                    task_graph[task].append(child_task)
 
             # Find all the parent Jobs of each task with the same timestamp and
             # add the task to their children list.

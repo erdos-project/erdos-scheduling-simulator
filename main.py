@@ -93,6 +93,9 @@ flags.DEFINE_integer(
     -1,
     "The difference to keep between the source Jobs of successive timestamps.",
 )
+flags.DEFINE_bool(
+    "synchronize_sensors", False, "If True then the sensor operators are synchronized."
+)
 
 # Scheduler related flags.
 flags.DEFINE_enum(

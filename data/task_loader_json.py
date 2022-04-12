@@ -116,6 +116,7 @@ class TaskLoaderJSON(object):
             max_timestamp,
             task_logger,
             _flags.deadline_variance,
+            _flags.synchronize_sensors,
         )
         for task in self._tasks:
             self._logger.debug(f"Loaded Task from JSON: {task}")
@@ -142,7 +143,7 @@ class TaskLoaderJSON(object):
         jobs = {}
         for entry in json_entries:
             if entry["pid"] not in jobs:
-                jobs[entry["pid"]] = Job(name=entry["pid"])
+                jobs[entry["pid"]] = Job(name=entry["pid"], pipelined=False)
         return jobs
 
     @staticmethod
@@ -165,6 +166,7 @@ class TaskLoaderJSON(object):
         job_graph = JobGraph()
         for source, destination in edges:
             job_graph.add_job(jobs[source], [jobs[destination]])
+        job_graph.pipeline_source_operators()
         return job_graph
 
     @staticmethod
@@ -208,6 +210,7 @@ class TaskLoaderJSON(object):
         max_timestamp: int = sys.maxsize,
         logger: Optional[logging.Logger] = None,
         deadline_variance: Optional[int] = 0,
+        synchronize_sensors: bool = False,
     ) -> Sequence[Task]:
         """Creates a list of tasks from the given JSON entries.
 
@@ -230,9 +233,15 @@ class TaskLoaderJSON(object):
             `json_entries`.
         """
         tasks = []
+        first_task = defaultdict(int)
         for entry in json_entries:
-            if entry["args"]["timestamp"] > max_timestamp:
+            timestamp = entry["args"]["timestamp"]
+            if timestamp > max_timestamp:
                 continue
+            if timestamp == 0 and synchronize_sensors:
+                first_task[entry["name"]] = entry["ts"]
+            offset = first_task[entry["name"]]
+
             # All times are in microseconds.
             runtime_deadline = utils.fuzz_time(entry["dur"], deadline_variance)
             deadline = entry["ts"] + runtime_deadline
@@ -242,9 +251,9 @@ class TaskLoaderJSON(object):
                     job=jobs[entry["pid"]],
                     resource_requirements=random.choice(resources[entry["name"]]),
                     runtime=entry["dur"],
-                    deadline=deadline,
+                    deadline=deadline - offset,
                     timestamp=entry["args"]["timestamp"],
-                    release_time=entry["ts"],
+                    release_time=entry["ts"] - offset,
                     _logger=logger,
                 )
             )
