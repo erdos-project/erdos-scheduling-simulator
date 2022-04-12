@@ -115,7 +115,11 @@ class Task(object):
             )
         if self.state != TaskState.VIRTUAL:
             raise ValueError(f"Cannot release {self.id} which is in state {self.state}")
-        self._release_time = time if time is not None else self._release_time
+        if time is not None:
+            if self._release_time != -1:
+                self._deadline -= self._release_time - time
+            self._release_time = time
+
         self._state = TaskState.RELEASED
 
     def start(
@@ -770,9 +774,8 @@ class TaskGraph(object):
                     parent_source_task.release_time + difference
                 )
                 offsets.append(offset)
-                child_source_task._release_time = (
-                    parent_source_task.release_time + difference
-                )
+                child_source_task._release_time -= offset
+                child_source_task._deadline -= offset
 
             # Calculate the average of the offsets of the source tasks and
             # offset the remainder of the tasks by the average.
@@ -780,6 +783,7 @@ class TaskGraph(object):
             for task in child_graph._task_graph:
                 if not child_graph.is_source_task(task):
                     task._release_time -= average_offset
+                    task._deadline -= average_offset
 
     def merge(self, task_graphs: Sequence["TaskGraph"]) -> "TaskGraph":
         """Merge the given task_graphs after ordering them by timestamps.

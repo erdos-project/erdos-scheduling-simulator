@@ -255,8 +255,7 @@ def plot_task_placement_stats(plotter, csv_file, scheduler_name, figure_size=(14
         scheduler_invocation.total_tasks
         for scheduler_invocation in scheduler_invocations
     )
-    y_ticks = list(range(int(max_y_val)))
-    plt.yticks(y_ticks)
+    plt.ylim(0, int(max_y_val))
 
     # Set the legend.
     legend_elements = [
