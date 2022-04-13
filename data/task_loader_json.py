@@ -22,8 +22,6 @@ class TaskLoaderJSON(object):
         profile_path (`str`): The path to the JSON profile path from Pylot.
         resource_path (`str`): The path to the JSON file of task resource
             requirements.
-        max_timestamp (`int`): The maximum timestamp of tasks to load from the
-            JSON file.
         _flags (`absl.flags`): The flags used to initialize the app, if any.
     """
 
@@ -32,7 +30,6 @@ class TaskLoaderJSON(object):
         graph_path: str,
         profile_path: str,
         resource_path: str,
-        max_timestamp: int = sys.maxsize,
         _flags: Optional["absl.flags"] = None,
     ):
         # Set up the logger.
@@ -108,6 +105,9 @@ class TaskLoaderJSON(object):
         # Create the Tasks and the TaskGraph from the Jobs.
         task_logger = utils.setup_logging(
             name="Task", log_file=_flags.log_file_name, log_level=_flags.log_level
+        )
+        max_timestamp = (
+            _flags.max_timestamp if _flags.max_timestamp is not None else sys.max_size
         )
         self._tasks = TaskLoaderJSON._TaskLoaderJSON__create_tasks(
             profile_data,

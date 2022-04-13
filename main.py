@@ -7,6 +7,7 @@ import utils
 from data import (
     TaskLoaderBenchmark,
     TaskLoaderJSON,
+    TaskLoaderSynthetic,
     WorkerLoaderBenchmark,
     WorkerLoaderJSON,
 )
@@ -19,7 +20,7 @@ FLAGS = flags.FLAGS
 flags.DEFINE_enum(
     "execution_mode",
     "replay",
-    ["replay", "benchmark"],
+    ["replay", "synthetic", "benchmark"],
     "Sets the execution mode of the simulator.",
 )
 flags.DEFINE_string(
@@ -147,14 +148,16 @@ def main(args):
 
     # Load the data.
     if FLAGS.execution_mode == "replay":
-        max_timestamp = (
-            FLAGS.max_timestamp if FLAGS.max_timestamp is not None else sys.max_size
-        )
         task_loader = TaskLoaderJSON(
             graph_path=FLAGS.graph_path,
             profile_path=FLAGS.profile_path,
             resource_path=FLAGS.resource_path,
-            max_timestamp=max_timestamp,
+            _flags=FLAGS,
+        )
+    elif FLAGS.execution_mode == "synthetic":
+        task_loader = TaskLoaderSynthetic(
+            num_perception_sensors=2,
+            num_traffic_light_cameras=1,
             _flags=FLAGS,
         )
     elif FLAGS.execution_mode == "benchmark":
@@ -208,7 +211,7 @@ def main(args):
         )
 
     # Load the worker topology.
-    if FLAGS.execution_mode == "replay":
+    if FLAGS.execution_mode in ["replay", "synthetic"]:
         worker_loader = WorkerLoaderJSON(
             worker_profile_path=FLAGS.worker_profile_path, _flags=FLAGS
         )

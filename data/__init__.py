@@ -19,6 +19,7 @@ from .plotter import (
 from .task_loader import TaskLoader
 from .task_loader_benchmark import TaskLoaderBenchmark
 from .task_loader_json import TaskLoaderJSON
+from .task_loader_synthetic import TaskLoaderSynthetic
 from .worker_loader import WorkerLoader
 from .worker_loader_benchmark import WorkerLoaderBenchmark
 from .worker_loader_json import WorkerLoaderJSON
