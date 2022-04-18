@@ -116,7 +116,7 @@ def test_create_taskgraph():
     """Tests the construction of a TaskGraph by the TaskLoaderJSON."""
     # Create the JobGraph first.
     jobs = {
-        "perception_operator": Job(name="perception_operator"),
+        "perception_operator": Job(name="perception_operator", pipelined=True),
         "prediction_operator": Job(name="prediction_operator"),
         "planning_operator": Job(name="planning_operator"),
     }
@@ -149,10 +149,7 @@ def test_create_taskgraph():
     assert len(parents_perception_task_1) == 0, "Incorrect length for parents."
 
     parents_perception_task_3 = task_graph.get_parents(tasks[2])
-    assert len(parents_perception_task_3) == 1, "Incorrect length for parents."
-    assert set(parents_perception_task_3) == {
-        tasks[1]
-    }, "Incorrect parents for the task."
+    assert len(parents_perception_task_3) == 0, "Incorrect length for parents."
 
     parents_prediction_task = task_graph.get_parents(tasks[5])
     assert len(parents_prediction_task) == 2, "Incorrect length for parents."

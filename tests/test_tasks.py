@@ -627,11 +627,11 @@ def test_task_time_dilation():
         prediction_task_0.release_time == 10
     ), "Incorrect release time for Prediction task [timestamp=0]"
     assert (
-        prediction_task_1.release_time == 92.5
+        prediction_task_1.release_time == 93
     ), "Incorrect release time for Prediction task [timestamp=1]"
     assert (
         planning_task_0.release_time == 50
     ), "Incorrect release time for Planning task [timestamp=0]"
     assert (
-        planning_task_1.release_time == 132.5
+        planning_task_1.release_time == 133
     ), "Incorrect release time for Planning task [timestamp=1]"

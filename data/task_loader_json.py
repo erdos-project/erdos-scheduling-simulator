@@ -210,7 +210,7 @@ class TaskLoaderJSON(object):
         max_timestamp: int = sys.maxsize,
         logger: Optional[logging.Logger] = None,
         deadline_variance: Optional[int] = 0,
-        synchronize_sensors: bool = False,
+        synchronize_sensors: Optional[bool] = False,
     ) -> Sequence[Task]:
         """Creates a list of tasks from the given JSON entries.
 
@@ -227,6 +227,8 @@ class TaskLoaderJSON(object):
                 Task to enable logging of its execution.
             deadline_variance (`Optional[int]`): The % variance to add to
                 the assigned deadline for each task.
+            synchronize_sensors (`Optional[bool]`): Ensures that sensors (source jobs)
+                release their first task at the same time.
 
         Returns:
             A `Sequence[Task]` with the task information retrieved from the

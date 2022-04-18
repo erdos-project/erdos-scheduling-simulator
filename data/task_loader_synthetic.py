@@ -72,7 +72,9 @@ class TaskLoaderSynthetic(object):
 
     @staticmethod
     def __create_job_graph(
-        num_perception_sensors, num_traffic_light_cameras, deadline_slack_factor=1.2
+        num_perception_sensors: int,
+        num_traffic_light_cameras: int,
+        deadline_slack_factor: float = 1.2,
     ):
         """Creates a synthetic Pylot JobGraph.
 
@@ -80,6 +82,8 @@ class TaskLoaderSynthetic(object):
             num_perception_sensors (`int`): Number of cameras the pipeline has.
             num_traffic_light_cameras (`int`): Number of traffic light cameras the
                 pipeline has.
+            deadline_slack_factor (`float`): Factor multiplied with the task runtimes
+                in order to compute task deadlines.
 
         Returns:
             A `JobGraph` instance depicting the relation between the different
