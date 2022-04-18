@@ -12,7 +12,7 @@ from workload import Job, Resource, Resources, TaskGraph, TaskState
 class MockScheduler(BaseScheduler):
     """A MockScheduler that enables the testing of the Simulator."""
 
-    def __init__(self, runtime: int, placement):
+    def __init__(self, runtime: int, placement=[]):
         self._runtime = runtime
         self._task_placement = placement
         self._preemptive = False
@@ -120,7 +120,7 @@ def test_simulator_construction():
     worker_pool = __create_default_worker_pool()
     simulator = Simulator(
         worker_pools=[worker_pool],
-        scheduler=MockScheduler(runtime=1, placement=None),
+        scheduler=MockScheduler(runtime=1, placement=[]),
         job_graph=None,
     )
     assert len(simulator._worker_pools) == 1, "Incorrect number of WorkerPool"
@@ -134,7 +134,7 @@ def test_failed_construction_of_scheduler_start_event():
     worker_pool = __create_default_worker_pool()
     simulator = Simulator(
         worker_pools=[worker_pool],
-        scheduler=MockScheduler(runtime=1, placement=None),
+        scheduler=MockScheduler(runtime=1, placement=[]),
         job_graph=None,
     )
     with pytest.raises(ValueError):
@@ -151,7 +151,7 @@ def test_construction_of_scheduler_start_event():
     worker_pool = __create_default_worker_pool()
     simulator = Simulator(
         worker_pools=[worker_pool],
-        scheduler=MockScheduler(runtime=1, placement=None),
+        scheduler=MockScheduler(runtime=1, placement=[]),
         job_graph=None,
     )
 
@@ -185,7 +185,7 @@ def test_simulator_loop_finish_event():
     worker_pool = __create_default_worker_pool()
     simulator = Simulator(
         worker_pools=[worker_pool],
-        scheduler=MockScheduler(runtime=1, placement=None),
+        scheduler=MockScheduler(runtime=1, placement=[]),
         job_graph=None,
     )
     assert (
@@ -212,7 +212,7 @@ def test_scheduler_invocation_by_simulator():
     worker_pool = __create_default_worker_pool()
     simulator = Simulator(
         worker_pools=[worker_pool],
-        scheduler=MockScheduler(runtime=5, placement=None),
+        scheduler=MockScheduler(runtime=5, placement=[]),
         job_graph=None,
     )
     scheduler_finished_event = simulator._Simulator__run_scheduler(
@@ -227,7 +227,7 @@ def test_simulator_step():
     worker_pool = __create_default_worker_pool()
     simulator = Simulator(
         worker_pools=[worker_pool],
-        scheduler=MockScheduler(runtime=5, placement=None),
+        scheduler=MockScheduler(runtime=5, placement=[]),
         job_graph=None,
     )
 
@@ -271,7 +271,7 @@ def test_simulator_handle_event():
     worker_pool = __create_default_worker_pool()
     simulator = Simulator(
         worker_pools=[worker_pool],
-        scheduler=MockScheduler(runtime=5, placement=None),
+        scheduler=MockScheduler(runtime=5, placement=[]),
         job_graph=None,
     )
 
@@ -318,7 +318,7 @@ def test_simulator_handle_event():
     assert len(simulator._event_queue) == 4, "Incorrect length of EventQueue."
 
     # Test the SCHEDULER_FINISHED event.
-    simulator._last_task_placement = [(planning_task, worker_pool.id)]
+    simulator._last_task_placement = [(planning_task, worker_pool.id, 6)]
     return_value = simulator._Simulator__handle_event(
         event=Event(
             event_type=EventType.SCHEDULER_FINISHED,

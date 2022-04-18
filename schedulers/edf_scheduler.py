@@ -68,11 +68,11 @@ class EDFScheduler(BaseScheduler):
                 if worker_pool.can_accomodate_task(task):
                     worker_pool.place_task(task)
                     is_task_placed = True
-                    placements.append((task, worker_pool.id))
+                    placements.append((task, worker_pool.id, sim_time))
                     break
 
             if not is_task_placed:
-                placements.append((task, None))
+                placements.append((task, None, None))
 
         end_time = time.time()
         self._runtime = (

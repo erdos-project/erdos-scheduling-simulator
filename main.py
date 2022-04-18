@@ -1,3 +1,4 @@
+import random
 import sys
 
 from absl import app, flags
@@ -6,6 +7,7 @@ import utils
 from data import (
     TaskLoaderBenchmark,
     TaskLoaderJSON,
+    TaskLoaderSynthetic,
     WorkerLoaderBenchmark,
     WorkerLoaderJSON,
 )
@@ -18,8 +20,11 @@ FLAGS = flags.FLAGS
 flags.DEFINE_enum(
     "execution_mode",
     "replay",
-    ["replay", "benchmark"],
-    "Sets the execution mode of the simulator.",
+    ["replay", "synthetic", "benchmark"],
+    "Sets the execution mode of the simulator. In the replay mode the simulator "
+    "replays a Pylot log, in the synthetic mode the simulator generates a synthetic "
+    "Pylot-like task workload, and in the benchmark mode the simulator generates a "
+    "synthetic task workload.",
 )
 flags.DEFINE_string(
     "log_file_name", None, "Name of the file to log the results to.", short_name="log"
@@ -92,6 +97,9 @@ flags.DEFINE_integer(
     -1,
     "The difference to keep between the source Jobs of successive timestamps.",
 )
+flags.DEFINE_bool(
+    "synchronize_sensors", False, "If True then the sensor operators are synchronized."
+)
 
 # Scheduler related flags.
 flags.DEFINE_enum(
@@ -114,6 +122,12 @@ flags.DEFINE_integer(
     "The delay (in us) associated with invoking a scheduler after the "
     "release of a Task in the system.",
 )
+flags.DEFINE_integer(
+    "scheduling_horizon",
+    0,
+    "The scheduler places tasks that are estimated to be released "
+    "within the tine horizon (in us)",
+)
 flags.DEFINE_enum(
     "ilp_goal",
     "max_slack",
@@ -126,6 +140,7 @@ def main(args):
     """Main loop that loads the data from the given profile paths, and
     runs the Simulator on the data with the given scheduler.
     """
+    random.seed(42)
     logger = utils.setup_logging(
         name=__name__, log_file=FLAGS.log_file_name, log_level=FLAGS.log_level
     )
@@ -136,14 +151,16 @@ def main(args):
 
     # Load the data.
     if FLAGS.execution_mode == "replay":
-        max_timestamp = (
-            FLAGS.max_timestamp if FLAGS.max_timestamp is not None else sys.max_size
-        )
         task_loader = TaskLoaderJSON(
             graph_path=FLAGS.graph_path,
             profile_path=FLAGS.profile_path,
             resource_path=FLAGS.resource_path,
-            max_timestamp=max_timestamp,
+            _flags=FLAGS,
+        )
+    elif FLAGS.execution_mode == "synthetic":
+        task_loader = TaskLoaderSynthetic(
+            num_perception_sensors=2,
+            num_traffic_light_cameras=1,
             _flags=FLAGS,
         )
     elif FLAGS.execution_mode == "benchmark":
@@ -178,6 +195,8 @@ def main(args):
             preemptive=FLAGS.preemption,
             runtime=FLAGS.scheduler_runtime,
             goal=FLAGS.ilp_goal,
+            enforce_deadlines=False,
+            scheduling_horizon=FLAGS.scheduling_horizon,
             _flags=FLAGS,
         )
     elif FLAGS.scheduler == "z3":
@@ -185,6 +204,8 @@ def main(args):
             preemptive=FLAGS.preemption,
             runtime=FLAGS.scheduler_runtime,
             goal=FLAGS.ilp_goal,
+            enforce_deadlines=False,
+            scheduling_horizon=FLAGS.scheduling_horizon,
             _flags=FLAGS,
         )
     else:
@@ -193,7 +214,7 @@ def main(args):
         )
 
     # Load the worker topology.
-    if FLAGS.execution_mode == "replay":
+    if FLAGS.execution_mode in ["replay", "synthetic"]:
         worker_loader = WorkerLoaderJSON(
             worker_profile_path=FLAGS.worker_profile_path, _flags=FLAGS
         )

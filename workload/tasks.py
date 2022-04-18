@@ -1,9 +1,9 @@
 import logging
+import random
 import sys
 import uuid
 from collections import defaultdict, deque, namedtuple
 from enum import Enum
-from random import Random
 from typing import Mapping, Optional, Sequence, Union
 
 import utils
@@ -41,7 +41,7 @@ class Task(object):
         release_time (`int`): The time at which the task was released by the
             job (in us).
         runtime (`int`): The expected runtime (in us) of this task.
-        deadline (`int`): The deadline by which the task should complete.
+        deadline (`int`): The absolute deadline by which the task should complete.
         state (`TaskState`): Defines the state of the task.
         timestamp (`int`): The timestamp for the Task (single dimension).
         start_time (`int`): The time (in us) at which the task was started
@@ -80,7 +80,7 @@ class Task(object):
         self._expected_runtime = runtime
         self._deadline = deadline
         self._timestamp = timestamp
-        self._id = uuid.uuid4()
+        self._id = uuid.UUID(int=random.getrandbits(128), version=4)
 
         # The timestamps maintained for each state of the task.
         # (VIRTUAL -> RELEASED)
@@ -115,14 +115,17 @@ class Task(object):
             )
         if self.state != TaskState.VIRTUAL:
             raise ValueError(f"Cannot release {self.id} which is in state {self.state}")
-        self._release_time = time if time is not None else self._release_time
+        if time is not None:
+            if self._release_time != -1:
+                self._deadline -= self._release_time - time
+            self._release_time = time
+
         self._state = TaskState.RELEASED
 
     def start(
         self,
         time: Optional[int] = None,
         variance: Optional[int] = 0,
-        rng: Random = Random(),
     ):
         """Begins the execution of the task at the given simulator time.
 
@@ -147,7 +150,7 @@ class Task(object):
                 "creating the Task or when starting it."
             )
 
-        remaining_time = utils.fuzz_time(rng, self._remaining_time, variance)
+        remaining_time = utils.fuzz_time(self._remaining_time, variance)
         self._logger.debug(
             f"Transitioning {self} to {TaskState.RUNNING} at time {time} "
             f"with the remaining time {remaining_time}"
@@ -277,10 +280,10 @@ class Task(object):
         self._remaining_time = time
 
     def update_deadline(self, new_deadline: int):
-        """Updates the deadline of the task to simulate any dynamic deadlines.
+        """Updates the absolute deadline of the task to simulate any dynamic deadlines.
 
         Args:
-            new_deadline (`int`): The new deadline (in us) to update the task
+            new_deadline (`int`): The new aboslute deadline (in us) to update the task
                 with.
 
         Raises:
@@ -464,9 +467,16 @@ class TaskGraph(object):
         for child in self.get_children(task):
             if all(map(lambda task: task.is_complete(), self.get_parents(child))):
                 if child.release_time == -1:
+                    # If the child does not have a release time, then set it to now,
+                    # which is the time of the completion of the last parent task.
                     child.release(finish_time)
                 else:
-                    child.release()
+                    parents = self.__parent_task_graph[child]
+                    earliest_release = child.release_time
+                    # Update the task's release time if parent tasks delayed it.
+                    for parent in parents:
+                        earliest_release = max(earliest_release, parent.completion_time)
+                    child.release(earliest_release)
                 released_tasks.append(child)
         return released_tasks
 
@@ -764,16 +774,16 @@ class TaskGraph(object):
                     parent_source_task.release_time + difference
                 )
                 offsets.append(offset)
-                child_source_task._release_time = (
-                    parent_source_task.release_time + difference
-                )
+                child_source_task._release_time -= offset
+                child_source_task._deadline -= offset
 
             # Calculate the average of the offsets of the source tasks and
             # offset the remainder of the tasks by the average.
-            average_offset = sum(offsets) / len(offsets)
+            average_offset = int(sum(offsets) / len(offsets))
             for task in child_graph._task_graph:
                 if not child_graph.is_source_task(task):
                     task._release_time -= average_offset
+                    task._deadline -= average_offset
 
     def merge(self, task_graphs: Sequence["TaskGraph"]) -> "TaskGraph":
         """Merge the given task_graphs after ordering them by timestamps.

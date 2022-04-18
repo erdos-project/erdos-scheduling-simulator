@@ -1,9 +1,9 @@
 import json
 import logging
+import random
 import sys
 from collections import defaultdict
 from operator import attrgetter
-from random import Random
 from typing import Mapping, Optional, Sequence, Tuple
 
 import absl  # noqa: F401
@@ -22,8 +22,6 @@ class TaskLoaderJSON(object):
         profile_path (`str`): The path to the JSON profile path from Pylot.
         resource_path (`str`): The path to the JSON file of task resource
             requirements.
-        max_timestamp (`int`): The maximum timestamp of tasks to load from the
-            JSON file.
         _flags (`absl.flags`): The flags used to initialize the app, if any.
     """
 
@@ -32,7 +30,6 @@ class TaskLoaderJSON(object):
         graph_path: str,
         profile_path: str,
         resource_path: str,
-        max_timestamp: int = sys.maxsize,
         _flags: Optional["absl.flags"] = None,
     ):
         # Set up the logger.
@@ -109,6 +106,9 @@ class TaskLoaderJSON(object):
         task_logger = utils.setup_logging(
             name="Task", log_file=_flags.log_file_name, log_level=_flags.log_level
         )
+        max_timestamp = (
+            _flags.max_timestamp if _flags.max_timestamp is not None else sys.max_size
+        )
         self._tasks = TaskLoaderJSON._TaskLoaderJSON__create_tasks(
             profile_data,
             self._jobs,
@@ -116,7 +116,7 @@ class TaskLoaderJSON(object):
             max_timestamp,
             task_logger,
             _flags.deadline_variance,
-            Random(42),
+            _flags.synchronize_sensors,
         )
         for task in self._tasks:
             self._logger.debug(f"Loaded Task from JSON: {task}")
@@ -143,7 +143,7 @@ class TaskLoaderJSON(object):
         jobs = {}
         for entry in json_entries:
             if entry["pid"] not in jobs:
-                jobs[entry["pid"]] = Job(name=entry["pid"])
+                jobs[entry["pid"]] = Job(name=entry["pid"], pipelined=False)
         return jobs
 
     @staticmethod
@@ -166,6 +166,7 @@ class TaskLoaderJSON(object):
         job_graph = JobGraph()
         for source, destination in edges:
             job_graph.add_job(jobs[source], [jobs[destination]])
+        job_graph.pipeline_source_operators()
         return job_graph
 
     @staticmethod
@@ -209,13 +210,13 @@ class TaskLoaderJSON(object):
         max_timestamp: int = sys.maxsize,
         logger: Optional[logging.Logger] = None,
         deadline_variance: Optional[int] = 0,
-        rng: Random = Random(),
+        synchronize_sensors: Optional[bool] = False,
     ) -> Sequence[Task]:
         """Creates a list of tasks from the given JSON entries.
 
         Args:
             json_entries (`Sequence[Mapping[str, str]]`): The JSON entries
-            retrieved from the profile file.
+                retrieved from the profile file.
             jobs (`Mapping[str, Job]`): A mapping from the name of the jobs
                 to a `Job` instance.
             resources (`Mapping[str, Sequence[Resources]]`): The set of
@@ -226,27 +227,35 @@ class TaskLoaderJSON(object):
                 Task to enable logging of its execution.
             deadline_variance (`Optional[int]`): The % variance to add to
                 the assigned deadline for each task.
+            synchronize_sensors (`Optional[bool]`): Ensures that sensors (source jobs)
+                release their first task at the same time.
 
         Returns:
             A `Sequence[Task]` with the task information retrieved from the
             `json_entries`.
         """
         tasks = []
+        first_task = defaultdict(int)
         for entry in json_entries:
-            if entry["args"]["timestamp"] > max_timestamp:
+            timestamp = entry["args"]["timestamp"]
+            if timestamp > max_timestamp:
                 continue
+            if timestamp == 0 and synchronize_sensors:
+                first_task[entry["name"]] = entry["ts"]
+            offset = first_task[entry["name"]]
+
             # All times are in microseconds.
-            runtime_deadline = utils.fuzz_time(rng, entry["dur"], deadline_variance)
+            runtime_deadline = utils.fuzz_time(entry["dur"], deadline_variance)
             deadline = entry["ts"] + runtime_deadline
             tasks.append(
                 Task(
                     name=entry["name"],
                     job=jobs[entry["pid"]],
-                    resource_requirements=rng.choice(resources[entry["name"]]),
+                    resource_requirements=random.choice(resources[entry["name"]]),
                     runtime=entry["dur"],
-                    deadline=deadline,
+                    deadline=deadline - offset,
                     timestamp=entry["args"]["timestamp"],
-                    release_time=entry["ts"],
+                    release_time=entry["ts"] - offset,
                     _logger=logger,
                 )
             )

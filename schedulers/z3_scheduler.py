@@ -113,10 +113,10 @@ class Z3Scheduler(BaseScheduler):
             s.add(self._task_ids_to_placement[task_id] >= start_id)
             s.add(self._task_ids_to_placement[task_id] < end_id)
 
-        for t1_id, task1 in self._task_ids_to_task.items():
-            for t2_id, task2 in self._task_ids_to_task.items():
-                if t2_id >= t1_id:
-                    continue
+        for index1, (t1_id, task1) in enumerate(self._task_ids_to_task.items()):
+            for index2, (t2_id, task2) in enumerate(self._task_ids_to_task.items()):
+                if index2 >= index1:
+                    break
                 disjoint = [
                     self._task_ids_to_start_time[t1_id] + task1.remaining_time
                     <= self._task_ids_to_start_time[t2_id],
@@ -162,6 +162,7 @@ class Z3Scheduler(BaseScheduler):
         (
             res_type_to_id_range,
             res_id_to_wp_id,
+            _,
         ) = worker_pools.get_resource_ilp_encoding()
         self._add_task_timing_constraints(s)
         self._add_task_resource_constraints(s, res_type_to_id_range)
@@ -204,18 +205,15 @@ class Z3Scheduler(BaseScheduler):
                     # Therefore, a task can progress before the next scheduler
                     # finishes. However, the next scheduler will assume that
                     # the task is not running while considering for placement.
-                    self._placements.append((task, placement))
+                    self._placements.append((task, placement, start_time))
                 else:
-                    self._placements.append((task, None))
-            start_times = {}
-            for task_id, st_var in self._task_ids_to_start_time.items():
-                start_times[task_id] = int(str(s.model()[st_var]))
+                    self._placements.append((task, None, None))
             self._verify_schedule(
-                self._worker_pools, self._task_graph, self._placements, start_times
+                self._worker_pools, self._task_graph, self._placements
             )
         else:
             self._placements = [
-                (task, None) for task in self._task_ids_to_task.values()
+                (task, None, None) for task in self._task_ids_to_task.values()
             ]
         # Log the scheduler run.
         self.log()

@@ -1,3 +1,4 @@
+import random
 import uuid
 from collections import defaultdict
 from typing import Mapping, Optional, Sequence
@@ -14,11 +15,14 @@ class Job(object):
 
     Args:
         name: The name of the ERDOS operator that corresponds to this job.
+        pipelined (`bool`): True if job's tasks from different timestamps can run
+            in parallel.
     """
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, pipelined: bool = False):
         self._name = name
-        self._id = uuid.uuid4()
+        self._id = uuid.UUID(int=random.getrandbits(128), version=4)
+        self._pipelined = pipelined
 
     @property
     def name(self):
@@ -28,11 +32,15 @@ class Job(object):
     def id(self):
         return str(self._id)
 
+    @property
+    def pipelined(self):
+        return self._pipelined
+
     def __eq__(self, other):
         return self._id == other._id
 
     def __str__(self):
-        return f"Job(name={self.name}, id={self.id})"
+        return f"Job(name={self.name}, id={self.id}, pipelined={self.pipelined})"
 
     def __repr__(self):
         return str(self)
@@ -114,6 +122,12 @@ class JobGraph(object):
             return []
         else:
             return self.__parent_job_graph[job]
+
+    def pipeline_source_operators(self):
+        """Ensures that the source operators pipeline tasks."""
+        for job in self._job_graph.keys():
+            if len(self.__parent_job_graph[job]) == 0:
+                job._pipelined = True
 
     def __len__(self):
         return len(self._job_graph)

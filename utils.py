@@ -1,5 +1,5 @@
 import logging
-from random import Random
+import random
 from typing import Optional
 
 import numpy as np
@@ -25,6 +25,9 @@ def setup_logging(
         A `logging.Logger` instance that can be used to log the required
         information.
     """
+    logger = logging.getLogger(name)
+    if logger.handlers:
+        return logger
     # Set the file to log to.
     if log_file is None:
         handler = logging.StreamHandler()
@@ -34,7 +37,6 @@ def setup_logging(
     # Create the logger.
     formatter = logging.Formatter(fmt=fmt, datefmt=date_fmt)
     handler.setFormatter(formatter)
-    logger = logging.getLogger(name)
     logger.addHandler(handler)
 
     # Set the logger properties.
@@ -66,9 +68,7 @@ def setup_csv_logging(name: str, log_file: str) -> logging.Logger:
     )
 
 
-def fuzz_time(
-    rng: Random, time: int, variance: int, positive: Optional[bool] = True
-) -> int:
+def fuzz_time(time: int, variance: int, positive: Optional[bool] = True) -> int:
     """Fuzz the given `time` according to the provided `variance`.
 
     Args:
@@ -81,12 +81,12 @@ def fuzz_time(
         The fuzzed time according to the given variance.
     """
     if positive:
-        return int(rng.uniform(time, time + (time * abs(variance) / 100.0)))
+        return int(random.uniform(time, time + (time * abs(variance) / 100.0)))
     else:
         return max(
             0,
             int(
-                rng.uniform(
+                random.uniform(
                     time - time * abs(variance) / 100.0,
                     time + time * abs(variance) / 100.0,
                 )

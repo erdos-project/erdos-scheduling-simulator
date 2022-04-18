@@ -2,7 +2,6 @@ import heapq
 import sys
 from enum import Enum
 from operator import attrgetter
-from random import Random
 from typing import Optional, Sequence, Type
 
 import absl  # noqa: F401
@@ -176,8 +175,6 @@ class Simulator(object):
                 name=self.__class__.__name__, log_file=None
             )
 
-        self._rng = Random(42)
-
         self._worker_pools = {
             worker_pool.id: worker_pool for worker_pool in worker_pools
         }
@@ -295,6 +292,9 @@ class Simulator(object):
         self._logger.info(
             f"[{self._simulator_time}] Received {event} from " "the event queue."
         )
+        assert (
+            event.time >= self._simulator_time
+        ), f"Simulator cannot move time from {self._simulator_time} to {event.time}"
         # Advance the clock until the occurrence of this event.
         self.__step(step_size=event.time - self._simulator_time)
 
@@ -418,7 +418,7 @@ class Simulator(object):
                 f"{num_placed},{num_unplaced}"
             )
 
-            for task, placement in self._last_task_placement:
+            for task, placement, start_time in self._last_task_placement:
                 if placement is None:
                     self._csv_logger.debug(
                         f"{event.time},TASK_SKIP,{task.name},{task.timestamp},"
@@ -438,7 +438,7 @@ class Simulator(object):
                     worker_pool = self._worker_pools[placement]
                     # Initialize the task at the given placement time, and
                     # place it on the WorkerPool.
-                    task.start(event.time, self._runtime_variance, self._rng)
+                    task.start(event.time, self._runtime_variance)
                     worker_pool.place_task(task)
                     self._logger.info(f"[{event.time}] Placed {task} on {worker_pool}")
 
@@ -478,6 +478,7 @@ class Simulator(object):
         self._logger.info(
             f"[{self._simulator_time}] Stepping for {step_size} timesteps."
         )
+        assert step_size >= 0, f"Simulator cannot step backwards {step_size}"
         completed_tasks = []
         for worker_pool in self._worker_pools.values():
             completed_tasks.extend(worker_pool.step(self._simulator_time, step_size))

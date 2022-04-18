@@ -7,21 +7,11 @@
                 "resources": [
                     {
                         "name": "CPU",
-                        "quantity": 4
+                        "quantity": 12
                     },
                     {
                         "name": "GPU",
-                        "quantity": 2
-                    }
-                ]
-            },
-
-            {
-                "name": "Worker_1_2",
-                "resources": [
-                    {
-                        "name": "CPU",
-                        "quantity": 4
+                        "quantity": 1
                     }
                 ]
             }
@@ -35,23 +25,13 @@
                 "name": "Worker_2_1",
                 "resources": [
                     {
-                        "name": "GPU",
-                        "quantity": 1
-                    }
-                ]
-            },
-
-            {
-                "name": "Worker_2_2",
-                "resources": [
-                    {
-                        "name": "GPU",
-                        "quantity": 1
+                        "name": "CPU",
+                        "quantity": 12
                     },
                     {
-                        "name": "CPU",
-                        "quantity": 8
-                    }
+                        "name": "GPU",
+                        "quantity": 1
+                    }                    
                 ]
             }
         ]

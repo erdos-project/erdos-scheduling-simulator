@@ -1,4 +1,5 @@
 import logging
+import random
 import uuid
 from copy import copy, deepcopy
 from operator import attrgetter
@@ -32,7 +33,7 @@ class Worker(object):
             self._logger = utils.setup_logging(name=self.__class__.__name__)
 
         self._name = name
-        self._id = uuid.uuid4()
+        self._id = uuid.UUID(int=random.getrandbits(128), version=4)
         self._resources = resources
         self._placed_tasks = {}  # Mapping[Task, TaskState]
 
@@ -49,6 +50,20 @@ class Worker(object):
         task._worker_pool_id = self._id
         self._placed_tasks[task] = task.state
         self._logger.debug(f"Placed {task} on {self}")
+
+    def remove_task(self, task: Task):
+        """Removes the task from this `Worker`.
+
+        Args:
+            task (`Task`): The task to be placed on this `Worker`.
+        Raises:
+            `ValueError` if the task was not placed on this worker.
+        """
+        if task not in self._placed_tasks:
+            raise ValueError("The task was not placed on this Worker.")
+        # Deallocate the resources and remove the placed task.
+        self._resources.deallocate(task)
+        del self._placed_tasks[task]
 
     def preempt_task(self, task: Task):
         """Preempts the given `Task` and frees the resources.
@@ -119,9 +134,8 @@ class Worker(object):
                 completed_tasks.append(task)
 
         # Delete the completed tasks from the set of placed tasks.
-        for completed_task in completed_tasks:
-            self._resources.deallocate(completed_task)
-            del self._placed_tasks[completed_task]
+        for task in completed_tasks:
+            self.remove_task(task)
         return completed_tasks
 
     def __copy__(self):
@@ -227,7 +241,7 @@ class WorkerPool(object):
         self._name = name
         self._workers = {worker.id: worker for worker in workers}
         self._scheduler = scheduler
-        self._id = uuid.uuid4()
+        self._id = uuid.UUID(int=random.getrandbits(128), version=4)
         self._placed_tasks = {}  # Mapping[Task, str] from task to worker ID.
 
     def add_workers(self, workers: Sequence[Worker]):
@@ -283,6 +297,20 @@ class WorkerPool(object):
             self._placed_tasks[task] = placement
             task._worker_pool_id = placement
 
+    def remove_task(self, task: Task):
+        """Removes the task from this `WorkerPool`.
+
+        Args:
+            task (`Task`): The task to be placed on this `WorkerPool`.
+        Raises:
+            `ValueError` if the task was not placed on this worker pool.
+        """
+        if task not in self._placed_tasks:
+            raise ValueError("The task was not placed on this WorkerPool.")
+        # Deallocate the resources and remove the placed task.
+        self._workers[self._placed_tasks[task]].remove_task(task)
+        del self._placed_tasks[task]
+
     def preempt_task(self, task: Task):
         """Preempts the given `Task` and frees the resources.
 
@@ -328,8 +356,10 @@ class WorkerPool(object):
             completed_tasks.extend(worker.step(current_time, step_size))
 
         # Delete the completed tasks from the set of placed tasks.
-        for completed_task in completed_tasks:
-            del self._placed_tasks[completed_task]
+        for task in completed_tasks:
+            # We do not need to remove the task from the worker because it was
+            # already removed while the worker stepped.
+            del self._placed_tasks[task]
         return completed_tasks
 
     def can_accomodate_task(self, task: Task) -> bool:
@@ -477,19 +507,21 @@ class WorkerPools(object):
 
         res_type_to_id_range = {}
         res_id_to_wp_id = {}
+        res_id_to_wp_index = {}
         start_range_id = 0
         for res_name in resource_names:
             cur_range_id = start_range_id
-            for wp in self._wps:
+            for index, wp in enumerate(self._wps):
                 res_available = wp.resources.get_available_quantity(
                     Resource(name=res_name, _id="any")
                 )
                 for res_id in range(cur_range_id, cur_range_id + res_available):
                     res_id_to_wp_id[res_id] = wp.id
+                    res_id_to_wp_index[res_id] = index
                 cur_range_id += res_available
             res_type_to_id_range[res_name] = (start_range_id, cur_range_id)
             start_range_id = cur_range_id
-        return res_type_to_id_range, res_id_to_wp_id
+        return res_type_to_id_range, res_id_to_wp_id, res_id_to_wp_index
 
     def __copy__(self):
         cls = self.__class__

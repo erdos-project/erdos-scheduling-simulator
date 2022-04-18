@@ -1,0 +1,160 @@
+[
+    {
+        "name": "behavior_planning.on_watermark",
+        "resource_requirements": [{
+            "CPU:any": 1
+        }]
+    },
+
+    {
+        "name": "center_camera_location_finder_history_operator.on_watermark",
+        "resource_requirements": [{
+            "CPU:any": 4
+        }]
+    },
+
+    {
+        "name": "center_camera_operator.process_images",
+        "resource_requirements": [{
+            "CPU:any": 1
+        }]
+    },
+
+    {
+        "name": "center_camera_operator.release_data",
+        "resource_requirements": [{
+            "CPU:any": 1
+        }]
+    },
+
+    {
+        "name": "faster_rcnn.on_msg_camera_stream",
+        "resource_requirements": [{
+            "CPU:any": 1,
+            "GPU:any": 1
+        }]
+    },
+
+    {
+        "name": "front_center_lidar_operator.process_point_clouds",
+        "resource_requirements": [{
+            "CPU:any": 2
+        }]
+    },
+
+    {
+        "name": "gnss_operator.process_gnss",
+        "resource_requirements": [{
+            "CPU:any": 1
+        }]
+    },
+    
+    {
+        "name": "imu_operator.process_imu",
+        "resource_requirements": [{
+            "CPU:any": 1
+        }]
+    },
+
+    {
+        "name": "lanenet_lane_detection.on_camera_frame",
+        "resource_requirements": [{
+            "CPU:any": 1,
+            "GPU:any": 1
+        }]
+    },
+
+    {
+        "name": "linear_prediction_operator.generate_predicted_trajectories",
+        "resource_requirements": [{
+            "CPU:any": 1,
+            "GPU:any": 1
+        }]
+    },
+
+    {
+        "name": "localization_operator.on_watermark",
+        "resource_requirements": [{
+            "CPU:any": 1
+        }]
+    },
+
+    {
+        "name": "pid_control_operator.on_watermark",
+        "resource_requirements": [{
+            "CPU:any": 1
+        }]
+    },
+
+    {
+        "name": "planning_operator.on_prediction_update",
+        "resource_requirements": [{
+            "CPU:any": 1
+        }]
+    },
+
+    {
+        "name": "planning_operator.on_time_to_decision",
+        "resource_requirements": [{
+            "CPU:any": 1
+        }]
+    },
+
+    {
+        "name": "planning_operator.on_watermark",
+        "resource_requirements": [{
+            "CPU:any": 8
+        }]
+    },
+
+    {
+        "name": "simulator_bridge_operator.on_control_msg",
+        "resource_requirements": [{
+            "CPU:any": 1
+        }]
+    },
+
+    {
+        "name": "simulator_bridge_operator.send_actor_data",
+        "resource_requirements": [{
+            "CPU:any": 1
+        }]
+    },
+
+    {
+        "name": "tracker_sort.on_watermark",
+        "resource_requirements": [{
+            "CPU:any": 2,
+            "GPU:any": 1
+        }]
+    },
+
+    {
+        "name": "traffic_light_camera_location_finder_operator.on_watermark",
+        "resource_requirements": [{
+            "CPU:any": 1
+        }]
+    },
+
+    {
+        "name": "traffic_light_camera_operator.process_images",
+        "resource_requirements": [{
+            "CPU:any": 1
+        }]
+    },
+
+    {
+        "name": "traffic_light_camera_operator.release_data",
+        "resource_requirements": [{
+            "CPU:any": 1
+        }]
+    },
+
+    {
+        "name": "traffic_light_detector_operator.on_frame",
+        "resource_requirements": [{
+            "CPU:any": 1,
+            "GPU:any": 1
+        }]
+    }
+]
