@@ -123,16 +123,19 @@ class GurobiScheduler(BaseScheduler):
                             vtype=gp.GRB.INTEGER,
                             lb=-(num_resources - 1),
                             ub=num_resources - 1,
-                            name=f"resource_diff_task_{task.id}_{resource.name}_{index}_{res_index}",
+                            name=f"resource_diff_task_{task.id}_"
+                            f"{resource.name}_{index}_{res_index}",
                         )
                         abs_diff_var = s.addVar(
                             ub=num_resources - 1,
                             vtype=gp.GRB.INTEGER,
-                            name=f"abs_resource_diff_task_{task.id}_{resource.name}_{index}_{res_index}",
+                            name=f"abs_resource_diff_task_{task.id}_"
+                            f"{resource.name}_{index}_{res_index}",
                         )
                         flag_var = s.addVar(
                             vtype=gp.GRB.BINARY,
-                            name=f"flag_resource_diff_task_{task.id}_{resource.name}_{index}_{res_index}",
+                            name=f"flag_resource_diff_task_{task.id}_"
+                            f"{resource.name}_{index}_{res_index}",
                         )
                         s.addConstr(res_diff_var == res_var - res_index)
                         s.addConstr(abs_diff_var == gp.abs_(res_diff_var))
@@ -205,20 +208,24 @@ class GurobiScheduler(BaseScheduler):
                             lb=-(num_resources - 1),
                             ub=num_resources - 1,
                             vtype=gp.GRB.INTEGER,
-                            name=f"res_diff_task_{t1_id}_res_index_{r1_index}_task_{t2_id}_res_index_{r2_index}",
+                            name=f"res_diff_task_{t1_id}_res_index_{r1_index}_"
+                            f"task_{t2_id}_res_index_{r2_index}",
                         )
                         abs_diff_var = s.addVar(
                             ub=num_resources - 1,
                             vtype=gp.GRB.INTEGER,
-                            name=f"abs_res_diff_task_{t1_id}_res_index_{r1_index}_task_{t2_id}_res_index_{r2_index}",
+                            name=f"abs_res_diff_task_{t1_id}_res_index_{r1_index}_"
+                            f"task_{t2_id}_res_index_{r2_index}",
                         )
                         flag_var = s.addVar(
                             vtype=gp.GRB.BINARY,
-                            name=f"flag_task_{t1_id}_res_index_{r1_index}_task_{t2_id}_res_index_{r2_index}",
+                            name=f"flag_task_{t1_id}_res_index_{r1_index}_task_"
+                            f"{t2_id}_res_index_{r2_index}",
                         )
                         or_var = s.addVar(
                             vtype=gp.GRB.BINARY,
-                            name=f"or_task_{t1_id}_res_index_{r1_index}_task_{t2_id}_res_index_{r2_index}",
+                            name=f"or_task_{t1_id}_res_index_{r1_index}_task_"
+                            f"{t2_id}_res_index_{r2_index}",
                         )
                         s.addConstr(diff_var == t1_res - t2_res)
                         s.addConstr(abs_diff_var == gp.abs_(diff_var))
