@@ -21,7 +21,10 @@ flags.DEFINE_enum(
     "execution_mode",
     "replay",
     ["replay", "synthetic", "benchmark"],
-    "Sets the execution mode of the simulator.",
+    "Sets the execution mode of the simulator. In the replay mode the simulator "
+    "replays a Pylot log, in the synthetic mode the simulator generates a synthetic "
+    "Pylot-like task workload, and in the benchmark mode the simulator generates a "
+    "synthetic task workload.",
 )
 flags.DEFINE_string(
     "log_file_name", None, "Name of the file to log the results to.", short_name="log"

@@ -1,10 +1,22 @@
 # erdos-sim
 
-pylot_profile.json 
-- log of events as a json
+Run the following command in order to run experiments:
 
-profile.ipynb
-- notebook demonstrating how to convert json log into a simulation
+```console
+python3 main.py --flagfile=configs/default.conf
+```
 
-sim.py
-- util functions and classes for generating simulations
+Next, run the following command in order to plot graphs (e.g., resource
+utilization, task placement delay, task slack) from the logs):
+
+```console
+cd plotting;
+python3 plot_simulator_graphs.py \
+  --csv_files={PATH_TO_CSV_LOG_FILE} \
+  --csv_labels={SCHEDULER_NAME} \
+  --plot_inter_task_time \
+  --plot_task_placement_delay \
+  --plot_task_placement_stats \
+  --plot_task_slack \
+  --plot_utilization
+```
