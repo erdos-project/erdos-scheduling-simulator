@@ -73,6 +73,10 @@ class BaseScheduler(object):
         return self._runtime
 
     @property
+    def enforce_deadlines(self):
+        return self._enforce_deadlines
+
+    @property
     def scheduling_horizon(self):
         return self._scheduling_horizon
 
