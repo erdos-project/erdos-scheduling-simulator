@@ -26,11 +26,7 @@ class EDFScheduler(BaseScheduler):
         runtime: int = -1,
         _flags: Optional["absl.flags"] = None,
     ):
-        self._preemptive = preemptive
-        self._runtime = runtime
-        # The scheduler only places tasks that have been released. Hence,
-        # scheduling horizon is 0.
-        self._scheduling_horizon = 0
+        super(EDFScheduler, self).__init__(preemptive, runtime)
 
     def schedule(
         self, sim_time: int, task_graph: TaskGraph, worker_pools: WorkerPools
@@ -82,15 +78,3 @@ class EDFScheduler(BaseScheduler):
         )
 
         return self.runtime, placements
-
-    @property
-    def preemptive(self):
-        return self._preemptive
-
-    @property
-    def runtime(self):
-        return self._runtime
-
-    @property
-    def scheduling_horizon(self):
-        return self._scheduling_horizon

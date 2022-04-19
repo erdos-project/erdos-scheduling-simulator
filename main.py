@@ -126,7 +126,12 @@ flags.DEFINE_integer(
     "scheduling_horizon",
     0,
     "The scheduler places tasks that are estimated to be released "
-    "within the tine horizon (in us)",
+    "within the tine horizon (in us).",
+)
+flags.DEFINE_bool(
+    "enforce_deadlines",
+    False,
+    "True if the ILP formulation must ensure that deadlines are met.",
 )
 flags.DEFINE_enum(
     "ilp_goal",
@@ -195,7 +200,7 @@ def main(args):
             preemptive=FLAGS.preemption,
             runtime=FLAGS.scheduler_runtime,
             goal=FLAGS.ilp_goal,
-            enforce_deadlines=False,
+            enforce_deadlines=FLAGS.enforce_deadlines,
             scheduling_horizon=FLAGS.scheduling_horizon,
             _flags=FLAGS,
         )
@@ -204,7 +209,7 @@ def main(args):
             preemptive=FLAGS.preemption,
             runtime=FLAGS.scheduler_runtime,
             goal=FLAGS.ilp_goal,
-            enforce_deadlines=False,
+            enforce_deadlines=FLAGS.enforce_deadlines,
             scheduling_horizon=FLAGS.scheduling_horizon,
             _flags=FLAGS,
         )

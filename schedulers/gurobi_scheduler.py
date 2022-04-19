@@ -39,12 +39,11 @@ class GurobiScheduler(BaseScheduler):
                 tasks that are within the scheduling horizon (in us) using
                 estimated task release times.
         """
-        self._preemptive = preemptive
-        self._runtime = runtime
+        super(GurobiScheduler, self).__init__(
+            preemptive, runtime, scheduling_horizon, enforce_deadlines
+        )
         assert goal != "feasibility", "Gurobi does not support feasibility checking."
         self._goal = goal
-        self._enforce_deadlines = enforce_deadlines
-        self._scheduling_horizon = scheduling_horizon
         self._time = None
         self._task_ids_to_task = {}
         # Mapping from task id to the var storing the task start time.
@@ -363,15 +362,3 @@ class GurobiScheduler(BaseScheduler):
                     "cost": self._cost,
                 }
                 pickle.dump(logged_data, log_file)
-
-    @property
-    def preemptive(self):
-        return self._preemptive
-
-    @property
-    def runtime(self):
-        return self._runtime
-
-    @property
-    def scheduling_horizon(self):
-        return self._scheduling_horizon
