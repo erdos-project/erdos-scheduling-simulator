@@ -521,7 +521,7 @@ class WorkerPools(object):
                 cur_range_id += res_available
             res_type_to_id_range[res_name] = (start_range_id, cur_range_id)
             start_range_id = cur_range_id
-        return res_type_to_id_range, res_id_to_wp_id, res_id_to_wp_index
+        return res_type_to_id_range, res_id_to_wp_id, res_id_to_wp_index, len(self._wps)
 
     def __copy__(self):
         cls = self.__class__
