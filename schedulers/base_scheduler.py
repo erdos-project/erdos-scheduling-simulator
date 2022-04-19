@@ -9,6 +9,31 @@ from workload import Task, TaskGraph
 
 
 class BaseScheduler(object):
+    """Base class that the schedulers must implement.
+
+    Args:
+        preemptive (`bool`): If `True`, the scheduler can preempt the tasks that
+            are currently running.
+        runtime (`int`): The runtime to return to the simulator (in us). If -1,
+            the scheduler returns the actual runtime.
+        scheduling_horizon (`int`): The scheduler will try to place tasks that are
+            within the scheduling horizon (in us) using estimated task release times.
+        enforce_deadlines (`bool`): If True then deadlines must be met or else the
+            `schedule()` will return None.
+    """
+
+    def __init__(
+        self,
+        preemptive: bool = False,
+        runtime: int = -1,
+        scheduling_horizon: int = 0,
+        enforce_deadlines: bool = False,
+    ):
+        self._preemptive = preemptive
+        self._runtime = runtime
+        self._scheduling_horizon = scheduling_horizon
+        self._enforce_deadlines = enforce_deadlines
+
     def schedule(
         self,
         sim_time: int,
@@ -41,13 +66,19 @@ class BaseScheduler(object):
 
     @property
     def preemptive(self):
-        raise NotImplementedError("The `preemptive` property has not been implemented.")
+        return self._preemptive
+
+    @property
+    def runtime(self):
+        return self._runtime
+
+    @property
+    def enforce_deadlines(self):
+        return self._enforce_deadlines
 
     @property
     def scheduling_horizon(self):
-        raise NotImplementedError(
-            "The `scheduling_horizon` property has not been implemented."
-        )
+        return self._scheduling_horizon
 
     def _verify_schedule(
         self, worker_pools: WorkerPools, task_graph: TaskGraph, placements
@@ -58,15 +89,16 @@ class BaseScheduler(object):
                 start_time >= task.release_time
                 for task, placement, start_time in placements
             ]
-        ), "not_valid_release_times"
+        ), "Some start times are less than release times"
 
-        # Check if all tasks finished before the deadline.
-        assert all(
-            [
-                (task.deadline >= start_time + task.runtime)
-                for task, placement, start_time in placements
-            ]
-        ), "doesn't finish before deadline"
+        if self._enforce_deadlines:
+            # Check if all tasks finished before the deadline.
+            assert all(
+                [
+                    (task.deadline >= start_time + task.runtime)
+                    for task, placement, start_time in placements
+                ]
+            ), "Some tasks did not finish before their deadline"
 
         # Check if task dependencies are satisfied.
         start_times = {task.id: start_time for task, _, start_time in placements}
@@ -76,7 +108,7 @@ class BaseScheduler(object):
                 if child_task.id in start_times:
                     assert (
                         start_time + task.remaining_time <= start_times[child_task.id]
-                    ), f"task dependency not valid{task.id}->{child_task.id}"
+                    ), f"Task dependency not valid{task.id}->{child_task.id}"
 
         # Check if resource requirements are satisfied.
         placed_tasks = []

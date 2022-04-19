@@ -34,16 +34,15 @@ class Z3Scheduler(BaseScheduler):
                 If -1, the scheduler returns the actual runtime.
             goal (`str`): Goal of the scheduler run.
             enforce_deadlines (`bool`): Deadlines must be met or else the
-                schedule will return None.
+                `schedule()` will return None.
             scheduling_horizon (`int`): The scheduler will try to place
                 tasks that are within the scheduling horizon (in us) using
                 estimated task release times.
         """
-        self._preemptive = preemptive
-        self._runtime = runtime
+        super(Z3Scheduler, self).__init__(
+            preemptive, runtime, scheduling_horizon, enforce_deadlines
+        )
         self._goal = goal
-        self._enforce_deadlines = enforce_deadlines
-        self._scheduling_horizon = scheduling_horizon
         self._time = None
         self._task_ids_to_task = {}
         # Mapping from task id to the var storing the task start time.
@@ -163,6 +162,7 @@ class Z3Scheduler(BaseScheduler):
             res_type_to_id_range,
             res_id_to_wp_id,
             _,
+            _,
         ) = worker_pools.get_resource_ilp_encoding()
         self._add_task_timing_constraints(s)
         self._add_task_resource_constraints(s, res_type_to_id_range)
@@ -233,15 +233,3 @@ class Z3Scheduler(BaseScheduler):
                     "cost": self._cost,
                 }
                 pickle.dump(logged_data, log_file)
-
-    @property
-    def preemptive(self):
-        return self._preemptive
-
-    @property
-    def runtime(self):
-        return self._runtime
-
-    @property
-    def scheduling_horizon(self):
-        return self._scheduling_horizon
