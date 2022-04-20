@@ -73,7 +73,8 @@ def fuzz_time(time: int, variance: Tuple[int, int]) -> int:
 
     Args:
         time (`int`): The time to fuzz.
-        variance (`Tuple[int, int]`): The (minimum, maximum) % variance to fuzz `time` by.
+        variance (`Tuple[int, int]`): The (minimum, maximum) % variance to fuzz
+            `time` by.
 
     Returns:
         The fuzzed time according to the given variance.
