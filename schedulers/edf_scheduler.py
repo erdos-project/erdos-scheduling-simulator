@@ -62,7 +62,7 @@ class EDFScheduler(BaseScheduler):
             is_task_placed = False
             for worker_pool in schedulable_worker_pools._wps:
                 if worker_pool.can_accomodate_task(task):
-                    worker_pool.place_task(task)
+                    worker_pool.place_task(task, dry_run=True)
                     is_task_placed = True
                     placements.append((task, worker_pool.id, sim_time))
                     break

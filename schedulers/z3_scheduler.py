@@ -89,14 +89,7 @@ class Z3Scheduler(BaseScheduler):
                         <= self._task_ids_to_start_time[child_task.id]
                     )
 
-    def _add_task_pinning_constraints(self, s):
-        if not self._preemptive:
-            for task_id, task in self._task_ids_to_task.items():
-                if task.state == TaskState.RUNNING:
-                    # TODO: Incorrect! Placement must equate to resource id!
-                    s.add(self._task_ids_to_placement[task_id] == 0)
-
-    def _add_task_resource_constraints(self, s, res_type_to_id_range):
+    def _add_task_resource_constraints(self, s, res_type_to_index_range):
         # Add constraints whether a task is placed on GPU or CPU.
         # from num_cpus to num_cpus to num_gpus.
         for task_id, task in self._task_ids_to_task.items():
@@ -108,9 +101,9 @@ class Z3Scheduler(BaseScheduler):
             # TODO: Add constraints for all resources once multi-dimensional
             # requirements are supported.
             resource = next(iter(task.resource_requirements._resource_vector))
-            (start_id, end_id) = res_type_to_id_range[resource.name]
-            s.add(self._task_ids_to_placement[task_id] >= start_id)
-            s.add(self._task_ids_to_placement[task_id] < end_id)
+            (start_index, end_index) = res_type_to_index_range[resource.name]
+            s.add(self._task_ids_to_placement[task_id] >= start_index)
+            s.add(self._task_ids_to_placement[task_id] < end_index)
 
         for index1, (t1_id, task1) in enumerate(self._task_ids_to_task.items()):
             for index2, (t2_id, task2) in enumerate(self._task_ids_to_task.items()):
@@ -159,15 +152,14 @@ class Z3Scheduler(BaseScheduler):
             self._task_ids_to_placement[task.id] = Int(f"p{task.id}")
 
         (
-            res_type_to_id_range,
-            res_id_to_wp_id,
+            res_type_to_index_range,
+            res_index_to_wp_id,
             _,
             _,
         ) = worker_pools.get_resource_ilp_encoding()
         self._add_task_timing_constraints(s)
-        self._add_task_resource_constraints(s, res_type_to_id_range)
+        self._add_task_resource_constraints(s, res_type_to_index_range)
         self._add_task_dependency_constraints(s)
-        self._add_task_pinning_constraints(s)
 
         if self._goal != "feasibility":
             result = s.maximize(sum_costs(self._task_ids_to_cost.values()))
@@ -196,7 +188,7 @@ class Z3Scheduler(BaseScheduler):
             self._placements = []
             for task_id, task in self._task_ids_to_task.items():
                 start_time = int(str(s.model()[self._task_ids_to_start_time[task_id]]))
-                placement = res_id_to_wp_id[
+                placement = res_index_to_wp_id[
                     int(str(s.model()[self._task_ids_to_placement[task_id]]))
                 ]
                 if start_time <= sim_time + self.runtime * 2:

@@ -67,15 +67,24 @@ class GurobiScheduler(BaseScheduler):
             self._logger = utils.setup_logging(name=self.__class__.__name__)
 
     def _add_variables(
-        self, sim_time, s, tasks, num_workers, res_type_to_id_range, res_id_to_wp_index
+        self,
+        sim_time,
+        s,
+        tasks,
+        num_workers,
+        res_type_index_range,
+        res_index_to_wp_index,
     ):
-        num_resources = len(res_id_to_wp_index.keys())
+        num_resources = len(res_index_to_wp_index.keys())
         # We are solving for start_times and placements while minimizing costs.
         for task in tasks:
             self._task_ids_to_task[task.id] = task
             # Add a variable to store the cost of the task assignment.
             self._task_ids_to_cost[task.id] = s.addVar(
                 vtype=gp.GRB.INTEGER,
+                ub=task.deadline
+                - sim_time
+                - task.remaining_time,  # Task cannot start before sim time.
                 name=f"cost_task_{task.id}",
             )
             # Add a variable to store the start time of the task.
@@ -108,12 +117,12 @@ class GurobiScheduler(BaseScheduler):
                     )
                     self._task_ids_to_resources[task.id].append(res_var)
                     # Add constraints whether a task is placed on GPU or CPU.
-                    (start_id, end_id) = res_type_to_id_range[resource.name]
-                    s.addConstr(res_var >= start_id)
-                    s.addConstr(res_var <= end_id - 1)
+                    (start_index, end_index) = res_type_index_range[resource.name]
+                    s.addConstr(res_var >= start_index)
+                    s.addConstr(res_var <= end_index - 1)
                     # if ri == resource_index => worker_var == worker_index, where
                     # worker_index is the index of the worker the resource in part of.
-                    for res_index in range(start_id, end_id):
+                    for res_index in range(start_index, end_index):
                         res_diff_var = s.addVar(
                             vtype=gp.GRB.INTEGER,
                             lb=-(num_resources - 1),
@@ -141,7 +150,7 @@ class GurobiScheduler(BaseScheduler):
                         # of the resource.
                         s.addConstr(
                             (flag_var == 0)
-                            >> (worker_var == res_id_to_wp_index[res_index])
+                            >> (worker_var == res_index_to_wp_index[res_index])
                         )
                     # A task must receive all its resources on a single worker.
                     if prev_worker_var:
@@ -170,14 +179,6 @@ class GurobiScheduler(BaseScheduler):
                         self._task_ids_to_start_time[task_id] + task.remaining_time
                         <= self._task_ids_to_start_time[child_task.id]
                     )
-
-    def _add_task_pinning_constraints(self, s):
-        if not self._preemptive:
-            for task_id, task in self._task_ids_to_task.items():
-                if task.state == TaskState.RUNNING:
-                    for resource in self._task_ids_to_resources[task_id]:
-                        # TODO: Incorrect! Placement must equate to resource id!
-                        s.add(resource == 0)
 
     def _add_task_resource_constraints(self, s, num_resources):
         # Tasks using the same resources must not overlap.
@@ -276,20 +277,19 @@ class GurobiScheduler(BaseScheduler):
         # s.Params.Method = 4
 
         (
-            res_type_to_id_range,
-            res_id_to_wp_id,
-            res_id_to_wp_index,
+            res_type_index_range,
+            res_index_to_wp_id,
+            res_index_to_wp_index,
             num_workers,
         ) = worker_pools.get_resource_ilp_encoding()
 
         # We are solving for start_times and placements while minimizing costs.
         self._add_variables(
-            sim_time, s, tasks, num_workers, res_type_to_id_range, res_id_to_wp_index
+            sim_time, s, tasks, num_workers, res_type_index_range, res_index_to_wp_index
         )
         self._add_task_timing_constraints(s)
-        self._add_task_resource_constraints(s, len(res_id_to_wp_index.keys()))
+        self._add_task_resource_constraints(s, len(res_index_to_wp_index.keys()))
         self._add_task_dependency_constraints(s)
-        self._add_task_pinning_constraints(s)
 
         s.setObjective(sum_costs(self._task_ids_to_cost.values()), gp.GRB.MAXIMIZE)
         s.optimize()
@@ -305,11 +305,11 @@ class GurobiScheduler(BaseScheduler):
             self._placements = []
             self._cost = int(s.objVal)
             for task_id, task in self._task_ids_to_task.items():
-                # All the variables of a task were placed on the same WorkerPoool
+                # All the variables of a task were placed on the same WorkerPool
                 # and at the same time. Thus, we can extract the placement from the
                 # first variable.
                 start_time = int(self._task_ids_to_start_time[task_id].X)
-                placement = res_id_to_wp_id[
+                placement = res_index_to_wp_id[
                     int(self._task_ids_to_resources[task_id][0].X)
                 ]
                 if start_time <= sim_time + self.runtime * 2:

@@ -47,7 +47,6 @@ class Worker(object):
             task (`Task`): The task to be placed on this `Worker`.
         """
         self._resources.allocate_multiple(task.resource_requirements, task)
-        task._worker_pool_id = self._id
         self._placed_tasks[task] = task.state
         self._logger.debug(f"Placed {task} on {self}")
 
@@ -60,29 +59,9 @@ class Worker(object):
             `ValueError` if the task was not placed on this worker.
         """
         if task not in self._placed_tasks:
-            raise ValueError("The task was not placed on this Worker.")
+            raise ValueError(f"The task {task} was not placed on {self.id} Worker.")
         # Deallocate the resources and remove the placed task.
         self._resources.deallocate(task)
-        del self._placed_tasks[task]
-
-    def preempt_task(self, task: Task):
-        """Preempts the given `Task` and frees the resources.
-
-        Args:
-            task (`Task`): The task to be preempted from this `Worker`.
-
-        Raises:
-            `ValueError` if the task was not placed on this worker, or is not
-            paused by the caller.
-        """
-        if task not in self._placed_tasks:
-            raise ValueError("The task was not placed on this Worker.")
-        if task.state != TaskState.PAUSED:
-            raise ValueError("The task is not in PAUSED state.")
-
-        # Deallocate the resources and remove the placed task.
-        self._resources.deallocate(task)
-        task._worker_pool_id = None
         del self._placed_tasks[task]
 
     def can_accomodate_task(self, task: Task) -> bool:
@@ -260,7 +239,7 @@ class WorkerPool(object):
                 self._logger.debug(f"Adding {worker} to {self}")
                 self._workers[worker.id] = worker
 
-    def place_task(self, task: Task):
+    def place_task(self, task: Task, dry_run: bool = False):
         """Places the task on this `WorkerPool`.
 
         The caller must ensure that the `WorkerPool` has enough resources to
@@ -269,6 +248,7 @@ class WorkerPool(object):
 
         Args:
             task (`Task`): The task to be placed in this `WorkerPool`.
+            dry_run (`bool`): If False, then the task's worker pool id is not updated.
 
         Raises:
             `ValueError` if the task could not be placed due to insufficient
@@ -295,36 +275,25 @@ class WorkerPool(object):
         else:
             self._workers[placement].place_task(task)
             self._placed_tasks[task] = placement
-            task._worker_pool_id = placement
+            if not dry_run:
+                task._worker_pool_id = self.id
 
-    def remove_task(self, task: Task):
+    def remove_task(self, task: Task, dry_run: bool = False):
         """Removes the task from this `WorkerPool`.
 
         Args:
             task (`Task`): The task to be placed on this `WorkerPool`.
+            dry_run (`bool`): If False, then the task's worker pool id is not updated.
+
         Raises:
             `ValueError` if the task was not placed on this worker pool.
         """
         if task not in self._placed_tasks:
-            raise ValueError("The task was not placed on this WorkerPool.")
+            raise ValueError(f"The task {task} was not placed on {self.id} WorkerPool.")
         # Deallocate the resources and remove the placed task.
         self._workers[self._placed_tasks[task]].remove_task(task)
-        del self._placed_tasks[task]
-
-    def preempt_task(self, task: Task):
-        """Preempts the given `Task` and frees the resources.
-
-        Args:
-            task (`Task`): The task to be preempted from this `WorkerPool`.
-
-        Raises:
-            `ValueError` if the task was not placed on this pool, or is not
-            paused by the caller.
-        """
-        # Find the worker where the task was placed, preempt it from there,
-        # and remove it from this worker pool's placed tasks.
-        self._workers[self._placed_tasks[task]].preempt_task(task)
-        task._worker_pool_id = None
+        if not dry_run:
+            task._worker_pool_id = None
         del self._placed_tasks[task]
 
     def get_placed_tasks(self) -> Sequence[Task]:
@@ -492,10 +461,10 @@ class WorkerPools(object):
         return placed_tasks
 
     def get_resource_ilp_encoding(self):
-        """Constructs a map from resource name to (resource_start_id,
-        resource_end_id) and a map from worker pool id to resource_id.
+        """Constructs a map from resource name to (resource_start_index,
+        resource_end_index) and a map from worker pool id to resource_id.
 
-        The resource_start_id and resource_end_id are derived based on the
+        The resource_start_index and resource_end_index are derived based on the
         available quantify of the given resource.
         """
         # Unique list of resource names -- not relying on set stability.
@@ -505,23 +474,30 @@ class WorkerPools(object):
         # Uniquify scrambles the order.
         resource_names.sort()
 
-        res_type_to_id_range = {}
-        res_id_to_wp_id = {}
-        res_id_to_wp_index = {}
-        start_range_id = 0
+        res_type_to_index_range = {}
+        res_index_to_wp_id = {}
+        res_index_to_wp_index = {}
+        start_range_index = 0
         for res_name in resource_names:
-            cur_range_id = start_range_id
+            cur_range_index = start_range_index
             for index, wp in enumerate(self._wps):
                 res_available = wp.resources.get_available_quantity(
                     Resource(name=res_name, _id="any")
                 )
-                for res_id in range(cur_range_id, cur_range_id + res_available):
-                    res_id_to_wp_id[res_id] = wp.id
-                    res_id_to_wp_index[res_id] = index
-                cur_range_id += res_available
-            res_type_to_id_range[res_name] = (start_range_id, cur_range_id)
-            start_range_id = cur_range_id
-        return res_type_to_id_range, res_id_to_wp_id, res_id_to_wp_index, len(self._wps)
+                for res_index in range(
+                    cur_range_index, cur_range_index + res_available
+                ):
+                    res_index_to_wp_id[res_index] = wp.id
+                    res_index_to_wp_index[res_index] = index
+                cur_range_index += res_available
+            res_type_to_index_range[res_name] = (start_range_index, cur_range_index)
+            start_range_index = cur_range_index
+        return (
+            res_type_to_index_range,
+            res_index_to_wp_id,
+            res_index_to_wp_index,
+            len(self._wps),
+        )
 
     def __copy__(self):
         cls = self.__class__
