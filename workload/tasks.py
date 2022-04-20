@@ -356,6 +356,11 @@ class Task(object):
     def __eq__(self, other):
         return uuid.UUID(self.id) == uuid.UUID(other.id)
 
+    def __lt__(self, other):
+        if self == other:
+            return False
+        return self.deadline < other.deadline
+
     @property
     def name(self):
         return self._name

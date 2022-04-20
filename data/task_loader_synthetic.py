@@ -296,7 +296,9 @@ class TaskLoaderSynthetic(object):
             for job in self._jobs:
                 # All times are in microseconds.
                 runtime = utils.fuzz_time(runtimes[job.name], runtime_variance)
-                deadline = utils.fuzz_time(deadlines[job.name], deadline_variance)
+                deadline = sensor_release_time + utils.fuzz_time(
+                    deadlines[job.name], deadline_variance
+                )
                 task = Task(
                     job.name,
                     job,

@@ -59,7 +59,7 @@ class Worker(object):
             `ValueError` if the task was not placed on this worker.
         """
         if task not in self._placed_tasks:
-            raise ValueError("The task was not placed on this Worker.")
+            raise ValueError(f"The task {task} was not placed on {self.id} Worker.")
         # Deallocate the resources and remove the placed task.
         self._resources.deallocate(task)
         del self._placed_tasks[task]
@@ -289,7 +289,7 @@ class WorkerPool(object):
             `ValueError` if the task was not placed on this worker pool.
         """
         if task not in self._placed_tasks:
-            raise ValueError(f"The task {task} was not placed on this WorkerPool.")
+            raise ValueError(f"The task {task} was not placed on {self.id} WorkerPool.")
         # Deallocate the resources and remove the placed task.
         self._workers[self._placed_tasks[task]].remove_task(task)
         if not dry_run:

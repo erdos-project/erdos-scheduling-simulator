@@ -444,6 +444,9 @@ class Simulator(object):
 
     def __handle_task_placements(self, sim_time):
         for task, placement, start_time in self._last_task_placement:
+            if task.is_complete():
+                # Task completd before the scheduler finished.
+                continue
             if placement is None:
                 if task.worker_pool_id:
                     # The task was preempted.

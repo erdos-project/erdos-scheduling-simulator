@@ -82,6 +82,9 @@ class GurobiScheduler(BaseScheduler):
             # Add a variable to store the cost of the task assignment.
             self._task_ids_to_cost[task.id] = s.addVar(
                 vtype=gp.GRB.INTEGER,
+                ub=task.deadline
+                - sim_time
+                - task.remaining_time,  # Task cannot start before sim time.
                 name=f"cost_task_{task.id}",
             )
             # Add a variable to store the start time of the task.
