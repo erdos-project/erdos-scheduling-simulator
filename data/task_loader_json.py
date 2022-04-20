@@ -225,8 +225,8 @@ class TaskLoaderJSON(object):
                 the JSON file.
             logger (`Optional[logging.Logger]`): The logger to pass to each
                 Task to enable logging of its execution.
-            deadline_variance (`Optional[Tuple[int, int]]`): The (minimum, maximum) % variance to add to
-                the assigned deadline for each task.
+            deadline_variance (`Optional[Tuple[int, int]]`): The (minimum, maximum) %
+                variance to add to the assigned deadline for each task.
             synchronize_sensors (`Optional[bool]`): Ensures that sensors (source jobs)
                 release their first task at the same time.
 
