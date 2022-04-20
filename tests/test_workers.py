@@ -152,8 +152,8 @@ def test_worker_deepcopy():
     ), "Incorrect number of GPU resources available on the copy of Worker."
 
 
-def test_worker_preempt_task_failed():
-    """Test that preempting a non-placed Task raises an error."""
+def test_worker_remove_task_failed():
+    """Test that removing a non-placed Task raises an error."""
     worker = Worker(
         name="Worker_1",
         resources=Resources({Resource(name="CPU"): 1, Resource(name="GPU"): 1}),
@@ -169,11 +169,11 @@ def test_worker_preempt_task_failed():
 
     # Ensure failure.
     with pytest.raises(ValueError):
-        worker.preempt_task(task)
+        worker.remove_task(task)
 
 
-def test_worker_preempt_task_success():
-    """Test that preempting a Task correctly maintains the Resources."""
+def test_worker_remove_task_success():
+    """Test that removing a Task correctly maintains the Resources."""
     worker = Worker(
         name="Worker_1",
         resources=Resources({Resource(name="CPU"): 1, Resource(name="GPU"): 1}),
@@ -200,10 +200,10 @@ def test_worker_preempt_task_success():
     # Run the task.
     task.release(1)
     task.start(2)
-    task.pause(3)
+    task.preempt(3)
 
-    # Preempt the task and ensure correct resources.
-    worker.preempt_task(task)
+    # Remove the task and ensure correct resources.
+    worker.remove_task(task)
     assert len(worker.get_placed_tasks()) == 0, "Incorrect number of placed tasks."
     assert (
         worker.resources.get_available_quantity(Resource(name="CPU", _id="any")) == 1

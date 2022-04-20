@@ -9,7 +9,7 @@ from typing import Mapping, Optional, Sequence, Union
 import utils
 from workload import Job, Resources
 
-Paused = namedtuple("Paused", "pause_time, restart_time")
+Preempted = namedtuple("Preempted", "preemption_time, restart_time")
 
 
 class TaskState(Enum):
@@ -18,7 +18,7 @@ class TaskState(Enum):
     VIRTUAL = 1  # The Task is expected to be generated in the future.
     RELEASED = 2  # The Task has been released, and is waiting to be run.
     RUNNING = 3  # The Task has begun execution, and is currently running.
-    PAUSED = 4  # The Task had begun execution but is currently paused.
+    PREEMPTED = 4  # The Task had begun execution but is currently paused.
     EVICTED = 5  # The Task has been evicted before completing.
     COMPLETED = 6  # The Task has successfully completed.
 
@@ -89,14 +89,14 @@ class Task(object):
         self._start_time = start_time
         # (RUNNING -> EVICTED / COMPLETED)
         self._completion_time = completion_time
-        # (RUNNING -> PAUSED)
-        self._paused_times = []
+        # (RUNNING -> PREEMPTED)
+        self._preemption_times = []
 
         # The data required for managing the execution of a particular task.
         self._remaining_time = runtime
         self._last_step_time = -1  # Time when this task was stepped through.
         self._state = TaskState.VIRTUAL
-        # ID of the worker on which the task is running.
+        # ID of the worker pool on which the task is running.
         self._worker_pool_id = None
 
     def release(self, time: Optional[int] = None):
@@ -117,6 +117,10 @@ class Task(object):
             raise ValueError(f"Cannot release {self.id} which is in state {self.state}")
         if time is not None:
             if self._release_time != -1:
+                # TODO: Should the deadline be modified?
+                self._logger.warning(
+                    f"Task {self} deadline offset by {self._release_time - time}"
+                )
                 self._deadline -= self._release_time - time
             self._release_time = time
 
@@ -137,11 +141,11 @@ class Task(object):
                 the runtime of the task.
 
         Raises:
-            `ValueError` if Task is not in `RELEASED`/`PAUSED` state yet.
+            `ValueError` if Task is not in `RELEASED`/`PREEMPTED` state yet.
         """
-        if self.state not in (TaskState.RELEASED, TaskState.PAUSED):
+        if self.state not in (TaskState.RELEASED, TaskState.PREEMPTED):
             raise ValueError(
-                f"Only RELEASED or PAUSED tasks can be started. "
+                f"Only RELEASED or PREEMPTED tasks can be started. "
                 f"Task is in state {self.state}"
             )
         if time is None and self._start_time == -1:
@@ -202,21 +206,23 @@ class Task(object):
             )
             return False
 
-    def pause(self, time: int):
-        """Pauses the execution of the task at the given simulation time.
+    def preempt(self, time: int):
+        """Preempts the task at the given simulation time.
 
         Args:
-            time (`int`): The simulation time (in us) at which to pause the
-                task.
+            time (`int`): The simulation time (in us) at which to preempt the task.
 
         Raises:
             `ValueError` if task is not RUNNING.
         """
         if self.state != TaskState.RUNNING:
             raise ValueError(f"Task {self.id} is not RUNNING right now.")
-        self._logger.debug(f"Transitioning {self} to {TaskState.PAUSED} at time {time}")
-        self._paused_times.append(Paused(time, -1))
-        self._state = TaskState.PAUSED
+        self._logger.debug(
+            f"Transitioning {self} to {TaskState.PREEMPTED} at time {time}"
+        )
+        self._preemption_times.append(Preempted(time, -1))
+        self._state = TaskState.PREEMPTED
+        self._worker_pool_id = None
 
     def resume(self, time: int):
         """Continues the execution of the task at the given simulation time.
@@ -226,16 +232,16 @@ class Task(object):
                 task.
 
         Raises:
-            `ValueError` if task is not PAUSED.
+            `ValueError` if task is not PREEMPTED.
         """
-        if self.state != TaskState.PAUSED:
-            raise ValueError(f"Task {self.id} is not PAUSED right now.")
+        if self.state != TaskState.PREEMPTED:
+            raise ValueError(f"Task {self.id} is not PREEMPTED right now.")
         self._logger.debug(
-            f"Transitioning {self} which was PAUSED at "
-            f"{self._paused_times[-1].pause_time} to {TaskState.RUNNING} at "
+            f"Transitioning {self} which was PREEMPTED at "
+            f"{self._preemption_times[-1].preemption_time} to {TaskState.RUNNING} at "
             f"time {time}"
         )
-        self._paused_times[-1]._replace(restart_time=time)
+        self._preemption_times[-1]._replace(restart_time=time)
         self._last_step_time = time
         self._state = TaskState.RUNNING
 
@@ -248,8 +254,8 @@ class Task(object):
             time (`int`): The simulation time (in us) at which the task was
                 finished.
         """
-        if self.state not in [TaskState.RUNNING, TaskState.PAUSED]:
-            raise ValueError(f"Task {self.id} is not RUNNING or PAUSED right now.")
+        if self.state not in [TaskState.RUNNING, TaskState.PREEMPTED]:
+            raise ValueError(f"Task {self.id} is not RUNNING or PREEMPTED right now.")
         self._completion_time = time
         if self._remaining_time == 0:
             self._state = TaskState.COMPLETED
@@ -327,11 +333,11 @@ class Task(object):
                 f"start_time={self.start_time}, "
                 f"remaining_time={self.remaining_time})"
             )
-        elif self.state == TaskState.PAUSED:
+        elif self.state == TaskState.PREEMPTED:
             return (
                 f"Task(name={self.name}, id={self.id}, job={self.job}, "
                 f"timestamp={self.timestamp}, state={self.state}, "
-                f"pause_time={self.pause_time}, "
+                f"preemption_time={self.preemption_time}, "
                 f"remaining_time={self.remaining_time})"
             )
         elif self.is_complete():
@@ -387,8 +393,8 @@ class Task(object):
         return self._start_time
 
     @property
-    def pause_time(self):
-        return self._paused_times[-1].pause_time
+    def preemption_time(self):
+        return self._preemption_times[-1].preemption_time
 
     @property
     def remaining_time(self):
@@ -550,9 +556,8 @@ class TaskGraph(object):
         preemption: bool = False,
         worker_pools: "WorkerPools" = None,  # noqa: F821
     ) -> Sequence[Task]:
-        """Retrieves the all the tasks that are in RELEASED, PAUSED, or
-        EVICTED state, and tasks that are expected to be released by
-        time + horizon.
+        """Retrieves the all the tasks that are in RELEASED, PREEMPTED, or
+        EVICTED state, and tasks that are expected to be released by time + horizon.
 
         Returns:
             A list of tasks.
@@ -564,10 +569,11 @@ class TaskGraph(object):
                     task.state == TaskState.RELEASED
                     and task.release_time <= time + horizon
                 )
-                or task.state == TaskState.PAUSED
+                or task.state == TaskState.PREEMPTED
                 or task.state == TaskState.EVICTED
             ):
                 tasks.append(task)
+        # No need to add already running tasks if preemption is not enabled.
         if preemption:
             if worker_pools:
                 # Adding the tasks placed on the given worker pool.
@@ -586,7 +592,7 @@ class TaskGraph(object):
             elif task.state in [
                 TaskState.RUNNING,
                 TaskState.RELEASED,
-                TaskState.PAUSED,
+                TaskState.PREEMPTED,
                 TaskState.EVICTED,
             ]:
                 estimated_completion_time[task] = time + task.remaining_time
@@ -795,9 +801,7 @@ class TaskGraph(object):
         Returns:
             The merged TaskGraph from the sequence ordered by timestamp.
         """
-        raise NotImplementedError(
-            "Merging of Taskgraphs has not been " "implemented yet."
-        )
+        raise NotImplementedError("Merging of Taskgraphs has not been implemented yet.")
 
     def __len__(self):
         return len(self._task_graph)

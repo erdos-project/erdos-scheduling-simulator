@@ -64,20 +64,20 @@ def test_task_runtime_variability():
     ), "Incorrect remaining time for the Task."
 
 
-def test_successful_task_pause():
-    """Test that a task can be paused successfully."""
+def test_successful_task_preempt():
+    """Test that a task can be preempted successfully."""
     default_task = create_default_task()
     default_task.release(2)
     default_task.start(3)
-    default_task.pause(4)
-    assert default_task.state == TaskState.PAUSED, "Incorrect state for Task."
+    default_task.preempt(4)
+    assert default_task.state == TaskState.PREEMPTED, "Incorrect state for Task."
 
 
-def test_failed_task_pause():
-    """Test that a Task cannot be PAUSED from a non-RUNNING state."""
+def test_failed_task_preempt():
+    """Test that a Task cannot be PREEMPTED from a non-RUNNING state."""
     default_task = create_default_task()
     with pytest.raises(ValueError):
-        default_task.pause(4)
+        default_task.preempt(4)
 
 
 def test_successful_task_resume():
@@ -85,13 +85,13 @@ def test_successful_task_resume():
     default_task = create_default_task()
     default_task.release(2)
     default_task.start(3)
-    default_task.pause(4)
+    default_task.preempt(4)
     default_task.resume(5)
     assert default_task.state == TaskState.RUNNING, "Incorrect state for Task."
 
 
 def test_failed_task_resume():
-    """Test that a Task cannot be resumed from a non-paused state."""
+    """Test that a Task cannot be resumed from a non-preempted state."""
     default_task = create_default_task()
     default_task.release(2)
     default_task.start(3)
@@ -154,8 +154,10 @@ def test_fail_step_non_running():
     default_task = create_default_task()
     default_task.release(2)
     default_task.start(3)
-    default_task.pause(4)
-    assert not default_task.step(5), "Task should not be completed from a PAUSED state."
+    default_task.preempt(4)
+    assert not default_task.step(
+        5
+    ), "Task should not be completed from a PREEMPTED state."
 
 
 def test_empty_task_graph_construction():
