@@ -50,6 +50,18 @@ class Event(object):
         self._task = task
 
     def __lt__(self, other):
+        if self.time == other.time:
+            if (
+                self._event_type == EventType.TASK_FINISHED
+                and other._event_type != EventType.TASK_FINISHED
+            ):
+                return True
+            if (
+                self._event_type == EventType.TASK_RELEASE
+                and other._event_type != EventType.TASK_FINISHED
+                and other._event_type != EventType.TASK_RELEASE
+            ):
+                return True
         return self.time < other.time
 
     def __str__(self):
@@ -324,10 +336,9 @@ class Simulator(object):
                 f"{event.task.timestamp},{event.task.release_time},"
                 f"{event.task.runtime},{event.task.deadline},{event.task.id}"
             )
-            # If we are not in the midst of a scheduler invocation, and the
-            # next scheduler start event is too far, pull the time back to
-            # the current time offset by a scheduler invocation delay, and
-            # re-heapify the event queue.
+            # If we are not in the midst of a scheduler invocation and next
+            # scheduled invocation is too late, then bring the invocation sooner
+            # (event time + scheduler_delay), and re-heapify the event queue.
             if self._next_scheduler_event:
                 self._next_scheduler_event._time = min(
                     self._next_scheduler_event.time, event.time + self._scheduler_delay
@@ -394,7 +405,7 @@ class Simulator(object):
             sched_finished_event = self.__run_scheduler(event, task_graph)
             self._event_queue.add_event(sched_finished_event)
             self._logger.info(
-                f"[{event.time}] Added {sched_finished_event} to the " f"event queue."
+                f"[{event.time}] Added {sched_finished_event} to the event queue."
             )
         elif event.event_type == EventType.SCHEDULER_FINISHED:
             # Place the tasks on the assigned worker pool, and reset the

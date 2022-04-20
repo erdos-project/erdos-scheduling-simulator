@@ -4,6 +4,7 @@ import sys
 import uuid
 from collections import defaultdict, deque, namedtuple
 from enum import Enum
+from functools import total_ordering
 from typing import Mapping, Optional, Sequence, Union
 
 import utils
@@ -23,6 +24,7 @@ class TaskState(Enum):
     COMPLETED = 6  # The Task has successfully completed.
 
 
+@total_ordering
 class Task(object):
     """A `Task` represents the invocation of a computation of a particular
     Operator in an ERDOS AV pipeline.
