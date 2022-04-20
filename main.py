@@ -83,9 +83,14 @@ flags.DEFINE_integer(
     short_name="max",
 )
 flags.DEFINE_integer(
-    "deadline_variance",
+    "min_deadline_variance",
     0,
-    "The % variance to allocate to the assigned deadline for each task.",
+    "The minimum % variance to allocate to the assigned deadline for each task.",
+)
+flags.DEFINE_integer(
+    "max_deadline_variance",
+    20,
+    "The maximum % variance to allocate to the assigned deadline for each task.",
 )
 flags.DEFINE_integer(
     "runtime_variance",
