@@ -1,4 +1,14 @@
-# erdos-sim
+# ERDOS Simulator
+
+## Installation
+
+To install the repository and set up the required paths, run
+
+```console
+python3 setup.py develop
+```
+
+## Executing Experiments
 
 Run the following command in order to run experiments:
 
