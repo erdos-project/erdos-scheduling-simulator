@@ -218,9 +218,13 @@ def test_gurobi_scheduler_limited_resources():
         50, task_graph=task_graph, worker_pools=WorkerPools([worker_pool])
     )
 
-    assert all(
-        [placement is None for (_, placement, _) in placements]
-    ), "Doesn't detect workload is unschedulable."
+    assert len(placements) == 2, "Didn't try to schedule both tasks."
+    if placements[0][0] == task_higher_priority:
+        assert placements[0][1] is not None, "Didn't place the high priority task."
+        assert placements[1][1] is None, "Placed the low priority task."
+    else:
+        assert placements[1][1] is not None, "Didn't place the high priority task."
+        assert placements[0][1] is None, "Placed the low priority task."
 
 
 def test_edf_scheduler_success():

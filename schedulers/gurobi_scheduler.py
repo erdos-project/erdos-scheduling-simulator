@@ -13,6 +13,10 @@ from schedulers import BaseScheduler
 from workers import WorkerPools
 from workload import TaskGraph, TaskState
 
+# Minimum task cost constant, which is used to set the cost of leaving a task
+# unscheduled. It is equivalent to missing a task deadline by 100 seconds.
+MIN_TASK_COST = -100 * 1000 * 1000
+
 
 class GurobiScheduler(BaseScheduler):
     def __init__(
@@ -50,8 +54,11 @@ class GurobiScheduler(BaseScheduler):
         self._task_ids_to_start_time = {}
         # Mapping from task id to the var storing the task resource placement.
         self._task_ids_to_resources = defaultdict(list)
-        # Mapping from task id to the var storing the cost of the placement.
+        # Mapping from task id to the variable storing the cost of the placement.
         self._task_ids_to_cost = {}
+        # Mapping from task id to the variable controlling if the task is placed
+        # or not.
+        self._task_ids_to_scheduled_flag = {}
         self._task_graph = None
         self._worker_pools = None
         self._placements = []
@@ -82,6 +89,7 @@ class GurobiScheduler(BaseScheduler):
             # Add a variable to store the cost of the task assignment.
             self._task_ids_to_cost[task.id] = s.addVar(
                 vtype=gp.GRB.INTEGER,
+                lb=MIN_TASK_COST,
                 ub=task.deadline
                 - sim_time
                 - task.remaining_time,  # Task cannot start before sim time.
@@ -93,6 +101,15 @@ class GurobiScheduler(BaseScheduler):
                 lb=sim_time,  # Start times cannot be less than sim time.
                 name=f"start_time_task_{task.id}",
             )
+            # Add a variable to control if the task is placed or left unplaced.
+            # A value of 0 means that the task is be placed, and a value of 1
+            # means that the task is not placed.
+            # Note: Do not change the encoding as the variable is also used to
+            # ensure that two tasks do not overlap on the same resource.
+            scheduled_flag_var = s.addVar(
+                vtype=gp.GRB.BINARY, name=f"scheduled_task_{task.id}"
+            )
+            self._task_ids_to_scheduled_flag[task.id] = scheduled_flag_var
             prev_worker_var = None
             for (
                 resource,
@@ -103,7 +120,7 @@ class GurobiScheduler(BaseScheduler):
                     # Stores the id of the resource that got allocated to the task.
                     res_var = s.addVar(
                         vtype=gp.GRB.INTEGER,
-                        lb=0,
+                        lb=-1,
                         ub=num_resources - 1,
                         name=f"resource_task_{task.id}_{resource.name}_{index}",
                     )
@@ -111,28 +128,32 @@ class GurobiScheduler(BaseScheduler):
                     # allocated to the task.
                     worker_var = s.addVar(
                         vtype=gp.GRB.INTEGER,
-                        lb=0,
+                        lb=-1,
                         ub=num_workers - 1,
                         name=f"worker_task_{task.id}_{resource.name}_{index}",
                     )
                     self._task_ids_to_resources[task.id].append(res_var)
                     # Add constraints whether a task is placed on GPU or CPU.
                     (start_index, end_index) = res_type_index_range[resource.name]
-                    s.addConstr(res_var >= start_index)
-                    s.addConstr(res_var <= end_index - 1)
+                    # If the task is not scheduled, then its resource and worker
+                    # variables must be -1.
+                    s.addConstr((scheduled_flag_var == 1) >> (res_var == -1))
+                    s.addConstr((scheduled_flag_var == 1) >> (worker_var == -1))
+                    s.addConstr((scheduled_flag_var == 0) >> (res_var >= start_index))
+                    s.addConstr((scheduled_flag_var == 0) >> (res_var <= end_index - 1))
                     # if ri == resource_index => worker_var == worker_index, where
                     # worker_index is the index of the worker the resource in part of.
                     for res_index in range(start_index, end_index):
                         res_diff_var = s.addVar(
                             vtype=gp.GRB.INTEGER,
-                            lb=-(num_resources - 1),
-                            ub=num_resources - 1,
+                            lb=-num_resources,
+                            ub=num_resources,
                             name=f"resource_diff_task_{task.id}_"
                             f"{resource.name}_{index}_{res_index}",
                         )
                         abs_diff_var = s.addVar(
                             lb=0,
-                            ub=num_resources - 1,
+                            ub=num_resources,
                             vtype=gp.GRB.INTEGER,
                             name=f"abs_resource_diff_task_{task.id}_"
                             f"{resource.name}_{index}_{res_index}",
@@ -152,6 +173,8 @@ class GurobiScheduler(BaseScheduler):
                             (flag_var == 0)
                             >> (worker_var == res_index_to_wp_index[res_index])
                         )
+                        s.addConstr((flag_var == 0) >> (abs_diff_var == 0))
+
                     # A task must receive all its resources on a single worker.
                     if prev_worker_var:
                         s.addConstr(prev_worker_var == worker_var)
@@ -164,10 +187,22 @@ class GurobiScheduler(BaseScheduler):
                 s.addConstr(start_time + task.remaining_time <= task.deadline)
             # Start at or after release time.
             s.addConstr(task.release_time <= start_time)
-            # Defines cost as slack deadline - finish time.
+            # If the task is scheduled, then the cost is defined as slack
+            # (i.e., deadline - finish time). Otherwise, set the cost to a very
+            # small value.
             s.addConstr(
-                task.deadline - start_time - task.remaining_time
-                == self._task_ids_to_cost[task_id]
+                (self._task_ids_to_scheduled_flag[task_id] == 0)
+                >> (
+                    task.deadline - start_time - task.remaining_time
+                    == self._task_ids_to_cost[task_id]
+                )
+            )
+            s.addConstr(
+                (self._task_ids_to_scheduled_flag[task_id] == 1)
+                >> (
+                    MIN_TASK_COST + task.deadline - start_time - task.remaining_time
+                    == self._task_ids_to_cost[task_id]
+                )
             )
 
     def _add_task_dependency_constraints(self, s):
@@ -201,15 +236,15 @@ class GurobiScheduler(BaseScheduler):
                         if index1 == index2 and r2_index >= r1_index:
                             break
                         diff_var = s.addVar(
-                            lb=-(num_resources - 1),
-                            ub=num_resources - 1,
+                            lb=-num_resources,
+                            ub=num_resources,
                             vtype=gp.GRB.INTEGER,
                             name=f"res_diff_task_{t1_id}_res_index_{r1_index}_"
                             f"task_{t2_id}_res_index_{r2_index}",
                         )
                         abs_diff_var = s.addVar(
                             lb=0,
-                            ub=num_resources - 1,
+                            ub=num_resources,
                             vtype=gp.GRB.INTEGER,
                             name=f"abs_res_diff_task_{t1_id}_res_index_{r1_index}_"
                             f"task_{t2_id}_res_index_{r2_index}",
@@ -226,7 +261,17 @@ class GurobiScheduler(BaseScheduler):
                         )
                         s.addConstr(diff_var == t1_res - t2_res)
                         s.addConstr(abs_diff_var == gp.abs_(diff_var))
-                        s.addConstr((flag_var == 1) >> (abs_diff_var >= 1))
+                        # Ensure that either the tasks do not use the same resource,
+                        # or at least one of them was left unscheduled.
+                        s.addConstr(
+                            (flag_var == 1)
+                            >> (
+                                abs_diff_var
+                                + self._task_ids_to_scheduled_flag[t1_id]
+                                + self._task_ids_to_scheduled_flag[t2_id]
+                                >= 1
+                            )
+                        )
                         # If the tasks use the same resource, then they must not
                         # overlap. We use a helper binary variable to capture the
                         # two cases:
@@ -270,8 +315,8 @@ class GurobiScheduler(BaseScheduler):
 
         scheduler_start_time = time.time()
         s = gp.Model("RAP")
-        s.Params.OptimalityTol = 0.01
-        s.Params.IntFeasTol = 0.1
+        s.Params.OptimalityTol = 0.005
+        s.Params.IntFeasTol = 0.01
         # s.Params.TimeLimit = 1  # In seconds.
         # Sets the solver method to concurrent and deterministic.
         # s.Params.Method = 4
@@ -309,9 +354,12 @@ class GurobiScheduler(BaseScheduler):
                 # and at the same time. Thus, we can extract the placement from the
                 # first variable.
                 start_time = int(self._task_ids_to_start_time[task_id].X)
-                placement = res_index_to_wp_id[
-                    int(self._task_ids_to_resources[task_id][0].X)
-                ]
+                res_index = int(self._task_ids_to_resources[task_id][0].X)
+                if res_index == -1:
+                    # The task has been left unscheduled.
+                    placement = None
+                else:
+                    placement = res_index_to_wp_id[res_index]
                 if start_time <= sim_time + self.runtime * 2:
                     # We only place the tasks with a start time earlier than
                     # the estimated end time of the next scheduler run.
@@ -330,7 +378,6 @@ class GurobiScheduler(BaseScheduler):
             ]
             self._cost = sys.maxsize
             if s.status == gp.GRB.INFEASIBLE:
-                # TODO: Implement load shedding.
                 self._logger.debug("Solver couldn't find a solution.")
                 self.log_solver_internal(s)
             else:

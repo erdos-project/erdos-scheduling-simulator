@@ -476,7 +476,7 @@ class WorkerPools(object):
 
         res_type_to_index_range = {}
         res_index_to_wp_id = {}
-        res_index_to_wp_index = {}
+        res_index_to_wp_index = {-1: -1}
         start_range_index = 0
         for res_name in resource_names:
             cur_range_index = start_range_index
