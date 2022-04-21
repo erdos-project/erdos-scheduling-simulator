@@ -614,10 +614,14 @@ class TaskGraph(object):
             children = self.get_children(task)
             for child_task in children:
                 if child_task.state != TaskState.VIRTUAL:
-                    # Can skip the task because we've already set its
-                    # completion time.
+                    # Skip the task because we've already set its completion time.
                     continue
                 child_completion_time = completion_time + child_task.remaining_time
+                if child_task.release_time:
+                    child_completion_time = max(
+                        child_completion_time,
+                        child_task.release_time + child_task.remaining_time,
+                    )
                 if (
                     child_task not in estimated_completion_time
                     or child_completion_time > estimated_completion_time[child_task]
@@ -633,6 +637,13 @@ class TaskGraph(object):
                     and estimated_completion_time[task] < time + horizon
                 ):
                     tasks.append(task)
+        assert all(
+            map(
+                lambda task: task.release_time is None
+                or task.release_time <= time + horizon,
+                tasks,
+            )
+        ), "Tasks send for scheduling beyond the scheduling horizon"
         return tasks
 
     def release_tasks(self, time: Optional[int] = None) -> Sequence[Task]:
