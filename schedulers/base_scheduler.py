@@ -84,7 +84,7 @@ class BaseScheduler(object):
         self, worker_pools: WorkerPools, task_graph: TaskGraph, placements
     ):
         placed_tasks = [
-            (start_time, placement, task)
+            (task, placement, start_time)
             for task, placement, start_time in placements
             if placement is not None
         ]
@@ -112,12 +112,12 @@ class BaseScheduler(object):
                     ), f"Task dependency not valid{task.id}->{child_task.id}"
 
         # Check if resource requirements are satisfied.
-        placed_tasks.sort(key=lambda e: e[0])
+        placed_tasks.sort(key=lambda e: e[2])
         wps = deepcopy(worker_pools)
         id_to_wp = {wp.id: wp for wp in wps._wps}
         # A heap storing the task in order of their completion time.
         task_completion = []
-        for start_time, wp_id, task in placed_tasks:
+        for task, wp_id, start_time in placed_tasks:
             # Remove task that finished before start_time.
             while len(task_completion) > 0 and start_time >= task_completion[0][0]:
                 (end_time, wp_id, task) = heapq.heappop(task_completion)
