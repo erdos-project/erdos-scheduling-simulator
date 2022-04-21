@@ -156,7 +156,7 @@ class Task(object):
                 "creating the Task or when starting it."
             )
 
-        remaining_time = utils.fuzz_time(self._remaining_time, variance)
+        remaining_time = utils.fuzz_time(self._remaining_time, (0, variance))
         self._logger.debug(
             f"Transitioning {self} to {TaskState.RUNNING} at time {time} "
             f"with the remaining time {remaining_time}"

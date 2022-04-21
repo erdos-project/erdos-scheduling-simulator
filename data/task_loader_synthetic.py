@@ -1,7 +1,7 @@
 import json
 import logging
 import sys
-from typing import Mapping, Optional, Sequence
+from typing import Mapping, Optional, Sequence, Tuple
 
 import absl  # noqa: F401
 
@@ -57,7 +57,7 @@ class TaskLoaderSynthetic(object):
             max_timestamp,
             _flags.timestamp_difference,
             _flags.runtime_variance,
-            _flags.deadline_variance,
+            (_flags.min_deadline_variance, _flags.max_deadline_variance),
             runtimes,
             deadlines,
             resources,
@@ -284,7 +284,7 @@ class TaskLoaderSynthetic(object):
         max_timestamp: int,
         timestamp_difference: int,
         runtime_variance: int,
-        deadline_variance: int,
+        deadline_variance: Tuple[int, int],
         runtimes: Mapping[str, int],
         deadlines: Mapping[str, int],
         resources: Mapping[str, Sequence[Resources]],
@@ -295,7 +295,7 @@ class TaskLoaderSynthetic(object):
         for timestamp in range(max_timestamp + 1):
             for job in self._jobs:
                 # All times are in microseconds.
-                runtime = utils.fuzz_time(runtimes[job.name], runtime_variance)
+                runtime = utils.fuzz_time(runtimes[job.name], (0, runtime_variance))
                 deadline = sensor_release_time + utils.fuzz_time(
                     deadlines[job.name], deadline_variance
                 )

@@ -1,6 +1,6 @@
 import logging
 import random
-from typing import Optional
+from typing import Optional, Tuple
 
 import numpy as np
 
@@ -68,30 +68,24 @@ def setup_csv_logging(name: str, log_file: str) -> logging.Logger:
     )
 
 
-def fuzz_time(time: int, variance: int, positive: Optional[bool] = True) -> int:
+def fuzz_time(time: int, variance: Tuple[int, int]) -> int:
     """Fuzz the given `time` according to the provided `variance`.
 
     Args:
         time (`int`): The time to fuzz.
-        variance (`int`): The % variance to fuzz `time` by.
-        positive (`Optional[bool]`): If True, the fuzzing only increases the
-            time.
+        variance (`Tuple[int, int]`): The (minimum, maximum) % variance to fuzz
+            `time` by.
 
     Returns:
         The fuzzed time according to the given variance.
     """
-    if positive:
-        return int(random.uniform(time, time + (time * abs(variance) / 100.0)))
-    else:
-        return max(
-            0,
-            int(
-                random.uniform(
-                    time - time * abs(variance) / 100.0,
-                    time + time * abs(variance) / 100.0,
-                )
-            ),
+    min_variance, max_variance = variance
+    return int(
+        random.uniform(
+            time + (time * abs(min_variance) / 100.0),
+            time + (time * abs(max_variance) / 100.0),
         )
+    )
 
 
 def log_statistics(data, logger: logging.Logger, offset: Optional[str] = "    "):
