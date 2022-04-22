@@ -326,11 +326,4 @@ def test_simulator_handle_event():
         ),
         task_graph=TaskGraph(),
     )
-    assert len(simulator._event_queue) == 5, "Incorrect length of EventQueue."
-    assert planning_task.state == TaskState.RUNNING, "Wrong task state."
-    assert (
-        len(worker_pool.get_placed_tasks()) == 1
-    ), "Incorrect number of placed tasks on WorkerPool."
-    assert (
-        worker_pool.get_placed_tasks()[0] == planning_task
-    ), "Incorrect task placed on the WorkerPool."
+    assert len(simulator._event_queue) == 6, "Incorrect length of EventQueue."

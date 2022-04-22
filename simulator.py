@@ -1,6 +1,7 @@
 import heapq
 import sys
 from enum import Enum
+from functools import total_ordering
 from operator import attrgetter
 from typing import Optional, Sequence, Type
 
@@ -12,15 +13,24 @@ from workers import WorkerPool, WorkerPools
 from workload import JobGraph, Resource, Resources, Task, TaskGraph
 
 
+@total_ordering
 class EventType(Enum):
     """Represents the different Events that a simulator has to simulate."""
 
-    SCHEDULER_START = 0  # Requires the simulator to invoke the scheduler.
-    SCHEDULER_FINISHED = 1  # Signifies the end of the scheduler loop.
-    TASK_RELEASE = 2  # Ask the simulator to release the task.
-    TASK_FINISHED = 3  # Notify the simulator of the end of a task.
-    SIMULATOR_START = 4  # Signify the start of the simulator loop.
-    SIMULATOR_END = 5  # Signify the end of the simulator loop.
+    SIMULATOR_START = 0  # Signify the start of the simulator loop.
+    TASK_FINISHED = 1  # Notify the simulator of the end of a task.
+    TASK_PREEMPT = 2  # Ask the simulator to preempt a task.
+    TASK_MIGRATION = 3  # Ask the simulator to migrate a task.
+    TASK_PLACEMENT = 4  # Ask the simulator to place a task.
+    TASK_RELEASE = 5  # Ask the simulator to release the task.
+    SCHEDULER_START = 6  # Requires the simulator to invoke the scheduler.
+    SCHEDULER_FINISHED = 7  # Signifies the end of the scheduler loop.
+    SIMULATOR_END = 8  # Signify the end of the simulator loop.
+
+    def __lt__(self, other):
+        # This method is used to order events in the event queue. We prioritize
+        # events that first free resources.
+        return self.value < other.value
 
 
 class Event(object):
@@ -38,30 +48,33 @@ class Event(object):
         and no associated task is provided.
     """
 
-    def __init__(self, event_type: EventType, time: int, task: Optional[Task] = None):
-        if (
-            event_type == EventType.TASK_RELEASE
-            or event_type == EventType.TASK_FINISHED
-        ):
+    def __init__(
+        self,
+        event_type: EventType,
+        time: int,
+        task: Optional[Task] = None,
+        placement: Optional[str] = None,
+    ):
+        if event_type in [
+            EventType.TASK_RELEASE,
+            EventType.TASK_PLACEMENT,
+            EventType.TASK_PREEMPT,
+            EventType.TASK_MIGRATION,
+            EventType.TASK_FINISHED,
+        ]:
             if task is None:
-                raise ValueError(f"No associated task provided with {event_type}")
+                raise ValueError(f"No task provided with {event_type}")
+            if event_type in [EventType.TASK_PLACEMENT, EventType.TASK_MIGRATION]:
+                if placement is None:
+                    raise ValueError(f"No placement provided with {event_type}")
         self._event_type = event_type
         self._time = time
         self._task = task
+        self._placement = placement
 
     def __lt__(self, other):
         if self.time == other.time:
-            if (
-                self._event_type == EventType.TASK_FINISHED
-                and other._event_type != EventType.TASK_FINISHED
-            ):
-                return True
-            if (
-                self._event_type == EventType.TASK_RELEASE
-                and other._event_type != EventType.TASK_FINISHED
-                and other._event_type != EventType.TASK_RELEASE
-            ):
-                return True
+            return self.event_type < other.event_type
         return self.time < other.time
 
     def __str__(self):
@@ -86,6 +99,10 @@ class Event(object):
     @property
     def task(self) -> Optional[Task]:
         return self._task
+
+    @property
+    def placement(self) -> Optional[str]:
+        return self._placement
 
 
 class EventQueue(object):
@@ -286,6 +303,217 @@ class Simulator(object):
                 if self.__handle_event(self._event_queue.next(), task_graph):
                     break
 
+    def __handle_scheduler_start(self, event: Event, task_graph: TaskGraph):
+        # Log the required CSV information.
+        currently_placed_tasks = []
+        for worker_pool in self._worker_pools.values():
+            currently_placed_tasks.extend(worker_pool.get_placed_tasks())
+        schedulable_tasks = task_graph.get_schedulable_tasks(
+            event.time,
+            self._scheduler.scheduling_horizon,
+            self._scheduler.preemptive,
+        )
+        self._csv_logger.debug(
+            f"{event.time},SCHEDULER_START,{len(schedulable_tasks)},"
+            f"{len(currently_placed_tasks)}"
+        )
+
+        # Execute the scheduler, and insert an event notifying the
+        # end of the scheduler into the loop.
+        self._last_scheduler_start_time = event.time
+        self._next_scheduler_event = None
+        self._logger.info(
+            f"[{event.time}] Running the scheduler with "
+            f"{len(schedulable_tasks)} schedulable tasks and "
+            f"{len(currently_placed_tasks)} tasks already placed across "
+            f"{len(self._worker_pools)} worker pools."
+        )
+        sched_finished_event = self.__run_scheduler(event, task_graph)
+        self._event_queue.add_event(sched_finished_event)
+        self._logger.info(
+            f"[{event.time}] Added {sched_finished_event} to the event queue."
+        )
+
+    def __handle_scheduler_finish(self, event: Event, task_graph: TaskGraph):
+        # Place the tasks on the assigned worker pool, and reset the
+        # available events to the tasks that could not be placed.
+        self._logger.info(
+            f"[{event.time}] Finished executing the scheduler initiated at "
+            f"{self._last_scheduler_start_time}. Placing tasks."
+        )
+
+        # Log the required CSV information.
+        num_placed = len(
+            list(filter(lambda p: p[1] is not None, self._last_task_placement))
+        )
+        num_unplaced = len(self._last_task_placement) - num_placed
+        self._csv_logger.debug(
+            f"{event.time},SCHEDULER_FINISHED,"
+            f"{event.time - self._last_scheduler_start_time},"
+            f"{num_placed},{num_unplaced}"
+        )
+
+        for task, placement, start_time in self._last_task_placement:
+            if task.is_complete():
+                # Task completd before the scheduler finished.
+                continue
+            if placement is None:
+                if task.worker_pool_id:
+                    self._event_queue.add_event(
+                        Event(
+                            event_type=EventType.TASK_PREEMPT,
+                            time=max(start_time, event.time),
+                            task=task,
+                        )
+                    )
+                else:
+                    # Task was not placed.
+                    self._csv_logger.debug(
+                        f"{event.time},TASK_SKIP,{task.name},{task.timestamp},{task.id}"
+                    )
+                    self._logger.warning(f"[{event.time}] Failed to place {task}")
+            elif task.worker_pool_id == placement:
+                # Task remained on the same worker pool.
+                pass
+            elif task.worker_pool_id is None:
+                self._event_queue.add_event(
+                    Event(
+                        event_type=EventType.TASK_PLACEMENT,
+                        time=max(start_time, event.time),
+                        task=task,
+                        placement=placement,
+                    )
+                )
+            else:
+                self._event_queue.add_event(
+                    Event(
+                        event_type=EventType.TASK_MIGRATION,
+                        time=max(start_time, event.time),
+                        task=task,
+                        placement=placement,
+                    )
+                )
+
+        # Now that all the tasks are placed, log the worker resource utilization.
+        self.__log_utilization(event.time)
+
+        # Reset the available tasks and the last task placement.
+        self._last_task_placement = []
+
+        # The scheduler has finished its execution, insert an event for the next
+        # invocation of the scheduler.
+        next_sched_event = self.__get_next_scheduler_event(
+            event,
+            task_graph,
+            self._scheduler_frequency,
+            self._last_scheduler_start_time,
+            self._loop_timeout,
+        )
+        self._event_queue.add_event(next_sched_event)
+        self._logger.info(
+            f"[{event.time}] Added {next_sched_event} to the event queue."
+        )
+
+    def __handle_task_release(self, event: Event):
+        # Release a task for the scheduler.
+        self._logger.info(
+            f"[{self._simulator_time}] Added the task from "
+            f"{event} to the released tasks."
+        )
+        self._csv_logger.debug(
+            f"{event.time},TASK_RELEASE,{event.task.name},"
+            f"{event.task.timestamp},{event.task.release_time},"
+            f"{event.task.runtime},{event.task.deadline},{event.task.id}"
+        )
+        # If we are not in the midst of a scheduler invocation and next
+        # scheduled invocation is too late, then bring the invocation sooner
+        # (event time + scheduler_delay), and re-heapify the event queue.
+        if self._next_scheduler_event:
+            self._next_scheduler_event._time = min(
+                self._next_scheduler_event.time, event.time + self._scheduler_delay
+            )
+            self._event_queue.reheapify()
+
+    def __handle_task_finished(self, event: Event, task_graph: TaskGraph):
+        self._finished_tasks += 1
+        self._csv_logger.debug(
+            f"{event.time},TASK_FINISHED,{event.task.name},{event.task.timestamp},"
+            f"{event.task.completion_time},{event.task.deadline},{event.task.id}"
+        )
+
+        # Log if the task missed its deadline or not.
+        if event.time > event.task.deadline:
+            self._missed_deadlines += 1
+            self._csv_logger.debug(
+                f"{event.time},MISSED_DEADLINE,{event.task.name},"
+                f"{event.task.timestamp},{event.task.deadline},{event.task.id}"
+            )
+
+        # The given task has finished execution, unlock dependencies.
+        new_tasks = task_graph.notify_task_completion(event.task, event.time)
+        self._logger.info(
+            f"[{event.time}] Notified the task graph of the completion of "
+            f"{event.task}, and received {len(new_tasks)} new tasks."
+        )
+
+        # Add events corresponding to the dependencies.
+        for index, task in enumerate(new_tasks, start=1):
+            event = Event(
+                event_type=EventType.TASK_RELEASE, time=task.release_time, task=task
+            )
+            self._event_queue.add_event(event)
+            self._logger.info(
+                f"[{event.time}] ({index}/{len(new_tasks)}) "
+                f"Added {event} for {task} to the event queue."
+            )
+
+    def __handle_task_preempt(self, event: Event, task_graph: TaskGraph):
+        task = event.task
+        self._csv_logger.debug(
+            f"{event.time},TASK_PREEMPT,{task.name},{task.timestamp},{task.id}"
+        )
+        worker_pool = self._worker_pools[task.worker_pool_id]
+        worker_pool.remove_task(task)
+        task.preempt(event.time)
+
+    def __handle_task_placement(self, event: Event, task_graph: TaskGraph):
+        task = event.task
+        if not task.is_ready_to_run():
+            # TODO: We might want to cache this placement and apply it when the
+            # task is released.
+            self._csv_logger.debug(
+                f"{event.time},TASK_NOT_READY,{task.name},{task.timestamp},"
+                f"{task.id},{event.placement}"
+            )
+            return
+        self._csv_logger.debug(
+            f"{event.time},TASK_PLACEMENT,{task.name},{task.timestamp},"
+            f"{task.id},{event.placement}"
+        )
+        worker_pool = self._worker_pools[event.placement]
+        # Initialize the task at the given placement time, and place it on
+        # the WorkerPool.
+        task.start(event.time, self._runtime_variance)
+        worker_pool.place_task(task)
+        self._logger.info(f"[{event.time}] Placed {task} on {worker_pool}")
+
+    def __handle_task_migration(self, event: Event, task_graph: TaskGraph):
+        task = event.task
+        self._csv_logger.debug(
+            f"{event.time},TASK_MIGRATED,{task.name},{task.timestamp},{task.id},"
+            f"{task.worker_pool_id},{event.placement}"
+        )
+        prev_worker_pool = self._worker_pools[task.worker_pool_id]
+        prev_worker_pool.remove_task(task)
+        task.preempt(event.time)
+        task.resume(event.time)
+        cur_worker_pool = self._worker_pools[event.placement]
+        cur_worker_pool.place_task(task)
+        self._logger.info(
+            f"[{event.time}] Migrated {task} from {prev_worker_pool} to "
+            f"{cur_worker_pool}"
+        )
+
     def __handle_event(self, event: Event, task_graph: TaskGraph) -> bool:
         """Handles the next event from the EventQueue.
 
@@ -326,186 +554,22 @@ class Simulator(object):
             self._logger.info(f"Ending the simulator loop at time {event.time}")
             return True
         elif event.event_type == EventType.TASK_RELEASE:
-            # Release a task for the scheduler.
-            self._logger.info(
-                f"[{self._simulator_time}] Added the task from "
-                f"{event} to the released tasks."
-            )
-            self._csv_logger.debug(
-                f"{event.time},TASK_RELEASE,{event.task.name},"
-                f"{event.task.timestamp},{event.task.release_time},"
-                f"{event.task.runtime},{event.task.deadline},{event.task.id}"
-            )
-            # If we are not in the midst of a scheduler invocation and next
-            # scheduled invocation is too late, then bring the invocation sooner
-            # (event time + scheduler_delay), and re-heapify the event queue.
-            if self._next_scheduler_event:
-                self._next_scheduler_event._time = min(
-                    self._next_scheduler_event.time, event.time + self._scheduler_delay
-                )
-                self._event_queue.reheapify()
+            self.__handle_task_release(event)
         elif event.event_type == EventType.TASK_FINISHED:
-            self._finished_tasks += 1
-            self._csv_logger.debug(
-                f"{event.time},TASK_FINISHED,{event.task.name},"
-                f"{event.task.timestamp},{event.task.completion_time},"
-                f"{event.task.deadline},{event.task.id}"
-            )
-
-            # Log if the task missed its deadline or not.
-            if event.time > event.task.deadline:
-                self._missed_deadlines += 1
-                self._csv_logger.debug(
-                    f"{event.time},MISSED_DEADLINE,{event.task.name},"
-                    f"{event.task.timestamp},{event.task.deadline},{event.task.id}"
-                )
-
-            # The given task has finished execution, unlock dependencies.
-            new_tasks = task_graph.notify_task_completion(event.task, event.time)
-            self._logger.info(
-                f"[{event.time}] Notified the task graph of the completion of "
-                f"{event.task}, and received {len(new_tasks)} new tasks."
-            )
-
-            # Add events corresponding to the dependencies.
-            for index, task in enumerate(new_tasks, start=1):
-                event = Event(
-                    event_type=EventType.TASK_RELEASE, time=task.release_time, task=task
-                )
-                self._event_queue.add_event(event)
-                self._logger.info(
-                    f"[{event.time}] ({index}/{len(new_tasks)}) "
-                    f"Added {event} for {task} to the event queue."
-                )
+            self.__handle_task_finished(event, task_graph)
+        elif event.event_type == EventType.TASK_PREEMPT:
+            self.__handle_task_preempt(event, task_graph)
+        elif event.event_type == EventType.TASK_PLACEMENT:
+            self.__handle_task_placement(event, task_graph)
+        elif event.event_type == EventType.TASK_MIGRATION:
+            self.__handle_task_migration(event, task_graph)
         elif event.event_type == EventType.SCHEDULER_START:
-            # Log the required CSV information.
-            currently_placed_tasks = []
-            for worker_pool in self._worker_pools.values():
-                currently_placed_tasks.extend(worker_pool.get_placed_tasks())
-            schedulable_tasks = task_graph.get_schedulable_tasks(
-                event.time,
-                self._scheduler.scheduling_horizon,
-                self._scheduler.preemptive,
-            )
-            self._csv_logger.debug(
-                f"{event.time},SCHEDULER_START,{len(schedulable_tasks)},"
-                f"{len(currently_placed_tasks)}"
-            )
-
-            # Execute the scheduler, and insert an event notifying the
-            # end of the scheduler into the loop.
-            self._last_scheduler_start_time = event.time
-            self._next_scheduler_event = None
-            self._logger.info(
-                f"[{event.time}] Running the scheduler with "
-                f"{len(schedulable_tasks)} schedulable tasks and "
-                f"{len(currently_placed_tasks)} tasks already placed across "
-                f"{len(self._worker_pools)} worker pools."
-            )
-            sched_finished_event = self.__run_scheduler(event, task_graph)
-            self._event_queue.add_event(sched_finished_event)
-            self._logger.info(
-                f"[{event.time}] Added {sched_finished_event} to the event queue."
-            )
+            self.__handle_scheduler_start(event, task_graph)
         elif event.event_type == EventType.SCHEDULER_FINISHED:
-            # Place the tasks on the assigned worker pool, and reset the
-            # available events to the tasks that could not be placed.
-            self._logger.info(
-                f"[{event.time}] Finished executing the scheduler initiated at "
-                f"{self._last_scheduler_start_time}. Placing tasks."
-            )
-
-            # Log the required CSV information.
-            num_placed = len(
-                list(filter(lambda p: p[1] is not None, self._last_task_placement))
-            )
-            num_unplaced = len(self._last_task_placement) - num_placed
-            self._csv_logger.debug(
-                f"{event.time},SCHEDULER_FINISHED,"
-                f"{event.time - self._last_scheduler_start_time},"
-                f"{num_placed},{num_unplaced}"
-            )
-
-            # Process all the task placements.
-            self.__handle_task_placements(event.time)
-
-            # Now that all the tasks are placed, log the worker resource
-            # utilization.
-            self.__log_utilization(event.time)
-
-            # Reset the available tasks and the last task placement.
-            self._last_task_placement = []
-
-            # The scheduler has finished its execution, insert an event for the next
-            # invocation of the scheduler.
-            next_sched_event = self.__get_next_scheduler_event(
-                event,
-                task_graph,
-                self._scheduler_frequency,
-                self._last_scheduler_start_time,
-                self._loop_timeout,
-            )
-            self._event_queue.add_event(next_sched_event)
-            self._logger.info(
-                f"[{event.time}] Added {next_sched_event} to the event queue."
-            )
+            self.__handle_scheduler_finish(event, task_graph)
         else:
             raise ValueError(f"[{event.time}] Retrieved event of unknown type: {event}")
         return False
-
-    def __handle_task_placements(self, sim_time):
-        for task, placement, start_time in self._last_task_placement:
-            if task.is_complete():
-                # Task completd before the scheduler finished.
-                continue
-            if placement is None:
-                if task.worker_pool_id:
-                    # The task was preempted.
-                    self._csv_logger.debug(
-                        f"{sim_time},TASK_PREEMPT,{task.name},{task.timestamp},"
-                        f"{task.id}"
-                    )
-                    worker_pool = self._worker_pools[task.worker_pool_id]
-                    worker_pool.remove_task(task)
-                    task.preempt(sim_time)
-                else:
-                    # Task was not placed.
-                    self._csv_logger.debug(
-                        f"{sim_time},TASK_SKIP,{task.name},{task.timestamp},"
-                        f"{task.id}"
-                    )
-                    self._logger.warning(f"[{sim_time}] Failed to place {task}")
-            elif task.worker_pool_id == placement:
-                # Task remained on the same worker pool.
-                pass
-            elif task.worker_pool_id is None:
-                # Task is newly placed.
-                self._csv_logger.debug(
-                    f"{sim_time},TASK_PLACEMENT,{task.name},{task.timestamp},"
-                    f"{task.id},{placement}"
-                )
-                worker_pool = self._worker_pools[placement]
-                # Initialize the task at the given placement time, and place it on
-                # the WorkerPool.
-                task.start(sim_time, self._runtime_variance)
-                worker_pool.place_task(task)
-                self._logger.info(f"[{sim_time}] Placed {task} on {worker_pool}")
-            else:
-                # Task was migrated.
-                self._csv_logger.debug(
-                    f"{sim_time},TASK_MIGRATED,{task.name},{task.timestamp},{task.id},"
-                    f"{task.worker_pool_id},{placement}"
-                )
-                prev_worker_pool = self._worker_pools[task.worker_pool_id]
-                prev_worker_pool.remove_task(task)
-                task.preempt(sim_time)
-                task.resume(sim_time)
-                cur_worker_pool = self._worker_pools[placement]
-                cur_worker_pool.place_task(task)
-                self._logger.info(
-                    f"[{sim_time}] Migrated {task} from {prev_worker_pool} to "
-                    f"{cur_worker_pool}"
-                )
 
     def __step(self, step_size: int = 1):
         """Advances the clock by the given `step_size`.

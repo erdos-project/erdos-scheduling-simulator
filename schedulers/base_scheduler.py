@@ -40,7 +40,7 @@ class BaseScheduler(object):
         task_graph: TaskGraph,
         worker_pools: "WorkerPools",  # noqa: F821
         _flags: Optional["absl.flags"] = None,
-    ) -> (int, Sequence[Tuple[Task, str]]):
+    ) -> (int, Sequence[Tuple[Task, str, int]]):
         """Abstract method to be implemented by derived classes to allow the
         scheduling of tasks.
 

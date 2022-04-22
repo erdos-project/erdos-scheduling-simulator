@@ -309,6 +309,14 @@ class Task(object):
         """
         return self.state == TaskState.EVICTED or self.state == TaskState.COMPLETED
 
+    def is_ready_to_run(self) -> bool:
+        """Check if the task can be placed.
+
+        Returns:
+            `True` if the task is ready to start, `False` otherwise.
+        """
+        return self.state == TaskState.RELEASED or self.state == TaskState.PREEMPTED
+
     def __str__(self):
         if self.state == TaskState.VIRTUAL:
             if self.release_time == -1:
