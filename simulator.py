@@ -359,6 +359,7 @@ class Simulator(object):
                 continue
             if placement is None:
                 if task.worker_pool_id:
+                    self._logger.info(f"[{event.time}] Task {task} was preempted")
                     self._event_queue.add_event(
                         Event(
                             event_type=EventType.TASK_PREEMPT,
