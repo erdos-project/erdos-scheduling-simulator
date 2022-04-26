@@ -83,27 +83,28 @@ class BaseScheduler(object):
     def _verify_schedule(
         self, worker_pools: WorkerPools, task_graph: TaskGraph, placements
     ):
-        # Check if each task's start time is greater than its release time.
-        assert all(
-            [
+        placed_tasks = [
+            (task, placement, start_time)
+            for task, placement, start_time in placements
+            if placement is not None
+        ]
+        for task, placement, start_time in placed_tasks:
+            # Ensure that the task didn't start before it was released.
+            assert (
                 start_time >= task.release_time
-                for task, placement, start_time in placements
-            ]
-        ), "Some start times are less than release times"
-
-        if self._enforce_deadlines:
-            # Check if all tasks finished before the deadline.
-            assert all(
-                [
-                    (task.deadline >= start_time + task.runtime)
-                    for task, placement, start_time in placements
-                ]
-            ), "Some tasks did not finish before their deadline"
+            ), f"Task {task} start time {start_time} is less than the release time"
+            if self._enforce_deadlines:
+                # Check if the task finished before the deadline.
+                assert (
+                    task.deadline >= start_time + task.runtime
+                ), f"Task {task} did not finish before its deadline"
 
         # Check if task dependencies are satisfied.
-        start_times = {task.id: start_time for task, _, start_time in placements}
-        for task, placement, start_time in placements:
+        start_times = {task.id: start_time for task, _, start_time in placed_tasks}
+        for task, placement, start_time in placed_tasks:
             children = task_graph.get_children(task)
+            # Check that the children of the placed task weren't scheduled to
+            # start before the task completes.
             for child_task in children:
                 if child_task.id in start_times:
                     assert (
@@ -111,16 +112,12 @@ class BaseScheduler(object):
                     ), f"Task dependency not valid{task.id}->{child_task.id}"
 
         # Check if resource requirements are satisfied.
-        placed_tasks = []
-        for task, placement, start_time in placements:
-            if placement is not None:
-                placed_tasks.append((start_time, placement, task))
-        placed_tasks.sort(key=lambda e: e[0])
+        placed_tasks.sort(key=lambda e: e[2])
         wps = deepcopy(worker_pools)
         id_to_wp = {wp.id: wp for wp in wps._wps}
         # A heap storing the task in order of their completion time.
         task_completion = []
-        for start_time, wp_id, task in placed_tasks:
+        for task, wp_id, start_time in placed_tasks:
             # Remove task that finished before start_time.
             while len(task_completion) > 0 and start_time >= task_completion[0][0]:
                 (end_time, wp_id, task) = heapq.heappop(task_completion)
