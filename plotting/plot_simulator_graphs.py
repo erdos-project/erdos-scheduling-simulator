@@ -18,21 +18,9 @@ flags.DEFINE_list(
 flags.DEFINE_list(
     "csv_labels", ["test_scheduler"], "List of labels to use for the experiment logs"
 )
+
+# Enumerate the different kinds of plots.
 flags.DEFINE_bool("plot_scheduler_runtime", False, "Plot scheduling runtime")
-flags.DEFINE_bool("plot_utilization", False, "Plot resource utilization")
-flags.DEFINE_bool("plot_task_placement_stats", False, "Plot task placement stats")
-flags.DEFINE_bool("plot_task_slack", False, "Plot task slack")
-flags.DEFINE_bool("plot_task_placement_delay", False, "Plot task placement delay")
-flags.DEFINE_bool(
-    "plot_inter_task_time",
-    False,
-    "Plot histogram of time difference between task releases",
-)
-flags.DEFINE_string(
-    "utilization_timeline_plot_name",
-    "utilization_bar_chart.png",
-    "The filename of the utilization timeline plot",
-)
 flags.DEFINE_string(
     "scheduler_runtime_timeline_plot_name",
     "scheduler_runtime_timeline.png",
@@ -43,18 +31,42 @@ flags.DEFINE_string(
     "scheduler_runtime_cdf.png",
     "The filename of the scheduler runtime CDF plot",
 )
+
+flags.DEFINE_bool("plot_utilization", False, "Plot resource utilization")
+flags.DEFINE_string(
+    "utilization_timeline_plot_name",
+    "utilization_bar_chart.png",
+    "The filename of the utilization timeline plot",
+)
+
+flags.DEFINE_bool("plot_task_placement_stats", False, "Plot task placement stats")
 flags.DEFINE_string(
     "task_placement_bar_chart_plot_name",
     "tasks_placed_bar_chart.png",
     "The filename of the task placement bar char plot",
 )
+
+flags.DEFINE_bool("plot_task_slack", False, "Plot task slack")
 flags.DEFINE_string(
     "task_slack_plot_name", "task_slack.png", "The filename of the task slack plot"
 )
+
+flags.DEFINE_bool("plot_task_placement_delay", False, "Plot task placement delay")
 flags.DEFINE_string(
     "task_placement_delay_plot_name",
     "task_placement_delay.png",
     "The filename of the task start delay plot",
+)
+
+flags.DEFINE_bool(
+    "plot_inter_task_time",
+    False,
+    "Plot histogram of time difference between task releases",
+)
+flags.DEFINE_string(
+    "inter_task_time_plot_name",
+    "inter_task_time.png",
+    "The filename of the inter-task time plot.",
 )
 
 matplotlib.rcParams.update({"font.size": 16, "figure.autolayout": True})
@@ -69,7 +81,12 @@ logger = setup_logging("plotting")
 
 
 def plot_utilization(
-    plotter, csv_file, scheduler_name, figure_size=(14, 10), bar_width=1.0
+    plotter,
+    scheduler_csv_file,
+    scheduler_name,
+    output,
+    figure_size=(14, 10),
+    bar_width=1.0,
 ):
     # Plotting defaults.
     # hatches = ['//', '--', '**']
@@ -150,9 +167,7 @@ def plot_utilization(
         for resource_type in resource_types
     ]
     plt.legend(handles=legend_elements, framealpha=0)
-    plt.savefig(
-        scheduler_name + "_" + FLAGS.utilization_timeline_plot_name, bbox_inches="tight"
-    )
+    plt.savefig(output, bbox_inches="tight")
 
 
 def plot_scheduler_runtime(plotter, figure_size=(14, 10)):
@@ -206,7 +221,9 @@ def plot_scheduler_runtime(plotter, figure_size=(14, 10)):
     plt.savefig(FLAGS.scheduler_runtime_cdf_plot_name, bbox_inches="tight")
 
 
-def plot_task_placement_stats(plotter, csv_file, scheduler_name, figure_size=(14, 10)):
+def plot_task_placement_stats(
+    plotter, scheduler_csv_file, scheduler_name, output, figure_size=(14, 10)
+):
     scheduler_invocations = plotter.get_scheduler_invocations(csv_file)
     # Calculate the heights of placed and unplaced tasks.
     placed_task_heights = [
@@ -263,13 +280,12 @@ def plot_task_placement_stats(plotter, csv_file, scheduler_name, figure_size=(14
         Patch(facecolor="red", label=f"{scheduler_name} Unplaced Tasks"),
     ]
     plt.legend(handles=legend_elements, framealpha=0)
-    plt.savefig(
-        scheduler_name + "_" + FLAGS.task_placement_bar_chart_plot_name,
-        bbox_inches="tight",
-    )
+    plt.savefig(output, bbox_inches="tight")
 
 
-def plot_inter_task_time(plotter, csv_file, scheduler_name, figure_size=(14, 10)):
+def plot_inter_task_time(
+    plotter, scheduler_csv_file, scheduler_name, output, figure_size=(14, 10)
+):
     plt.figure(figsize=figure_size)
     tasks = plotter.get_tasks(csv_file)
     task_map = defaultdict(list)
@@ -293,10 +309,10 @@ def plot_inter_task_time(plotter, csv_file, scheduler_name, figure_size=(14, 10)
     plt.xlabel("Inter-Task Time [ms]", fontsize=axes_fontsize)
     plt.hist(inter_release_times, label=labels, density=False, bins=100)
     plt.legend(frameon=False)
-    plt.savefig(scheduler_name + "_inter_task_time.png", bbox_inches="tight")
+    plt.savefig(output, bbox_inches="tight")
 
 
-def plot_task_slack(plotter, csv_file, scheduler_name, figure_size=(14, 10)):
+def plot_task_slack(plotter, csv_file, scheduler_name, output, figure_size=(14, 10)):
     # Plot a histogram of the slack from the deadline for the tasks.
     plt.figure(figsize=figure_size)
     tasks = plotter.get_tasks(csv_file)
@@ -321,7 +337,7 @@ def plot_task_slack(plotter, csv_file, scheduler_name, figure_size=(14, 10)):
         bins=100,
     )
     plt.legend(frameon=False)
-    plt.savefig(scheduler_name + "_" + FLAGS.task_slack_plot_name, bbox_inches="tight")
+    plt.savefig(output, bbox_inches="tight")
 
 
 def plot_task_placement_delay(plotter, figure_size=(14, 10)):
@@ -371,8 +387,9 @@ def task_stats(tasks):
 def main(argv):
     assert len(FLAGS.csv_files) == len(
         FLAGS.csv_labels
-    ), "Mismatch between lenght of csv files and labels flags."
+    ), "Mismatch between length of csv files and labels flags."
     figure_size = (14, 10)
+
     # Load the events from the CSV file into the Plotter class.
     plotter = Plotter(csv_paths=FLAGS.csv_files)
 
@@ -388,17 +405,39 @@ def main(argv):
             f"Number of missed deadlines for {csv_file}: {len(missed_deadline_events)}"
         )
 
-    for i, csv_file in enumerate(FLAGS.csv_files):
+    for scheduler_csv_file, scheduler_label in zip(FLAGS.csv_files, FLAGS.csv_labels):
         if FLAGS.plot_utilization:
-            plot_utilization(plotter, csv_file, FLAGS.csv_labels[i], figure_size)
+            plot_utilization(
+                plotter,
+                scheduler_csv_file,
+                scheduler_label,
+                f"{scheduler_label}_{FLAGS.utilization_timeline_plot_name}",
+                figure_size,
+            )
         if FLAGS.plot_task_placement_stats:
             plot_task_placement_stats(
-                plotter, csv_file, FLAGS.csv_labels[i], figure_size
+                plotter,
+                scheduler_csv_file,
+                scheduler_label,
+                f"{scheduler_label}_{FLAGS.task_placement_bar_chart_plot_name}",
+                figure_size,
             )
         if FLAGS.plot_task_slack:
-            plot_task_slack(plotter, csv_file, FLAGS.csv_labels[i], figure_size)
+            plot_task_slack(
+                plotter,
+                scheduler_csv_file,
+                scheduler_label,
+                f"{scheduler_label}_{FLAGS.task_slack_plot_name}",
+                figure_size,
+            )
         if FLAGS.plot_inter_task_time:
-            plot_inter_task_time(plotter, csv_file, FLAGS.csv_labels[i], figure_size)
+            plot_inter_task_time(
+                plotter,
+                scheduler_csv_file,
+                scheduler_label,
+                f"{scheduler_label}_{FLAGS.inter_task_time_plot_name}",
+                figure_size,
+            )
 
     if FLAGS.plot_scheduler_runtime:
         plot_scheduler_runtime(plotter, figure_size)
