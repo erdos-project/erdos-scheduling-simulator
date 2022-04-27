@@ -94,7 +94,7 @@ def plot_utilization(
     resource_color = {"GPU": "red", "CPU": "green"}
 
     # Worker Pool statistics
-    worker_pool_stats = plotter.get_worker_pool_utilizations(csv_file)
+    worker_pool_stats = plotter.get_worker_pool_utilizations(scheduler_csv_file)
 
     # Find all the resource types in the system.
     resource_types = set()
@@ -224,7 +224,7 @@ def plot_scheduler_runtime(plotter, figure_size=(14, 10)):
 def plot_task_placement_stats(
     plotter, scheduler_csv_file, scheduler_name, output, figure_size=(14, 10)
 ):
-    scheduler_invocations = plotter.get_scheduler_invocations(csv_file)
+    scheduler_invocations = plotter.get_scheduler_invocations(scheduler_csv_file)
     # Calculate the heights of placed and unplaced tasks.
     placed_task_heights = [
         scheduler_invocation.placed_tasks
@@ -287,7 +287,7 @@ def plot_inter_task_time(
     plotter, scheduler_csv_file, scheduler_name, output, figure_size=(14, 10)
 ):
     plt.figure(figsize=figure_size)
-    tasks = plotter.get_tasks(csv_file)
+    tasks = plotter.get_tasks(scheduler_csv_file)
     task_map = defaultdict(list)
     for task in tasks:
         task_map[task.name].append(task)
