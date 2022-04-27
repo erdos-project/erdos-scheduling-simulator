@@ -69,6 +69,17 @@ flags.DEFINE_string(
     "The filename of the inter-task time plot.",
 )
 
+flags.DEFINE_bool(
+    "plot_missed_deadlines",
+    False,
+    "Plots statistics about the missed deadlines from each invocation.",
+)
+flags.DEFINE_string(
+    "missed_deadline_plot_name",
+    "missed_deadline.png",
+    "The filename of the missed deadline plot.",
+)
+
 matplotlib.rcParams.update({"font.size": 16, "figure.autolayout": True})
 matplotlib.rcParams["xtick.labelsize"] = 16
 matplotlib.rcParams["ytick.labelsize"] = 16
@@ -384,6 +395,22 @@ def task_stats(tasks):
         )
 
 
+def plot_missed_deadlines(
+    plotter, scheduler_csv_file, scheduler_name, output, figure_size=(14, 10)
+):
+    # Plot the number of missed deadlines by the method name.
+    plt.figure(figsize=figure_size)
+    missed_deadlines = plotter.get_missed_deadline_events(scheduler_csv_file)
+
+    # Group the missed deadlines by their task name.
+    missed_deadline_by_task_name = defaultdict(int)
+    for _, task in missed_deadlines:
+        missed_deadline_by_task_name[task.name] += 1
+
+    plt.bar(missed_deadline_by_task_name.keys(), missed_deadline_by_task_name.values())
+    plt.savefig(output, bbox_inches="tight")
+
+
 def main(argv):
     assert len(FLAGS.csv_files) == len(
         FLAGS.csv_labels
@@ -436,6 +463,14 @@ def main(argv):
                 scheduler_csv_file,
                 scheduler_label,
                 f"{scheduler_label}_{FLAGS.inter_task_time_plot_name}",
+                figure_size,
+            )
+        if FLAGS.plot_missed_deadlines:
+            plot_missed_deadlines(
+                plotter,
+                scheduler_csv_file,
+                scheduler_label,
+                f"{scheduler_label}_{FLAGS.missed_deadline_plot_name}",
                 figure_size,
             )
 
