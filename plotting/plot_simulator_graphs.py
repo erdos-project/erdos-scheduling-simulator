@@ -161,7 +161,6 @@ def plot_utilization(
     # }
 
     logger.debug("================== Resource Utilization ==================")
-    log_statistics(placed_task_heights, logger)
     for resource_type in resource_types:
         logger.debug("Utilization for {}".format(resource_type))
         log_statistics(resource_used_heights[resource_type], logger)
@@ -567,7 +566,7 @@ def plot_missed_deadlines(
     # Log the results.
     logger.debug("================== Inter-Task Time [ms] ==================")
     logger.debug(f"Tasks that match the regex: {task_name_regex}")
-    for task_name, missed_deadlines in missed_deadline_by_task_name.values():
+    for task_name, missed_deadlines in missed_deadline_by_task_name.items():
         logger.debug(f"{task_name}: {missed_deadlines}")
 
     if plot:
