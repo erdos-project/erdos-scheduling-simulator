@@ -564,7 +564,7 @@ def plot_missed_deadlines(
             missed_deadline_by_task_name[task.name] += 1
 
     # Log the results.
-    logger.debug("================== Inter-Task Time [ms] ==================")
+    logger.debug("==================  Missed Deadlines ==================")
     logger.debug(f"Tasks that match the regex: {task_name_regex}")
     for task_name, missed_deadlines in missed_deadline_by_task_name.items():
         logger.debug(f"{task_name}: {missed_deadlines}")
