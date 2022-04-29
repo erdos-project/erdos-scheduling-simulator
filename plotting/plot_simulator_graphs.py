@@ -1,3 +1,5 @@
+import os
+import re
 import sys
 from collections import defaultdict
 from operator import attrgetter
@@ -18,8 +20,18 @@ flags.DEFINE_list(
 flags.DEFINE_list(
     "csv_labels", ["test_scheduler"], "List of labels to use for the experiment logs"
 )
+flags.DEFINE_string("output_dir", ".", "The directory to output the graphs to.")
+
+# Enable the restriction of events to a particular regular expression.
+flags.DEFINE_string(
+    "task_name",
+    ".*",
+    "Regular expression that restricts the plots to the given tasks.",
+)
 
 # Enumerate the different kinds of plots.
+flags.DEFINE_bool("plot_all", False, "Plot all graphs.")
+
 flags.DEFINE_bool("plot_scheduler_runtime", False, "Plot scheduling runtime")
 flags.DEFINE_string(
     "scheduler_runtime_timeline_plot_name",
@@ -181,14 +193,21 @@ def plot_utilization(
     plt.savefig(output, bbox_inches="tight")
 
 
-def plot_scheduler_runtime(plotter, figure_size=(14, 10)):
+def plot_scheduler_runtime(
+    plotter,
+    scheduler_csv_files,
+    scheduler_labels,
+    timeline_output,
+    cdf_output,
+    figure_size=(14, 10),
+):
     # Retrieve the runtime of the scheduler invocations.
     logger.debug("================= Scheduler runtime [ms] =================")
     max_start_time = -sys.maxsize
     max_runtime = -sys.maxsize
     all_runtimes = []
     all_start_times = []
-    for csv_file in FLAGS.csv_files:
+    for csv_file in scheduler_csv_files:
         scheduler_invocations = plotter.get_scheduler_invocations(csv_file)
         runtimes = list(map(attrgetter("runtime"), scheduler_invocations))
         runtimes_ms = [runtime / 1000 for runtime in runtimes]
@@ -203,7 +222,7 @@ def plot_scheduler_runtime(plotter, figure_size=(14, 10)):
 
     # Plot a timelapse of the runtime of the scheduler.
     plt.figure(figsize=figure_size)
-    for i, label in enumerate(FLAGS.csv_labels):
+    for i, label in enumerate(scheduler_labels):
         plt.plot(
             all_start_times[i],
             all_runtimes[i],
@@ -215,12 +234,12 @@ def plot_scheduler_runtime(plotter, figure_size=(14, 10)):
     plt.xlabel("Timeline [ms]", fontsize=axes_fontsize)
     plt.ylabel("Scheduler Runtime [ms]", fontsize=axes_fontsize)
     plt.legend(frameon=False)
-    plt.savefig(FLAGS.scheduler_runtime_timeline_plot_name, bbox_inches="tight")
+    plt.savefig(timeline_output, bbox_inches="tight")
 
     # Plot the CDF of the runtime of the scheduler invocations.
 
     plt.figure(figsize=figure_size)
-    for i, label in enumerate(FLAGS.csv_labels):
+    for i, label in enumerate(scheduler_labels):
         count, bin_count = np.histogram(all_runtimes[i], bins=100)
         pdf = count / sum(count)
         cdf = np.cumsum(pdf)
@@ -229,13 +248,14 @@ def plot_scheduler_runtime(plotter, figure_size=(14, 10)):
     plt.xlabel("Scheduler Runtime [ms]", fontsize=axes_fontsize)
     plt.ylabel("CDF", fontsize=axes_fontsize)
     plt.legend(frameon=False)
-    plt.savefig(FLAGS.scheduler_runtime_cdf_plot_name, bbox_inches="tight")
+    plt.savefig(cdf_output, bbox_inches="tight")
 
 
 def plot_task_placement_stats(
     plotter, scheduler_csv_file, scheduler_name, output, figure_size=(14, 10)
 ):
     scheduler_invocations = plotter.get_scheduler_invocations(scheduler_csv_file)
+
     # Calculate the heights of placed and unplaced tasks.
     placed_task_heights = [
         scheduler_invocation.placed_tasks
@@ -295,13 +315,21 @@ def plot_task_placement_stats(
 
 
 def plot_inter_task_time(
-    plotter, scheduler_csv_file, scheduler_name, output, figure_size=(14, 10)
+    plotter,
+    task_name_regex,
+    scheduler_csv_file,
+    scheduler_name,
+    output,
+    figure_size=(14, 10),
 ):
     plt.figure(figsize=figure_size)
+
+    # Retrieve the tasks from the CSV file that match the given regular expression.
     tasks = plotter.get_tasks(scheduler_csv_file)
     task_map = defaultdict(list)
     for task in tasks:
-        task_map[task.name].append(task)
+        if re.match(task_name_regex, task.name):
+            task_map[task.name].append(task)
 
     inter_release_times = []
     labels = []
@@ -323,10 +351,23 @@ def plot_inter_task_time(
     plt.savefig(output, bbox_inches="tight")
 
 
-def plot_task_slack(plotter, csv_file, scheduler_name, output, figure_size=(14, 10)):
+def plot_task_slack(
+    plotter,
+    task_name_regex,
+    scheduler_csv_file,
+    scheduler_name,
+    output,
+    figure_size=(14, 10),
+):
     # Plot a histogram of the slack from the deadline for the tasks.
     plt.figure(figsize=figure_size)
-    tasks = plotter.get_tasks(csv_file)
+
+    # Retrieve the tasks that match the given regular expression.
+    tasks = []
+    for task in plotter.get_tasks(scheduler_csv_file):
+        if re.match(task_name_regex, task.name):
+            tasks.append(task)
+
     slack = [(task.deadline - task.completion_time) / 1000 for task in tasks]
     initial_slack = [
         (task.deadline - task.release_time - task.runtime) / 1000 for task in tasks
@@ -351,14 +392,16 @@ def plot_task_slack(plotter, csv_file, scheduler_name, output, figure_size=(14, 
     plt.savefig(output, bbox_inches="tight")
 
 
-def plot_task_placement_delay(plotter, figure_size=(14, 10)):
+def plot_task_placement_delay(
+    plotter, scheduler_csv_files, scheduler_labels, output, figure_size=(14, 10)
+):
     plt.figure(figsize=figure_size)
     logger.debug("================ Task placement delay [ms] ================")
     placement_delays = []
     min_delay = sys.maxsize
     max_delay = -sys.maxsize
-    plot_colors = [colors[label] for label in FLAGS.csv_labels]
-    for csv_file in FLAGS.csv_files:
+    plot_colors = [colors[label] for label in scheduler_labels]
+    for csv_file in scheduler_csv_files:
         task_placements = plotter.get_task_placements(csv_file)
         placement_delay = [
             (placement.simulator_time - placement.task.release_time) / 1000
@@ -377,11 +420,11 @@ def plot_task_placement_delay(plotter, figure_size=(14, 10)):
         placement_delays,
         density=False,
         bins=100,
-        label=FLAGS.csv_labels,
+        label=scheduler_labels,
         color=plot_colors,
     )
     plt.legend(frameon=False)
-    plt.savefig(FLAGS.task_placement_delay_plot_name, bbox_inches="tight")
+    plt.savefig(output, bbox_inches="tight")
 
 
 def task_stats(tasks):
@@ -396,16 +439,22 @@ def task_stats(tasks):
 
 
 def plot_missed_deadlines(
-    plotter, scheduler_csv_file, scheduler_name, output, figure_size=(14, 10)
+    plotter,
+    task_name_regex,
+    scheduler_csv_file,
+    scheduler_name,
+    output,
+    figure_size=(14, 10),
 ):
     # Plot the number of missed deadlines by the method name.
     plt.figure(figsize=figure_size)
     missed_deadlines = plotter.get_missed_deadline_events(scheduler_csv_file)
 
-    # Group the missed deadlines by their task name.
+    # Group the missed deadlines by their task name (if regex is matched).
     missed_deadline_by_task_name = defaultdict(int)
     for _, task in missed_deadlines:
-        missed_deadline_by_task_name[task.name] += 1
+        if re.match(task_name_regex, task.name):
+            missed_deadline_by_task_name[task.name] += 1
 
     plt.bar(missed_deadline_by_task_name.keys(), missed_deadline_by_task_name.values())
     plt.savefig(output, bbox_inches="tight")
@@ -415,6 +464,14 @@ def main(argv):
     assert len(FLAGS.csv_files) == len(
         FLAGS.csv_labels
     ), "Mismatch between length of csv files and labels flags."
+
+    try:
+        re.compile(FLAGS.task_name)
+    except re.error:
+        raise ValueError(
+            f"The regular expression for Task names: {FLAGS.task_name} is invalid."
+        )
+
     figure_size = (14, 10)
 
     # Load the events from the CSV file into the Plotter class.
@@ -433,51 +490,81 @@ def main(argv):
         )
 
     for scheduler_csv_file, scheduler_label in zip(FLAGS.csv_files, FLAGS.csv_labels):
-        if FLAGS.plot_utilization:
+        if FLAGS.plot_utilization or FLAGS.plot_all:
             plot_utilization(
                 plotter,
                 scheduler_csv_file,
                 scheduler_label,
-                f"{scheduler_label}_{FLAGS.utilization_timeline_plot_name}",
+                os.path.join(
+                    FLAGS.output_dir,
+                    f"{scheduler_label}_{FLAGS.utilization_timeline_plot_name}",
+                ),
                 figure_size,
             )
-        if FLAGS.plot_task_placement_stats:
+        if FLAGS.plot_task_placement_stats or FLAGS.plot_all:
             plot_task_placement_stats(
                 plotter,
                 scheduler_csv_file,
                 scheduler_label,
-                f"{scheduler_label}_{FLAGS.task_placement_bar_chart_plot_name}",
+                os.path.join(
+                    FLAGS.output_dir,
+                    f"{scheduler_label}_{FLAGS.task_placement_bar_chart_plot_name}",
+                ),
                 figure_size,
             )
-        if FLAGS.plot_task_slack:
+        if FLAGS.plot_task_slack or FLAGS.plot_all:
             plot_task_slack(
                 plotter,
+                FLAGS.task_name,
                 scheduler_csv_file,
                 scheduler_label,
-                f"{scheduler_label}_{FLAGS.task_slack_plot_name}",
+                os.path.join(
+                    FLAGS.output_dir, f"{scheduler_label}_{FLAGS.task_slack_plot_name}"
+                ),
                 figure_size,
             )
-        if FLAGS.plot_inter_task_time:
+        if FLAGS.plot_inter_task_time or FLAGS.plot_all:
             plot_inter_task_time(
                 plotter,
+                FLAGS.task_name,
                 scheduler_csv_file,
                 scheduler_label,
-                f"{scheduler_label}_{FLAGS.inter_task_time_plot_name}",
+                os.path.join(
+                    FLAGS.output_dir,
+                    f"{scheduler_label}_{FLAGS.inter_task_time_plot_name}",
+                ),
                 figure_size,
             )
-        if FLAGS.plot_missed_deadlines:
+        if FLAGS.plot_missed_deadlines or FLAGS.plot_all:
             plot_missed_deadlines(
                 plotter,
+                FLAGS.task_name,
                 scheduler_csv_file,
                 scheduler_label,
-                f"{scheduler_label}_{FLAGS.missed_deadline_plot_name}",
+                os.path.join(
+                    FLAGS.output_dir,
+                    f"{scheduler_label}_{FLAGS.missed_deadline_plot_name}",
+                ),
                 figure_size,
             )
 
-    if FLAGS.plot_scheduler_runtime:
-        plot_scheduler_runtime(plotter, figure_size)
-    if FLAGS.plot_task_placement_delay:
-        plot_task_placement_delay(plotter, figure_size)
+    if FLAGS.plot_scheduler_runtime or FLAGS.plot_all:
+        plot_scheduler_runtime(
+            plotter,
+            FLAGS.csv_files,
+            FLAGS.csv_labels,
+            os.path.join(FLAGS.output_dir, FLAGS.scheduler_runtime_timeline_plot_name),
+            os.path.join(FLAGS.output_dir, FLAGS.scheduler_runtime_cdf_plot_name),
+            figure_size,
+        )
+    if FLAGS.plot_task_placement_delay or FLAGS.plot_all:
+        plot_task_placement_delay(
+            plotter,
+            FLAGS.csv_files,
+            FLAGS.csv_labels,
+            os.path.join(FLAGS.output_dir, FLAGS.task_placement_delay_plot_name),
+            figure_size,
+        )
 
 
 if __name__ == "__main__":
