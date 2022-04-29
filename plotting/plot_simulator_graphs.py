@@ -30,7 +30,7 @@ flags.DEFINE_string(
 )
 
 # Execution modes for the script.
-flags.DEFINE_bool("plot_all", False, "Plot all graphs.")
+flags.DEFINE_bool("all", False, "Plot or show statistics for all graphs.")
 flags.DEFINE_bool(
     "stats_only", False, "Print only statistics and skip output of plots."
 )
@@ -609,7 +609,7 @@ def main(argv):
         )
 
     for scheduler_csv_file, scheduler_label in zip(FLAGS.csv_files, FLAGS.csv_labels):
-        if FLAGS.plot_utilization or FLAGS.plot_all:
+        if FLAGS.plot_utilization or FLAGS.all:
             plot_utilization(
                 plotter,
                 scheduler_csv_file,
@@ -621,7 +621,7 @@ def main(argv):
                 plot=not FLAGS.stats_only,
                 figure_size=figure_size,
             )
-        if FLAGS.plot_task_placement_stats or FLAGS.plot_all:
+        if FLAGS.plot_task_placement_stats or FLAGS.all:
             plot_task_placement_stats(
                 plotter,
                 scheduler_csv_file,
@@ -633,7 +633,7 @@ def main(argv):
                 plot=not FLAGS.stats_only,
                 figure_size=figure_size,
             )
-        if FLAGS.plot_task_slack or FLAGS.plot_all:
+        if FLAGS.plot_task_slack or FLAGS.all:
             plot_task_slack(
                 plotter,
                 FLAGS.task_name,
@@ -645,7 +645,7 @@ def main(argv):
                 plot=not FLAGS.stats_only,
                 figure_size=figure_size,
             )
-        if FLAGS.plot_inter_task_time or FLAGS.plot_all:
+        if FLAGS.plot_inter_task_time or FLAGS.all:
             plot_inter_task_time(
                 plotter,
                 FLAGS.task_name,
@@ -658,7 +658,7 @@ def main(argv):
                 plot=not FLAGS.stats_only,
                 figure_size=figure_size,
             )
-        if FLAGS.plot_missed_deadlines or FLAGS.plot_all:
+        if FLAGS.plot_missed_deadlines or FLAGS.all:
             plot_missed_deadlines(
                 plotter,
                 FLAGS.task_name,
@@ -672,7 +672,7 @@ def main(argv):
                 figure_size=figure_size,
             )
 
-    if FLAGS.plot_scheduler_runtime or FLAGS.plot_all:
+    if FLAGS.plot_scheduler_runtime or FLAGS.all:
         plot_scheduler_runtime(
             plotter,
             FLAGS.csv_files,
@@ -682,7 +682,7 @@ def main(argv):
             plot=not FLAGS.stats_only,
             figure_size=figure_size,
         )
-    if FLAGS.plot_task_placement_delay or FLAGS.plot_all:
+    if FLAGS.plot_task_placement_delay or FLAGS.all:
         plot_task_placement_delay(
             plotter,
             FLAGS.csv_files,
