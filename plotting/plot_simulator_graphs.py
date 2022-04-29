@@ -29,9 +29,13 @@ flags.DEFINE_string(
     "Regular expression that restricts the plots to the given tasks.",
 )
 
-# Enumerate the different kinds of plots.
+# Execution modes for the script.
 flags.DEFINE_bool("plot_all", False, "Plot all graphs.")
+flags.DEFINE_bool(
+    "stats_only", False, "Print only statistics and skip output of plots."
+)
 
+# Enumerate the different kinds of plots.
 flags.DEFINE_bool("plot_scheduler_runtime", False, "Plot scheduling runtime")
 flags.DEFINE_string(
     "scheduler_runtime_timeline_plot_name",
@@ -108,9 +112,20 @@ def plot_utilization(
     scheduler_csv_file,
     scheduler_name,
     output,
+    plot=True,
     figure_size=(14, 10),
     bar_width=1.0,
 ):
+    """Plots the timeline of the utilization of different resources on the workers.
+
+    Args:
+        plotter (`data.Plotter`): The plotter instance containing the parsed CSV file.
+        scheduler_csv_file (`str`): The path to the CSV file for which to plot results.
+        scheduler_name (`str`): The label to give to the scheduler.
+        output (`str`): The path to where the plot should be output to.
+        plot (`bool`) [default = True]: Show statistics only if set to False.
+        figure_size (`Tuple[int, int]`) [default=(14, 10)]: The size of the plot.
+    """
     # Plotting defaults.
     # hatches = ['//', '--', '**']
     # alphas = np.arange(0.2, 1.2, 0.2)
@@ -145,52 +160,52 @@ def plot_utilization(
     #     for resource in resource_types
     # }
 
+    logger.debug("================== Resource Utilization ==================")
+    log_statistics(placed_task_heights, logger)
     for resource_type in resource_types:
-        logger.debug(
-            "Max {} resource utilization {}".format(
-                resource_type, max(resource_used_heights[resource_type])
-            )
-        )
+        logger.debug("Utilization for {}".format(resource_type))
+        log_statistics(resource_used_heights[resource_type], logger)
 
     # Plot a histogram with the results.
-    fig = plt.figure(figsize=figure_size)
-    # Keeping this for a little bit longer.
-    # x_vals = np.arange(1, len(worker_pool_stats) + 1)
-    # _ = [
-    #     plt.bar(
-    #         x_vals + bar_width * i,
-    #         resource_used_heights[resource_type],
-    #         width=bar_width,
-    #         # edgecolor='black',
-    #         # hatch=hatches[i],
-    #         alpha=0.4,
-    #         color=resource_color[resource_type],
-    #     )
-    #     for i, resource_type in enumerate(resource_types)
-    # ]
-    for i, resource_type in enumerate(resource_types):
-        plt.scatter(
-            sim_times_sec,
-            resource_used_heights[resource_type],
-            color=resource_color[resource_type],
-        )
+    if plot:
+        fig = plt.figure(figsize=figure_size)
+        # Keeping this for a little bit longer.
+        # x_vals = np.arange(1, len(worker_pool_stats) + 1)
+        # _ = [
+        #     plt.bar(
+        #         x_vals + bar_width * i,
+        #         resource_used_heights[resource_type],
+        #         width=bar_width,
+        #         # edgecolor='black',
+        #         # hatch=hatches[i],
+        #         alpha=0.4,
+        #         color=resource_color[resource_type],
+        #     )
+        #     for i, resource_type in enumerate(resource_types)
+        # ]
+        for i, resource_type in enumerate(resource_types):
+            plt.scatter(
+                sim_times_sec,
+                resource_used_heights[resource_type],
+                color=resource_color[resource_type],
+            )
 
-    plt.xlabel("Timeline [s]", fontsize=axes_fontsize)
-    plt.ylabel("Normalized utilization", fontsize=axes_fontsize)
-    # Set the y limits so we can visualize the legend.
-    ax = fig.gca()
-    ax.set_ylim(0, 1.01)
-    plt.yticks([0, 0.5, 1.0])
+        plt.xlabel("Timeline [s]", fontsize=axes_fontsize)
+        plt.ylabel("Normalized utilization", fontsize=axes_fontsize)
+        # Set the y limits so we can visualize the legend.
+        ax = fig.gca()
+        ax.set_ylim(0, 1.01)
+        plt.yticks([0, 0.5, 1.0])
 
-    legend_elements = [
-        Patch(
-            facecolor=resource_color[resource_type],
-            label=f"{scheduler_name}-{resource_type}",
-        )
-        for resource_type in resource_types
-    ]
-    plt.legend(handles=legend_elements, framealpha=0)
-    plt.savefig(output, bbox_inches="tight")
+        legend_elements = [
+            Patch(
+                facecolor=resource_color[resource_type],
+                label=f"{scheduler_name}-{resource_type}",
+            )
+            for resource_type in resource_types
+        ]
+        plt.legend(handles=legend_elements, framealpha=0)
+        plt.savefig(output, bbox_inches="tight")
 
 
 def plot_scheduler_runtime(
@@ -199,8 +214,21 @@ def plot_scheduler_runtime(
     scheduler_labels,
     timeline_output,
     cdf_output,
+    plot=True,
     figure_size=(14, 10),
 ):
+    """Plots a timeline and a CDF of the scheduler invocations.
+
+    Args:
+        plotter (`data.Plotter`): The plotter instance containing the parsed CSV file.
+        scheduler_csv_files (`Sequence[str]`): A list of paths to CSV files containing
+            the results.
+        scheduler_labels (`Sequence[str]`): A list of labels to give the schedulers.
+        timeline_output (`str`): The path to where the timeline plot should be output.
+        cdf_output (`str`): The path to where the CDF plot should be output.
+        plot (`bool`) [default = True]: Show statistics only if set to False.
+        figure_size (`Tuple[int, int]`) [default=(14, 10)]: The size of the plot.
+    """
     # Retrieve the runtime of the scheduler invocations.
     logger.debug("================= Scheduler runtime [ms] =================")
     max_start_time = -sys.maxsize
@@ -217,43 +245,53 @@ def plot_scheduler_runtime(
         max_runtime = max(max_runtime, max(runtimes_ms))
         all_runtimes.append(runtimes_ms)
         all_start_times.append(start_times_ms)
-        logger.debug(f"Scheduler runtime stats {csv_file}")
+        logger.debug(f"Stats for {csv_file}")
         log_statistics(runtimes_ms, logger)
 
     # Plot a timelapse of the runtime of the scheduler.
-    plt.figure(figsize=figure_size)
-    for i, label in enumerate(scheduler_labels):
-        plt.plot(
-            all_start_times[i],
-            all_runtimes[i],
-            label=label,
-            marker=markers[label],
-            color=colors[label],
-        )
-    plt.xlim(0, max_start_time)
-    plt.xlabel("Timeline [ms]", fontsize=axes_fontsize)
-    plt.ylabel("Scheduler Runtime [ms]", fontsize=axes_fontsize)
-    plt.legend(frameon=False)
-    plt.savefig(timeline_output, bbox_inches="tight")
+    if plot:
+        plt.figure(figsize=figure_size)
+        for i, label in enumerate(scheduler_labels):
+            plt.plot(
+                all_start_times[i],
+                all_runtimes[i],
+                label=label,
+                marker=markers[label],
+                color=colors[label],
+            )
+        plt.xlim(0, max_start_time)
+        plt.xlabel("Timeline [ms]", fontsize=axes_fontsize)
+        plt.ylabel("Scheduler Runtime [ms]", fontsize=axes_fontsize)
+        plt.legend(frameon=False)
+        plt.savefig(timeline_output, bbox_inches="tight")
 
-    # Plot the CDF of the runtime of the scheduler invocations.
-
-    plt.figure(figsize=figure_size)
-    for i, label in enumerate(scheduler_labels):
-        count, bin_count = np.histogram(all_runtimes[i], bins=100)
-        pdf = count / sum(count)
-        cdf = np.cumsum(pdf)
-        plt.plot(bin_count[1:], cdf, label=label)
-    plt.xlim(0, max_runtime)
-    plt.xlabel("Scheduler Runtime [ms]", fontsize=axes_fontsize)
-    plt.ylabel("CDF", fontsize=axes_fontsize)
-    plt.legend(frameon=False)
-    plt.savefig(cdf_output, bbox_inches="tight")
+        # Plot the CDF of the runtime of the scheduler invocations.
+        plt.figure(figsize=figure_size)
+        for i, label in enumerate(scheduler_labels):
+            count, bin_count = np.histogram(all_runtimes[i], bins=100)
+            pdf = count / sum(count)
+            cdf = np.cumsum(pdf)
+            plt.plot(bin_count[1:], cdf, label=label)
+        plt.xlim(0, max_runtime)
+        plt.xlabel("Scheduler Runtime [ms]", fontsize=axes_fontsize)
+        plt.ylabel("CDF", fontsize=axes_fontsize)
+        plt.legend(frameon=False)
+        plt.savefig(cdf_output, bbox_inches="tight")
 
 
 def plot_task_placement_stats(
-    plotter, scheduler_csv_file, scheduler_name, output, figure_size=(14, 10)
+    plotter, scheduler_csv_file, scheduler_name, output, plot=True, figure_size=(14, 10)
 ):
+    """Plots the number of placed and unplaced tasks by each scheduler invocation.
+
+    Args:
+        plotter (`data.Plotter`): The plotter instance containing the parsed CSV file.
+        scheduler_csv_file (`str`): The path to the CSV file for which to plot results.
+        scheduler_name (`str`): The label to give to the scheduler.
+        output (`str`): The path to where the plot should be output to.
+        plot (`bool`) [default = True]: Show statistics only if set to False.
+        figure_size (`Tuple[int, int]`) [default=(14, 10)]: The size of the plot.
+    """
     scheduler_invocations = plotter.get_scheduler_invocations(scheduler_csv_file)
 
     # Calculate the heights of placed and unplaced tasks.
@@ -266,52 +304,52 @@ def plot_task_placement_stats(
         for scheduler_invocation in scheduler_invocations
     ]
 
-    # Plot a histogram with the results.
-    plt.figure(figsize=figure_size)
-    x_vals = np.arange(1, len(scheduler_invocations) + 1)
-
-    _ = plt.bar(
-        x_vals,
-        placed_task_heights,
-        # edgecolor='black',
-        # hatch='//',
-        alpha=0.4,
-        color="green",
-    )
-
-    _ = plt.bar(
-        x_vals,
-        unplaced_task_heights,
-        bottom=placed_task_heights,
-        # edgecolor='black',
-        # hatch='**',
-        alpha=0.4,
-        color="red",
-    )
-
     logger.debug("================== Num placed tasks ==================")
     log_statistics(placed_task_heights, logger)
     logger.debug("================== Num unplaced tasks ==================")
     log_statistics(unplaced_task_heights, logger)
 
-    # Add the axis labels.
-    plt.xlabel("Scheduler Run", fontsize=axes_fontsize)
-    plt.ylabel("Placed and Unplaced Tasks", fontsize=axes_fontsize)
+    if plot:
+        # Plot a histogram with the results.
+        plt.figure(figsize=figure_size)
+        x_vals = np.arange(1, len(scheduler_invocations) + 1)
 
-    # Add the yticks
-    max_y_val = max(
-        scheduler_invocation.total_tasks
-        for scheduler_invocation in scheduler_invocations
-    )
-    plt.ylim(0, int(max_y_val))
+        _ = plt.bar(
+            x_vals,
+            placed_task_heights,
+            # edgecolor='black',
+            # hatch='//',
+            alpha=0.4,
+            color="green",
+        )
+        _ = plt.bar(
+            x_vals,
+            unplaced_task_heights,
+            bottom=placed_task_heights,
+            # edgecolor='black',
+            # hatch='**',
+            alpha=0.4,
+            color="red",
+        )
 
-    # Set the legend.
-    legend_elements = [
-        Patch(facecolor="green", label=f"{scheduler_name} Placed Tasks"),
-        Patch(facecolor="red", label=f"{scheduler_name} Unplaced Tasks"),
-    ]
-    plt.legend(handles=legend_elements, framealpha=0)
-    plt.savefig(output, bbox_inches="tight")
+        # Add the axis labels.
+        plt.xlabel("Scheduler Run", fontsize=axes_fontsize)
+        plt.ylabel("Placed and Unplaced Tasks", fontsize=axes_fontsize)
+
+        # Add the yticks
+        max_y_val = max(
+            scheduler_invocation.total_tasks
+            for scheduler_invocation in scheduler_invocations
+        )
+        plt.ylim(0, int(max_y_val))
+
+        # Set the legend.
+        legend_elements = [
+            Patch(facecolor="green", label=f"{scheduler_name} Placed Tasks"),
+            Patch(facecolor="red", label=f"{scheduler_name} Unplaced Tasks"),
+        ]
+        plt.legend(handles=legend_elements, framealpha=0)
+        plt.savefig(output, bbox_inches="tight")
 
 
 def plot_inter_task_time(
@@ -320,10 +358,23 @@ def plot_inter_task_time(
     scheduler_csv_file,
     scheduler_name,
     output,
+    plot=True,
     figure_size=(14, 10),
 ):
-    plt.figure(figsize=figure_size)
+    """Plots the inter-task time for tasks that match the given regex.
 
+    The inter-task time is the actual time elapsed between the release time of two
+    successive invocations of a particular task.
+
+    Args:
+        plotter (`data.Plotter`): The plotter instance containing the parsed CSV file.
+        task_name_regex (`str`): The regular expression to match the task name to.
+        scheduler_csv_file (`str`): The path to the CSV file for which to plot results.
+        scheduler_name (`str`): The label to give to the scheduler.
+        output (`str`): The path to where the plot should be output to.
+        plot (`bool`) [default = True]: Show statistics only if set to False.
+        figure_size (`Tuple[int, int]`) [default=(14, 10)]: The size of the plot.
+    """
     # Retrieve the tasks from the CSV file that match the given regular expression.
     tasks = plotter.get_tasks(scheduler_csv_file)
     task_map = defaultdict(list)
@@ -331,6 +382,9 @@ def plot_inter_task_time(
         if re.match(task_name_regex, task.name):
             task_map[task.name].append(task)
 
+    # Collect the inter-task time statistics and print them.
+    logger.debug("================== Inter-Task Time [ms] ==================")
+    logger.debug(f"Tasks that match the regex: {task_name_regex}")
     inter_release_times = []
     labels = []
     for task_name, tasks in task_map.items():
@@ -344,11 +398,15 @@ def plot_inter_task_time(
             last_release = sorted_tasks[index].release_time
         labels.append(task_name)
         inter_release_times.append(task_inter_release_time)
+        logger.debug(f"Statistics for {task_name}:")
+        log_statistics(task_inter_release_time, logger, offset="      ")
 
-    plt.xlabel("Inter-Task Time [ms]", fontsize=axes_fontsize)
-    plt.hist(inter_release_times, label=labels, density=False, bins=100)
-    plt.legend(frameon=False)
-    plt.savefig(output, bbox_inches="tight")
+    if plot:
+        plt.figure(figsize=figure_size)
+        plt.xlabel("Inter-Task Time [ms]", fontsize=axes_fontsize)
+        plt.hist(inter_release_times, label=labels, density=False, bins=100)
+        plt.legend(frameon=False)
+        plt.savefig(output, bbox_inches="tight")
 
 
 def plot_task_slack(
@@ -357,45 +415,84 @@ def plot_task_slack(
     scheduler_csv_file,
     scheduler_name,
     output,
+    plot=True,
     figure_size=(14, 10),
 ):
-    # Plot a histogram of the slack from the deadline for the tasks.
-    plt.figure(figsize=figure_size)
+    """Plots the intended and actual slack of the tasks.
 
+    The actual slack is defined as the time between the deadline and the actual
+    completion of the task, where a negative value defines a missed deadline.
+
+    The intended slack is defined as the time between the deadline and the intended
+    finish time of the task (as defined by its intended start time and runtime).
+
+    Args:
+        plotter (`data.Plotter`): The plotter instance containing the parsed CSV file.
+        task_name_regex (`str`): The regular expression to match the task name to.
+        scheduler_csv_file (`str`): The path to the CSV file for which to plot results.
+        scheduler_name (`str`): The label to give to the scheduler.
+        output (`str`): The path to where the plot should be output to.
+        plot (`bool`) [default = True]: Show statistics only if set to False.
+        figure_size (`Tuple[int, int]`) [default=(14, 10)]: The size of the plot.
+    """
     # Retrieve the tasks that match the given regular expression.
     tasks = []
     for task in plotter.get_tasks(scheduler_csv_file):
         if re.match(task_name_regex, task.name):
             tasks.append(task)
 
+    # Compute the time between the deadline and the actual completion of the task.
     slack = [(task.deadline - task.completion_time) / 1000 for task in tasks]
+    logger.debug("================== Task completion slack [ms] ==================")
+    logger.debug(f"Tasks that match the regex: {task_name_regex}")
+    log_statistics(slack, logger)
+
+    # Compute the time between the deadline and the intended completion of the task.
     initial_slack = [
         (task.deadline - task.release_time - task.runtime) / 1000 for task in tasks
     ]
-    logger.debug("================== Task completion slack [ms] ==================")
-    log_statistics(slack, logger)
     logger.debug("================== Task placement slack [ms] ==================")
+    logger.debug(f"Tasks that match the regex: {task_name_regex}")
     log_statistics(initial_slack, logger)
-    plt.xlim(min(slack), max(slack))
-    plt.xlabel("Task Slack [ms]", fontsize=axes_fontsize)
-    plt.ylabel("Number of Tasks", fontsize=axes_fontsize)
-    plt.hist(
-        [slack, initial_slack],
-        label=[
-            f"{scheduler_name} Task Completion Slack",
-            f"{scheduler_name} Task Placement Slack",
-        ],
-        density=False,
-        bins=100,
-    )
-    plt.legend(frameon=False)
-    plt.savefig(output, bbox_inches="tight")
+
+    # If required, plot a histogram of the slack from the deadline for the tasks.
+    if plot:
+        plt.figure(figsize=figure_size)
+        plt.xlim(min(slack), max(slack))
+        plt.xlabel("Task Slack [ms]", fontsize=axes_fontsize)
+        plt.ylabel("Number of Tasks", fontsize=axes_fontsize)
+        plt.hist(
+            [slack, initial_slack],
+            label=[
+                f"{scheduler_name} Task Completion Slack",
+                f"{scheduler_name} Task Placement Slack",
+            ],
+            density=False,
+            bins=100,
+        )
+        plt.legend(frameon=False)
+        plt.savefig(output, bbox_inches="tight")
 
 
 def plot_task_placement_delay(
-    plotter, scheduler_csv_files, scheduler_labels, output, figure_size=(14, 10)
+    plotter,
+    scheduler_csv_files,
+    scheduler_labels,
+    output,
+    plot=True,
+    figure_size=(14, 10),
 ):
-    plt.figure(figsize=figure_size)
+    """Plots a histogram of the placement delays.
+
+    Args:
+        plotter (`data.Plotter`): The plotter instance containing the parsed CSV file.
+        scheduler_csv_files (`Sequence[str]`): A list of paths to CSV files containing
+            the results.
+        scheduler_labels (`Sequence[str]`): A list of labels to give the schedulers.
+        output (`str`): The path to where the plot should be output.
+        plot (`bool`) [default = True]: Show statistics only if set to False.
+        figure_size (`Tuple[int, int]`) [default=(14, 10)]: The size of the plot.
+    """
     logger.debug("================ Task placement delay [ms] ================")
     placement_delays = []
     min_delay = sys.maxsize
@@ -410,21 +507,23 @@ def plot_task_placement_delay(
         placement_delays.append(placement_delay)
         min_delay = min(min_delay, min(placement_delay))
         max_delay = max(max_delay, max(placement_delay))
-        logger.debug(f"Placement delay stats {csv_file}")
+        logger.debug(f"Placement delay stats for {csv_file}")
         log_statistics(placement_delay, logger)
 
-    plt.xlim(min_delay, max_delay)
-    plt.xlabel("Task Placement Delay [ms]", fontsize=axes_fontsize)
-    plt.ylabel("Number of Tasks", fontsize=axes_fontsize)
-    plt.hist(
-        placement_delays,
-        density=False,
-        bins=100,
-        label=scheduler_labels,
-        color=plot_colors,
-    )
-    plt.legend(frameon=False)
-    plt.savefig(output, bbox_inches="tight")
+    if plot:
+        plt.figure(figsize=figure_size)
+        plt.xlim(min_delay, max_delay)
+        plt.xlabel("Task Placement Delay [ms]", fontsize=axes_fontsize)
+        plt.ylabel("Number of Tasks", fontsize=axes_fontsize)
+        plt.hist(
+            placement_delays,
+            density=False,
+            bins=100,
+            label=scheduler_labels,
+            color=plot_colors,
+        )
+        plt.legend(frameon=False)
+        plt.savefig(output, bbox_inches="tight")
 
 
 def task_stats(tasks):
@@ -444,20 +543,40 @@ def plot_missed_deadlines(
     scheduler_csv_file,
     scheduler_name,
     output,
+    plot=True,
     figure_size=(14, 10),
 ):
-    # Plot the number of missed deadlines by the method name.
-    plt.figure(figsize=figure_size)
-    missed_deadlines = plotter.get_missed_deadline_events(scheduler_csv_file)
+    """Plots the number of missed deadlines by each task.
 
+    Args:
+        plotter (`data.Plotter`): The plotter instance containing the parsed CSV file.
+        task_name_regex (`str`): The regular expression to match the task name to.
+        scheduler_csv_file (`str`): The path to the CSV file for which to plot results.
+        scheduler_name (`str`): The label to give to the scheduler.
+        output (`str`): The path to where the plot should be output to.
+        plot (`bool`) [default = True]: Show statistics only if set to False.
+        figure_size (`Tuple[int, int]`) [default=(14, 10)]: The size of the plot.
+    """
     # Group the missed deadlines by their task name (if regex is matched).
+    missed_deadlines = plotter.get_missed_deadline_events(scheduler_csv_file)
     missed_deadline_by_task_name = defaultdict(int)
     for _, task in missed_deadlines:
         if re.match(task_name_regex, task.name):
             missed_deadline_by_task_name[task.name] += 1
 
-    plt.bar(missed_deadline_by_task_name.keys(), missed_deadline_by_task_name.values())
-    plt.savefig(output, bbox_inches="tight")
+    # Log the results.
+    logger.debug("================== Inter-Task Time [ms] ==================")
+    logger.debug(f"Tasks that match the regex: {task_name_regex}")
+    for task_name, missed_deadlines in missed_deadline_by_task_name.values():
+        logger.debug(f"{task_name}: {missed_deadlines}")
+
+    if plot:
+        # Plot the number of missed deadlines by the method name.
+        plt.figure(figsize=figure_size)
+        plt.bar(
+            missed_deadline_by_task_name.keys(), missed_deadline_by_task_name.values()
+        )
+        plt.savefig(output, bbox_inches="tight")
 
 
 def main(argv):
@@ -499,7 +618,8 @@ def main(argv):
                     FLAGS.output_dir,
                     f"{scheduler_label}_{FLAGS.utilization_timeline_plot_name}",
                 ),
-                figure_size,
+                plot=not FLAGS.stats_only,
+                figure_size=figure_size,
             )
         if FLAGS.plot_task_placement_stats or FLAGS.plot_all:
             plot_task_placement_stats(
@@ -510,7 +630,8 @@ def main(argv):
                     FLAGS.output_dir,
                     f"{scheduler_label}_{FLAGS.task_placement_bar_chart_plot_name}",
                 ),
-                figure_size,
+                plot=not FLAGS.stats_only,
+                figure_size=figure_size,
             )
         if FLAGS.plot_task_slack or FLAGS.plot_all:
             plot_task_slack(
@@ -521,7 +642,8 @@ def main(argv):
                 os.path.join(
                     FLAGS.output_dir, f"{scheduler_label}_{FLAGS.task_slack_plot_name}"
                 ),
-                figure_size,
+                plot=not FLAGS.stats_only,
+                figure_size=figure_size,
             )
         if FLAGS.plot_inter_task_time or FLAGS.plot_all:
             plot_inter_task_time(
@@ -533,7 +655,8 @@ def main(argv):
                     FLAGS.output_dir,
                     f"{scheduler_label}_{FLAGS.inter_task_time_plot_name}",
                 ),
-                figure_size,
+                plot=not FLAGS.stats_only,
+                figure_size=figure_size,
             )
         if FLAGS.plot_missed_deadlines or FLAGS.plot_all:
             plot_missed_deadlines(
@@ -545,7 +668,8 @@ def main(argv):
                     FLAGS.output_dir,
                     f"{scheduler_label}_{FLAGS.missed_deadline_plot_name}",
                 ),
-                figure_size,
+                plot=not FLAGS.stats_only,
+                figure_size=figure_size,
             )
 
     if FLAGS.plot_scheduler_runtime or FLAGS.plot_all:
@@ -555,7 +679,8 @@ def main(argv):
             FLAGS.csv_labels,
             os.path.join(FLAGS.output_dir, FLAGS.scheduler_runtime_timeline_plot_name),
             os.path.join(FLAGS.output_dir, FLAGS.scheduler_runtime_cdf_plot_name),
-            figure_size,
+            plot=not FLAGS.stats_only,
+            figure_size=figure_size,
         )
     if FLAGS.plot_task_placement_delay or FLAGS.plot_all:
         plot_task_placement_delay(
@@ -563,7 +688,8 @@ def main(argv):
             FLAGS.csv_files,
             FLAGS.csv_labels,
             os.path.join(FLAGS.output_dir, FLAGS.task_placement_delay_plot_name),
-            figure_size,
+            plot=not FLAGS.stats_only,
+            figure_size=figure_size,
         )
 
 
