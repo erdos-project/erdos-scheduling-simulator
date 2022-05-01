@@ -10,7 +10,7 @@ import numpy as np
 from absl import app, flags
 from matplotlib.patches import Patch
 
-from data import Plotter
+from data import CSVReader
 from utils import log_statistics, setup_logging
 
 FLAGS = flags.FLAGS
@@ -119,7 +119,7 @@ def plot_utilization(
     """Plots the timeline of the utilization of different resources on the workers.
 
     Args:
-        plotter (`data.Plotter`): The plotter instance containing the parsed CSV file.
+        plotter (`data.CSVReader`): The plotter instance containing the parsed CSV file.
         scheduler_csv_file (`str`): The path to the CSV file for which to plot results.
         scheduler_name (`str`): The label to give to the scheduler.
         output (`str`): The path to where the plot should be output to.
@@ -219,7 +219,7 @@ def plot_scheduler_runtime(
     """Plots a timeline and a CDF of the scheduler invocations.
 
     Args:
-        plotter (`data.Plotter`): The plotter instance containing the parsed CSV file.
+        plotter (`data.CSVReader`): The plotter instance containing the parsed CSV file.
         scheduler_csv_files (`Sequence[str]`): A list of paths to CSV files containing
             the results.
         scheduler_labels (`Sequence[str]`): A list of labels to give the schedulers.
@@ -284,7 +284,7 @@ def plot_task_placement_stats(
     """Plots the number of placed and unplaced tasks by each scheduler invocation.
 
     Args:
-        plotter (`data.Plotter`): The plotter instance containing the parsed CSV file.
+        plotter (`data.CSVReader`): The plotter instance containing the parsed CSV file.
         scheduler_csv_file (`str`): The path to the CSV file for which to plot results.
         scheduler_name (`str`): The label to give to the scheduler.
         output (`str`): The path to where the plot should be output to.
@@ -366,7 +366,7 @@ def plot_inter_task_time(
     successive invocations of a particular task.
 
     Args:
-        plotter (`data.Plotter`): The plotter instance containing the parsed CSV file.
+        plotter (`data.CSVReader`): The plotter instance containing the parsed CSV file.
         task_name_regex (`str`): The regular expression to match the task name to.
         scheduler_csv_file (`str`): The path to the CSV file for which to plot results.
         scheduler_name (`str`): The label to give to the scheduler.
@@ -426,7 +426,7 @@ def plot_task_slack(
     finish time of the task (as defined by its intended start time and runtime).
 
     Args:
-        plotter (`data.Plotter`): The plotter instance containing the parsed CSV file.
+        plotter (`data.CSVReader`): The plotter instance containing the parsed CSV file.
         task_name_regex (`str`): The regular expression to match the task name to.
         scheduler_csv_file (`str`): The path to the CSV file for which to plot results.
         scheduler_name (`str`): The label to give to the scheduler.
@@ -484,7 +484,7 @@ def plot_task_placement_delay(
     """Plots a histogram of the placement delays.
 
     Args:
-        plotter (`data.Plotter`): The plotter instance containing the parsed CSV file.
+        plotter (`data.CSVReader`): The plotter instance containing the parsed CSV file.
         scheduler_csv_files (`Sequence[str]`): A list of paths to CSV files containing
             the results.
         scheduler_labels (`Sequence[str]`): A list of labels to give the schedulers.
@@ -548,7 +548,7 @@ def plot_missed_deadlines(
     """Plots the number of missed deadlines by each task.
 
     Args:
-        plotter (`data.Plotter`): The plotter instance containing the parsed CSV file.
+        plotter (`data.CSVReader`): The plotter instance containing the parsed CSV file.
         task_name_regex (`str`): The regular expression to match the task name to.
         scheduler_csv_file (`str`): The path to the CSV file for which to plot results.
         scheduler_name (`str`): The label to give to the scheduler.
@@ -600,8 +600,8 @@ def main(argv):
 
     figure_size = (14, 10)
 
-    # Load the events from the CSV file into the Plotter class.
-    plotter = Plotter(csv_paths=FLAGS.csv_files)
+    # Load the events from the CSV file into the CSVReader class.
+    plotter = CSVReader(csv_paths=FLAGS.csv_files)
 
     for csv_file in FLAGS.csv_files:
         simulation_end_time = plotter.get_simulator_end_time(csv_file)

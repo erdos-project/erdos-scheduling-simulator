@@ -92,8 +92,8 @@ WorkerPoolUtilization = namedtuple(
 )
 
 
-class Plotter(object):
-    """Plots the data from the CSV logs of a Simulator run.
+class CSVReader(object):
+    """Reads the data from the CSV logs of a Simulator run.
 
     Args:
         csv_paths (`Sequence[str]`): The paths to the CSVs where the results
@@ -110,7 +110,7 @@ class Plotter(object):
                     path_readings.append(line)
                 readings[csv_path] = path_readings
 
-        self._events = Plotter.parse_events(readings)
+        self._events = CSVReader.parse_events(readings)
 
     @staticmethod
     def parse_events(
@@ -358,8 +358,3 @@ class Plotter(object):
             if type(event) == MissedDeadline:
                 missed_deadline_events.append(event)
         return missed_deadline_events
-
-    def plot_scheduler_invocations(self):
-        """Plots the invocation of the scheduler along with the number of tasks
-        to schedule and the tasks that were placed and unplaced."""
-        pass
