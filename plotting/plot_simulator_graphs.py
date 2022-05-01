@@ -558,22 +558,30 @@ def plot_missed_deadlines(
     """
     # Group the missed deadlines by their task name (if regex is matched).
     missed_deadlines = plotter.get_missed_deadline_events(scheduler_csv_file)
-    missed_deadline_by_task_name = defaultdict(int)
+    missed_deadline_by_task_name = defaultdict(list)
+    missed_deadline_delays = []
     for _, task in missed_deadlines:
         if re.match(task_name_regex, task.name):
-            missed_deadline_by_task_name[task.name] += 1
+            missed_deadline_by_task_name[task.name].append(task)
+            missed_deadline_delays.append((task.completion_time - task.deadline) / 1000)
 
     # Log the results.
     logger.debug("==================  Missed Deadlines ==================")
     logger.debug(f"Tasks that match the regex: {task_name_regex}")
-    for task_name, missed_deadlines in missed_deadline_by_task_name.items():
-        logger.debug(f"{task_name}: {missed_deadlines}")
+    logger.debug(f"Average missed deadline delay: {np.mean(missed_deadline_delays)}")
+    for task_name, tasks in missed_deadline_by_task_name.items():
+        logger.debug(f"{task_name}: {len(tasks)}")
+        missed_deadline_delays_per_task = [
+            (task.completion_time - task.deadline) / 1000 for task in tasks
+        ]
+        logger.debug(f"    Average: {np.mean(missed_deadline_delays_per_task)}")
 
     if plot:
         # Plot the number of missed deadlines by the method name.
         plt.figure(figsize=figure_size)
         plt.bar(
-            missed_deadline_by_task_name.keys(), missed_deadline_by_task_name.values()
+            missed_deadline_by_task_name.keys(),
+            map(len, missed_deadline_by_task_name.values()),
         )
         plt.savefig(output, bbox_inches="tight")
 
