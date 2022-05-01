@@ -3,6 +3,7 @@ import re
 import sys
 from collections import defaultdict
 from operator import attrgetter
+from pathlib import Path
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -33,6 +34,11 @@ flags.DEFINE_string(
 flags.DEFINE_bool("all", False, "Plot or show statistics for all graphs.")
 flags.DEFINE_bool(
     "stats_only", False, "Print only statistics and skip output of plots."
+)
+flags.DEFINE_bool(
+    "chrome_trace",
+    False,
+    "Outputs the given CSV files in the Chrome trace format.",
 )
 
 # Enumerate the different kinds of plots.
@@ -108,7 +114,7 @@ logger = setup_logging("plotting")
 
 
 def plot_utilization(
-    plotter,
+    csv_reader,
     scheduler_csv_file,
     scheduler_name,
     output,
@@ -119,7 +125,8 @@ def plot_utilization(
     """Plots the timeline of the utilization of different resources on the workers.
 
     Args:
-        plotter (`data.CSVReader`): The plotter instance containing the parsed CSV file.
+        csv_reader (`data.CSVReader`): The CSVReader instance containing the parsed
+            CSV file.
         scheduler_csv_file (`str`): The path to the CSV file for which to plot results.
         scheduler_name (`str`): The label to give to the scheduler.
         output (`str`): The path to where the plot should be output to.
@@ -132,7 +139,7 @@ def plot_utilization(
     resource_color = {"GPU": "red", "CPU": "green"}
 
     # Worker Pool statistics
-    worker_pool_stats = plotter.get_worker_pool_utilizations(scheduler_csv_file)
+    worker_pool_stats = csv_reader.get_worker_pool_utilizations(scheduler_csv_file)
 
     # Find all the resource types in the system.
     resource_types = set()
@@ -208,7 +215,7 @@ def plot_utilization(
 
 
 def plot_scheduler_runtime(
-    plotter,
+    csv_reader,
     scheduler_csv_files,
     scheduler_labels,
     timeline_output,
@@ -219,7 +226,8 @@ def plot_scheduler_runtime(
     """Plots a timeline and a CDF of the scheduler invocations.
 
     Args:
-        plotter (`data.CSVReader`): The plotter instance containing the parsed CSV file.
+        csv_reader (`data.CSVReader`): The CSVReader instance containing the parsed
+            CSV file.
         scheduler_csv_files (`Sequence[str]`): A list of paths to CSV files containing
             the results.
         scheduler_labels (`Sequence[str]`): A list of labels to give the schedulers.
@@ -235,7 +243,7 @@ def plot_scheduler_runtime(
     all_runtimes = []
     all_start_times = []
     for csv_file in scheduler_csv_files:
-        scheduler_invocations = plotter.get_scheduler_invocations(csv_file)
+        scheduler_invocations = csv_reader.get_scheduler_invocations(csv_file)
         runtimes = list(map(attrgetter("runtime"), scheduler_invocations))
         runtimes_ms = [runtime / 1000 for runtime in runtimes]
         start_times = list(map(attrgetter("start_time"), scheduler_invocations))
@@ -279,19 +287,24 @@ def plot_scheduler_runtime(
 
 
 def plot_task_placement_stats(
-    plotter, scheduler_csv_file, scheduler_name, output, plot=True, figure_size=(14, 10)
+    csv_reader,
+    scheduler_csv_file,
+    scheduler_name,
+    output,
+    plot=True,
+    figure_size=(14, 10),
 ):
     """Plots the number of placed and unplaced tasks by each scheduler invocation.
 
     Args:
-        plotter (`data.CSVReader`): The plotter instance containing the parsed CSV file.
+        csv_reader (`data.CSVReader`): The CSVReader instance containing the parsed CSV file.
         scheduler_csv_file (`str`): The path to the CSV file for which to plot results.
         scheduler_name (`str`): The label to give to the scheduler.
         output (`str`): The path to where the plot should be output to.
         plot (`bool`) [default = True]: Show statistics only if set to False.
         figure_size (`Tuple[int, int]`) [default=(14, 10)]: The size of the plot.
     """
-    scheduler_invocations = plotter.get_scheduler_invocations(scheduler_csv_file)
+    scheduler_invocations = csv_reader.get_scheduler_invocations(scheduler_csv_file)
 
     # Calculate the heights of placed and unplaced tasks.
     placed_task_heights = [
@@ -352,7 +365,7 @@ def plot_task_placement_stats(
 
 
 def plot_inter_task_time(
-    plotter,
+    csv_reader,
     task_name_regex,
     scheduler_csv_file,
     scheduler_name,
@@ -366,7 +379,8 @@ def plot_inter_task_time(
     successive invocations of a particular task.
 
     Args:
-        plotter (`data.CSVReader`): The plotter instance containing the parsed CSV file.
+        csv_reader (`data.CSVReader`): The CSVReader instance containing the parsed
+            CSV file.
         task_name_regex (`str`): The regular expression to match the task name to.
         scheduler_csv_file (`str`): The path to the CSV file for which to plot results.
         scheduler_name (`str`): The label to give to the scheduler.
@@ -375,7 +389,7 @@ def plot_inter_task_time(
         figure_size (`Tuple[int, int]`) [default=(14, 10)]: The size of the plot.
     """
     # Retrieve the tasks from the CSV file that match the given regular expression.
-    tasks = plotter.get_tasks(scheduler_csv_file)
+    tasks = csv_reader.get_tasks(scheduler_csv_file)
     task_map = defaultdict(list)
     for task in tasks:
         if re.match(task_name_regex, task.name):
@@ -409,7 +423,7 @@ def plot_inter_task_time(
 
 
 def plot_task_slack(
-    plotter,
+    csv_reader,
     task_name_regex,
     scheduler_csv_file,
     scheduler_name,
@@ -426,7 +440,8 @@ def plot_task_slack(
     finish time of the task (as defined by its intended start time and runtime).
 
     Args:
-        plotter (`data.CSVReader`): The plotter instance containing the parsed CSV file.
+        csv_reader (`data.CSVReader`): The CSVReader instance containing the parsed
+            CSV file.
         task_name_regex (`str`): The regular expression to match the task name to.
         scheduler_csv_file (`str`): The path to the CSV file for which to plot results.
         scheduler_name (`str`): The label to give to the scheduler.
@@ -436,7 +451,7 @@ def plot_task_slack(
     """
     # Retrieve the tasks that match the given regular expression.
     tasks = []
-    for task in plotter.get_tasks(scheduler_csv_file):
+    for task in csv_reader.get_tasks(scheduler_csv_file):
         if re.match(task_name_regex, task.name):
             tasks.append(task)
 
@@ -474,7 +489,7 @@ def plot_task_slack(
 
 
 def plot_task_placement_delay(
-    plotter,
+    csv_reader,
     scheduler_csv_files,
     scheduler_labels,
     output,
@@ -484,7 +499,8 @@ def plot_task_placement_delay(
     """Plots a histogram of the placement delays.
 
     Args:
-        plotter (`data.CSVReader`): The plotter instance containing the parsed CSV file.
+        csv_reader (`data.CSVReader`): The CSVReader instance containing the parsed
+            CSV file.
         scheduler_csv_files (`Sequence[str]`): A list of paths to CSV files containing
             the results.
         scheduler_labels (`Sequence[str]`): A list of labels to give the schedulers.
@@ -498,7 +514,7 @@ def plot_task_placement_delay(
     max_delay = -sys.maxsize
     plot_colors = [colors[label] for label in scheduler_labels]
     for csv_file in scheduler_csv_files:
-        task_placements = plotter.get_task_placements(csv_file)
+        task_placements = csv_reader.get_task_placements(csv_file)
         placement_delay = [
             (placement.simulator_time - placement.task.release_time) / 1000
             for placement in task_placements
@@ -537,7 +553,7 @@ def task_stats(tasks):
 
 
 def plot_missed_deadlines(
-    plotter,
+    csv_reader,
     task_name_regex,
     scheduler_csv_file,
     scheduler_name,
@@ -548,7 +564,8 @@ def plot_missed_deadlines(
     """Plots the number of missed deadlines by each task.
 
     Args:
-        plotter (`data.CSVReader`): The plotter instance containing the parsed CSV file.
+        csv_reader (`data.CSVReader`): The CSVReader instance containing the parsed
+            CSV file.
         task_name_regex (`str`): The regular expression to match the task name to.
         scheduler_csv_file (`str`): The path to the CSV file for which to plot results.
         scheduler_name (`str`): The label to give to the scheduler.
@@ -557,7 +574,7 @@ def plot_missed_deadlines(
         figure_size (`Tuple[int, int]`) [default=(14, 10)]: The size of the plot.
     """
     # Group the missed deadlines by their task name (if regex is matched).
-    missed_deadlines = plotter.get_missed_deadline_events(scheduler_csv_file)
+    missed_deadlines = csv_reader.get_missed_deadline_events(scheduler_csv_file)
     missed_deadline_by_task_name = defaultdict(list)
     missed_deadline_delays = []
     for _, task in missed_deadlines:
@@ -601,24 +618,37 @@ def main(argv):
     figure_size = (14, 10)
 
     # Load the events from the CSV file into the CSVReader class.
-    plotter = CSVReader(csv_paths=FLAGS.csv_files)
-
-    for csv_file in FLAGS.csv_files:
-        simulation_end_time = plotter.get_simulator_end_time(csv_file)
-        logger.debug(f"Simulation end time for {csv_file} : {simulation_end_time}")
-        logger.debug(
-            f"Number of tasks for {csv_file}: {len(plotter.get_tasks(csv_file))}"
-        )
-        # Missed deadline statistics
-        missed_deadline_events = plotter.get_missed_deadline_events(csv_file)
-        logger.debug(
-            f"Number of missed deadlines for {csv_file}: {len(missed_deadline_events)}"
-        )
+    csv_reader = CSVReader(csv_paths=FLAGS.csv_files)
 
     for scheduler_csv_file, scheduler_label in zip(FLAGS.csv_files, FLAGS.csv_labels):
+        # Log basic statistics
+        simulation_end_time = csv_reader.get_simulator_end_time(scheduler_csv_file)
+        logger.debug(
+            f"Simulation end time for {scheduler_csv_file}: {simulation_end_time}"
+        )
+        logger.debug(
+            f"Number of tasks for {scheduler_csv_file}: "
+            f"{len(csv_reader.get_tasks(scheduler_csv_file))}"
+        )
+        missed_deadline_events = csv_reader.get_missed_deadline_events(
+            scheduler_csv_file
+        )
+        logger.debug(
+            f"Number of missed deadlines for {scheduler_csv_file}: "
+            f"{len(missed_deadline_events)}"
+        )
+
+        # Output the Chrome trace format if requested.
+        if FLAGS.chrome_trace:
+            filename = Path(scheduler_csv_file).stem
+            output_path = os.path.join(FLAGS.output_dir, filename + ".json")
+            logger.debug(f"Saving trace for {scheduler_csv_file} at {output_path}")
+            csv_reader.to_chrome_trace(scheduler_csv_file, scheduler_label, output_path)
+
+        # Plot the requested graphs.
         if FLAGS.plot_utilization or FLAGS.all:
             plot_utilization(
-                plotter,
+                csv_reader,
                 scheduler_csv_file,
                 scheduler_label,
                 os.path.join(
@@ -630,7 +660,7 @@ def main(argv):
             )
         if FLAGS.plot_task_placement_stats or FLAGS.all:
             plot_task_placement_stats(
-                plotter,
+                csv_reader,
                 scheduler_csv_file,
                 scheduler_label,
                 os.path.join(
@@ -642,7 +672,7 @@ def main(argv):
             )
         if FLAGS.plot_task_slack or FLAGS.all:
             plot_task_slack(
-                plotter,
+                csv_reader,
                 FLAGS.task_name,
                 scheduler_csv_file,
                 scheduler_label,
@@ -654,7 +684,7 @@ def main(argv):
             )
         if FLAGS.plot_inter_task_time or FLAGS.all:
             plot_inter_task_time(
-                plotter,
+                csv_reader,
                 FLAGS.task_name,
                 scheduler_csv_file,
                 scheduler_label,
@@ -667,7 +697,7 @@ def main(argv):
             )
         if FLAGS.plot_missed_deadlines or FLAGS.all:
             plot_missed_deadlines(
-                plotter,
+                csv_reader,
                 FLAGS.task_name,
                 scheduler_csv_file,
                 scheduler_label,
@@ -681,7 +711,7 @@ def main(argv):
 
     if FLAGS.plot_scheduler_runtime or FLAGS.all:
         plot_scheduler_runtime(
-            plotter,
+            csv_reader,
             FLAGS.csv_files,
             FLAGS.csv_labels,
             os.path.join(FLAGS.output_dir, FLAGS.scheduler_runtime_timeline_plot_name),
@@ -691,7 +721,7 @@ def main(argv):
         )
     if FLAGS.plot_task_placement_delay or FLAGS.all:
         plot_task_placement_delay(
-            plotter,
+            csv_reader,
             FLAGS.csv_files,
             FLAGS.csv_labels,
             os.path.join(FLAGS.output_dir, FLAGS.task_placement_delay_plot_name),

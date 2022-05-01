@@ -1,4 +1,5 @@
 import csv
+import json
 import uuid
 from collections import defaultdict, namedtuple
 from functools import total_ordering
@@ -68,6 +69,7 @@ Scheduler = namedtuple(
         "total_tasks",
         "placed_tasks",
         "unplaced_tasks",
+        "instance_id",
     ],
 )
 
@@ -233,8 +235,8 @@ class CSVReader(object):
 
         # Form scheduler invocation events from the retrieved events.
         scheduler_invocation_events = []
-        for scheduler_start, scheduler_finish in zip(
-            scheduler_events[::2], scheduler_events[1::2]
+        for index, (scheduler_start, scheduler_finish) in enumerate(
+            zip(scheduler_events[::2], scheduler_events[1::2]), start=1
         ):
             assert (
                 type(scheduler_start) == SchedulerStart
@@ -255,6 +257,7 @@ class CSVReader(object):
                     + scheduler_start.placed_tasks,
                     placed_tasks=scheduler_finish.placed_tasks,
                     unplaced_tasks=scheduler_finish.unplaced_tasks,
+                    instance_id=index,
                 )
             )
         return scheduler_invocation_events
@@ -358,3 +361,59 @@ class CSVReader(object):
             if type(event) == MissedDeadline:
                 missed_deadline_events.append(event)
         return missed_deadline_events
+
+    def to_chrome_trace(self, csv_path: str, scheduler_label: str, output_path: str):
+        """Converts the CSV of the events in a simulation execution to a Chrome tracer
+        format.
+
+        Args:
+            csv_path (str): The path to the CSV to be converted to Chrome trace.
+            output_path (str): The path where the Chrome trace file should be output.
+            scheduler_label (str): The name of the scheduler that produced the trace.
+        """
+        trace = {
+            "traceEvents": [],
+            "otherData": {"csv_path": csv_path, "scheduler": scheduler_label},
+        }
+
+        # Output all the scheduler events.
+        for scheduler_event in self.get_scheduler_invocations(csv_path):
+            trace_event = {
+                "name": f"{scheduler_label} {scheduler_event.instance_id}",
+                "cat": "scheduler",
+                "ph": "X",
+                "ts": scheduler_event.start_time,
+                "dur": scheduler_event.runtime,
+                "pid": scheduler_label,
+                "tid": "main",
+                "args": {
+                    "total_tasks": scheduler_event.total_tasks,
+                    "placed_tasks": scheduler_event.placed_tasks,
+                    "unplaced_tasks": scheduler_event.unplaced_tasks,
+                },
+            }
+            trace["traceEvents"].append(trace_event)
+
+        # Output all the tasks.
+        for task in self.get_tasks(csv_path):
+            operator_name, callback_name = task.name.split(".", 1)
+            trace_event = {
+                "name": f"{task.name} {task.timestamp}",
+                "cat": "task",
+                "ph": "X",
+                "ts": task.start_time,
+                "dur": task.completion_time - task.start_time,
+                "pid": operator_name,
+                "tid": callback_name,
+                "args": {
+                    "id": str(task.id),
+                    "deadline": task.deadline,
+                    "release_time": task.release_time,
+                    "missed_deadline": task.missed_deadline,
+                    "timestamp": task.timestamp,
+                },
+            }
+            trace["traceEvents"].append(trace_event)
+
+        with open(output_path, "w") as f:
+            json.dump(trace, f, indent=4)
