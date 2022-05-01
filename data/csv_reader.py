@@ -66,6 +66,8 @@ Scheduler = namedtuple(
         "start_time",
         "end_time",
         "runtime",
+        "released_tasks",
+        "previously_placed_tasks",
         "total_tasks",
         "placed_tasks",
         "unplaced_tasks",
@@ -259,6 +261,8 @@ class CSVReader(object):
                     start_time=scheduler_start.simulator_time,
                     end_time=scheduler_finish.simulator_time,
                     runtime=scheduler_finish.runtime,
+                    released_tasks=scheduler_start.released_tasks,
+                    previously_placed_tasks=scheduler_start.placed_tasks,
                     total_tasks=scheduler_start.released_tasks
                     + scheduler_start.placed_tasks,
                     placed_tasks=scheduler_finish.placed_tasks,
@@ -385,7 +389,7 @@ class CSVReader(object):
         # Output all the scheduler events.
         for scheduler_event in self.get_scheduler_invocations(csv_path):
             trace_event = {
-                "name": f"{scheduler_label} {scheduler_event.instance_id}",
+                "name": f"{scheduler_label}::{scheduler_event.instance_id}",
                 "cat": "scheduler",
                 "ph": "X",
                 "ts": scheduler_event.start_time,
@@ -393,6 +397,8 @@ class CSVReader(object):
                 "pid": scheduler_label,
                 "tid": "main",
                 "args": {
+                    "released_tasks": scheduler_event.released_tasks,
+                    "previously_placed_tasks": scheduler_event.previously_placed_tasks,
                     "total_tasks": scheduler_event.total_tasks,
                     "placed_tasks": scheduler_event.placed_tasks,
                     "unplaced_tasks": scheduler_event.unplaced_tasks,
@@ -404,7 +410,7 @@ class CSVReader(object):
         for task in self.get_tasks(csv_path):
             operator_name, callback_name = task.name.split(".", 1)
             trace_event = {
-                "name": f"{task.name} {task.timestamp}",
+                "name": f"{task.name}::{task.timestamp}",
                 "cat": "task,duration",
                 "ph": "X",
                 "ts": task.start_time,
@@ -427,13 +433,13 @@ class CSVReader(object):
 
         # Output all the missed deadlines.
         for missed_deadline_event in self.get_missed_deadline_events(csv_path):
-            missed_deadline_task = missed_deadline_event.task
-            operator_name, callback_name = missed_deadline_task.name.split(".", 1)
+            task = missed_deadline_event.task
+            operator_name, callback_name = task.name.split(".", 1)
             trace_event = {
-                "name": f"{missed_deadline_task.name} {missed_deadline_task.timestamp}",
+                "name": f"{task.name}::{task.timestamp}",
                 "cat": "task,missed,deadline,instant",
                 "ph": "i",
-                "ts": missed_deadline_task.deadline,
+                "ts": task.deadline,
                 "pid": operator_name,
                 "tid": callback_name,
                 "s": "t",  # The scope of the missed deadline events is per thread.
