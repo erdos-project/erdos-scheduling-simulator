@@ -205,9 +205,15 @@ class CSVReader(object):
                         name=reading[2], id=uuid.UUID(reading[3])
                     )
                 elif reading[1] == "TASK_PLACEMENT":
+                    # Update the task's start time (if needed)
+                    task = tasks_memo[reading[4]]
+                    simulator_time = int(reading[0])
+                    if task.start_time == -1:
+                        task.start_time = simulator_time
+
                     events.append(
                         TaskPlacement(
-                            simulator_time=int(reading[0]),
+                            simulator_time=simulator_time,
                             task=tasks_memo[reading[4]],
                             worker_pool=worker_pool_memo[reading[5]],
                         )
@@ -399,19 +405,38 @@ class CSVReader(object):
             operator_name, callback_name = task.name.split(".", 1)
             trace_event = {
                 "name": f"{task.name} {task.timestamp}",
-                "cat": "task",
+                "cat": "task,duration",
                 "ph": "X",
                 "ts": task.start_time,
                 "dur": task.completion_time - task.start_time,
                 "pid": operator_name,
                 "tid": callback_name,
                 "args": {
+                    "name": task.name,
                     "id": str(task.id),
-                    "deadline": task.deadline,
-                    "release_time": task.release_time,
-                    "missed_deadline": task.missed_deadline,
                     "timestamp": task.timestamp,
+                    "release_time": task.release_time,
+                    "runtime": task.runtime,
+                    "deadline": task.deadline,
+                    "start_time": task.start_time,
+                    "completion_time": task.completion_time,
+                    "missed_deadline": task.missed_deadline,
                 },
+            }
+            trace["traceEvents"].append(trace_event)
+
+        # Output all the missed deadlines.
+        for missed_deadline_event in self.get_missed_deadline_events(csv_path):
+            missed_deadline_task = missed_deadline_event.task
+            operator_name, callback_name = missed_deadline_task.name.split(".", 1)
+            trace_event = {
+                "name": f"{missed_deadline_task.name} {missed_deadline_task.timestamp}",
+                "cat": "task,missed,deadline,instant",
+                "ph": "i",
+                "ts": missed_deadline_task.deadline,
+                "pid": operator_name,
+                "tid": callback_name,
+                "s": "t",  # The scope of the missed deadline events is per thread.
             }
             trace["traceEvents"].append(trace_event)
 
