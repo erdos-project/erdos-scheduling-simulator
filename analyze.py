@@ -597,8 +597,9 @@ def plot_missed_deadlines(
         plt.figure(figsize=figure_size)
         plt.bar(
             missed_deadline_by_task_name.keys(),
-            map(len, missed_deadline_by_task_name.values()),
+            list(map(len, missed_deadline_by_task_name.values())),
         )
+        plt.xticks(rotation=90)
         plt.savefig(output, bbox_inches="tight")
 
 

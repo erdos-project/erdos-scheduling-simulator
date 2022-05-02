@@ -408,7 +408,10 @@ class CSVReader(object):
 
         # Output all the tasks.
         for task in self.get_tasks(csv_path):
-            operator_name, callback_name = task.name.split(".", 1)
+            if "." in task.name:
+                operator_name, callback_name = task.name.split(".", 1)
+            else:
+                operator_name = callback_name = task.name
             trace_event = {
                 "name": f"{task.name}::{task.timestamp}",
                 "cat": "task,duration",
@@ -434,7 +437,10 @@ class CSVReader(object):
         # Output all the missed deadlines.
         for missed_deadline_event in self.get_missed_deadline_events(csv_path):
             task = missed_deadline_event.task
-            operator_name, callback_name = task.name.split(".", 1)
+            if "." in task.name:
+                operator_name, callback_name = task.name.split(".", 1)
+            else:
+                operator_name = callback_name = task.name
             trace_event = {
                 "name": f"{task.name}::{task.timestamp}",
                 "cat": "task,missed,deadline,instant",
