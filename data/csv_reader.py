@@ -447,4 +447,4 @@ class CSVReader(object):
             trace["traceEvents"].append(trace_event)
 
         with open(output_path, "w") as f:
-            json.dump(trace, f, indent=4)
+            json.dump(trace, f, indent=4, sort_keys=True)

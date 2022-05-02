@@ -297,7 +297,8 @@ def plot_task_placement_stats(
     """Plots the number of placed and unplaced tasks by each scheduler invocation.
 
     Args:
-        csv_reader (`data.CSVReader`): The CSVReader instance containing the parsed CSV file.
+        csv_reader (`data.CSVReader`): The CSVReader instance containing the parsed
+            CSV file.
         scheduler_csv_file (`str`): The path to the CSV file for which to plot results.
         scheduler_name (`str`): The label to give to the scheduler.
         output (`str`): The path to where the plot should be output to.
