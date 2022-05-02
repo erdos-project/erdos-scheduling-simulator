@@ -100,6 +100,17 @@ flags.DEFINE_string(
     "The filename of the missed deadline plot.",
 )
 
+flags.DEFINE_boolean(
+    "plot_end_to_end_response_time",
+    False,
+    "Plots end to end response time for each timestamp.",
+)
+flags.DEFINE_string(
+    "end_to_end_response_time_plot_name",
+    "end_to_end_response_time.png",
+    "The filename of the end-to-end response time plot.",
+)
+
 matplotlib.rcParams.update({"font.size": 16, "figure.autolayout": True})
 matplotlib.rcParams["xtick.labelsize"] = 16
 matplotlib.rcParams["ytick.labelsize"] = 16
@@ -603,6 +614,42 @@ def plot_missed_deadlines(
         plt.savefig(output, bbox_inches="tight")
 
 
+def plot_end_to_end_response_time(
+    csv_reader,
+    scheduler_csv_file,
+    output,
+    plot=True,
+    figure_size=(14, 10),
+):
+    tasks = csv_reader.get_tasks(scheduler_csv_file)
+    timestamp_start_end = {}
+    for task in tasks:
+        if task.timestamp in timestamp_start_end:
+            release_time = min(
+                task.release_time, timestamp_start_end[task.timestamp][0]
+            )
+            completion_time = max(
+                task.completion_time, timestamp_start_end[task.timestamp][1]
+            )
+            timestamp_start_end[task.timestamp] = (release_time, completion_time)
+        else:
+            timestamp_start_end[task.timestamp] = (
+                task.release_time,
+                task.completion_time,
+            )
+
+    e2e_response_time = [ct - rt for (rt, ct) in timestamp_start_end.values()]
+    logger.debug("================== End-to-end response time [ms] ==================")
+    log_statistics(e2e_response_time, logger)
+
+    if plot:
+        plt.figure(figsize=figure_size)
+        plt.xlabel("End-to-end response time [ms]", fontsize=axes_fontsize)
+        plt.hist(e2e_response_time, density=False, bins=100)
+        plt.legend(frameon=False)
+        plt.savefig(output, bbox_inches="tight")
+
+
 def main(argv):
     assert len(FLAGS.csv_files) == len(
         FLAGS.csv_labels
@@ -704,6 +751,17 @@ def main(argv):
                 os.path.join(
                     FLAGS.output_dir,
                     f"{scheduler_label}_{FLAGS.missed_deadline_plot_name}",
+                ),
+                plot=not FLAGS.stats_only,
+                figure_size=figure_size,
+            )
+        if FLAGS.plot_end_to_end_response_time or FLAGS.all:
+            plot_end_to_end_response_time(
+                csv_reader,
+                scheduler_csv_file,
+                os.path.join(
+                    FLAGS.output_dir,
+                    f"{scheduler_label}_{FLAGS.end_to_end_response_time_plot_name}",
                 ),
                 plot=not FLAGS.stats_only,
                 figure_size=figure_size,
