@@ -49,7 +49,7 @@ python3 analyze.py
   --stats_only
 ```
 
-and to convert the given CSV files into Chrome traces (to be visualized in chrome://tracing, do
+and to convert the given CSV files into Chrome traces (to be visualized in chrome://tracing), do
 
 ```console
 python3 analyze.py
