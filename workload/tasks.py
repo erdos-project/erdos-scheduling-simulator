@@ -486,6 +486,10 @@ class TaskGraph(object):
         # Release any tasks that can be unlocked by the completion.
         released_tasks = []
         for child in self.get_children(task):
+            if child.state != TaskState.VIRTUAL:
+                # Task was already released when another of its parent tasks completed
+                # simulatenously with the argument parent task given to this method.
+                continue
             if all(map(lambda task: task.is_complete(), self.get_parents(child))):
                 if child.release_time == -1:
                     # If the child does not have a release time, then set it to now,
