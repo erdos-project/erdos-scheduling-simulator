@@ -1,4 +1,5 @@
 import csv
+import json
 import uuid
 from collections import defaultdict, namedtuple
 from functools import total_ordering
@@ -65,9 +66,12 @@ Scheduler = namedtuple(
         "start_time",
         "end_time",
         "runtime",
+        "released_tasks",
+        "previously_placed_tasks",
         "total_tasks",
         "placed_tasks",
         "unplaced_tasks",
+        "instance_id",
     ],
 )
 
@@ -92,8 +96,8 @@ WorkerPoolUtilization = namedtuple(
 )
 
 
-class Plotter(object):
-    """Plots the data from the CSV logs of a Simulator run.
+class CSVReader(object):
+    """Reads the data from the CSV logs of a Simulator run.
 
     Args:
         csv_paths (`Sequence[str]`): The paths to the CSVs where the results
@@ -110,7 +114,7 @@ class Plotter(object):
                     path_readings.append(line)
                 readings[csv_path] = path_readings
 
-        self._events = Plotter.parse_events(readings)
+        self._events = CSVReader.parse_events(readings)
 
     @staticmethod
     def parse_events(
@@ -203,9 +207,15 @@ class Plotter(object):
                         name=reading[2], id=uuid.UUID(reading[3])
                     )
                 elif reading[1] == "TASK_PLACEMENT":
+                    # Update the task's start time (if needed)
+                    task = tasks_memo[reading[4]]
+                    simulator_time = int(reading[0])
+                    if task.start_time == -1:
+                        task.start_time = simulator_time
+
                     events.append(
                         TaskPlacement(
-                            simulator_time=int(reading[0]),
+                            simulator_time=simulator_time,
                             task=tasks_memo[reading[4]],
                             worker_pool=worker_pool_memo[reading[5]],
                         )
@@ -233,8 +243,8 @@ class Plotter(object):
 
         # Form scheduler invocation events from the retrieved events.
         scheduler_invocation_events = []
-        for scheduler_start, scheduler_finish in zip(
-            scheduler_events[::2], scheduler_events[1::2]
+        for index, (scheduler_start, scheduler_finish) in enumerate(
+            zip(scheduler_events[::2], scheduler_events[1::2]), start=1
         ):
             assert (
                 type(scheduler_start) == SchedulerStart
@@ -251,10 +261,13 @@ class Plotter(object):
                     start_time=scheduler_start.simulator_time,
                     end_time=scheduler_finish.simulator_time,
                     runtime=scheduler_finish.runtime,
+                    released_tasks=scheduler_start.released_tasks,
+                    previously_placed_tasks=scheduler_start.placed_tasks,
                     total_tasks=scheduler_start.released_tasks
                     + scheduler_start.placed_tasks,
                     placed_tasks=scheduler_finish.placed_tasks,
                     unplaced_tasks=scheduler_finish.unplaced_tasks,
+                    instance_id=index,
                 )
             )
         return scheduler_invocation_events
@@ -359,7 +372,79 @@ class Plotter(object):
                 missed_deadline_events.append(event)
         return missed_deadline_events
 
-    def plot_scheduler_invocations(self):
-        """Plots the invocation of the scheduler along with the number of tasks
-        to schedule and the tasks that were placed and unplaced."""
-        pass
+    def to_chrome_trace(self, csv_path: str, scheduler_label: str, output_path: str):
+        """Converts the CSV of the events in a simulation execution to a Chrome tracer
+        format.
+
+        Args:
+            csv_path (str): The path to the CSV to be converted to Chrome trace.
+            output_path (str): The path where the Chrome trace file should be output.
+            scheduler_label (str): The name of the scheduler that produced the trace.
+        """
+        trace = {
+            "traceEvents": [],
+            "otherData": {"csv_path": csv_path, "scheduler": scheduler_label},
+        }
+
+        # Output all the scheduler events.
+        for scheduler_event in self.get_scheduler_invocations(csv_path):
+            trace_event = {
+                "name": f"{scheduler_label}::{scheduler_event.instance_id}",
+                "cat": "scheduler",
+                "ph": "X",
+                "ts": scheduler_event.start_time,
+                "dur": scheduler_event.runtime,
+                "pid": scheduler_label,
+                "tid": "main",
+                "args": {
+                    "released_tasks": scheduler_event.released_tasks,
+                    "previously_placed_tasks": scheduler_event.previously_placed_tasks,
+                    "total_tasks": scheduler_event.total_tasks,
+                    "placed_tasks": scheduler_event.placed_tasks,
+                    "unplaced_tasks": scheduler_event.unplaced_tasks,
+                },
+            }
+            trace["traceEvents"].append(trace_event)
+
+        # Output all the tasks.
+        for task in self.get_tasks(csv_path):
+            operator_name, callback_name = task.name.split(".", 1)
+            trace_event = {
+                "name": f"{task.name}::{task.timestamp}",
+                "cat": "task,duration",
+                "ph": "X",
+                "ts": task.start_time,
+                "dur": task.completion_time - task.start_time,
+                "pid": operator_name,
+                "tid": callback_name,
+                "args": {
+                    "name": task.name,
+                    "id": str(task.id),
+                    "timestamp": task.timestamp,
+                    "release_time": task.release_time,
+                    "runtime": task.runtime,
+                    "deadline": task.deadline,
+                    "start_time": task.start_time,
+                    "completion_time": task.completion_time,
+                    "missed_deadline": task.missed_deadline,
+                },
+            }
+            trace["traceEvents"].append(trace_event)
+
+        # Output all the missed deadlines.
+        for missed_deadline_event in self.get_missed_deadline_events(csv_path):
+            task = missed_deadline_event.task
+            operator_name, callback_name = task.name.split(".", 1)
+            trace_event = {
+                "name": f"{task.name}::{task.timestamp}",
+                "cat": "task,missed,deadline,instant",
+                "ph": "i",
+                "ts": task.deadline,
+                "pid": operator_name,
+                "tid": callback_name,
+                "s": "t",  # The scope of the missed deadline events is per thread.
+            }
+            trace["traceEvents"].append(trace_event)
+
+        with open(output_path, "w") as f:
+            json.dump(trace, f, indent=4, sort_keys=True)

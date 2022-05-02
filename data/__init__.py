@@ -1,8 +1,8 @@
 # Export the loaders.
-# Export the plotter.
-from .plotter import (
+# Export the CSV Reader.
+from .csv_reader import (
+    CSVReader,
     MissedDeadline,
-    Plotter,
     Scheduler,
     SchedulerFinished,
     SchedulerStart,
