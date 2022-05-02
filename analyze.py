@@ -15,13 +15,9 @@ from data import CSVReader
 from utils import log_statistics, setup_logging
 
 FLAGS = flags.FLAGS
-flags.DEFINE_list(
-    "csv_files", None, "List of CSV files containing experiment logs"
-)
+flags.DEFINE_list("csv_files", None, "List of CSV files containing experiment logs")
 flags.mark_flag_as_required("csv_files")
-flags.DEFINE_list(
-    "csv_labels", None, "List of labels to use for the experiment logs"
-)
+flags.DEFINE_list("csv_labels", None, "List of labels to use for the experiment logs")
 flags.mark_flag_as_required("csv_labels")
 flags.DEFINE_string("output_dir", ".", "The directory to output the graphs to.")
 
