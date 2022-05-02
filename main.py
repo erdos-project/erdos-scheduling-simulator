@@ -41,22 +41,22 @@ flags.DEFINE_string(
 flags.DEFINE_string("log_level", "debug", "Level of logging.")
 flags.DEFINE_string(
     "graph_path",
-    "./data/pylot-complete-graph.dot",
+    "./profiles/workload/pylot-complete-graph.dot",
     "Path of the DOT file that contains the execution graph.",
 )
 flags.DEFINE_string(
     "profile_path",
-    "./data/pylot_profile.json",
+    "./profiles/workload/pylot_profile.json",
     "Path of the JSON profile for the Pylot execution.",
 )
 flags.DEFINE_string(
     "resource_path",
-    "./data/pylot_resource_profile.json",
+    "./profiles/workload/pylot_resource_profile.json",
     "Path of the Resource requirements for each Task.",
 )
 flags.DEFINE_string(
     "worker_profile_path",
-    "./data/worker_profile.json",
+    "./profiles/workers/worker_profile.json",
     "Path of the topology of Workers to schedule on.",
 )
 flags.DEFINE_bool("stats", False, "Print the statistics from the tasks loaded.")

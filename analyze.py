@@ -16,11 +16,13 @@ from utils import log_statistics, setup_logging
 
 FLAGS = flags.FLAGS
 flags.DEFINE_list(
-    "csv_files", ["../test.csv"], "List of CSV files containing experiment logs"
+    "csv_files", None, "List of CSV files containing experiment logs"
 )
+flags.mark_flag_as_required("csv_files")
 flags.DEFINE_list(
-    "csv_labels", ["test_scheduler"], "List of labels to use for the experiment logs"
+    "csv_labels", None, "List of labels to use for the experiment logs"
 )
+flags.mark_flag_as_required("csv_labels")
 flags.DEFINE_string("output_dir", ".", "The directory to output the graphs to.")
 
 # Enable the restriction of events to a particular regular expression.
