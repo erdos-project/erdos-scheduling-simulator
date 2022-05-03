@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from absl import app, flags
 from matplotlib.patches import Patch
+from tabulate import tabulate
 
 from data import CSVReader
 from utils import log_statistics, setup_logging
@@ -650,6 +651,86 @@ def plot_end_to_end_response_time(
         plt.savefig(output, bbox_inches="tight")
 
 
+def log_basic_task_statistics(logger, csv_reader: CSVReader, csv_file: str):
+    """Prints the basic task statistics from the given CSV file.
+
+    Args:
+        logger (logging.Logger): The logger instance to show results on.
+        csv_reader (:py:class:`CSVReader`): The CSVReader instance containing the
+            results.
+        csv_file (str): The path to the CSV file to show the results for.
+    """
+    # Get the tasks grouped by their name.
+    tasks = defaultdict(list)
+    for task in csv_reader.get_tasks(csv_file):
+        tasks[task.name].append(task)
+
+    # Get the placements grouped by the task name.
+    placements = defaultdict(list)
+    for placement in csv_reader.get_task_placements(csv_file):
+        placements[placement.task.name].append(placement)
+
+    # Gather the results.
+    results = []
+    total_missed_deadline_delays = []
+    total_placement_delays = []
+    for task_name, grouped_tasks in tasks.items():
+        # Gather missed deadline delays.
+        missed_deadline_tasks = [task for task in grouped_tasks if task.missed_deadline]
+        missed_deadline_delays = [
+            (task.completion_time - task.deadline) / 1000
+            for task in missed_deadline_tasks
+        ]
+        total_missed_deadline_delays.extend(missed_deadline_delays)
+
+        # Gather placement delays.
+        placement_delays = [
+            (placement.simulator_time - placement.task.release_time) / 1000
+            for placement in placements[task_name]
+        ]
+        total_placement_delays.extend(placement_delays)
+
+        results.append(
+            (
+                task_name,
+                len(grouped_tasks),
+                len(missed_deadline_tasks),
+                np.mean(missed_deadline_delays)
+                if len(missed_deadline_delays) != 0
+                else 0.0,
+                np.mean(placement_delays),
+            )
+        )
+    results.append(
+        (
+            "Total",
+            len(csv_reader.get_tasks(csv_file)),
+            len(csv_reader.get_missed_deadline_events(csv_file)),
+            np.mean(total_missed_deadline_delays)
+            if len(total_missed_deadline_delays) != 0
+            else 0.0,
+            np.mean(total_placement_delays),
+        )
+    )
+
+    # Log the results.
+    logger.debug(
+        "\n"
+        + tabulate(
+            results,
+            headers=[
+                "Name",
+                "Total",
+                "X Dline?",
+                "Dline Delay",
+                "Place Delay",
+            ],
+            tablefmt="grid",
+            showindex=True,
+        )
+    )
+
+
 def main(argv):
     assert len(FLAGS.csv_files) == len(
         FLAGS.csv_labels
@@ -673,17 +754,7 @@ def main(argv):
         logger.debug(
             f"Simulation end time for {scheduler_csv_file}: {simulation_end_time}"
         )
-        logger.debug(
-            f"Number of tasks for {scheduler_csv_file}: "
-            f"{len(csv_reader.get_tasks(scheduler_csv_file))}"
-        )
-        missed_deadline_events = csv_reader.get_missed_deadline_events(
-            scheduler_csv_file
-        )
-        logger.debug(
-            f"Number of missed deadlines for {scheduler_csv_file}: "
-            f"{len(missed_deadline_events)}"
-        )
+        log_basic_task_statistics(logger, csv_reader, scheduler_csv_file)
 
         # Output the Chrome trace format if requested.
         if FLAGS.chrome_trace:
