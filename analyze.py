@@ -35,9 +35,14 @@ flags.DEFINE_bool(
     "stats_only", False, "Print only statistics and skip output of plots."
 )
 flags.DEFINE_bool(
-    "chrome_trace",
+    "chrome_task_trace",
     False,
-    "Outputs the given CSV files in the Chrome trace format.",
+    "Outputs the given CSV files in the Chrome trace format in a task-centric view.",
+)
+flags.DEFINE_bool(
+    "chrome_resource_trace",
+    False,
+    "Outpus the given CSV files in the Chrome trace format in a resource-centric view.",
 )
 
 # Enumerate the different kinds of plots.
@@ -757,11 +762,19 @@ def main(argv):
         log_basic_task_statistics(logger, csv_reader, scheduler_csv_file)
 
         # Output the Chrome trace format if requested.
-        if FLAGS.chrome_trace:
+        if FLAGS.chrome_task_trace or FLAGS.chrome_resource_trace:
+            assert (
+                FLAGS.chrome_task_trace != FLAGS.chrome_resource_trace
+            ), "--chrome_task_trace and --chrome_resource_trace cannot be both True"
             filename = Path(scheduler_csv_file).stem
             output_path = os.path.join(FLAGS.output_dir, filename + ".json")
             logger.debug(f"Saving trace for {scheduler_csv_file} at {output_path}")
-            csv_reader.to_chrome_trace(scheduler_csv_file, scheduler_label, output_path)
+            csv_reader.to_chrome_trace(
+                scheduler_csv_file,
+                scheduler_label,
+                output_path,
+                task_centric=FLAGS.chrome_task_trace,
+            )
 
         # Plot the requested graphs.
         if FLAGS.plot_utilization or FLAGS.all:
