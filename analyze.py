@@ -37,12 +37,15 @@ flags.DEFINE_bool(
 flags.DEFINE_bool(
     "chrome_task_trace",
     False,
-    "Outputs the given CSV files in the Chrome trace format in a task-centric view.",
+    "Outputs the given CSV files in the Chrome trace format in task-centric view.",
 )
 flags.DEFINE_bool(
     "chrome_resource_trace",
     False,
-    "Outpus the given CSV files in the Chrome trace format in a resource-centric view.",
+    "Outputs the given CSV files in the Chrome trace format in resource-centric view.",
+)
+flags.mark_bool_flags_as_mutual_exclusive(
+    ["chrome_task_trace", "chrome_resource_trace"], required=False
 )
 
 # Enumerate the different kinds of plots.
@@ -763,9 +766,6 @@ def main(argv):
 
         # Output the Chrome trace format if requested.
         if FLAGS.chrome_task_trace or FLAGS.chrome_resource_trace:
-            assert (
-                FLAGS.chrome_task_trace != FLAGS.chrome_resource_trace
-            ), "--chrome_task_trace and --chrome_resource_trace cannot be both True"
             filename = Path(scheduler_csv_file).stem
             output_path = os.path.join(FLAGS.output_dir, filename + ".json")
             logger.debug(f"Saving trace for {scheduler_csv_file} at {output_path}")
