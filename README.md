@@ -55,5 +55,5 @@ and to convert the given CSV files into Chrome traces (to be visualized in chrom
 python3 analyze.py
   --csv_files={PATH_TO_CSV_LOG_FILE} \
   --csv_labels={SCHEDULER_NAME}
-  --chrome_trace
+  --chrome_task_trace
 ```

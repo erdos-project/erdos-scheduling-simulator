@@ -52,6 +52,9 @@ class Task(object):
                 return self.runtime <= other.runtime
         return True
 
+    def __hash__(self):
+        return hash(repr(self))
+
     def __eq__(self, other):
         return self.id == other.id
 
@@ -372,7 +375,13 @@ class CSVReader(object):
                 missed_deadline_events.append(event)
         return missed_deadline_events
 
-    def to_chrome_trace(self, csv_path: str, scheduler_label: str, output_path: str):
+    def to_chrome_trace(
+        self,
+        csv_path: str,
+        scheduler_label: str,
+        output_path: str,
+        task_centric: bool = True,
+    ):
         """Converts the CSV of the events in a simulation execution to a Chrome tracer
         format.
 
@@ -380,6 +389,8 @@ class CSVReader(object):
             csv_path (str): The path to the CSV to be converted to Chrome trace.
             output_path (str): The path where the Chrome trace file should be output.
             scheduler_label (str): The name of the scheduler that produced the trace.
+            task_centric (bool): If True then the trace contains timelines of task runs,
+                otherwise the trace contains timelines of resource utilization.
         """
         trace = {
             "traceEvents": [],
@@ -406,20 +417,30 @@ class CSVReader(object):
             }
             trace["traceEvents"].append(trace_event)
 
+        if not task_centric:
+            task_to_wp = {
+                task_placement.task: task_placement.worker_pool
+                for task_placement in self.get_task_placements(csv_path)
+            }
         # Output all the tasks.
         for task in self.get_tasks(csv_path):
-            if "." in task.name:
-                operator_name, callback_name = task.name.split(".", 1)
+            if task_centric:
+                if "." in task.name:
+                    # pid = operator name, tid = callback name
+                    pid, tid = task.name.split(".", 1)
+                else:
+                    pid = tid = task.name
             else:
-                operator_name = callback_name = task.name
+                pid = task_to_wp[task].name
+                tid = task.name
             trace_event = {
                 "name": f"{task.name}::{task.timestamp}",
                 "cat": "task,duration",
                 "ph": "X",
                 "ts": task.start_time,
                 "dur": task.completion_time - task.start_time,
-                "pid": operator_name,
-                "tid": callback_name,
+                "pid": pid,
+                "tid": tid,
                 "args": {
                     "name": task.name,
                     "id": str(task.id),
@@ -437,17 +458,22 @@ class CSVReader(object):
         # Output all the missed deadlines.
         for missed_deadline_event in self.get_missed_deadline_events(csv_path):
             task = missed_deadline_event.task
-            if "." in task.name:
-                operator_name, callback_name = task.name.split(".", 1)
+            if task_centric:
+                if "." in task.name:
+                    # pid = operator name, tid = callback name
+                    pid, tid = task.name.split(".", 1)
+                else:
+                    pid = tid = task.name
             else:
-                operator_name = callback_name = task.name
+                pid = task_to_wp[task].name
+                tid = task.name
             trace_event = {
                 "name": f"{task.name}::{task.timestamp}",
                 "cat": "task,missed,deadline,instant",
                 "ph": "i",
                 "ts": task.deadline,
-                "pid": operator_name,
-                "tid": callback_name,
+                "pid": pid,
+                "tid": tid,
                 "s": "t",  # The scope of the missed deadline events is per thread.
             }
             trace["traceEvents"].append(trace_event)
