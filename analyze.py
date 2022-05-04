@@ -702,11 +702,14 @@ def analyze_end_to_end_response_time(
         plt.savefig(output, bbox_inches="tight")
 
 
-def log_basic_task_statistics(logger, csv_reader: CSVReader, csv_file: str):
+def log_basic_task_statistics(
+    logger, task_name_regex, csv_reader: CSVReader, csv_file: str
+):
     """Prints the basic task statistics from the given CSV file.
 
     Args:
         logger (logging.Logger): The logger instance to show results on.
+        task_name_regex (`str`): The regular expression to match the task name to.
         csv_reader (:py:class:`CSVReader`): The CSVReader instance containing the
             results.
         csv_file (str): The path to the CSV file to show the results for.
@@ -714,12 +717,14 @@ def log_basic_task_statistics(logger, csv_reader: CSVReader, csv_file: str):
     # Get the tasks grouped by their name.
     tasks = defaultdict(list)
     for task in csv_reader.get_tasks(csv_file):
-        tasks[task.name].append(task)
+        if re.match(task_name_regex, task.name):
+            tasks[task.name].append(task)
 
     # Get the placements grouped by the task name.
     placements = defaultdict(list)
     for placement in csv_reader.get_task_placements(csv_file):
-        placements[placement.task.name].append(placement)
+        if re.match(task_name_regex, placement.task.name):
+            placements[placement.task.name].append(placement)
 
     # Gather the results.
     results = []
@@ -755,8 +760,8 @@ def log_basic_task_statistics(logger, csv_reader: CSVReader, csv_file: str):
     results.append(
         (
             "Total",
-            len(csv_reader.get_tasks(csv_file)),
-            len(csv_reader.get_missed_deadline_events(csv_file)),
+            sum(map(len, tasks.values())),
+            len(total_missed_deadline_delays),
             np.mean(total_missed_deadline_delays)
             if len(total_missed_deadline_delays) != 0
             else 0.0,
@@ -805,7 +810,9 @@ def main(argv):
         logger.debug(
             f"Simulation end time for {scheduler_csv_file}: {simulation_end_time}"
         )
-        log_basic_task_statistics(logger, csv_reader, scheduler_csv_file)
+        log_basic_task_statistics(
+            logger, FLAGS.task_name, csv_reader, scheduler_csv_file
+        )
 
         # Output the Chrome trace format if requested.
         if FLAGS.chrome_trace:
@@ -820,7 +827,7 @@ def main(argv):
             )
 
         # Show statistics or plot the requested graphs.
-        if FLAGS.utilization or FLAGS.all:
+        if FLAGS.resource_utilization or FLAGS.all:
             analyze_resource_utilization(
                 csv_reader,
                 scheduler_csv_file,
