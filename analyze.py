@@ -632,6 +632,7 @@ def plot_missed_deadlines(
 def plot_end_to_end_response_time(
     csv_reader,
     scheduler_csv_file,
+    scheduler_label,
     output,
     plot=True,
     figure_size=(14, 10),
@@ -661,7 +662,13 @@ def plot_end_to_end_response_time(
         plt.figure(figsize=figure_size)
         plt.xlim(0, max(600, max(e2e_response_time)))
         plt.xlabel("End-to-end response time [ms]", fontsize=axes_fontsize)
-        plt.hist(e2e_response_time, density=False, bins=100)
+        plt.hist(
+            e2e_response_time,
+            label=scheduler_label,
+            density=False,
+            range=(0, max(e2e_response_time)),
+            bins=100,
+        )
         plt.legend(frameon=False)
         plt.savefig(output, bbox_inches="tight")
 
@@ -850,6 +857,7 @@ def main(argv):
             plot_end_to_end_response_time(
                 csv_reader,
                 scheduler_csv_file,
+                scheduler_label,
                 os.path.join(
                     FLAGS.output_dir,
                     f"{scheduler_label}_{FLAGS.end_to_end_response_time_plot_name}",
