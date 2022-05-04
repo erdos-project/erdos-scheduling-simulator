@@ -109,8 +109,8 @@ flags.DEFINE_bool(
 # Scheduler related flags.
 flags.DEFINE_enum(
     "scheduler",
-    "edf",
-    ["edf", "lsf", "gurobi", "z3"],
+    "EDF",
+    ["EDF", "LSF", "Gurobi", "Z3"],
     "The scheduler to use for this execution.",
 )
 flags.DEFINE_bool(
@@ -192,15 +192,15 @@ def main(args):
 
     # Instantiate the scheduler based on the given flag.
     scheduler = None
-    if FLAGS.scheduler == "edf":
+    if FLAGS.scheduler == "EDF":
         scheduler = EDFScheduler(
             preemptive=FLAGS.preemption, runtime=FLAGS.scheduler_runtime, _flags=FLAGS
         )
-    elif FLAGS.scheduler == "lsf":
+    elif FLAGS.scheduler == "LSF":
         scheduler = LSFScheduler(
             preemptive=FLAGS.preemption, runtime=FLAGS.scheduler_runtime, _flags=FLAGS
         )
-    elif FLAGS.scheduler == "gurobi":
+    elif FLAGS.scheduler == "Gurobi":
         scheduler = GurobiScheduler(
             preemptive=FLAGS.preemption,
             runtime=FLAGS.scheduler_runtime,
@@ -209,7 +209,7 @@ def main(args):
             scheduling_horizon=FLAGS.scheduling_horizon,
             _flags=FLAGS,
         )
-    elif FLAGS.scheduler == "z3":
+    elif FLAGS.scheduler == "Z3":
         scheduler = Z3Scheduler(
             preemptive=FLAGS.preemption,
             runtime=FLAGS.scheduler_runtime,

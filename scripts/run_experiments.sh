@@ -2,14 +2,15 @@
 # $1 directory where to save the logs.
 
 # Scheduler runtimes in us.
-SCHEDULERS=(edf lsf z3 gurobi)
+SCHEDULERS=(EDF LSF Z3 Gurobi)
 SCHEDULER_RUNTIMES=(1 1000 5000 10000 -1)
 SCHEDULING_HORIZONS=(0 1000 5000 10000)
 RUNTIME_VARIANCES=(0 10)
 DEADLINE_VARIANCES=(0 10)
 MAX_TIMESTAMP=50
 RESOURCE_CONFIGS=(pylot_1_camera_1_lidar_resource_profile)
-WORKER_CONFIGS=(worker_2_machines_24_cpus_2_gpus_profile worker_2_machines_24_cpus_4_gpus_profile worker_2_machines_48_cpus_8_gpus_profile)
+WORKER_CONFIGS=(worker_2_machines_24_cpus_6_gpus_profile worker_2_machines_24_cpus_8_gpus_profile worker_2_machines_24_cpus_10_gpus_profile)
+EXECUTION_MODE=synthetic
 
 
 # Move to the simulator directory.
@@ -36,23 +37,30 @@ for WORKER_CONFIG in ${WORKER_CONFIGS[@]}; do
                             if [[ ${SCHEDULING_HORIZON} -ne 0 && ${SCHEDULER} != gurobi && ${SCHEDULER} != z3 ]] ; then
                                 continue
                             fi
-                            LOG_BASE=$1/scheduler_${SCHEDULER}_horizon_${SCHEDULING_HORIZON}_runtime_${RUNTIME}_timestamps_${MAX_TIMESTAMP}_runtime_var_${RUNTIME_VAR}_deadline_var_${DEADLINE_VAR}_${WORKER_CONFIG}_${RESOURCE_CONFIG}
+                            LOG_BASE=$1/${EXECUTION_MODE}_scheduler_${SCHEDULER}_horizon_${SCHEDULING_HORIZON}_runtime_${RUNTIME}_timestamps_${MAX_TIMESTAMP}_runtime_var_${RUNTIME_VAR}_deadline_var_${DEADLINE_VAR}_${WORKER_CONFIG}_${RESOURCE_CONFIG}
                             echo "Running ${LOG_BASE}"
                             if [ ! -f "${LOG_BASE}.csv" ]; then
-                                python3 main.py --graph_path=data/pylot-complete-graph.dot \
-                                        --resource_path=data/${RESOURCE_CONFIG}.json \
-                                        --worker_profile_path=data/${WORKER_CONFIG}.json \
+                                python3 main.py --graph_path=profiles/workload/pylot-complete-graph.dot \
+                                        --resource_path=profiles/workload/${RESOURCE_CONFIG}.json \
+                                        --worker_profile_path=profiles/workers/${WORKER_CONFIG}.json \
                                         --max_timestamp=${MAX_TIMESTAMP} \
-                                        --deadline_variance=${DEADLINE_VAR} \
+                                        --max_deadline_variance=${DEADLINE_VAR} \
                                         --runtime_variance=${RUNTIME_VAR} \
                                         --scheduler_runtime=${RUNTIME} \
                                         --scheduler=${SCHEDULER} \
                                         --scheduling_horizon=${SCHEDULING_HORIZON} \
                                         --log=${LOG_BASE}.log \
-                                        --csv=${LOG_BASE}.csv
+                                        --csv=${LOG_BASE}.csv \
+                                        --preemption=False \
+                                        --synchronize_sensors \
+                                        --timestamp_difference=100000 \
+                                        --execution_mode=${EXECUTION_MODE}
                             else
                                 echo "${LOG_BASE}.csv already exists."
                             fi
+                            python3 analyze.py --csv_files=${LOG_BASE}.csv --csv_labels=${SCHEDULER} --all
+                            mkdir -p ${LOG_BASE}
+                            mv *.png ${LOG_BASE}/
                         done
                     done
                 done
