@@ -32,7 +32,7 @@ flags.DEFINE_string(
 # Execution modes for the script.
 flags.DEFINE_bool("all", False, "Plot or show statistics for all graphs.")
 flags.DEFINE_bool(
-    "stats_only", False, "Print only statistics and skip output of plots."
+    "plot", False, "Plots the graph in addition to showing the statistics."
 )
 flags.DEFINE_bool(
     "chrome_task_trace",
@@ -800,7 +800,7 @@ def main(argv):
                     FLAGS.output_dir,
                     f"{scheduler_label}_{FLAGS.utilization_timeline_plot_name}",
                 ),
-                plot=not FLAGS.stats_only,
+                plot=FLAGS.plot,
                 figure_size=figure_size,
             )
         if FLAGS.plot_task_placement_stats or FLAGS.all:
@@ -812,7 +812,7 @@ def main(argv):
                     FLAGS.output_dir,
                     f"{scheduler_label}_{FLAGS.task_placement_bar_chart_plot_name}",
                 ),
-                plot=not FLAGS.stats_only,
+                plot=FLAGS.plot,
                 figure_size=figure_size,
             )
         if FLAGS.plot_task_slack or FLAGS.all:
@@ -824,7 +824,7 @@ def main(argv):
                 os.path.join(
                     FLAGS.output_dir, f"{scheduler_label}_{FLAGS.task_slack_plot_name}"
                 ),
-                plot=not FLAGS.stats_only,
+                plot=FLAGS.plot,
                 figure_size=figure_size,
             )
         if FLAGS.plot_inter_task_time or FLAGS.all:
@@ -837,7 +837,7 @@ def main(argv):
                     FLAGS.output_dir,
                     f"{scheduler_label}_{FLAGS.inter_task_time_plot_name}",
                 ),
-                plot=not FLAGS.stats_only,
+                plot=FLAGS.plot,
                 figure_size=figure_size,
             )
         if FLAGS.plot_missed_deadlines or FLAGS.all:
@@ -850,7 +850,7 @@ def main(argv):
                     FLAGS.output_dir,
                     f"{scheduler_label}_{FLAGS.missed_deadline_plot_name}",
                 ),
-                plot=not FLAGS.stats_only,
+                plot=FLAGS.plot,
                 figure_size=figure_size,
             )
         if FLAGS.plot_end_to_end_response_time or FLAGS.all:
@@ -862,7 +862,7 @@ def main(argv):
                     FLAGS.output_dir,
                     f"{scheduler_label}_{FLAGS.end_to_end_response_time_plot_name}",
                 ),
-                plot=not FLAGS.stats_only,
+                plot=FLAGS.plot,
                 figure_size=figure_size,
             )
 
@@ -873,7 +873,7 @@ def main(argv):
             FLAGS.csv_labels,
             os.path.join(FLAGS.output_dir, FLAGS.scheduler_runtime_timeline_plot_name),
             os.path.join(FLAGS.output_dir, FLAGS.scheduler_runtime_cdf_plot_name),
-            plot=not FLAGS.stats_only,
+            plot=FLAGS.plot,
             figure_size=figure_size,
         )
     if FLAGS.plot_task_placement_delay or FLAGS.all:
@@ -882,7 +882,7 @@ def main(argv):
             FLAGS.csv_files,
             FLAGS.csv_labels,
             os.path.join(FLAGS.output_dir, FLAGS.task_placement_delay_plot_name),
-            plot=not FLAGS.stats_only,
+            plot=FLAGS.plot,
             figure_size=figure_size,
         )
 
