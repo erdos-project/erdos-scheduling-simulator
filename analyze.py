@@ -214,8 +214,9 @@ def plot_utilization(
                 color=resource_color[resource_type],
             )
 
+        plt.xlim(0, max(sim_times_sec))
         plt.xlabel("Timeline [s]", fontsize=axes_fontsize)
-        plt.ylabel("Normalized utilization", fontsize=axes_fontsize)
+        plt.ylabel("Normalized Utilization", fontsize=axes_fontsize)
         # Set the y limits so we can visualize the legend.
         ax = fig.gca()
         ax.set_ylim(0, 1.01)
@@ -285,6 +286,7 @@ def plot_scheduler_runtime(
                 color=colors[label],
             )
         plt.xlim(0, max_start_time)
+        plt.ylim(0, max(50, max([max(a_r) for a_r in all_runtimes])))
         plt.xlabel("Timeline [ms]", fontsize=axes_fontsize)
         plt.ylabel("Scheduler Runtime [ms]", fontsize=axes_fontsize)
         plt.legend(frameon=False)
@@ -298,6 +300,7 @@ def plot_scheduler_runtime(
             cdf = np.cumsum(pdf)
             plt.plot(bin_count[1:], cdf, label=label)
         plt.xlim(0, max_runtime)
+        plt.ylim(0, 1)
         plt.xlabel("Scheduler Runtime [ms]", fontsize=axes_fontsize)
         plt.ylabel("CDF", fontsize=axes_fontsize)
         plt.legend(frameon=False)
@@ -366,6 +369,8 @@ def plot_task_placement_stats(
         # Add the axis labels.
         plt.xlabel("Scheduler Run", fontsize=axes_fontsize)
         plt.ylabel("Placed and Unplaced Tasks", fontsize=axes_fontsize)
+
+        plt.xlim(0, max(x_vals))
 
         # Add the yticks
         max_y_val = max(
@@ -620,6 +625,7 @@ def plot_missed_deadlines(
             list(map(len, missed_deadline_by_task_name.values())),
         )
         plt.xticks(rotation=90)
+        plt.ylabel("Number of Missed Deadlines")
         plt.savefig(output, bbox_inches="tight")
 
 
@@ -647,12 +653,13 @@ def plot_end_to_end_response_time(
                 task.completion_time,
             )
 
-    e2e_response_time = [ct - rt for (rt, ct) in timestamp_start_end.values()]
+    e2e_response_time = [(ct - rt) / 1000 for (rt, ct) in timestamp_start_end.values()]
     logger.debug("================== End-to-end response time [ms] ==================")
     log_statistics(e2e_response_time, logger)
 
     if plot:
         plt.figure(figsize=figure_size)
+        plt.xlim(0, max(600, max(e2e_response_time)))
         plt.xlabel("End-to-end response time [ms]", fontsize=axes_fontsize)
         plt.hist(e2e_response_time, density=False, bins=100)
         plt.legend(frameon=False)

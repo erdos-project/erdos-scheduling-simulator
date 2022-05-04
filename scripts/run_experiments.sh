@@ -9,7 +9,7 @@ RUNTIME_VARIANCES=(0 10)
 DEADLINE_VARIANCES=(0 10)
 MAX_TIMESTAMP=50
 RESOURCE_CONFIGS=(pylot_1_camera_1_lidar_resource_profile)
-WORKER_CONFIGS=(worker_2_machines_24_cpus_6_gpus_profile worker_2_machines_24_cpus_8_gpus_profile worker_2_machines_24_cpus_10_gpus_profile)
+WORKER_CONFIGS=(worker_2_machines_24_cpus_8_gpus_profile worker_2_machines_24_cpus_9_gpus_profile worker_2_machines_24_cpus_10_gpus_profile)
 EXECUTION_MODE=synthetic
 
 
