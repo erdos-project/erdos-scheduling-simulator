@@ -49,7 +49,9 @@ flags.mark_bool_flags_as_mutual_exclusive(
 )
 
 # Enumerate the different kinds of plots.
-flags.DEFINE_bool("plot_scheduler_runtime", False, "Plot scheduling runtime")
+flags.DEFINE_bool(
+    "scheduler_runtime", False, "Analyze the runtime of the scheduler invocations."
+)
 flags.DEFINE_string(
     "scheduler_runtime_timeline_plot_name",
     "scheduler_runtime_timeline.png",
@@ -61,26 +63,36 @@ flags.DEFINE_string(
     "The filename of the scheduler runtime CDF plot",
 )
 
-flags.DEFINE_bool("plot_utilization", False, "Plot resource utilization")
+flags.DEFINE_bool(
+    "resource_utilization", False, "Analyze the resource utilization of the trace."
+)
 flags.DEFINE_string(
-    "utilization_timeline_plot_name",
-    "utilization_bar_chart.png",
-    "The filename of the utilization timeline plot",
+    "resource_utilization_timeline_plot_name",
+    "resource_utilization_bar_chart.png",
+    "The filename of the resource utilization timeline plot",
 )
 
-flags.DEFINE_bool("plot_task_placement_stats", False, "Plot task placement stats")
+flags.DEFINE_bool(
+    "task_placement",
+    False,
+    "Analyzes the number of placed and unplaced tasks in the trace.",
+)
 flags.DEFINE_string(
     "task_placement_bar_chart_plot_name",
     "tasks_placed_bar_chart.png",
     "The filename of the task placement bar char plot",
 )
 
-flags.DEFINE_bool("plot_task_slack", False, "Plot task slack")
+flags.DEFINE_bool(
+    "task_slack",
+    False,
+    "Analyzes the placement and completion slack of the tasks in the trace.",
+)
 flags.DEFINE_string(
     "task_slack_plot_name", "task_slack.png", "The filename of the task slack plot"
 )
 
-flags.DEFINE_bool("plot_task_placement_delay", False, "Plot task placement delay")
+flags.DEFINE_bool("task_placement_delay", False, "Plot task placement delay")
 flags.DEFINE_string(
     "task_placement_delay_plot_name",
     "task_placement_delay.png",
@@ -88,9 +100,9 @@ flags.DEFINE_string(
 )
 
 flags.DEFINE_bool(
-    "plot_inter_task_time",
+    "inter_task_time",
     False,
-    "Plot histogram of time difference between task releases",
+    "Analyzes the time difference between task releases.",
 )
 flags.DEFINE_string(
     "inter_task_time_plot_name",
@@ -99,9 +111,9 @@ flags.DEFINE_string(
 )
 
 flags.DEFINE_bool(
-    "plot_missed_deadlines",
+    "missed_deadlines",
     False,
-    "Plots statistics about the missed deadlines from each invocation.",
+    "Analyzes the statistics about the missed deadlines from each invocation.",
 )
 flags.DEFINE_string(
     "missed_deadline_plot_name",
@@ -110,9 +122,9 @@ flags.DEFINE_string(
 )
 
 flags.DEFINE_boolean(
-    "plot_end_to_end_response_time",
+    "end_to_end_response_time",
     False,
-    "Plots end to end response time for each timestamp.",
+    "Analyzes the end-to-end response time for each timestamp.",
 )
 flags.DEFINE_string(
     "end_to_end_response_time_plot_name",
@@ -131,16 +143,19 @@ colors = {"EDF": "r", "Gurobi": "b", "Z3": "y", "LSF": "b"}
 logger = setup_logging("plotting")
 
 
-def plot_utilization(
+def analyze_resource_utilization(
     csv_reader,
     scheduler_csv_file,
     scheduler_name,
     output,
-    plot=True,
+    plot=False,
     figure_size=(14, 10),
     bar_width=1.0,
 ):
-    """Plots the timeline of the utilization of different resources on the workers.
+    """Analyzes the utilization of different resources on the workers.
+
+    If `plot` is `True`, the method plots a timeline of the utilization of different
+    resources on the workers.
 
     Args:
         csv_reader (`data.CSVReader`): The CSVReader instance containing the parsed
@@ -148,7 +163,7 @@ def plot_utilization(
         scheduler_csv_file (`str`): The path to the CSV file for which to plot results.
         scheduler_name (`str`): The label to give to the scheduler.
         output (`str`): The path to where the plot should be output to.
-        plot (`bool`) [default = True]: Show statistics only if set to False.
+        plot (`bool`) [default = False]: Plots the graphs if set to True.
         figure_size (`Tuple[int, int]`) [default=(14, 10)]: The size of the plot.
     """
     # Plotting defaults.
@@ -233,16 +248,19 @@ def plot_utilization(
         plt.savefig(output, bbox_inches="tight")
 
 
-def plot_scheduler_runtime(
+def analyze_scheduler_runtime(
     csv_reader,
     scheduler_csv_files,
     scheduler_labels,
     timeline_output,
     cdf_output,
-    plot=True,
+    plot=False,
     figure_size=(14, 10),
 ):
-    """Plots a timeline and a CDF of the scheduler invocations.
+    """Analyzes the runtime of the scheduler invocations from the CSV files.
+
+    If `plot` is `True`, the method plots a timeline and a CDF of the runtime of the
+    scheduler invocations.
 
     Args:
         csv_reader (`data.CSVReader`): The CSVReader instance containing the parsed
@@ -252,7 +270,7 @@ def plot_scheduler_runtime(
         scheduler_labels (`Sequence[str]`): A list of labels to give the schedulers.
         timeline_output (`str`): The path to where the timeline plot should be output.
         cdf_output (`str`): The path to where the CDF plot should be output.
-        plot (`bool`) [default = True]: Show statistics only if set to False.
+        plot (`bool`) [default = False]: Plots the graphs if set to True.
         figure_size (`Tuple[int, int]`) [default=(14, 10)]: The size of the plot.
     """
     # Retrieve the runtime of the scheduler invocations.
@@ -307,15 +325,15 @@ def plot_scheduler_runtime(
         plt.savefig(cdf_output, bbox_inches="tight")
 
 
-def plot_task_placement_stats(
+def analyze_task_placement(
     csv_reader,
     scheduler_csv_file,
     scheduler_name,
     output,
-    plot=True,
+    plot=False,
     figure_size=(14, 10),
 ):
-    """Plots the number of placed and unplaced tasks by each scheduler invocation.
+    """Analyzes the number of placed and unplaced tasks by each scheduler invocation.
 
     Args:
         csv_reader (`data.CSVReader`): The CSVReader instance containing the parsed
@@ -323,7 +341,7 @@ def plot_task_placement_stats(
         scheduler_csv_file (`str`): The path to the CSV file for which to plot results.
         scheduler_name (`str`): The label to give to the scheduler.
         output (`str`): The path to where the plot should be output to.
-        plot (`bool`) [default = True]: Show statistics only if set to False.
+        plot (`bool`) [default = False]: Plots the graphs if set to True.
         figure_size (`Tuple[int, int]`) [default=(14, 10)]: The size of the plot.
     """
     scheduler_invocations = csv_reader.get_scheduler_invocations(scheduler_csv_file)
@@ -388,16 +406,16 @@ def plot_task_placement_stats(
         plt.savefig(output, bbox_inches="tight")
 
 
-def plot_inter_task_time(
+def analyze_inter_task_time(
     csv_reader,
     task_name_regex,
     scheduler_csv_file,
     scheduler_name,
     output,
-    plot=True,
+    plot=False,
     figure_size=(14, 10),
 ):
-    """Plots the inter-task time for tasks that match the given regex.
+    """Analyzes the inter-task time for tasks that match the given regex.
 
     The inter-task time is the actual time elapsed between the release time of two
     successive invocations of a particular task.
@@ -409,7 +427,7 @@ def plot_inter_task_time(
         scheduler_csv_file (`str`): The path to the CSV file for which to plot results.
         scheduler_name (`str`): The label to give to the scheduler.
         output (`str`): The path to where the plot should be output to.
-        plot (`bool`) [default = True]: Show statistics only if set to False.
+        plot (`bool`) [default = False]: Plots the graphs if set to True.
         figure_size (`Tuple[int, int]`) [default=(14, 10)]: The size of the plot.
     """
     # Retrieve the tasks from the CSV file that match the given regular expression.
@@ -446,22 +464,23 @@ def plot_inter_task_time(
         plt.savefig(output, bbox_inches="tight")
 
 
-def plot_task_slack(
+def analyze_task_slack(
     csv_reader,
     task_name_regex,
     scheduler_csv_file,
     scheduler_name,
     output,
-    plot=True,
+    plot=False,
     figure_size=(14, 10),
 ):
-    """Plots the intended and actual slack of the tasks.
+    """Analyzes the actual and intended completion slack of the tasks.
 
-    The actual slack is defined as the time between the deadline and the actual
-    completion of the task, where a negative value defines a missed deadline.
+    The actual completion slack is defined as the time between the deadline and the
+    actual completion of the task, where a negative value defines a missed deadline.
 
-    The intended slack is defined as the time between the deadline and the intended
-    finish time of the task (as defined by its intended start time and runtime).
+    The intended completion slack is defined as the time between the deadline and the
+    intended finish time of the task (as defined by its intended start time and
+    runtime).
 
     Args:
         csv_reader (`data.CSVReader`): The CSVReader instance containing the parsed
@@ -470,7 +489,7 @@ def plot_task_slack(
         scheduler_csv_file (`str`): The path to the CSV file for which to plot results.
         scheduler_name (`str`): The label to give to the scheduler.
         output (`str`): The path to where the plot should be output to.
-        plot (`bool`) [default = True]: Show statistics only if set to False.
+        plot (`bool`) [default = False]: Plots the graphs if set to True.
         figure_size (`Tuple[int, int]`) [default=(14, 10)]: The size of the plot.
     """
     # Retrieve the tasks that match the given regular expression.
@@ -481,7 +500,7 @@ def plot_task_slack(
 
     # Compute the time between the deadline and the actual completion of the task.
     slack = [(task.deadline - task.completion_time) / 1000 for task in tasks]
-    logger.debug("================== Task completion slack [ms] ==================")
+    logger.debug("================== Actual task completion slack [ms] ===============")
     logger.debug(f"Tasks that match the regex: {task_name_regex}")
     log_statistics(slack, logger)
 
@@ -489,7 +508,7 @@ def plot_task_slack(
     initial_slack = [
         (task.deadline - task.release_time - task.runtime) / 1000 for task in tasks
     ]
-    logger.debug("================== Task placement slack [ms] ==================")
+    logger.debug("================== Intended task completion slack [ms] =============")
     logger.debug(f"Tasks that match the regex: {task_name_regex}")
     log_statistics(initial_slack, logger)
 
@@ -512,15 +531,15 @@ def plot_task_slack(
         plt.savefig(output, bbox_inches="tight")
 
 
-def plot_task_placement_delay(
+def analyze_task_placement_delay(
     csv_reader,
     scheduler_csv_files,
     scheduler_labels,
     output,
-    plot=True,
+    plot=False,
     figure_size=(14, 10),
 ):
-    """Plots a histogram of the placement delays.
+    """Analyzes the placement delays from the given trace.
 
     Args:
         csv_reader (`data.CSVReader`): The CSVReader instance containing the parsed
@@ -576,16 +595,16 @@ def task_stats(tasks):
         )
 
 
-def plot_missed_deadlines(
+def analyze_missed_deadlines(
     csv_reader,
     task_name_regex,
     scheduler_csv_file,
     scheduler_name,
     output,
-    plot=True,
+    plot=False,
     figure_size=(14, 10),
 ):
-    """Plots the number of missed deadlines by each task.
+    """Analyzes the number of missed deadlines by each task.
 
     Args:
         csv_reader (`data.CSVReader`): The CSVReader instance containing the parsed
@@ -594,7 +613,7 @@ def plot_missed_deadlines(
         scheduler_csv_file (`str`): The path to the CSV file for which to plot results.
         scheduler_name (`str`): The label to give to the scheduler.
         output (`str`): The path to where the plot should be output to.
-        plot (`bool`) [default = True]: Show statistics only if set to False.
+        plot (`bool`) [default = False]: Plots the graphs if set to True.
         figure_size (`Tuple[int, int]`) [default=(14, 10)]: The size of the plot.
     """
     # Group the missed deadlines by their task name (if regex is matched).
@@ -629,14 +648,24 @@ def plot_missed_deadlines(
         plt.savefig(output, bbox_inches="tight")
 
 
-def plot_end_to_end_response_time(
+def analyze_end_to_end_response_time(
     csv_reader,
     scheduler_csv_file,
     scheduler_label,
     output,
-    plot=True,
+    plot=False,
     figure_size=(14, 10),
 ):
+    """Analyzes the end-to-end response time of each timestamp in the trace.
+
+    Args:
+        csv_reader (`data.CSVReader`): The CSVReader instance containing the parsed
+            CSV file.
+        scheduler_csv_file (`str`): The path to the CSV file for which to plot results.
+        output (`str`): The path to where the plot should be output to.
+        plot (`bool`) [default = False]: Plots the graphs if set to True.
+        figure_size (`Tuple[int, int]`) [default=(14, 10)]: The size of the plot.
+    """
     tasks = csv_reader.get_tasks(scheduler_csv_file)
     timestamp_start_end = {}
     for task in tasks:
@@ -790,9 +819,9 @@ def main(argv):
                 task_centric=FLAGS.chrome_task_trace,
             )
 
-        # Plot the requested graphs.
-        if FLAGS.plot_utilization or FLAGS.all:
-            plot_utilization(
+        # Show statistics or plot the requested graphs.
+        if FLAGS.utilization or FLAGS.all:
+            analyze_resource_utilization(
                 csv_reader,
                 scheduler_csv_file,
                 scheduler_label,
@@ -803,8 +832,8 @@ def main(argv):
                 plot=FLAGS.plot,
                 figure_size=figure_size,
             )
-        if FLAGS.plot_task_placement_stats or FLAGS.all:
-            plot_task_placement_stats(
+        if FLAGS.task_placement or FLAGS.all:
+            analyze_task_placement(
                 csv_reader,
                 scheduler_csv_file,
                 scheduler_label,
@@ -815,8 +844,8 @@ def main(argv):
                 plot=FLAGS.plot,
                 figure_size=figure_size,
             )
-        if FLAGS.plot_task_slack or FLAGS.all:
-            plot_task_slack(
+        if FLAGS.task_slack or FLAGS.all:
+            analyze_task_slack(
                 csv_reader,
                 FLAGS.task_name,
                 scheduler_csv_file,
@@ -827,8 +856,8 @@ def main(argv):
                 plot=FLAGS.plot,
                 figure_size=figure_size,
             )
-        if FLAGS.plot_inter_task_time or FLAGS.all:
-            plot_inter_task_time(
+        if FLAGS.inter_task_time or FLAGS.all:
+            analyze_inter_task_time(
                 csv_reader,
                 FLAGS.task_name,
                 scheduler_csv_file,
@@ -840,8 +869,8 @@ def main(argv):
                 plot=FLAGS.plot,
                 figure_size=figure_size,
             )
-        if FLAGS.plot_missed_deadlines or FLAGS.all:
-            plot_missed_deadlines(
+        if FLAGS.missed_deadlines or FLAGS.all:
+            analyze_missed_deadlines(
                 csv_reader,
                 FLAGS.task_name,
                 scheduler_csv_file,
@@ -853,8 +882,8 @@ def main(argv):
                 plot=FLAGS.plot,
                 figure_size=figure_size,
             )
-        if FLAGS.plot_end_to_end_response_time or FLAGS.all:
-            plot_end_to_end_response_time(
+        if FLAGS.end_to_end_response_time or FLAGS.all:
+            analyze_end_to_end_response_time(
                 csv_reader,
                 scheduler_csv_file,
                 scheduler_label,
@@ -866,8 +895,8 @@ def main(argv):
                 figure_size=figure_size,
             )
 
-    if FLAGS.plot_scheduler_runtime or FLAGS.all:
-        plot_scheduler_runtime(
+    if FLAGS.scheduler_runtime or FLAGS.all:
+        analyze_scheduler_runtime(
             csv_reader,
             FLAGS.csv_files,
             FLAGS.csv_labels,
@@ -876,8 +905,8 @@ def main(argv):
             plot=FLAGS.plot,
             figure_size=figure_size,
         )
-    if FLAGS.plot_task_placement_delay or FLAGS.all:
-        plot_task_placement_delay(
+    if FLAGS.task_placement_delay or FLAGS.all:
+        analyze_task_placement_delay(
             csv_reader,
             FLAGS.csv_files,
             FLAGS.csv_labels,
