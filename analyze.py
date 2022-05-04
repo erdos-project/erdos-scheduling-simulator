@@ -22,6 +22,9 @@ flags.DEFINE_list("csv_labels", None, "List of labels to use for the experiment 
 flags.mark_flag_as_required("csv_labels")
 flags.DEFINE_string("output_dir", ".", "The directory to output the graphs to.")
 
+# The formats that the Chrome trace can be output to.
+TRACE_FORMATS = ("task", "resource")
+
 # Enable the restriction of events to a particular regular expression.
 flags.DEFINE_string(
     "task_name",
@@ -34,18 +37,15 @@ flags.DEFINE_bool("all", False, "Plot or show statistics for all graphs.")
 flags.DEFINE_bool(
     "plot", False, "Plots the graph in addition to showing the statistics."
 )
-flags.DEFINE_bool(
-    "chrome_task_trace",
-    False,
-    "Outputs the given CSV files in the Chrome trace format in task-centric view.",
+flags.DEFINE_string(
+    "chrome_trace",
+    None,
+    f"Outputs the CSV data as a Chrome trace. Allowed values: {TRACE_FORMATS}",
 )
-flags.DEFINE_bool(
-    "chrome_resource_trace",
-    False,
-    "Outputs the given CSV files in the Chrome trace format in resource-centric view.",
-)
-flags.mark_bool_flags_as_mutual_exclusive(
-    ["chrome_task_trace", "chrome_resource_trace"], required=False
+flags.register_validator(
+    "chrome_trace",
+    lambda value: value in TRACE_FORMATS if value is not None else True,
+    message=f"Only {TRACE_FORMATS} Chrome trace formats are allowed.",
 )
 
 # Enumerate the different kinds of plots.
@@ -808,7 +808,7 @@ def main(argv):
         log_basic_task_statistics(logger, csv_reader, scheduler_csv_file)
 
         # Output the Chrome trace format if requested.
-        if FLAGS.chrome_task_trace or FLAGS.chrome_resource_trace:
+        if FLAGS.chrome_trace:
             filename = Path(scheduler_csv_file).stem
             output_path = os.path.join(FLAGS.output_dir, filename + ".json")
             logger.debug(f"Saving trace for {scheduler_csv_file} at {output_path}")
@@ -816,7 +816,7 @@ def main(argv):
                 scheduler_csv_file,
                 scheduler_label,
                 output_path,
-                task_centric=FLAGS.chrome_task_trace,
+                trace_fmt=FLAGS.chrome_trace,
             )
 
         # Show statistics or plot the requested graphs.

@@ -380,7 +380,7 @@ class CSVReader(object):
         csv_path: str,
         scheduler_label: str,
         output_path: str,
-        task_centric: bool = True,
+        trace_fmt: str = "task",
     ):
         """Converts the CSV of the events in a simulation execution to a Chrome tracer
         format.
@@ -389,8 +389,7 @@ class CSVReader(object):
             csv_path (str): The path to the CSV to be converted to Chrome trace.
             output_path (str): The path where the Chrome trace file should be output.
             scheduler_label (str): The name of the scheduler that produced the trace.
-            task_centric (bool): If True then the trace contains timelines of task runs,
-                otherwise the trace contains timelines of resource utilization.
+            trace_fmt (str): The format of trace to output (task / resource).
         """
         trace = {
             "traceEvents": [],
@@ -417,22 +416,24 @@ class CSVReader(object):
             }
             trace["traceEvents"].append(trace_event)
 
-        if not task_centric:
+        if trace_fmt == "task":
             task_to_wp = {
                 task_placement.task: task_placement.worker_pool
                 for task_placement in self.get_task_placements(csv_path)
             }
         # Output all the tasks.
         for task in self.get_tasks(csv_path):
-            if task_centric:
+            if trace_fmt == "task":
                 if "." in task.name:
                     # pid = operator name, tid = callback name
                     pid, tid = task.name.split(".", 1)
                 else:
                     pid = tid = task.name
-            else:
+            elif trace_fmt == "resource":
                 pid = task_to_wp[task].name
                 tid = task.name
+            else:
+                raise ValueError(f"Undefined execution mode: {trace_fmt}")
             trace_event = {
                 "name": f"{task.name}::{task.timestamp}",
                 "cat": "task,duration",
@@ -458,15 +459,17 @@ class CSVReader(object):
         # Output all the missed deadlines.
         for missed_deadline_event in self.get_missed_deadline_events(csv_path):
             task = missed_deadline_event.task
-            if task_centric:
+            if trace_fmt == "task":
                 if "." in task.name:
                     # pid = operator name, tid = callback name
                     pid, tid = task.name.split(".", 1)
                 else:
                     pid = tid = task.name
-            else:
+            elif trace_fmt == "resource":
                 pid = task_to_wp[task].name
                 tid = task.name
+            else:
+                raise ValueError(f"Undefined execution mode: {trace_fmt}")
             trace_event = {
                 "name": f"{task.name}::{task.timestamp}",
                 "cat": "task,missed,deadline,instant",
