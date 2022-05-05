@@ -430,10 +430,18 @@ class Simulator(object):
         # scheduled invocation is too late, then bring the invocation sooner
         # (event time + scheduler_delay), and re-heapify the event queue.
         if self._next_scheduler_event:
-            self._next_scheduler_event._time = min(
+            new_scheduler_event_time = min(
                 self._next_scheduler_event.time, event.time + self._scheduler_delay
             )
-            self._event_queue.reheapify()
+            if self._next_scheduler_event._time != new_scheduler_event_time:
+                self._logger.info(
+                    f"[{self._simulator_time}] While adding the task from"
+                    f"{event}, the scheduler event from "
+                    f"{self._next_scheduler_event._time} was pulled back to "
+                    f"{new_scheduler_event_time}"
+                )
+                self._next_scheduler_event._time = new_scheduler_event_time
+                self._event_queue.reheapify()
 
     def __handle_task_finished(self, event: Event, task_graph: TaskGraph):
         self._finished_tasks += 1
@@ -652,6 +660,10 @@ class Simulator(object):
                 scheduler_start_time = event.time + 1
             else:
                 scheduler_start_time = next_scheduler_time
+        self._logger.debug(
+            f"[{event.time}] Executing the next scheduler at {scheduler_start_time} "
+            f"because the frequency was {scheduler_frequency}."
+        )
 
         # End the loop according to the timeout, if reached.
         if scheduler_start_time >= loop_timeout:
@@ -662,17 +674,21 @@ class Simulator(object):
             )
             return Event(event_type=EventType.SIMULATOR_END, time=loop_timeout)
 
-        # If no events in the queue, no running tasks and no released tasks,
-        # end the loop.
+        # Find sources of existing or ongoing work in the Simulator.
         running_tasks = []
         for worker_pool in self._worker_pools.values():
             running_tasks.extend(worker_pool.get_placed_tasks())
         schedulable_tasks = task_graph.get_schedulable_tasks(
             event.time, self._scheduler.scheduling_horizon, self._scheduler.preemptive
         )
+        next_event = self._event_queue.peek()
+
+        # If there is either existing work in the form of events in the queue or tasks
+        # waiting to be scheduled, or currently running tasks that can lead to more
+        # work, adjust the scheduler invocation time accordingly, or end the loop.
         if (
-            len(schedulable_tasks) == 0
-            and len(self._event_queue) == 0
+            next_event is None
+            and len(schedulable_tasks) == 0
             and len(running_tasks) == 0
         ):
             self._logger.info(
@@ -681,27 +697,35 @@ class Simulator(object):
                 f"the event queue. Ending the loop."
             )
             return Event(event_type=EventType.SIMULATOR_END, time=event.time + 1)
+        elif len(schedulable_tasks) == 0:
+            # If there are no schedulable tasks currently, adjust the scheduler
+            # invocation time according to either the time of invocation of the
+            # next event, or the minimum completion time of a running task.
+            minimum_running_task_completion_time = (
+                self._simulator_time
+                + min(map(attrgetter("remaining_time"), running_tasks), default=0)
+                + self._scheduler_delay
+            )
 
-        next_event = self._event_queue.peek()
-        if len(running_tasks) > 0:
-            # If there are running tasks, and their completion is farther into
-            # the future than the scheduled start time, run the scheduler after
-            # the completion of the first task offset by a scheduler delay.
-            scheduler_start_time = max(
+            next_event_invocation_time = (
+                next_event.time + self._scheduler_delay if next_event is not None else 0
+            )
+
+            adjusted_scheduler_start_time = max(
                 scheduler_start_time,
-                (
-                    self._simulator_time
-                    + min(map(attrgetter("remaining_time"), running_tasks))
-                    + self._scheduler_delay
-                ),
+                minimum_running_task_completion_time,
+                next_event_invocation_time,
             )
-        elif next_event:
-            # If there were no running tasks, and the next event in the loop
-            # is too far away, run the scheduler at the next event time offset
-            # by a scheduler delay, instead of running it at a fixed frequency.
-            scheduler_start_time = max(
-                scheduler_start_time, next_event.time + self._scheduler_delay
-            )
+
+            if scheduler_start_time != adjusted_scheduler_start_time:
+                self._logger.debug(
+                    f"[{event.time}] The scheduler start time was pushed from "
+                    f"{scheduler_start_time} to {adjusted_scheduler_start_time} since "
+                    f"either the next running task finishes at "
+                    f"{minimum_running_task_completion_time} or the next event is "
+                    f"being invoked at {next_event_invocation_time}."
+                )
+                scheduler_start_time = adjusted_scheduler_start_time
 
         # Save the scheduler event in case its start time needs to be pulled
         # back by the arrival of a task.
