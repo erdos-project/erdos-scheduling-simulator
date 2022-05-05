@@ -339,11 +339,7 @@ class GurobiScheduler(BaseScheduler):
         s.setObjective(sum_costs(self._task_ids_to_cost.values()), gp.GRB.MAXIMIZE)
         s.optimize()
         scheduler_end_time = time.time()
-        self._runtime = (
-            int((scheduler_end_time - scheduler_start_time) * 1000000)
-            if self.runtime == -1
-            else self.runtime
-        )
+        runtime = int((scheduler_end_time - scheduler_start_time) * 1000000)
 
         if s.status == gp.GRB.OPTIMAL:
             self._logger.debug(f"Found optimal value: {s.objVal}")
@@ -385,7 +381,10 @@ class GurobiScheduler(BaseScheduler):
                 self.log_solver_internal(s)
         # Log the scheduler run.
         self.log()
-        return self.runtime, self._placements
+        if self.runtime == -1:
+            return runtime, self._placements
+        else:
+            return self.runtime, self._placements
 
     def log_solver_internal(self, s):
         self._logger.debug(f"Solver stats: {s.printStats()}")
