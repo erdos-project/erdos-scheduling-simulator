@@ -919,7 +919,8 @@ def main(argv):
                 scheduler_label,
                 os.path.join(
                     FLAGS.output_dir,
-                    f"{scheduler_label}_{FLAGS.utilization_timeline_plot_name}",
+                    f"{scheduler_label}_"
+                    f"{FLAGS.resource_utilization_timeline_plot_name}",
                 ),
                 plot=FLAGS.plot,
                 figure_size=figure_size,
