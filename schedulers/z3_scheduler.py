@@ -166,11 +166,10 @@ class Z3Scheduler(BaseScheduler):
 
         schedulable = s.check()
         scheduler_end_time = time.time()
-        self._runtime = (
-            int((scheduler_end_time - scheduler_start_time) * 1000000)
-            if self.runtime == -1
-            else self.runtime
-        )
+        if self.runtime == -1:
+            runtime = int((scheduler_end_time - scheduler_start_time) * 1000000)
+        else:
+            runtime = self.runtime
 
         # if self._flags.ilp_log_dir is not None:
         #     log_dir = self._flags.ilp_log_dir + f"{self._goal}.smt"
@@ -191,7 +190,7 @@ class Z3Scheduler(BaseScheduler):
                 placement = res_index_to_wp_id[
                     int(str(s.model()[self._task_ids_to_placement[task_id]]))
                 ]
-                if start_time <= sim_time + self.runtime * 2:
+                if start_time <= sim_time + runtime * 2:
                     # We only place the tasks with a start time earlier than
                     # the estimated end time of the next scheduler run.
                     # Therefore, a task can progress before the next scheduler
@@ -209,7 +208,7 @@ class Z3Scheduler(BaseScheduler):
             ]
         # Log the scheduler run.
         self.log()
-        return self.runtime, self._placements
+        return runtime, self._placements
 
     def log(self):
         if self._flags is not None and self._flags.scheduler_log_file_name is not None:

@@ -69,13 +69,10 @@ class LSFScheduler(BaseScheduler):
                 placements.append((task, None, None))
 
         end_time = time.time()
-        self._runtime = (
-            int((end_time - start_time) * 1000000)
-            if self.runtime == -1
-            else self.runtime
-        )
-
-        return self.runtime, placements
+        if self.runtime == -1:
+            return int((end_time - start_time) * 1000000), placements
+        else:
+            return self.runtime, placements
 
     def slack(self, sim_time: int, task: Task) -> int:
         """Defines the Slack used by the scheduler to order the events.
