@@ -23,11 +23,12 @@ utilization, task placement delay, task slack) from the logs):
 python3 analyze.py \
   --csv_files={PATH_TO_CSV_LOG_FILE} \
   --csv_labels={SCHEDULER_NAME} \
-  --plot_inter_task_time \
-  --plot_task_placement_delay \
-  --plot_task_placement_stats \
-  --plot_task_slack \
-  --plot_utilization
+  --inter_task_time \
+  --task_placement \
+  --task_placement_delay \
+  --task_slack \
+  --resource_utilization
+  --plot
 ```
 
 or plot all the graphs using:
@@ -37,6 +38,7 @@ python3 analyze.py
   --csv_files={PATH_TO_CSV_LOG_FILE} \
   --csv_labels={SCHEDULER_NAME}
   --all
+  --plot
 ```
 
 To just output detailed statistics for all graphs, do
@@ -46,7 +48,6 @@ python3 analyze.py
   --csv_files={PATH_TO_CSV_LOG_FILE} \
   --csv_labels={SCHEDULER_NAME}
   --all
-  --stats_only
 ```
 
 and to convert the given CSV files into Chrome traces (to be visualized in chrome://tracing), do
@@ -55,5 +56,5 @@ and to convert the given CSV files into Chrome traces (to be visualized in chrom
 python3 analyze.py
   --csv_files={PATH_TO_CSV_LOG_FILE} \
   --csv_labels={SCHEDULER_NAME}
-  --chrome_task_trace
+  --chrome_trace=task
 ```
