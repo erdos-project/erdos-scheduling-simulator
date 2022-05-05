@@ -18,6 +18,11 @@ from utils import log_statistics, setup_logging
 FLAGS = flags.FLAGS
 flags.DEFINE_list("csv_files", None, "List of CSV files containing experiment logs")
 flags.mark_flag_as_required("csv_files")
+flags.register_validator(
+    "csv_files",
+    lambda value: all(f.endswith(".csv") for f in value),
+    "All files must end with .csv extension",
+)
 flags.DEFINE_list("csv_labels", None, "List of labels to use for the experiment logs")
 flags.mark_flag_as_required("csv_labels")
 flags.DEFINE_string("output_dir", ".", "The directory to output the graphs to.")
@@ -121,7 +126,7 @@ flags.DEFINE_string(
     "The filename of the missed deadline plot.",
 )
 
-flags.DEFINE_boolean(
+flags.DEFINE_bool(
     "end_to_end_response_time",
     False,
     "Analyzes the end-to-end response time for each timestamp.",
@@ -130,6 +135,12 @@ flags.DEFINE_string(
     "end_to_end_response_time_plot_name",
     "end_to_end_response_time.png",
     "The filename of the end-to-end response time plot.",
+)
+
+flags.DEFINE_bool(
+    "task_stats",
+    False,
+    "Log detailed statistics for each task grouped by the task name.",
 )
 
 matplotlib.rcParams.update({"font.size": 16, "figure.autolayout": True})
@@ -584,14 +595,82 @@ def analyze_task_placement_delay(
         plt.savefig(output, bbox_inches="tight")
 
 
-def task_stats(tasks):
-    for task in tasks:
-        logger.debug(f"Task Name: {task.name}\n\tRelease Time: {task.release_time}\n\t")
+def log_detailed_task_statistics(
+    logger, task_name_regex: str, csv_reader: CSVReader, csv_file: str
+):
+    """Prints the detailed statistics for the given CSV file.
+
+    Args:
+        logger (logging.Logger): The logger instance to show results on.
+        task_name_regex (`str`): The regular expression to match the task name to.
+        csv_reader (:py:class:`CSVReader`): The CSVReader instance containing the
+            results.
+        csv_file (str): The path to the CSV file to show the results for.
+    """
+    # Get the tasks grouped by their name.
+    grouped_tasks = defaultdict(list)
+    for task in csv_reader.get_tasks(csv_file):
+        if re.match(task_name_regex, task.name):
+            grouped_tasks[task.name].append(task)
+
+    # Get the placements grouped by the task name.
+    placements = defaultdict(dict)
+    for placement in csv_reader.get_task_placements(csv_file):
+        if re.match(task_name_regex, placement.task.name):
+            placements[placement.task.name][str(placement.task.id)] = placement
+
+    # Colorify the results.
+    R = "\033[0;31;40m"
+    G = "\033[0;32;40m"
+    D = "\033[0m"
+
+    # Log the results.
+    for task_name, tasks in grouped_tasks.items():
+        results = []
+        for task in tasks:
+            placement = placements[task_name][str(task.id)]
+            results.append(
+                tuple(
+                    map(
+                        lambda val: R + str(val) + D
+                        if task.missed_deadline
+                        else G + str(val) + D,
+                        (
+                            task.timestamp,
+                            str(task.id),
+                            task.release_time / 1000,
+                            placement.simulator_time / 1000,
+                            task.start_time / 1000,
+                            task.runtime / 1000,
+                            task.deadline / 1000,
+                            task.completion_time / 1000,
+                            task.missed_deadline,
+                            (task.completion_time - task.deadline) / 1000,
+                            (placement.simulator_time - task.release_time) / 1000,
+                        ),
+                    )
+                )
+            )
         logger.debug(
-            f"Completion Time: {task.completion_time}\n\tDeadline: {task.deadline}\n\t"
-        )
-        logger.debug(
-            f"Runtime: {task.runtime}\n\tSlack: {task.deadline - task.completion_time}"
+            f"Detailed view for {task_name}:\n"
+            + tabulate(
+                results,
+                headers=[
+                    "Time",
+                    "ID",
+                    "Release",
+                    "Placement",
+                    "Start",
+                    "Runtime",
+                    "Deadline",
+                    "Completion",
+                    "X Dline?",
+                    "Dline Delay",
+                    "Place Delay",
+                ],
+                tablefmt="grid",
+                showindex=True,
+            )
         )
 
 
@@ -813,6 +892,12 @@ def main(argv):
         log_basic_task_statistics(
             logger, FLAGS.task_name, csv_reader, scheduler_csv_file
         )
+
+        # Log the detailed statistics if requested.
+        if FLAGS.task_stats:
+            log_detailed_task_statistics(
+                logger, FLAGS.task_name, csv_reader, scheduler_csv_file
+            )
 
         # Output the Chrome trace format if requested.
         if FLAGS.chrome_trace:
