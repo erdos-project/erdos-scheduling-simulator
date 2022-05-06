@@ -1054,7 +1054,7 @@ def log_aggregate_stats(
     logger.debug(
         f"Aggregated results for tasks {task_name_regex} with {stat_description}: \n"
         + tabulate(
-            results,
+            list(sorted(results, key=lambda v: v[2])),
             headers=[
                 "# Time",
                 "# Tasks",
@@ -1131,7 +1131,9 @@ def main(argv):
         # Output the Chrome trace format if requested.
         if FLAGS.chrome_trace:
             filename = Path(scheduler_csv_file).stem
-            output_path = os.path.join(FLAGS.output_dir, filename + ".json")
+            output_path = os.path.join(
+                FLAGS.output_dir, filename + f"_{FLAGS.chrome_trace}.json"
+            )
             logger.debug(f"Saving trace for {scheduler_csv_file} at {output_path}")
             csv_reader.to_chrome_trace(
                 scheduler_csv_file,
