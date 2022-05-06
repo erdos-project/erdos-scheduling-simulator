@@ -863,7 +863,7 @@ def analyze_end_to_end_response_time(
 
 
 def log_basic_task_statistics(
-    logger, task_name_regex, csv_reader: CSVReader, csv_file: str
+    logger, task_name_regex, csv_reader: CSVReader, csv_file: str, stat: str = "p50"
 ):
     """Prints the basic task statistics from the given CSV file.
 
@@ -873,7 +873,15 @@ def log_basic_task_statistics(
         csv_reader (:py:class:`CSVReader`): The CSVReader instance containing the
             results.
         csv_file (str): The path to the CSV file to show the results for.
+        stat (str): The stat to show in the table for the given tasks.
     """
+    # Get the Statistic function to use.
+    if stat not in STATS_FUNCTIONS:
+        raise ValueError(
+            f"Requested stat: {stat} not found in {STATS_FUNCTIONS.keys()}"
+        )
+    stat_function = STATS_FUNCTIONS[stat]
+
     # Get the tasks grouped by their name.
     tasks = defaultdict(list)
     for task in csv_reader.get_tasks(csv_file):
@@ -911,10 +919,10 @@ def log_basic_task_statistics(
                 task_name,
                 len(grouped_tasks),
                 len(missed_deadline_tasks),
-                np.mean(missed_deadline_delays)
+                stat_function(missed_deadline_delays)
                 if len(missed_deadline_delays) != 0
                 else 0.0,
-                np.mean(placement_delays),
+                stat_function(placement_delays),
             )
         )
     results.append(
@@ -922,10 +930,10 @@ def log_basic_task_statistics(
             "Total",
             sum(map(len, tasks.values())),
             len(total_missed_deadline_delays),
-            np.mean(total_missed_deadline_delays)
+            stat_function(total_missed_deadline_delays)
             if len(total_missed_deadline_delays) != 0
             else 0.0,
-            np.mean(total_placement_delays),
+            stat_function(total_placement_delays),
         )
     )
 
