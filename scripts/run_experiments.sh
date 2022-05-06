@@ -22,8 +22,8 @@ cd ${ERDOS_SIMULATOR_DIR}
 
 LOG_DIR=$1
 if [[ -z ${LOG_DIR} ]]; then
-    echo "[x] WARNING: Log directory argument wasn't passed to the script. Setting log dir to `pwd`."
-    LOG_DIR=`pwd`
+    echo "[x] ERROR: Please provide a directory to output results to as the first argument."
+    exit 2
 fi
 
 for WORKER_CONFIG in ${WORKER_CONFIGS[@]}; do
@@ -58,16 +58,22 @@ for WORKER_CONFIG in ${WORKER_CONFIGS[@]}; do
 --synchronize_sensors
 --timestamp_difference=100000
 --execution_mode=${EXECUTION_MODE}" > ${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.conf
-                                python3 main.py --flagfile=${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.conf
+				if ! python3 main.py --flagfile=${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.conf; then
+				    echo "[x] Failed in the execution of ${LOG_BASE}. Exiting."
+				    exit 3
+				fi
                             else
                                 echo "[x] ${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.csv already exists."
                             fi
-                            python3 analyze.py \
+			    if ! python3 analyze.py \
                                 --csv_files=${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.csv \
                                 --csv_labels=${SCHEDULER} \
                                 --all \
                                 --plot \
-                                --output_dir=${LOG_DIR}/${LOG_BASE}
+                                --output_dir=${LOG_DIR}/${LOG_BASE}; then
+			        echo "[x] Failed in analyzing the results of ${LOG_BASE}. Exiting."
+				exit 4
+			    fi
                         done
                     done
                 done
