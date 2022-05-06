@@ -11,6 +11,7 @@ MAX_TIMESTAMP=50
 RESOURCE_CONFIGS=(pylot_1_camera_1_lidar_resource_profile)
 WORKER_CONFIGS=(worker_2_machines_24_cpus_8_gpus_profile worker_2_machines_24_cpus_9_gpus_profile worker_2_machines_24_cpus_10_gpus_profile)
 EXECUTION_MODE=synthetic
+PARALLEL_FACTOR=16
 
 
 # Move to the simulator directory.
@@ -26,23 +27,12 @@ if [[ -z ${LOG_DIR} ]]; then
     exit 2
 fi
 
-for WORKER_CONFIG in ${WORKER_CONFIGS[@]}; do
-    for RESOURCE_CONFIG in ${RESOURCE_CONFIGS[@]}; do
-        for DEADLINE_VAR in ${DEADLINE_VARIANCES[@]}; do
-            for RUNTIME_VAR in ${RUNTIME_VARIANCES[@]}; do
-                for RUNTIME in ${SCHEDULER_RUNTIMES[@]}; do
-                    for SCHEDULER in ${SCHEDULERS[@]}; do
-                        for SCHEDULING_HORIZON in ${SCHEDULING_HORIZONS[@]}; do
-                            # Other schedulers do not support scheduling horizons.
-                            if [[ ${SCHEDULING_HORIZON} -ne 0 && ${SCHEDULER} != gurobi && ${SCHEDULER} != z3 ]] ; then
-                                continue
-                            fi
-                            LOG_BASE=${EXECUTION_MODE}_scheduler_${SCHEDULER}_horizon_${SCHEDULING_HORIZON}_runtime_${RUNTIME}_timestamps_${MAX_TIMESTAMP}_runtime_var_${RUNTIME_VAR}_deadline_var_${DEADLINE_VAR}_${WORKER_CONFIG}_${RESOURCE_CONFIG}
-
-                            mkdir -p ${LOG_DIR}/${LOG_BASE}
-                            echo "[x] Running ${LOG_BASE}"
-                            if [ ! -f "${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.csv" ]; then
-                                echo "\
+execute_experiment () {
+    LOG_DIR=$1
+    LOG_BASE=$2
+    echo "[x] Initiating the execution of ${LOG_BASE}"
+    if [ ! -f "${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.csv" ]; then
+	echo "\
 --graph_path=profiles/workload/pylot-complete-graph.dot
 --resource_path=profiles/workload/${RESOURCE_CONFIG}.json
 --worker_profile_path=profiles/workers/${WORKER_CONFIG}.json
@@ -58,22 +48,41 @@ for WORKER_CONFIG in ${WORKER_CONFIGS[@]}; do
 --synchronize_sensors
 --timestamp_difference=100000
 --execution_mode=${EXECUTION_MODE}" > ${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.conf
-				if ! python3 main.py --flagfile=${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.conf; then
-				    echo "[x] Failed in the execution of ${LOG_BASE}. Exiting."
-				    exit 3
-				fi
-                            else
-                                echo "[x] ${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.csv already exists."
+	if ! python3 main.py --flagfile=${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.conf; then
+	    echo "[x] Failed in the execution of ${LOG_BASE}. Exiting."
+	    exit 3
+	fi
+    else
+	echo "[x] ${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.csv already exists."
+    fi
+    if ! python3 analyze.py \
+	--csv_files=${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.csv \
+	--csv_labels=${SCHEDULER} \
+	--all \
+	--plot \
+	--output_dir=${LOG_DIR}/${LOG_BASE}; then
+	echo "[x] Failed in analyzing the results of ${LOG_BASE}. Exiting."
+	exit 4
+    fi
+   echo "[x] Finished execution of ${LOG_BASE}."
+}
+
+for WORKER_CONFIG in ${WORKER_CONFIGS[@]}; do
+    for RESOURCE_CONFIG in ${RESOURCE_CONFIGS[@]}; do
+        for DEADLINE_VAR in ${DEADLINE_VARIANCES[@]}; do
+            for RUNTIME_VAR in ${RUNTIME_VARIANCES[@]}; do
+                for RUNTIME in ${SCHEDULER_RUNTIMES[@]}; do
+                    for SCHEDULER in ${SCHEDULERS[@]}; do
+                        for SCHEDULING_HORIZON in ${SCHEDULING_HORIZONS[@]}; do
+                            # Other schedulers do not support scheduling horizons.
+                            if [[ ${SCHEDULING_HORIZON} -ne 0 && ${SCHEDULER} != gurobi && ${SCHEDULER} != z3 ]] ; then
+                                continue
                             fi
-			    if ! python3 analyze.py \
-                                --csv_files=${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.csv \
-                                --csv_labels=${SCHEDULER} \
-                                --all \
-                                --plot \
-                                --output_dir=${LOG_DIR}/${LOG_BASE}; then
-			        echo "[x] Failed in analyzing the results of ${LOG_BASE}. Exiting."
-				exit 4
-			    fi
+
+			    ((i=i%${PARALLEL_FACTOR})); ((i++==0)) && wait
+                            LOG_BASE=${EXECUTION_MODE}_scheduler_${SCHEDULER}_horizon_${SCHEDULING_HORIZON}_runtime_${RUNTIME}_timestamps_${MAX_TIMESTAMP}_runtime_var_${RUNTIME_VAR}_deadline_var_${DEADLINE_VAR}_${WORKER_CONFIG}_${RESOURCE_CONFIG}
+                            mkdir -p ${LOG_DIR}/${LOG_BASE}
+			    execute_experiment ${LOG_DIR} ${LOG_BASE} &
                         done
                     done
                 done
