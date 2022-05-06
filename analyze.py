@@ -13,6 +13,7 @@ from matplotlib.patches import Patch
 from tabulate import tabulate
 
 from data import CSVReader
+from main import FLAGS as main_flags
 from utils import STATS_FUNCTIONS, log_statistics, setup_logging
 
 # The formats that the Chrome trace can be output to.
@@ -88,16 +89,16 @@ flags.register_validator(
 
 # Enumerate the different kinds of metrics.
 flags.DEFINE_bool(
-    "scheduler_runtime", False, "Analyze the runtime of the scheduler invocations."
+    "sched_runtime", False, "Analyze the runtime of the scheduler invocations."
 )
 flags.DEFINE_string(
-    "scheduler_runtime_timeline_plot_name",
-    "scheduler_runtime_timeline.png",
+    "sched_runtime_timeline_plot_name",
+    "sched_runtime_timeline.png",
     "The filename of the scheduler runtime timeline plot",
 )
 flags.DEFINE_string(
-    "scheduler_runtime_cdf_plot_name",
-    "scheduler_runtime_cdf.png",
+    "sched_runtime_cdf_plot_name",
+    "sched_runtime_cdf.png",
     "The filename of the scheduler runtime CDF plot",
 )
 
@@ -205,32 +206,14 @@ colors = {"EDF": "r", "Gurobi": "b", "Z3": "y", "LSF": "b"}
 logger = setup_logging("plotting")
 
 
-def __parse_flagfile(path: str) -> dict:
-    """Parses the flagfile at the given path, and returns a dictionary containing the
-    flag values.
+def __parse_flagfile(path: str):
+    """Parses the flagfile at the given path, and sets the FLAGS to contain the new
+    values.
 
     Args:
         path (str): The path to where the config file is stored.
-
-    Returns:
-        A dictionary where the keys are the name of the arguments and the values are
-        the values specified in the flagfile.
     """
-    parsed_values = {}
-    with open(path, "r") as flagfile:
-        for line in flagfile:
-            line = line.strip()
-            if line.startswith("--") and "=" in line:
-                argument, value = line.lstrip("--").split("=", 1)
-                parsed_values[argument.strip()] = value.strip()
-            elif line.startswith("--no"):
-                argument = line.lstrip("--no")
-                parsed_values[argument.strip()] = False
-            elif line.startswith("--"):
-                argument = line.lstrip("--")
-                parsed_values[argument.strip()] = True
-    return parsed_values
-
+    values = main_flags([__file__, f"--flagfile={path}"])
 
 def analyze_resource_utilization(
     csv_reader,
@@ -991,7 +974,7 @@ def log_aggregate_stats(
     for csv_file, conf_file, scheduler_label in zip(
         csv_files, conf_files, scheduler_labels
     ):
-        parsed_config = __parse_flagfile(conf_file)
+        __parse_flagfile(conf_file)
         log_name = Path(csv_file).stem
         tasks = []
         for task in csv_reader.get_tasks(csv_file):
@@ -1003,7 +986,7 @@ def log_aggregate_stats(
             if re.match(task_name_regex, placement.task.name):
                 placements.append(placement)
 
-        num_timestamps = parsed_config.get("max_timestamp", "-")
+        num_timestamps = FLAGS.max_timestamp if FLAGS.max_timestamp else "-"
         num_missed = len(list(filter(attrgetter("missed_deadline"), tasks)))
         placement_delay = stat_function(
             [
@@ -1095,9 +1078,8 @@ def main(argv):
         for i, (csv_file, conf_file) in enumerate(
             zip(FLAGS.csv_files, FLAGS.conf_files)
         ):
-            scheduler_label = (
-                __parse_flagfile(conf_file).get("scheduler", "EDF") + f"_{i}"
-            )
+            __parse_flagfile(conf_file)
+            scheduler_label = FLAGS.scheduler + f"_{i}"
             scheduler_labels.append(scheduler_label)
 
     figure_size = (14, 10)
@@ -1225,13 +1207,13 @@ def main(argv):
                 stats=statistics,
             )
 
-    if FLAGS.scheduler_runtime or FLAGS.all:
+    if FLAGS.sched_runtime or FLAGS.all:
         analyze_scheduler_runtime(
             csv_reader,
             FLAGS.csv_files,
             scheduler_labels,
-            os.path.join(FLAGS.output_dir, FLAGS.scheduler_runtime_timeline_plot_name),
-            os.path.join(FLAGS.output_dir, FLAGS.scheduler_runtime_cdf_plot_name),
+            os.path.join(FLAGS.output_dir, FLAGS.sched_runtime_timeline_plot_name),
+            os.path.join(FLAGS.output_dir, FLAGS.sched_runtime_cdf_plot_name),
             plot=FLAGS.plot,
             figure_size=figure_size,
             stats=statistics,
