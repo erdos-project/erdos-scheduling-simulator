@@ -181,6 +181,19 @@ flags.register_validator(
     message=f"Only {TASK_STATS_FORMATS} formats are allowed for task statistics.",
 )
 
+flags.DEFINE_bool(
+    "aggregate_stats",
+    False,
+    "Log aggregate stats from a list of (csv_files, conf_files)",
+)
+flags.register_multi_flags_validator(
+    ["aggregate_stats", "conf_files"],
+    lambda values: values["conf_files"] is not None
+    if values["aggregate_stats"]
+    else True,
+    message="Config files must be provided to invoke the aggregate_stats mode.",
+)
+
 matplotlib.rcParams.update({"font.size": 16, "figure.autolayout": True})
 matplotlib.rcParams["xtick.labelsize"] = 16
 matplotlib.rcParams["ytick.labelsize"] = 16
@@ -673,12 +686,11 @@ def analyze_task_placement_delay(
 
 
 def log_detailed_task_statistics(
-    logger, task_name_regex: str, csv_reader: CSVReader, csv_file: str
+    task_name_regex: str, csv_reader: CSVReader, csv_file: str
 ):
     """Prints the detailed statistics for the given CSV file.
 
     Args:
-        logger (logging.Logger): The logger instance to show results on.
         task_name_regex (`str`): The regular expression to match the task name to.
         csv_reader (:py:class:`CSVReader`): The CSVReader instance containing the
             results.
@@ -863,12 +875,11 @@ def analyze_end_to_end_response_time(
 
 
 def log_basic_task_statistics(
-    logger, task_name_regex, csv_reader: CSVReader, csv_file: str, stat: str = "p50"
+    task_name_regex, csv_reader: CSVReader, csv_file: str, stat: str = "p50"
 ):
     """Prints the basic task statistics from the given CSV file.
 
     Args:
-        logger (logging.Logger): The logger instance to show results on.
         task_name_regex (`str`): The regular expression to match the task name to.
         csv_reader (:py:class:`CSVReader`): The CSVReader instance containing the
             results.
@@ -880,7 +891,7 @@ def log_basic_task_statistics(
         raise ValueError(
             f"Requested stat: {stat} not found in {STATS_FUNCTIONS.keys()}"
         )
-    stat_function = STATS_FUNCTIONS[stat]
+    stat_function = STATS_FUNCTIONS[stat][0]
 
     # Get the tasks grouped by their name.
     tasks = defaultdict(list)
@@ -955,6 +966,114 @@ def log_basic_task_statistics(
     )
 
 
+def log_aggregate_stats(
+    csv_reader, csv_files, conf_files, scheduler_labels, task_name_regex, stat="p50"
+):
+    """Prints the aggregate statistics for the given sequence of CSV files.
+
+    Args:
+        csv_reader (:py:class:`CSVReader`): The CSVReader instance containing the
+            results.
+        csv_files (Sequence[str]): The path to the CSV files to show the results for.
+        conf_files (Sequence[str]): The path to the conf files to show the results for.
+        scheduler_labels (Sequence[str]): The labels to assign to the schedulers.
+        task_name_regex (`str`): The regular expression to match the task name to.
+        stat (str): The stat to show in the table for the given tasks.
+    """
+    # Get the Statistic function to use.
+    if stat not in STATS_FUNCTIONS:
+        raise ValueError(
+            f"Requested stat: {stat} not found in {STATS_FUNCTIONS.keys()}"
+        )
+    stat_function, stat_description = STATS_FUNCTIONS[stat]
+
+    results = []
+    for csv_file, conf_file, scheduler_label in zip(
+        csv_files, conf_files, scheduler_labels
+    ):
+        parsed_config = __parse_flagfile(conf_file)
+        log_name = Path(csv_file).stem
+        tasks = []
+        for task in csv_reader.get_tasks(csv_file):
+            if re.match(task_name_regex, task.name):
+                tasks.append(task)
+
+        placements = []
+        for placement in csv_reader.get_task_placements(csv_file):
+            if re.match(task_name_regex, placement.task.name):
+                placements.append(placement)
+
+        num_timestamps = parsed_config.get("max_timestamp", "-")
+        num_missed = len(list(filter(attrgetter("missed_deadline"), tasks)))
+        placement_delay = stat_function(
+            [
+                (placement.simulator_time - placement.task.release_time) / 1000
+                for placement in placements
+            ]
+        )
+        deadline_delay = stat_function(
+            [(task.deadline - task.completion_time) / 1000 for task in tasks]
+        )
+
+        worker_pool_stats = csv_reader.get_worker_pool_utilizations(csv_file)
+        resource_uses = {
+            resource: [
+                stat.resource_utilizations[resource][0]
+                / sum(stat.resource_utilizations[resource])
+                for stat in worker_pool_stats
+            ]
+            for resource in ("GPU", "CPU")
+        }
+
+        scheduler_invocations = csv_reader.get_scheduler_invocations(csv_file)
+        placed_tasks = [
+            scheduler_invocation.placed_tasks
+            for scheduler_invocation in scheduler_invocations
+        ]
+        unplaced_tasks = [
+            scheduler_invocation.unplaced_tasks
+            for scheduler_invocation in scheduler_invocations
+        ]
+
+        results.append(
+            (
+                num_timestamps,
+                len(tasks),
+                num_missed,
+                placement_delay,
+                deadline_delay,
+                stat_function(resource_uses["GPU"]),
+                stat_function(resource_uses["CPU"]),
+                stat_function(placed_tasks),
+                stat_function(unplaced_tasks),
+                csv_reader.get_simulator_end_time(csv_file),
+                log_name,
+            )
+        )
+
+    logger.debug(
+        f"Aggregated results for tasks {task_name_regex} with {stat_description}: \n"
+        + tabulate(
+            results,
+            headers=[
+                "# Time",
+                "# Tasks",
+                "# Missed",
+                "Placement",
+                "Deadline",
+                "GPU",
+                "CPU",
+                "Placed",
+                "Unplaced",
+                "Completion Time",
+                "Log",
+            ],
+            tablefmt="grid",
+            showindex=True,
+        )
+    )
+
+
 def main(argv):
     # Parse the flags.
     try:
@@ -970,7 +1089,7 @@ def main(argv):
 
     # Get the labels from either the csv_labels or conf_files.
     if FLAGS.csv_labels:
-        scheduler_labels = csv_labels
+        scheduler_labels = FLAGS.csv_labels
     else:
         scheduler_labels = []
         for i, (csv_file, conf_file) in enumerate(
@@ -995,14 +1114,18 @@ def main(argv):
 
         # Log the basic statistics if requested.
         if FLAGS.task_stats == "basic":
+            if len(statistics) != 1:
+                _statistic = "p50"
+            else:
+                _statistic = statistics[0] if statistics[0] != "all" else "p50"
             log_basic_task_statistics(
-                logger, FLAGS.task_name, csv_reader, scheduler_csv_file
+                FLAGS.task_name, csv_reader, scheduler_csv_file, _statistic
             )
 
         # Log the detailed statistics if requested.
-        if FLAGS.task_stats == "detailed":
+        if FLAGS.task_stats == "detailed" or FLAGS.all:
             log_detailed_task_statistics(
-                logger, FLAGS.task_name, csv_reader, scheduler_csv_file
+                FLAGS.task_name, csv_reader, scheduler_csv_file
             )
 
         # Output the Chrome trace format if requested.
@@ -1104,7 +1227,7 @@ def main(argv):
         analyze_scheduler_runtime(
             csv_reader,
             FLAGS.csv_files,
-            FLAGS.csv_labels,
+            scheduler_labels,
             os.path.join(FLAGS.output_dir, FLAGS.scheduler_runtime_timeline_plot_name),
             os.path.join(FLAGS.output_dir, FLAGS.scheduler_runtime_cdf_plot_name),
             plot=FLAGS.plot,
@@ -1115,11 +1238,25 @@ def main(argv):
         analyze_task_placement_delay(
             csv_reader,
             FLAGS.csv_files,
-            FLAGS.csv_labels,
+            scheduler_labels,
             os.path.join(FLAGS.output_dir, FLAGS.task_placement_delay_plot_name),
             plot=FLAGS.plot,
             figure_size=figure_size,
             stats=statistics,
+        )
+
+    if FLAGS.aggregate_stats:
+        if len(statistics) != 1:
+            _statistic = "p50"
+        else:
+            _statistic = statistics[0] if statistics[0] != "all" else "p50"
+        log_aggregate_stats(
+            csv_reader,
+            FLAGS.csv_files,
+            FLAGS.conf_files,
+            scheduler_labels,
+            FLAGS.task_name,
+            _statistic,
         )
 
 
