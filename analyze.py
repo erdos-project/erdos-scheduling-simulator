@@ -15,6 +15,12 @@ from tabulate import tabulate
 from data import CSVReader
 from utils import log_statistics, setup_logging
 
+# The formats that the Chrome trace can be output to.
+TRACE_FORMATS = ("task", "resource")
+
+# The formats that the task stats can be output to.
+TASK_STATS_FORMATS = ("basic", "detailed")
+
 FLAGS = flags.FLAGS
 flags.DEFINE_list("csv_files", None, "List of CSV files containing experiment logs")
 flags.mark_flag_as_required("csv_files")
@@ -26,9 +32,6 @@ flags.register_validator(
 flags.DEFINE_list("csv_labels", None, "List of labels to use for the experiment logs")
 flags.mark_flag_as_required("csv_labels")
 flags.DEFINE_string("output_dir", ".", "The directory to output the graphs to.")
-
-# The formats that the Chrome trace can be output to.
-TRACE_FORMATS = ("task", "resource")
 
 # Enable the restriction of events to a particular regular expression.
 flags.DEFINE_string(
@@ -137,10 +140,15 @@ flags.DEFINE_string(
     "The filename of the end-to-end response time plot.",
 )
 
-flags.DEFINE_bool(
+flags.DEFINE_string(
     "task_stats",
-    False,
-    "Log detailed statistics for each task grouped by the task name.",
+    None,
+    "Log basic or detailed statistics for each task grouped by the task name.",
+)
+flags.register_validator(
+    "task_stats",
+    lambda value: value in TASK_STATS_FORMATS if value is not None else True,
+    message=f"Only {TASK_STATS_FORMATS} formats are allowed for task statistics.",
 )
 
 matplotlib.rcParams.update({"font.size": 16, "figure.autolayout": True})
@@ -889,12 +897,15 @@ def main(argv):
         logger.debug(
             f"Simulation end time for {scheduler_csv_file}: {simulation_end_time}"
         )
-        log_basic_task_statistics(
-            logger, FLAGS.task_name, csv_reader, scheduler_csv_file
-        )
+
+        # Log the basic statistics if requested.
+        if FLAGS.task_stats == "basic":
+            log_basic_task_statistics(
+                logger, FLAGS.task_name, csv_reader, scheduler_csv_file
+            )
 
         # Log the detailed statistics if requested.
-        if FLAGS.task_stats:
+        if FLAGS.task_stats == "detailed":
             log_detailed_task_statistics(
                 logger, FLAGS.task_name, csv_reader, scheduler_csv_file
             )
