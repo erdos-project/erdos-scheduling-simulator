@@ -215,6 +215,7 @@ def __parse_flagfile(path: str):
     """
     values = main_flags([__file__, f"--flagfile={path}"])
 
+
 def analyze_resource_utilization(
     csv_reader,
     scheduler_csv_file,
