@@ -710,6 +710,7 @@ def analyze_missed_deadlines(
     output,
     plot=False,
     figure_size=(14, 10),
+    stats="all",
 ):
     """Analyzes the number of missed deadlines by each task.
 
@@ -722,6 +723,7 @@ def analyze_missed_deadlines(
         output (`str`): The path to where the plot should be output to.
         plot (`bool`) [default = False]: Plots the graphs if set to True.
         figure_size (`Tuple[int, int]`) [default=(14, 10)]: The size of the plot.
+        stats (`Union[str, Sequence[str]`): The statistics to show for the metric.
     """
     # Group the missed deadlines by their task name (if regex is matched).
     missed_deadlines = csv_reader.get_missed_deadline_events(scheduler_csv_file)
@@ -737,11 +739,11 @@ def analyze_missed_deadlines(
     logger.debug(f"Tasks that match the regex: {task_name_regex}")
     logger.debug(f"Average missed deadline delay: {np.mean(missed_deadline_delays)}")
     for task_name, tasks in missed_deadline_by_task_name.items():
-        logger.debug(f"{task_name}: {len(tasks)}")
+        logger.debug(f"{task_name}")
         missed_deadline_delays_per_task = [
             (task.completion_time - task.deadline) / 1000 for task in tasks
         ]
-        logger.debug(f"    Average: {np.mean(missed_deadline_delays_per_task)}")
+        log_statistics(missed_deadline_delays_per_task, logger, stats, offset="    ")
 
     if plot:
         # Plot the number of missed deadlines by the method name.
@@ -1015,6 +1017,7 @@ def main(argv):
                 ),
                 plot=FLAGS.plot,
                 figure_size=figure_size,
+                stats=statistics,
             )
         if FLAGS.end_to_end_response_time or FLAGS.all:
             analyze_end_to_end_response_time(
