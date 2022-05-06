@@ -4,5 +4,5 @@ numpy
 pyparsing<=3.0.1  # Fix parsing error in pydot.
 pydot
 z3
-z3-solver
+z3-solver==4.8.14.0 # Cannot import z3.Implies otherwise.
 tabulate
