@@ -22,6 +22,8 @@ TRACE_FORMATS = ("task", "resource")
 TASK_STATS_FORMATS = ("basic", "detailed")
 
 FLAGS = flags.FLAGS
+
+# Required inputs for either (csv_files, label) or (csv_files, conf_files)
 flags.DEFINE_list("csv_files", None, "List of CSV files containing experiment logs")
 flags.mark_flag_as_required("csv_files")
 flags.register_validator(
@@ -29,8 +31,28 @@ flags.register_validator(
     lambda value: all(f.endswith(".csv") for f in value),
     message="All files must end with .csv extension",
 )
+
 flags.DEFINE_list("csv_labels", None, "List of labels to use for the experiment logs")
-flags.mark_flag_as_required("csv_labels")
+flags.register_validator(
+    "csv_labels",
+    lambda value: len(value) == len(FLAGS.csv_files) if value else True,
+    message="Mismatch between length of csv files and labels flags.",
+)
+
+flags.DEFINE_list("conf_files", None, "List of conf files used to run the experiments.")
+flags.register_validator(
+    "conf_files",
+    lambda value: (len(value) == len(FLAGS.csv_files) if value else True)
+    and (all(f.endswith(".conf") for f in value) if value else True),
+    message="All files must end with .conf extension.",
+)
+
+flags.register_multi_flags_validator(
+    ["csv_labels", "conf_files"],
+    lambda values: values["csv_labels"] is not None or values["conf_files"] is not None,
+    message="Atleast one of csv_labels or conf_files must be provided.",
+)
+
 flags.DEFINE_string("output_dir", ".", "The directory to output the graphs to.")
 
 # Enable the restriction of events to a particular regular expression.
@@ -168,6 +190,33 @@ markers = {"EDF": "o", "Gurobi": "x", "Z3": "+", "LSF": "^"}
 colors = {"EDF": "r", "Gurobi": "b", "Z3": "y", "LSF": "b"}
 
 logger = setup_logging("plotting")
+
+
+def __parse_flagfile(path: str) -> dict:
+    """Parses the flagfile at the given path, and returns a dictionary containing the
+    flag values.
+
+    Args:
+        path (str): The path to where the config file is stored.
+
+    Returns:
+        A dictionary where the keys are the name of the arguments and the values are
+        the values specified in the flagfile.
+    """
+    parsed_values = {}
+    with open(path, "r") as flagfile:
+        for line in flagfile:
+            line = line.strip()
+            if line.startswith("--") and "=" in line:
+                argument, value = line.lstrip("--").split("=", 1)
+                parsed_values[argument.strip()] = value.strip()
+            elif line.startswith("--no"):
+                argument = line.lstrip("--no")
+                parsed_values[argument.strip()] = False
+            elif line.startswith("--"):
+                argument = line.lstrip("--")
+                parsed_values[argument.strip()] = True
+    return parsed_values
 
 
 def analyze_resource_utilization(
@@ -899,10 +948,7 @@ def log_basic_task_statistics(
 
 
 def main(argv):
-    assert len(FLAGS.csv_files) == len(
-        FLAGS.csv_labels
-    ), "Mismatch between length of csv files and labels flags."
-
+    # Parse the flags.
     try:
         re.compile(FLAGS.task_name)
     except re.error:
@@ -914,12 +960,25 @@ def main(argv):
         "all" if len(FLAGS.stat) == 1 and FLAGS.stat[0] == "all" else FLAGS.stat
     )
 
+    # Get the labels from either the csv_labels or conf_files.
+    if FLAGS.csv_labels:
+        scheduler_labels = csv_labels
+    else:
+        scheduler_labels = []
+        for i, (csv_file, conf_file) in enumerate(
+            zip(FLAGS.csv_files, FLAGS.conf_files)
+        ):
+            scheduler_label = (
+                __parse_flagfile(conf_file).get("scheduler", "EDF") + f"_{i}"
+            )
+            scheduler_labels.append(scheduler_label)
+
     figure_size = (14, 10)
 
     # Load the events from the CSV file into the CSVReader class.
     csv_reader = CSVReader(csv_paths=FLAGS.csv_files)
 
-    for scheduler_csv_file, scheduler_label in zip(FLAGS.csv_files, FLAGS.csv_labels):
+    for scheduler_csv_file, scheduler_label in zip(FLAGS.csv_files, scheduler_labels):
         # Log basic statistics
         simulation_end_time = csv_reader.get_simulator_end_time(scheduler_csv_file)
         logger.debug(
