@@ -1,8 +1,25 @@
 import logging
 import random
-from typing import Optional, Tuple
+from functools import partial
+from typing import Optional, Sequence, Tuple, Union
 
 import numpy as np
+
+# Mapping between the requested stat values and (functions, helper messages).
+STATS_FUNCTIONS = {
+    "min": (np.min, "Minimum"),
+    "max": (np.max, "Maximum"),
+    "median": (np.median, "Median"),
+    "std": (np.std, "Standard Deviation"),
+    "p1": (partial(np.percentile, q=1), "Percentile (1st)"),
+    "p10": (partial(np.percentile, q=10), "Percentile (10th)"),
+    "p25": (partial(np.percentile, q=25), "Percentile (25th)"),
+    "p50": (partial(np.percentile, q=50), "Percentile (50th)"),
+    "p75": (partial(np.percentile, q=75), "Percentile (75th)"),
+    "p90": (partial(np.percentile, q=90), "Percentile (90th)"),
+    "p99": (partial(np.percentile, q=99), "Percentile (99th)"),
+    "p99.9": (partial(np.percentile, q=99.9), "Percentile (99.9th)"),
+}
 
 
 def setup_logging(
@@ -88,25 +105,43 @@ def fuzz_time(time: int, variance: Tuple[int, int]) -> int:
     )
 
 
-def log_statistics(data, logger: logging.Logger, offset: Optional[str] = "    "):
-    """Logs the required statistics from the given data.
+def log_statistics(
+    data,
+    logger: logging.Logger,
+    stats: Union[str, Sequence[str]] = "all",
+    offset: Optional[str] = "    ",
+):
+    """Logs the requested statistics from the given data.
+
+    Users can choose from the statistics functions defined in STATS_FUNCTIONS or
+    specify 'all' to show all the statistics.
 
     Args:
         data (`Sequence[int]`): The data to print the statistics from.
         logger (`logging.Logger`): The logger to use for logging the stats.
+        stats (`Union[str, Sequence[str]]`): The stats to be logged.
         offset (`Optional[str]`): The space offset to use for logging.
     """
+    if stats == "all":
+        requested_stats = [
+            "median",
+            "min",
+            "max",
+            "std",
+            "p1",
+            "p10",
+            "p25",
+            "p50",
+            "p75",
+            "p90",
+            "p99",
+            "p99.9",
+        ]
+    else:
+        requested_stats = [stat for stat in stats]
+
     logger.debug(f"{offset}Number of values: {len(data)}")
     logger.debug(f"{offset}Average: {np.mean(data)}")
-    logger.debug(f"{offset}Median: {np.median(data)}")
-    logger.debug(f"{offset}Minimum: {np.min(data)}")
-    logger.debug(f"{offset}Maximum: {np.max(data)}")
-    logger.debug(f"{offset}Standard Deviation: {np.std(data)}")
-    logger.debug(f"{offset}Percentile (1st): {np.percentile(data, 1)}")
-    logger.debug(f"{offset}Percentile (10th): {np.percentile(data, 10)}")
-    logger.debug(f"{offset}Percentile (25th): {np.percentile(data, 25)}")
-    logger.debug(f"{offset}Percentile (50th): {np.percentile(data, 50)}")
-    logger.debug(f"{offset}Percentile (75th): {np.percentile(data, 75)}")
-    logger.debug(f"{offset}Percentile (90th): {np.percentile(data, 90)}")
-    logger.debug(f"{offset}Percentile (99th): {np.percentile(data, 99)}")
-    logger.debug(f"{offset}Percentile (99.9th): {np.percentile(data, 99.9)}")
+    for stat in requested_stats:
+        method, helper = STATS_FUNCTIONS[stat]
+        logger.debug(f"{offset}{helper}: {method(data)}")

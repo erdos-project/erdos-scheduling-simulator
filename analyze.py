@@ -13,7 +13,7 @@ from matplotlib.patches import Patch
 from tabulate import tabulate
 
 from data import CSVReader
-from utils import log_statistics, setup_logging
+from utils import STATS_FUNCTIONS, log_statistics, setup_logging
 
 # The formats that the Chrome trace can be output to.
 TRACE_FORMATS = ("task", "resource")
@@ -27,7 +27,7 @@ flags.mark_flag_as_required("csv_files")
 flags.register_validator(
     "csv_files",
     lambda value: all(f.endswith(".csv") for f in value),
-    "All files must end with .csv extension",
+    message="All files must end with .csv extension",
 )
 flags.DEFINE_list("csv_labels", None, "List of labels to use for the experiment logs")
 flags.mark_flag_as_required("csv_labels")
@@ -56,7 +56,15 @@ flags.register_validator(
     message=f"Only {TRACE_FORMATS} Chrome trace formats are allowed.",
 )
 
-# Enumerate the different kinds of plots.
+# Allow the choice of statistics to show for the metrics.
+flags.DEFINE_list("stat", "all", "The statistic to show for the given metric.")
+flags.register_validator(
+    "stat",
+    lambda value: all(s in STATS_FUNCTIONS or s == "all" for s in value),
+    message=f"Only {tuple(STATS_FUNCTIONS.keys())} statistic functions are allowed.",
+)
+
+# Enumerate the different kinds of metrics.
 flags.DEFINE_bool(
     "scheduler_runtime", False, "Analyze the runtime of the scheduler invocations."
 )
@@ -170,6 +178,7 @@ def analyze_resource_utilization(
     plot=False,
     figure_size=(14, 10),
     bar_width=1.0,
+    stats="all",
 ):
     """Analyzes the utilization of different resources on the workers.
 
@@ -184,6 +193,7 @@ def analyze_resource_utilization(
         output (`str`): The path to where the plot should be output to.
         plot (`bool`) [default = False]: Plots the graphs if set to True.
         figure_size (`Tuple[int, int]`) [default=(14, 10)]: The size of the plot.
+        stats (`Union[str, Sequence[str]`): The statistics to show for the metric.
     """
     # Plotting defaults.
     # hatches = ['//', '--', '**']
@@ -195,8 +205,8 @@ def analyze_resource_utilization(
 
     # Find all the resource types in the system.
     resource_types = set()
-    for stats in worker_pool_stats:
-        for resource in stats.resource_utilizations.keys():
+    for wp_stats in worker_pool_stats:
+        for resource in wp_stats.resource_utilizations.keys():
             resource_types.add(resource)
 
     # Calculate the heights of utilization for each resource, after
@@ -222,7 +232,7 @@ def analyze_resource_utilization(
     logger.debug("================== Resource Utilization ==================")
     for resource_type in resource_types:
         logger.debug("Utilization for {}".format(resource_type))
-        log_statistics(resource_used_heights[resource_type], logger)
+        log_statistics(resource_used_heights[resource_type], logger, stats)
 
     # Plot a histogram with the results.
     if plot:
@@ -275,6 +285,7 @@ def analyze_scheduler_runtime(
     cdf_output,
     plot=False,
     figure_size=(14, 10),
+    stats="all",
 ):
     """Analyzes the runtime of the scheduler invocations from the CSV files.
 
@@ -291,6 +302,7 @@ def analyze_scheduler_runtime(
         cdf_output (`str`): The path to where the CDF plot should be output.
         plot (`bool`) [default = False]: Plots the graphs if set to True.
         figure_size (`Tuple[int, int]`) [default=(14, 10)]: The size of the plot.
+        stats (`Union[str, Sequence[str]`): The statistics to show for the metric.
     """
     # Retrieve the runtime of the scheduler invocations.
     logger.debug("================= Scheduler runtime [ms] =================")
@@ -309,7 +321,7 @@ def analyze_scheduler_runtime(
         all_runtimes.append(runtimes_ms)
         all_start_times.append(start_times_ms)
         logger.debug(f"Stats for {csv_file}")
-        log_statistics(runtimes_ms, logger)
+        log_statistics(runtimes_ms, logger, stats)
 
     # Plot a timelapse of the runtime of the scheduler.
     if plot:
@@ -351,6 +363,7 @@ def analyze_task_placement(
     output,
     plot=False,
     figure_size=(14, 10),
+    stats="all",
 ):
     """Analyzes the number of placed and unplaced tasks by each scheduler invocation.
 
@@ -362,6 +375,7 @@ def analyze_task_placement(
         output (`str`): The path to where the plot should be output to.
         plot (`bool`) [default = False]: Plots the graphs if set to True.
         figure_size (`Tuple[int, int]`) [default=(14, 10)]: The size of the plot.
+        stats (`Union[str, Sequence[str]`): The statistics to show for the metric.
     """
     scheduler_invocations = csv_reader.get_scheduler_invocations(scheduler_csv_file)
 
@@ -376,9 +390,9 @@ def analyze_task_placement(
     ]
 
     logger.debug("================== Num placed tasks ==================")
-    log_statistics(placed_task_heights, logger)
+    log_statistics(placed_task_heights, logger, stats)
     logger.debug("================== Num unplaced tasks ==================")
-    log_statistics(unplaced_task_heights, logger)
+    log_statistics(unplaced_task_heights, logger, stats)
 
     if plot:
         # Plot a histogram with the results.
@@ -433,6 +447,7 @@ def analyze_inter_task_time(
     output,
     plot=False,
     figure_size=(14, 10),
+    stats="all",
 ):
     """Analyzes the inter-task time for tasks that match the given regex.
 
@@ -448,6 +463,7 @@ def analyze_inter_task_time(
         output (`str`): The path to where the plot should be output to.
         plot (`bool`) [default = False]: Plots the graphs if set to True.
         figure_size (`Tuple[int, int]`) [default=(14, 10)]: The size of the plot.
+        stats (`Union[str, Sequence[str]`): The statistics to show for the metric.
     """
     # Retrieve the tasks from the CSV file that match the given regular expression.
     tasks = csv_reader.get_tasks(scheduler_csv_file)
@@ -473,7 +489,7 @@ def analyze_inter_task_time(
         labels.append(task_name)
         inter_release_times.append(task_inter_release_time)
         logger.debug(f"Statistics for {task_name}:")
-        log_statistics(task_inter_release_time, logger, offset="      ")
+        log_statistics(task_inter_release_time, logger, stats, offset="      ")
 
     if plot:
         plt.figure(figsize=figure_size)
@@ -491,6 +507,7 @@ def analyze_task_slack(
     output,
     plot=False,
     figure_size=(14, 10),
+    stats="all",
 ):
     """Analyzes the actual and intended completion slack of the tasks.
 
@@ -510,6 +527,7 @@ def analyze_task_slack(
         output (`str`): The path to where the plot should be output to.
         plot (`bool`) [default = False]: Plots the graphs if set to True.
         figure_size (`Tuple[int, int]`) [default=(14, 10)]: The size of the plot.
+        stats (`Union[str, Sequence[str]`): The statistics to show for the metric.
     """
     # Retrieve the tasks that match the given regular expression.
     tasks = []
@@ -521,7 +539,7 @@ def analyze_task_slack(
     slack = [(task.deadline - task.completion_time) / 1000 for task in tasks]
     logger.debug("================== Actual task completion slack [ms] ===============")
     logger.debug(f"Tasks that match the regex: {task_name_regex}")
-    log_statistics(slack, logger)
+    log_statistics(slack, logger, stats)
 
     # Compute the time between the deadline and the intended completion of the task.
     initial_slack = [
@@ -529,7 +547,7 @@ def analyze_task_slack(
     ]
     logger.debug("================== Intended task completion slack [ms] =============")
     logger.debug(f"Tasks that match the regex: {task_name_regex}")
-    log_statistics(initial_slack, logger)
+    log_statistics(initial_slack, logger, stats)
 
     # If required, plot a histogram of the slack from the deadline for the tasks.
     if plot:
@@ -557,6 +575,7 @@ def analyze_task_placement_delay(
     output,
     plot=False,
     figure_size=(14, 10),
+    stats="all",
 ):
     """Analyzes the placement delays from the given trace.
 
@@ -569,6 +588,7 @@ def analyze_task_placement_delay(
         output (`str`): The path to where the plot should be output.
         plot (`bool`) [default = True]: Show statistics only if set to False.
         figure_size (`Tuple[int, int]`) [default=(14, 10)]: The size of the plot.
+        stats (`Union[str, Sequence[str]`): The statistics to show for the metric.
     """
     logger.debug("================ Task placement delay [ms] ================")
     placement_delays = []
@@ -585,7 +605,7 @@ def analyze_task_placement_delay(
         min_delay = min(min_delay, min(placement_delay))
         max_delay = max(max_delay, max(placement_delay))
         logger.debug(f"Placement delay stats for {csv_file}")
-        log_statistics(placement_delay, logger)
+        log_statistics(placement_delay, logger, stats)
 
     if plot:
         plt.figure(figsize=figure_size)
@@ -742,6 +762,7 @@ def analyze_end_to_end_response_time(
     output,
     plot=False,
     figure_size=(14, 10),
+    stats="all",
 ):
     """Analyzes the end-to-end response time of each timestamp in the trace.
 
@@ -752,6 +773,7 @@ def analyze_end_to_end_response_time(
         output (`str`): The path to where the plot should be output to.
         plot (`bool`) [default = False]: Plots the graphs if set to True.
         figure_size (`Tuple[int, int]`) [default=(14, 10)]: The size of the plot.
+        stats (`Union[str, Sequence[str]`): The statistics to show for the metric.
     """
     tasks = csv_reader.get_tasks(scheduler_csv_file)
     timestamp_start_end = {}
@@ -772,7 +794,7 @@ def analyze_end_to_end_response_time(
 
     e2e_response_time = [(ct - rt) / 1000 for (rt, ct) in timestamp_start_end.values()]
     logger.debug("================== End-to-end response time [ms] ==================")
-    log_statistics(e2e_response_time, logger)
+    log_statistics(e2e_response_time, logger, stats)
 
     if plot:
         plt.figure(figsize=figure_size)
@@ -886,6 +908,10 @@ def main(argv):
             f"The regular expression for Task names: {FLAGS.task_name} is invalid."
         )
 
+    statistics = (
+        "all" if len(FLAGS.stat) == 1 and FLAGS.stat[0] == "all" else FLAGS.stat
+    )
+
     figure_size = (14, 10)
 
     # Load the events from the CSV file into the CSVReader class.
@@ -935,6 +961,7 @@ def main(argv):
                 ),
                 plot=FLAGS.plot,
                 figure_size=figure_size,
+                stats=statistics,
             )
         if FLAGS.task_placement or FLAGS.all:
             analyze_task_placement(
@@ -947,6 +974,7 @@ def main(argv):
                 ),
                 plot=FLAGS.plot,
                 figure_size=figure_size,
+                stats=statistics,
             )
         if FLAGS.task_slack or FLAGS.all:
             analyze_task_slack(
@@ -959,6 +987,7 @@ def main(argv):
                 ),
                 plot=FLAGS.plot,
                 figure_size=figure_size,
+                stats=statistics,
             )
         if FLAGS.inter_task_time or FLAGS.all:
             analyze_inter_task_time(
@@ -972,6 +1001,7 @@ def main(argv):
                 ),
                 plot=FLAGS.plot,
                 figure_size=figure_size,
+                stats=statistics,
             )
         if FLAGS.missed_deadlines or FLAGS.all:
             analyze_missed_deadlines(
@@ -997,6 +1027,7 @@ def main(argv):
                 ),
                 plot=FLAGS.plot,
                 figure_size=figure_size,
+                stats=statistics,
             )
 
     if FLAGS.scheduler_runtime or FLAGS.all:
@@ -1008,6 +1039,7 @@ def main(argv):
             os.path.join(FLAGS.output_dir, FLAGS.scheduler_runtime_cdf_plot_name),
             plot=FLAGS.plot,
             figure_size=figure_size,
+            stats=statistics,
         )
     if FLAGS.task_placement_delay or FLAGS.all:
         analyze_task_placement_delay(
@@ -1017,6 +1049,7 @@ def main(argv):
             os.path.join(FLAGS.output_dir, FLAGS.task_placement_delay_plot_name),
             plot=FLAGS.plot,
             figure_size=figure_size,
+            stats=statistics,
         )
 
 
