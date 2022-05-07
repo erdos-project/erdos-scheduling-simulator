@@ -213,7 +213,7 @@ def __parse_flagfile(path: str):
     Args:
         path (str): The path to where the config file is stored.
     """
-    values = main_flags([__file__, f"--flagfile={path}"])
+    main_flags([__file__, f"--flagfile={path}"])
 
 
 def analyze_resource_utilization(
