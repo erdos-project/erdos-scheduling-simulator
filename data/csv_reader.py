@@ -416,7 +416,7 @@ class CSVReader(object):
             }
             trace["traceEvents"].append(trace_event)
 
-        if trace_fmt == "task":
+        if trace_fmt == "resource":
             task_to_wp = {
                 task_placement.task: task_placement.worker_pool
                 for task_placement in self.get_task_placements(csv_path)
