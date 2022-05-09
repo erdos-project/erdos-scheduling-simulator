@@ -12,7 +12,14 @@ fi
 CSV_FILES=""
 CONF_FILES=""
 
-for DIR in $(ls -d $RESULT_DIR/*); do
+
+if [[ -d $RESULT_DIR ]]; then
+    DIR_TO_LIST="$RESULT_DIR/*"
+else
+    DIR_TO_LIST="$RESULT_DIR"
+fi
+
+for DIR in $(ls -d $DIR_TO_LIST); do
     EXPERIMENT=$(basename $DIR)
     CSV_FILE=$DIR/$EXPERIMENT.csv
     CONF_FILE=$DIR/$EXPERIMENT.conf
