@@ -14,7 +14,7 @@ from data import TaskLoader
 from workload import Job, JobGraph, Resource, Resources, Task, TaskGraph
 
 
-class TaskLoaderJSON(object):
+class TaskLoaderJSON(TaskLoader):
     """Loads the Task data from Pylot traces.
 
     Args:

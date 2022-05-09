@@ -10,7 +10,7 @@ from data import TaskLoader, TaskLoaderJSON
 from workload import Job, JobGraph, Resource, Resources, Task, TaskGraph
 
 
-class TaskLoaderSynthetic(object):
+class TaskLoaderSynthetic(TaskLoader):
     """Generates a synthetic task workload.
 
     Args:
