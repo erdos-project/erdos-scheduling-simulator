@@ -79,10 +79,16 @@ for WORKER_CONFIG in ${WORKER_CONFIGS[@]}; do
                                 continue
                             fi
 
-			    ((i=i%${PARALLEL_FACTOR})); ((i++==0)) && wait
-                            LOG_BASE=${EXECUTION_MODE}_scheduler_${SCHEDULER}_horizon_${SCHEDULING_HORIZON}_runtime_${RUNTIME}_timestamps_${MAX_TIMESTAMP}_runtime_var_${RUNTIME_VAR}_deadline_var_${DEADLINE_VAR}_${WORKER_CONFIG}_${RESOURCE_CONFIG}
+                            ((i=i%${PARALLEL_FACTOR})); ((i++==0)) && wait
+
+                            LOG_BASE=${EXECUTION_MODE}_scheduler_${SCHEDULER}_horizon_${SCHEDULING_HORIZON}_runtime_${RUNTIME}_timestamps_${MAX_TIMESTAMP}_runtime_var_${RUNTIME_VAR}_deadline_var_${DEADLINE_VAR}_${WORKER_CONFIG}
+                            # Synthetic execution mode does not support resource configs.
+                            if [[ ${EXECUTION_MODE} != synthetic ]]; then
+                                LOG_BASE="${LOG_BASE}_${RESOURCE_CONFIG}"
+                            fi
+
                             mkdir -p ${LOG_DIR}/${LOG_BASE}
-			    execute_experiment ${LOG_DIR} ${LOG_BASE} &
+                            execute_experiment ${LOG_DIR} ${LOG_BASE} &
                         done
                     done
                 done
