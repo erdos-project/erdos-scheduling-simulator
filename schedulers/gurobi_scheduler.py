@@ -783,14 +783,40 @@ class GurobiScheduler2(BaseScheduler):
                         <= self._task_ids_to_start_time[child_task.id]
                     )
 
+    def _in_interval(self, model, event_time, start_time, end_time, var_name=None):
+        """Adds constraints to check if event time is in [start, end] time interval.
+
+        Args:
+            model: The Gurobi model.
+            event_time: The time of the event to check if is in the interval.
+            start_time: The start of the time interval.
+            end_time: The end of the time interval.
+            var_name: Name to give to the Gurobi binary variable.
+
+        Returns:
+            A Gurobi variable that is 1 if the event time is in the interval, 0 otherwise.
+        """
+        if var_name is None:
+            var_name = f"time_{event_time}_in_{start_time},{end_time}"
+        in_var = model.addVar(vtype=gp.GRB.BINARY, name=var_name)
+        M = 1000000
+        model.addConstr(event_time >= start_time - M * (1 - in_var))
+        model.addConstr(event_time <= start_time - 1 + M * in_var)
+        model.addConstr(event_time <= end_time + M * (1 - in_var))
+        model.addConstr(event_time >= end_time + 1 - M * in_var)
+        return in_var
+
+    def _in_interval_approximate(self, event_time, start_time, end_time):
+        if start_time <= event_time and event_time <= end_time:
+            return 1
+        return 0
+
     def _add_task_resource_constraints(self, model):
         for task_id, task in self._task_ids_to_task.items():
             # The task can be left unscheduled or placed on a single worker.
             model.addConstr(
                 gp.quicksum(p for p in self._task_ids_to_placements[task_id]) == 1
             )
-
-        w_index = 1
 
         total_resources = Resources(_logger=self._logger)
         for wp in self._worker_pools._wps:
@@ -799,26 +825,38 @@ class GurobiScheduler2(BaseScheduler):
             map(attrgetter("name"), total_resources._resource_vector.keys())
         )
 
-        for wp in self._worker_pools._wps:
-            for res_name in res_names:
-                resource = Resource(name=res_name, _id="any")
-                # Place constraints to ensure that worker pool's resources are not exceeded.
-                available = wp.resources.get_available_quantity(resource)
-
-                # TODO: Finish!
-                # for task_id, task in self._task_ids_to_start_time.items():
-                #     start_time = self._task_ids_to_start_time[task_id]
-                #     start_time + task.remaining_time
-
-                model.addConstr(
-                    gp.quicksum(
-                        worker_var
-                        * task.resource_requirements.get_available_quantity(resource)
-                        for (task, worker_var) in self._wp_index_to_vars[w_index]
-                    )
-                    <= available
+        for task_id in self._task_ids_to_start_time.keys():
+            event_time = self._task_ids_to_start_time[task_id]
+            # event_time = self._task_ids_to_task[task_id].release_time
+            overlap_vars = {}
+            for task in self._task_ids_to_task.values():
+                start_time = self._task_ids_to_start_time[task.id]
+                overlap_vars[task.id] = self._in_interval(
+                    model, event_time, start_time, start_time + task.remaining_time
                 )
-            w_index += 1
+                # overlap_vars[task.id] = self._in_interval_approximate(
+                #     event_time, task.release_time, task.deadline
+                # )
+
+            w_index = 1
+            for wp in self._worker_pools._wps:
+                for res_name in res_names:
+                    resource = Resource(name=res_name, _id="any")
+                    # Place constraints to ensure that worker pool's resources are not
+                    # exceeded.
+                    available = wp.resources.get_available_quantity(resource)
+                    model.addConstr(
+                        gp.quicksum(
+                            worker_var
+                            * overlap_vars[task.id]
+                            * task.resource_requirements.get_available_quantity(
+                                resource
+                            )
+                            for (task, worker_var) in self._wp_index_to_vars[w_index]
+                        )
+                        <= available
+                    )
+                w_index += 1
 
     def schedule(self, sim_time: int, task_graph: TaskGraph, worker_pools: WorkerPools):
         self._time = sim_time
@@ -861,9 +899,9 @@ class GurobiScheduler2(BaseScheduler):
         model.setObjective(objective, gp.GRB.MAXIMIZE)
         model.optimize()
         scheduler_end_time = time.time()
-        if self.runtime == -1:
-            runtime = int((scheduler_end_time - scheduler_start_time) * 1000000)
-        else:
+        runtime = int((scheduler_end_time - scheduler_start_time) * 1000000)
+        self._logger.info(f"Scheduler wall-clock runtime: {runtime}")
+        if self.runtime != -1:
             runtime = self.runtime
 
         if model.status == gp.GRB.OPTIMAL:
