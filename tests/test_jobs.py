@@ -115,3 +115,20 @@ def test_iteration_jobgraph():
         lidar_coordinate_mapping_job,
         perception_job,
     ], "Incorrect BFS traversal returned by the JobGraph."
+
+
+def test_job_depth():
+    """Test that the depth of each Job is correct."""
+    job_graph = JobGraph()
+    camera_job, lidar_job = Job(name="Camera"), Job(name="Lidar")
+    lidar_coordinate_mapping_job = Job(name="LidarToCameraMapping")
+    perception_job = Job(name="Perception")
+    job_graph.add_job(camera_job, [perception_job])
+    job_graph.add_job(lidar_job, [lidar_coordinate_mapping_job])
+    job_graph.add_job(lidar_coordinate_mapping_job, [perception_job])
+
+    assert job_graph.get_job_depth(camera_job) == 1, "Incorrect job depth."
+    assert job_graph.get_job_depth(lidar_job) == 1, "Incorrect job depth."
+    assert (
+        job_graph.get_job_depth(lidar_coordinate_mapping_job) == 1
+    ), "Incorrect job depth."

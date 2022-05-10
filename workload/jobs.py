@@ -140,6 +140,33 @@ class JobGraph(object):
                 source_jobs.append(job)
         return source_jobs
 
+    def get_job_depth(self, job: Job) -> int:
+        """Retrieves the depth of the given Job in the JobGraph.
+
+        Args:
+            job (`Job`): The job to check for a source Job.
+
+        Returns:
+            The depth of the Job with the depth of a source job being 1.
+        """
+        if job not in self._job_graph:
+            raise ValueError(f"The job: {job} was not found in the graph.")
+        if self.is_source_job(job):
+            return 1
+
+        return max(self.get_job_depth(parent) for parent in self.get_parents(job)) + 1
+
+    def is_source_job(self, job: Job) -> bool:
+        """Checks whether the given job is a source job.
+
+        Args:
+            job (`Job`): The job to check for a source Job.
+
+        Returns:
+            `True` if `job` is a source job, and `False` otherwise.
+        """
+        return len(self.get_parents(job)) == 0
+
     def __iter__(self):
         """Iterates through the JobGraph in a BFS manner."""
         visited_nodes = set()
