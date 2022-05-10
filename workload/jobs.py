@@ -1,6 +1,6 @@
 import random
 import uuid
-from collections import defaultdict
+from collections import defaultdict, deque
 from typing import Mapping, Optional, Sequence
 
 
@@ -125,9 +125,37 @@ class JobGraph(object):
 
     def pipeline_source_operators(self):
         """Ensures that the source operators pipeline tasks."""
+        for job in self.get_source_jobs():
+            job._pipelined = True
+
+    def get_source_jobs(self) -> Sequence[Job]:
+        """Retrieves the source jobs from the given graph.
+
+        Returns:
+            The source jobs from the given graph.
+        """
+        source_jobs = []
         for job in self._job_graph.keys():
             if len(self.__parent_job_graph[job]) == 0:
-                job._pipelined = True
+                source_jobs.append(job)
+        return source_jobs
+
+    def __iter__(self):
+        """Iterates through the JobGraph in a BFS manner."""
+        visited_nodes = set()
+        frontier = deque(self.get_source_jobs())
+        while True:
+            if len(frontier) == 0:
+                break
+            else:
+                job = frontier.popleft()
+                visited_nodes.add(job)
+                for child in self.get_children(job):
+                    if all(
+                        parent in visited_nodes for parent in self.get_parents(child)
+                    ):
+                        frontier.append(child)
+                yield job
 
     def __len__(self):
         return len(self._job_graph)
