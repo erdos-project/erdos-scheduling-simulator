@@ -7,7 +7,7 @@ from data import TaskLoader
 from workload import Job, JobGraph, Resource, Resources, Task, TaskGraph
 
 
-class TaskLoaderBenchmark(object):
+class TaskLoaderBenchmark(TaskLoader):
     """Generates a synthetic task workload.
 
     Args:

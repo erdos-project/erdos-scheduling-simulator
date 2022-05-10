@@ -93,3 +93,43 @@ def test_failed_addition_of_child_to_job():
     job_1, job_2 = Job(name="Perception"), Job(name="Planning")
     with pytest.raises(ValueError):
         job_graph.add_child(job_1, job_2)
+
+
+def test_iteration_jobgraph():
+    """Test that the iteration of the JobGraph is in a BFS manner."""
+    job_graph = JobGraph()
+    camera_job, lidar_job = Job(name="Camera"), Job(name="Lidar")
+    lidar_coordinate_mapping_job = Job(name="LidarToCameraMapping")
+    perception_job = Job(name="Perception")
+    job_graph.add_job(camera_job, [perception_job])
+    job_graph.add_job(lidar_job, [lidar_coordinate_mapping_job])
+    job_graph.add_job(lidar_coordinate_mapping_job, [perception_job])
+
+    traversal = []
+    for job in job_graph:
+        traversal.append(job)
+
+    assert traversal == [
+        camera_job,
+        lidar_job,
+        lidar_coordinate_mapping_job,
+        perception_job,
+    ], "Incorrect BFS traversal returned by the JobGraph."
+
+
+def test_job_depth():
+    """Test that the depth of each Job is correct."""
+    job_graph = JobGraph()
+    camera_job, lidar_job = Job(name="Camera"), Job(name="Lidar")
+    lidar_coordinate_mapping_job = Job(name="LidarToCameraMapping")
+    perception_job = Job(name="Perception")
+    job_graph.add_job(camera_job, [perception_job])
+    job_graph.add_job(lidar_job, [lidar_coordinate_mapping_job])
+    job_graph.add_job(lidar_coordinate_mapping_job, [perception_job])
+
+    assert job_graph.get_job_depth(camera_job) == 1, "Incorrect job depth."
+    assert job_graph.get_job_depth(lidar_job) == 1, "Incorrect job depth."
+    assert (
+        job_graph.get_job_depth(lidar_coordinate_mapping_job) == 2
+    ), "Incorrect job depth."
+    assert job_graph.get_job_depth(perception_job) == 3, "Incorrect job depth."

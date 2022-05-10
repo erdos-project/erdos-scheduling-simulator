@@ -989,6 +989,7 @@ def log_aggregate_stats(
 
         num_timestamps = FLAGS.max_timestamp if FLAGS.max_timestamp else "-"
         num_missed = len(list(filter(attrgetter("missed_deadline"), tasks)))
+
         placement_delay = stat_function(
             [
                 (placement.simulator_time - placement.task.release_time) / 1000
@@ -998,6 +999,25 @@ def log_aggregate_stats(
         deadline_delay = stat_function(
             [(task.deadline - task.completion_time) / 1000 for task in tasks]
         )
+
+        timestamp_start_end = {}
+        for task in tasks:
+            if task.timestamp in timestamp_start_end:
+                release_time = min(
+                    task.release_time, timestamp_start_end[task.timestamp][0]
+                )
+                completion_time = max(
+                    task.completion_time, timestamp_start_end[task.timestamp][1]
+                )
+                timestamp_start_end[task.timestamp] = (release_time, completion_time)
+            else:
+                timestamp_start_end[task.timestamp] = (
+                    task.release_time,
+                    task.completion_time,
+                )
+        e2e_response_time = [
+            (ct - rt) / 1000 for (rt, ct) in timestamp_start_end.values()
+        ]
 
         worker_pool_stats = csv_reader.get_worker_pool_utilizations(csv_file)
         resource_uses = {
@@ -1026,11 +1046,11 @@ def log_aggregate_stats(
                 num_missed,
                 placement_delay,
                 deadline_delay,
+                stat_function(e2e_response_time),
                 stat_function(resource_uses["GPU"]),
                 stat_function(resource_uses["CPU"]),
                 stat_function(placed_tasks),
                 stat_function(unplaced_tasks),
-                csv_reader.get_simulator_end_time(csv_file),
                 log_name,
             )
         )
@@ -1045,11 +1065,11 @@ def log_aggregate_stats(
                 "# Missed",
                 "Placement",
                 "Deadline",
+                "JCT",
                 "GPU",
                 "CPU",
                 "Placed",
                 "Unplaced",
-                "Completion Time",
                 "Log",
             ],
             tablefmt="grid",
