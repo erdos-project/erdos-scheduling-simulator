@@ -293,27 +293,53 @@ class TaskLoaderSynthetic(TaskLoader):
         resources: Mapping[str, Sequence[Resources]],
         logger: Optional[logging.Logger] = None,
     ):
-        self._tasks = []
+        tasks = {}
         sensor_release_time = 0
         for timestamp in range(max_timestamp + 1):
-            for job in self._jobs:
+            for job in self._job_graph:
                 # All times are in microseconds.
-                runtime = utils.fuzz_time(runtimes[job.name], (0, runtime_variance))
-                deadline = sensor_release_time + utils.fuzz_time(
-                    deadlines[job.name], deadline_variance
-                )
+                if self._job_graph.is_source_job(job):
+                    # Source jobs are released at a pre-specified interval.
+                    release_time = sensor_release_time
+                    deadline = sensor_release_time + utils.fuzz_time(
+                        deadlines[job.name], deadline_variance
+                    )
+                else:
+                    # Non-Source jobs are released as soon as all of their dependencies
+                    # are estimated to be satisfied.
+                    max_estimated_parent_completion_time = max(
+                        tasks[(parent.name, timestamp)].release_time
+                        + runtimes[parent.name]
+                        for parent in self._job_graph.get_parents(job)
+                    )
+                    release_time = (
+                        max_estimated_parent_completion_time
+                        if job.pipelined or timestamp == 0
+                        else max(
+                            max_estimated_parent_completion_time,
+                            tasks[(job.name, timestamp - 1)].release_time
+                            + runtimes[job.name],
+                        )
+                    )
+                    deadline = release_time + utils.fuzz_time(
+                        deadlines[job.name], deadline_variance
+                    )
+
+                # Create the task.
                 task = Task(
                     job.name,
                     job,
                     resource_requirements=resources[job.name],
-                    runtime=runtime,
+                    runtime=utils.fuzz_time(runtimes[job.name], (0, runtime_variance)),
                     deadline=deadline,
                     timestamp=timestamp,
-                    release_time=sensor_release_time,
+                    release_time=release_time,
                     _logger=logger,
                 )
-                self._tasks.append(task)
+                tasks[(job.name, timestamp)] = task
+
             sensor_release_time += timestamp_difference
+        self._tasks = tasks.values()
 
     def get_jobs(self) -> Sequence[Job]:
         """Retrieve the set of `Job`s loaded.
