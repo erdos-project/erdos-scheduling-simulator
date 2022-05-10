@@ -682,3 +682,245 @@ class GurobiScheduler2(BaseScheduler):
                     "cost": self._cost,
                 }
                 pickle.dump(logged_data, log_file)
+
+
+class GurobiScheduler2(BaseScheduler):
+    def __init__(
+        self,
+        preemptive: bool = False,
+        runtime: int = -1,
+        goal: str = "max_slack",
+        enforce_deadlines: bool = True,
+        scheduling_horizon: int = 0,
+        _flags: Optional["absl.flags"] = None,
+    ):
+        """Constructs a Gurobi scheduler.
+
+        Args:
+            preemptive (`bool`): If `True`, the Gurobi scheduler can preempt
+                the tasks that are currently running.
+            runtime (`int`): The runtime to return to the simulator (in us).
+                If -1, the scheduler returns the actual runtime.
+            goal (`str`): Goal of the scheduler run. Note: Gurobi does not
+                support feasibility checking.
+            enforce_deadlines (`bool`): Deadlines must be met or else the
+                schedule will return None.
+            scheduling_horizon (`int`): The scheduler will try to place
+                tasks that are within the scheduling horizon (in us) using
+                estimated task release times.
+        """
+        super(GurobiScheduler2, self).__init__(
+            preemptive, runtime, scheduling_horizon, enforce_deadlines
+        )
+        assert goal != "feasibility", "Gurobi does not support feasibility checking."
+        self._goal = goal
+        self._time = None
+        self._task_ids_to_task = {}
+        # Mapping from task id to the var storing the task start time.
+        self._task_ids_to_start_time = {}
+        # Mapping from task id to the var storing the placement.
+        self._task_ids_to_placements = defaultdict(list)
+        self._worker_index_to_vars = defaultdict(list)
+        self._task_graph = None
+        self._worker_pools = None
+        self._placements = []
+        # Set up the loggers.
+        self._flags = _flags
+        if _flags:
+            self._logger = utils.setup_logging(
+                name=self.__class__.__name__,
+                log_file=_flags.log_file_name,
+                log_level=_flags.log_level,
+            )
+        else:
+            self._logger = utils.setup_logging(name=self.__class__.__name__)
+
+    def _add_variables(self, sim_time, model, tasks):
+        for task in tasks:
+            self._task_ids_to_task[task.id] = task
+            # Add a variable to store the start time of the task.
+            # TODO: Should we set an upper bound?
+            self._task_ids_to_start_time[task.id] = model.addVar(
+                vtype=gp.GRB.INTEGER,
+                lb=max(
+                    sim_time, task.release_time
+                ),  # Start times cannot be less than sim time.
+                name=f"start_time_task_{task.id}",
+            )
+            # Add a variable which encodes if the task is scheduled or not.
+            self._task_ids_to_placements[task.id] = [
+                model.addVar(vtype=gp.GRB.BINARY, name=f"no_placement_{task.id}")
+            ]
+            w_index = 1
+            for wp in self._worker_pools._wps:
+                for worker in wp.workers:
+                    # Add a variable which is set to 1 if a task is placed on the
+                    # variable's associated worker.
+                    placement_var = model.addVar(
+                        vtype=gp.GRB.BINARY,
+                        name=f"placement_{task.id}_worker_{w_index}",
+                    )
+                    self._task_ids_to_placements[task.id].append(placement_var)
+                    self._worker_index_to_vars[w_index].append((task, placement_var))
+                    w_index += 1
+
+    def _add_task_timing_constraints(self, model):
+        for task_id, task in self._task_ids_to_task.items():
+            start_time = self._task_ids_to_start_time[task_id]
+            if self._enforce_deadlines:
+                model.addConstr(start_time + task.remaining_time <= task.deadline)
+            # Start at or after release time.
+            model.addConstr(task.release_time <= start_time)
+
+    def _add_task_dependency_constraints(self, model):
+        for task_id, task in self._task_ids_to_task.items():
+            for child_task in self._task_graph.get_children(task):
+                # Dependent tasks need to finish before the next one.
+                if child_task.id in self._task_ids_to_start_time:
+                    model.addConstr(
+                        self._task_ids_to_start_time[task_id] + task.remaining_time
+                        <= self._task_ids_to_start_time[child_task.id]
+                    )
+
+    def _add_task_resource_constraints(self, model):
+        for task_id, task in self._task_ids_to_task.items():
+            # The task can be left unscheduled or placed on a single worker.
+            model.addConstr(
+                gp.quicksum(p for p in self._task_ids_to_placements[task_id]) == 1
+            )
+
+        w_index = 1
+        for wp in self._worker_pools._wps:
+            for worker in wp.workers:
+                # Place constraints to ensure that worker's resources are not exceeded.
+                available_cpu = worker.resources.get_available_quantity(
+                    Resource(name="CPU", _id="any")
+                )
+                available_gpu = worker.resources.get_available_quantity(
+                    Resource(name="GPU", _id="any")
+                )
+                # for task_id, task in self._task_ids_to_start_time.items():
+                #     start_time = self._task_ids_to_start_time[task_id]
+                #     start_time + task.remaining_time
+
+                model.addConstr(
+                    gp.quicksum(
+                        worker_var
+                        * task.resource_requirements.get_available_quantity(
+                            Resource(name="CPU", _id="any")
+                        )
+                        for (task, worker_var) in self._worker_index_to_vars[w_index]
+                    )
+                    <= available_cpu
+                )
+                model.addConstr(
+                    gp.quicksum(
+                        worker_var
+                        * task.resource_requirements.get_available_quantity(
+                            Resource(name="GPU", _id="any")
+                        )
+                        for (task, worker_var) in self._worker_index_to_vars[w_index]
+                    )
+                    <= available_gpu
+                )
+                w_index += 1
+
+    def schedule(self, sim_time: int, task_graph: TaskGraph, worker_pools: WorkerPools):
+        self._time = sim_time
+        # Reset the state.
+        self._task_ids_to_task = {}
+        self._task_ids_to_start_time = {}
+        self._task_ids_to_placements = defaultdict(list)
+        self._worker_index_to_vars = defaultdict(list)
+        self._task_graph = task_graph
+        self._worker_pools = worker_pools
+
+        tasks = task_graph.get_schedulable_tasks(
+            sim_time, self.scheduling_horizon, self.preemptive, worker_pools
+        )
+
+        scheduler_start_time = time.time()
+        model = gp.Model("RAP")
+        model.Params.OptimalityTol = 0.005
+        model.Params.IntFeasTol = 0.01
+        # model.Params.TimeLimit = 1  # In seconds.
+        # Sets the solver method to concurrent and deterministic.
+        # model.Params.Method = 4
+
+        self._add_variables(sim_time, model, tasks)
+        self._add_task_timing_constraints(model)
+        self._add_task_dependency_constraints(model)
+        self._add_task_resource_constraints(model)
+
+        objective = gp.QuadExpr()
+        for task in tasks:
+            skipped = self._task_ids_to_placements[task.id][0]
+            start_time = self._task_ids_to_start_time[task.id]
+            objective.add(
+                (1 - skipped) * (task.deadline - task.remaining_time - start_time)
+            )
+            objective.add(
+                skipped
+                * (MIN_TASK_COST + task.deadline - task.remaining_time - start_time)
+            )
+        model.setObjective(objective, gp.GRB.MAXIMIZE)
+        model.optimize()
+        scheduler_end_time = time.time()
+        if self.runtime == -1:
+            runtime = int((scheduler_end_time - scheduler_start_time) * 1000000)
+        else:
+            runtime = self.runtime
+
+        if model.status == gp.GRB.OPTIMAL:
+            self._logger.debug(f"Found optimal value: {model.objVal}")
+            self._placements = []
+            self._cost = int(model.objVal)
+            for task in tasks:
+                start_time = int(self._task_ids_to_start_time[task.id].X)
+                placement_vars = self._task_ids_to_placements[task.id]
+                unscheduled = int(placement_vars[0].X)
+                placement = None
+                if unscheduled == 0:
+                    w_index = 1
+                    for wp in worker_pools._wps:
+                        for worker in wp.workers:
+                            scheduled = int(placement_vars[w_index].X)
+                            if scheduled:
+                                placement = wp.id
+                                break
+                            w_index += 1
+                        if placement:
+                            break
+                if start_time <= sim_time + runtime * 2:
+                    # We only place the tasks with a start time earlier than
+                    # the estimated end time of the next scheduler run.
+                    # Therefore, a task can progress before the next scheduler
+                    # finishes. However, the next scheduler will assume that
+                    # the task is not running while considering for placement.
+                    self._placements.append((task, placement, start_time))
+                else:
+                    self._placements.append((task, None, None))
+            self._verify_schedule(worker_pools, self._task_graph, self._placements)
+        else:
+            self._placements = [(task, None, None) for task in tasks]
+            self._cost = sys.maxsize
+            if model.status == gp.GRB.INFEASIBLE:
+                self._logger.debug("Solver couldn't find a solution.")
+                self.log_solver_internal(model)
+            else:
+                self._logger.debug(f"Solver failed with status: {model.status}")
+                self.log_solver_internal(model)
+        # Log the scheduler run.
+        self.log()
+        return runtime, self._placements
+
+    def log_solver_internal(self, model):
+        self._logger.debug(f"Solver stats: {model.printStats()}")
+        model.computeIIS()
+        self._logger.debug("The following constraint(s) cannot be satisfied:")
+        for c in model.getConstrs():
+            if c.IISConstr:
+                self._logger.debug(f"Constraint: {c}")
+
+    def log(self):
+        pass
