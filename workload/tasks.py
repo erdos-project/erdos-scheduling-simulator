@@ -319,36 +319,43 @@ class Task(object):
                     f"timestamp={self.timestamp}, state={self.state})"
                 )
             else:
-                return (
-                    f"Task(name={self.name}, id={self.id}, job={self.job}, "
-                    f"timestamp={self.timestamp}, state={self.state}, "
-                    f"release_time={self.release_time})"
-                )
+                if self.deadline == -1:
+                    return (
+                        f"Task(name={self.name}, id={self.id}, job={self.job}, "
+                        f"timestamp={self.timestamp}, state={self.state}, "
+                        f"release_time={self.release_time})"
+                    )
+                else:
+                    return (
+                        f"Task(name={self.name}, id={self.id}, job={self.job}, "
+                        f"timestamp={self.timestamp}, state={self.state}, "
+                        f"release_time={self.release_time}, deadline={self.deadline})"
+                    )
         elif self.state == TaskState.RELEASED:
             return (
                 f"Task(name={self.name}, id={self.id}, job={self.job}, "
                 f"timestamp={self.timestamp}, state={self.state}, "
-                f"release_time={self.release_time})"
+                f"release_time={self.release_time}, deadline={self.deadline})"
             )
         elif self.state == TaskState.RUNNING:
             return (
                 f"Task(name={self.name}, id={self.id}, job={self.job}, "
                 f"timestamp={self.timestamp}, state={self.state}, "
-                f"start_time={self.start_time}, "
+                f"start_time={self.start_time}, deadline={self.deadline}, "
                 f"remaining_time={self.remaining_time})"
             )
         elif self.state == TaskState.PREEMPTED:
             return (
                 f"Task(name={self.name}, id={self.id}, job={self.job}, "
                 f"timestamp={self.timestamp}, state={self.state}, "
-                f"preemption_time={self.preemption_time}, "
+                f"preemption_time={self.preemption_time}, deadline={self.deadline}, "
                 f"remaining_time={self.remaining_time})"
             )
         elif self.is_complete():
             return (
                 f"Task(name={self.name}, id={self.id}, job={self.job}, "
                 f"timestamp={self.timestamp}, state={self.state}, "
-                f"completion_time={self.completion_time})"
+                f"completion_time={self.completion_time}, deadline={self.deadline})"
             )
 
     def __repr__(self):
