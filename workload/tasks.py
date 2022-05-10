@@ -118,12 +118,6 @@ class Task(object):
         if self.state != TaskState.VIRTUAL:
             raise ValueError(f"Cannot release {self.id} which is in state {self.state}")
         if time is not None:
-            if self._release_time != -1:
-                # TODO: Should the deadline be modified?
-                self._logger.warning(
-                    f"Task {self} deadline offset by {self._release_time - time}"
-                )
-                self._deadline -= self._release_time - time
             self._release_time = time
 
         self._state = TaskState.RELEASED
