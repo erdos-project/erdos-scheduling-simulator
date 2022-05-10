@@ -3,6 +3,7 @@ import pickle
 import sys
 import time
 from collections import defaultdict
+from operator import attrgetter
 from typing import Optional
 
 import absl  # noqa: F401
@@ -11,7 +12,7 @@ import gurobipy as gp
 import utils
 from schedulers import BaseScheduler
 from workers import WorkerPools
-from workload import Resource, TaskGraph, TaskState
+from workload import Resource, Resources, TaskGraph, TaskState
 
 # Minimum task cost constant, which is used to set the cost of leaving a task
 # unscheduled. It is equivalent to missing a task deadline by 100 seconds.
@@ -446,7 +447,9 @@ class GurobiScheduler2(BaseScheduler):
         self._task_ids_to_start_time = {}
         # Mapping from task id to the var storing the placement.
         self._task_ids_to_placements = defaultdict(list)
-        self._worker_index_to_vars = defaultdict(list)
+        # Mapping from worker pool index to binary variables, each corresponding to a task.
+        # The variable is set to one if the task is allocated to the work pool.
+        self._wp_index_to_vars = defaultdict(list)
         self._task_graph = None
         self._worker_pools = None
         self._placements = []
@@ -479,16 +482,15 @@ class GurobiScheduler2(BaseScheduler):
             ]
             w_index = 1
             for wp in self._worker_pools._wps:
-                for worker in wp.workers:
-                    # Add a variable which is set to 1 if a task is placed on the
-                    # variable's associated worker.
-                    placement_var = model.addVar(
-                        vtype=gp.GRB.BINARY,
-                        name=f"placement_{task.id}_worker_{w_index}",
-                    )
-                    self._task_ids_to_placements[task.id].append(placement_var)
-                    self._worker_index_to_vars[w_index].append((task, placement_var))
-                    w_index += 1
+                # Add a variable which is set to 1 if a task is placed on the
+                # variable's associated worker pool.
+                placement_var = model.addVar(
+                    vtype=gp.GRB.BINARY,
+                    name=f"placement_{task.id}_worker_{w_index}",
+                )
+                self._task_ids_to_placements[task.id].append(placement_var)
+                self._wp_index_to_vars[w_index].append((task, placement_var))
+                w_index += 1
 
     def _add_task_timing_constraints(self, model):
         for task_id, task in self._task_ids_to_task.items():
@@ -516,15 +518,21 @@ class GurobiScheduler2(BaseScheduler):
             )
 
         w_index = 1
+
+        total_resources = Resources(_logger=self._logger)
         for wp in self._worker_pools._wps:
-            for worker in wp.workers:
-                # Place constraints to ensure that worker's resources are not exceeded.
-                available_cpu = worker.resources.get_available_quantity(
-                    Resource(name="CPU", _id="any")
-                )
-                available_gpu = worker.resources.get_available_quantity(
-                    Resource(name="GPU", _id="any")
-                )
+            total_resources += wp.resources
+        res_names = set(
+            map(attrgetter("name"), total_resources._resource_vector.keys())
+        )
+
+        for wp in self._worker_pools._wps:
+            for res_name in res_names:
+                resource = Resource(name=res_name, _id="any")
+                # Place constraints to ensure that worker pool's resources are not exceeded.
+                available = wp.resources.get_available_quantity(resource)
+
+                # TODO: Finish!
                 # for task_id, task in self._task_ids_to_start_time.items():
                 #     start_time = self._task_ids_to_start_time[task_id]
                 #     start_time + task.remaining_time
@@ -532,24 +540,12 @@ class GurobiScheduler2(BaseScheduler):
                 model.addConstr(
                     gp.quicksum(
                         worker_var
-                        * task.resource_requirements.get_available_quantity(
-                            Resource(name="CPU", _id="any")
-                        )
-                        for (task, worker_var) in self._worker_index_to_vars[w_index]
+                        * task.resource_requirements.get_available_quantity(resource)
+                        for (task, worker_var) in self._wp_index_to_vars[w_index]
                     )
-                    <= available_cpu
+                    <= available
                 )
-                model.addConstr(
-                    gp.quicksum(
-                        worker_var
-                        * task.resource_requirements.get_available_quantity(
-                            Resource(name="GPU", _id="any")
-                        )
-                        for (task, worker_var) in self._worker_index_to_vars[w_index]
-                    )
-                    <= available_gpu
-                )
-                w_index += 1
+            w_index += 1
 
     def schedule(self, sim_time: int, task_graph: TaskGraph, worker_pools: WorkerPools):
         self._time = sim_time
@@ -557,7 +553,7 @@ class GurobiScheduler2(BaseScheduler):
         self._task_ids_to_task = {}
         self._task_ids_to_start_time = {}
         self._task_ids_to_placements = defaultdict(list)
-        self._worker_index_to_vars = defaultdict(list)
+        self._wp_index_to_vars = defaultdict(list)
         self._task_graph = task_graph
         self._worker_pools = worker_pools
 
@@ -609,14 +605,11 @@ class GurobiScheduler2(BaseScheduler):
                 if unscheduled == 0:
                     w_index = 1
                     for wp in worker_pools._wps:
-                        for worker in wp.workers:
-                            scheduled = int(placement_vars[w_index].X)
-                            if scheduled:
-                                placement = wp.id
-                                break
-                            w_index += 1
-                        if placement:
+                        scheduled = int(placement_vars[w_index].X)
+                        if scheduled:
+                            placement = wp.id
                             break
+                        w_index += 1
                 if start_time <= sim_time + runtime * 2:
                     # We only place the tasks with a start time earlier than
                     # the estimated end time of the next scheduler run.
@@ -649,4 +642,16 @@ class GurobiScheduler2(BaseScheduler):
                 self._logger.debug(f"Constraint: {c}")
 
     def log(self):
-        pass
+        if self._flags is not None and self._flags.scheduler_log_file_name is not None:
+            with open(self._flags.scheduler_log_file_name, "wb") as log_file:
+                logged_data = {
+                    "time": self._time,
+                    "tasks": self._task_ids_to_task,
+                    "task_graph": self._task_graph,
+                    "worker_pools": self._worker_pools,
+                    "scheduling_horizon": self._scheduling_horizon,
+                    "runtime": self.runtime,
+                    "placements": self._placements,
+                    "cost": self._cost,
+                }
+                pickle.dump(logged_data, log_file)

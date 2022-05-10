@@ -18,11 +18,11 @@ class EventType(Enum):
     """Represents the different Events that a simulator has to simulate."""
 
     SIMULATOR_START = 0  # Signify the start of the simulator loop.
-    TASK_FINISHED = 1  # Notify the simulator of the end of a task.
-    TASK_PREEMPT = 2  # Ask the simulator to preempt a task.
-    TASK_MIGRATION = 3  # Ask the simulator to migrate a task.
-    TASK_PLACEMENT = 4  # Ask the simulator to place a task.
-    TASK_RELEASE = 5  # Ask the simulator to release the task.
+    TASK_RELEASE = 1  # Ask the simulator to release the task.
+    TASK_FINISHED = 2  # Notify the simulator of the end of a task.
+    TASK_PREEMPT = 3  # Ask the simulator to preempt a task.
+    TASK_MIGRATION = 4  # Ask the simulator to migrate a task.
+    TASK_PLACEMENT = 5  # Ask the simulator to place a task.
     SCHEDULER_START = 6  # Requires the simulator to invoke the scheduler.
     SCHEDULER_FINISHED = 7  # Signifies the end of the scheduler loop.
     SIMULATOR_END = 8  # Signify the end of the simulator loop.
