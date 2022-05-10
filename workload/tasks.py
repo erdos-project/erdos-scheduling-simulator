@@ -10,6 +10,8 @@ from typing import Mapping, Optional, Sequence, Union
 import utils
 from workload import Job, Resources
 
+from .graph import Graph
+
 Preempted = namedtuple("Preempted", "preemption_time, restart_time")
 
 
@@ -429,7 +431,7 @@ class Task(object):
         return self._worker_pool_id
 
 
-class TaskGraph(object):
+class TaskGraph(Graph[Task]):
     """A `TaskGraph` represents a directed graph of task dependencies that
     arise due to either the structure of the computation represented in the
     `JobGraph` or the timestamp ordering semantics employed by ERDOS.
@@ -439,30 +441,16 @@ class TaskGraph(object):
     """
 
     def __init__(self, tasks: Optional[Mapping[Task, Sequence[Task]]] = {}):
-        self._task_graph = defaultdict(list)
-        self.__parent_task_graph = defaultdict(list)
-        self._max_timestamp = -sys.maxsize
+        super().__init__(tasks)
 
-        # Maintain the child and parent abstractions from the given taskset.
-        for task, children in tasks.items():
-            self.add_task(task, children)
-
-    def add_task(self, task: Task, _children: Optional[Sequence[Task]] = []):
+    def add_task(self, task: Task, children: Optional[Sequence[Task]] = []):
         """Adds the task to the graph along with the given children.
 
         Args:
             task (`Task`): The task to be added to the graph.
             children (`Sequence[Task]`): The children of the task, if any.
         """
-        if len(_children) == 0:
-            # If no children are provided, add just the task.
-            if task.timestamp > self._max_timestamp:
-                self._max_timestamp = task.timestamp
-            self._task_graph[task].extend([])
-        else:
-            # Add the children to the graph individually.
-            for child in _children:
-                self.add_child(task, child)
+        self.add_node(task, *children)
 
     def notify_task_completion(self, task: Task, finish_time: int) -> Sequence[Task]:
         """Notify the completion of the task.
@@ -497,33 +485,13 @@ class TaskGraph(object):
                     # which is the time of the completion of the last parent task.
                     child.release(finish_time)
                 else:
-                    parents = self.__parent_task_graph[child]
                     earliest_release = child.release_time
                     # Update the task's release time if parent tasks delayed it.
-                    for parent in parents:
+                    for parent in self.get_parents(child):
                         earliest_release = max(earliest_release, parent.completion_time)
                     child.release(earliest_release)
                 released_tasks.append(child)
         return released_tasks
-
-    def add_child(self, task: Task, child: Task):
-        """Adds a child to the `Task` in the task graph.
-
-        Args:
-            task (`Task`): The task, to which the child needs to be added.
-            child (`Task`): The child task to be added.
-        """
-        # Maintain the maximum timestamp encountered in tasks.
-        if task.timestamp > self._max_timestamp:
-            self._max_timestamp = task.timestamp
-
-        if child.timestamp > self._max_timestamp:
-            self._max_timestamp = child.timestamp
-
-        # Maintian the child and parent connections for the task.
-        self._task_graph[task].append(child)
-        self._task_graph[child].extend([])
-        self.__parent_task_graph[child].append(task)
 
     def find(self, task_name: str) -> Sequence[Task]:
         """Find all the instances of a task with the given name.
@@ -537,37 +505,7 @@ class TaskGraph(object):
         Returns:
             A possibly empty `Sequence[Task]` with the given name.
         """
-        return list(
-            filter(lambda task: task.name == task_name, self._task_graph.keys())
-        )
-
-    def get_children(self, task: Task) -> Sequence[Task]:
-        """Retrieves the children of the given task.
-
-        Args:
-            task (`Task`): The task to retrieve the children of.
-
-        Returns:
-            The children of the given task.
-        """
-        if task not in self._task_graph:
-            return []
-        else:
-            return self._task_graph[task]
-
-    def get_parents(self, task: Task) -> Sequence[Task]:
-        """Retrieves the parents of the given task.
-
-        Args:
-            task (`Task`): The task to retrieve the parents of.
-
-        Returns:
-            The parents of the given task.
-        """
-        if task not in self._task_graph:
-            return []
-        else:
-            return self.__parent_task_graph[task]
+        return self.filter(lambda task: task.name == task_name)
 
     def get_schedulable_tasks(
         self,
@@ -582,17 +520,14 @@ class TaskGraph(object):
         Returns:
             A list of tasks.
         """
-        tasks = []
-        for task in self._task_graph:
-            if (
-                (
-                    task.state == TaskState.RELEASED
-                    and task.release_time <= time + horizon
-                )
-                or task.state == TaskState.PREEMPTED
-                or task.state == TaskState.EVICTED
-            ):
-                tasks.append(task)
+        tasks = self.filter(
+            lambda task: (
+                task.state == TaskState.RELEASED and task.release_time <= time + horizon
+            )
+            or task.state == TaskState.PREEMPTED
+            or task.state == TaskState.EVICTED
+        )
+
         # No need to add already running tasks if preemption is not enabled.
         if preemption:
             if worker_pools:
@@ -600,13 +535,12 @@ class TaskGraph(object):
                 tasks.extend(worker_pools.get_placed_tasks())
             else:
                 # No worker pool provided. Getting all RUNNING tasks.
-                for task in self._task_graph:
-                    if task.state == TaskState.RUNNING:
-                        tasks.append(task)
+                tasks.extend(self.filter(lambda task: task.state == TaskState.RUNNING))
+
         task_queue = deque([])
         estimated_completion_time = {}
         # Estimate the completion time of materialized tasks.
-        for task in self._task_graph:
+        for task in self.get_nodes():
             if task.state == TaskState.COMPLETED:
                 estimated_completion_time[task] = task.completion_time
             elif task.state in [
@@ -624,8 +558,7 @@ class TaskGraph(object):
         while len(task_queue) > 0:
             task = task_queue.popleft()
             completion_time = estimated_completion_time[task]
-            children = self.get_children(task)
-            for child_task in children:
+            for child_task in self.get_children(task):
                 if child_task.state != TaskState.VIRTUAL:
                     # Skip the task because we've already set its completion time.
                     continue
@@ -643,13 +576,14 @@ class TaskGraph(object):
                     task_queue.append(child_task)
 
         # Add the tasks that are within the horizon.
-        for task in self._task_graph:
-            if task.state == TaskState.VIRTUAL:
-                if (
-                    task in estimated_completion_time
-                    and estimated_completion_time[task] < time + horizon
-                ):
-                    tasks.append(task)
+        tasks.extend(
+            self.filter(
+                lambda task: task.state == TaskState.VIRTUAL
+                and task in estimated_completion_time
+                and estimated_completion_time[task] < time + horizon
+            )
+        )
+
         assert all(
             map(
                 lambda task: task.release_time is None
@@ -676,10 +610,9 @@ class TaskGraph(object):
             were not instantiated with a `release_time`.
         """
         tasks_to_be_released = []
-        for task in self._task_graph:
-            if len(self.__parent_task_graph[task]) == 0 or all(
-                map(lambda task: task.is_complete(), self.__parent_task_graph[task])
-            ):
+        for task in self.get_nodes():
+            parents = self.get_parents(task)
+            if len(parents) == 0 or all(map(lambda task: task.is_complete(), parents)):
                 tasks_to_be_released.append(task)
 
         # Release the tasks.
@@ -696,12 +629,12 @@ class TaskGraph(object):
         We only clean up the tasks whose children have finished execution.
         """
         tasks_to_clean = []
-        for task, children in self._task_graph.items():
+        for task in self.get_nodes():
             # Has this task finished execution?
             if task.is_complete():
                 # Check if all children have finished execution too.
                 can_be_cleaned = True
-                for child in children:
+                for child in self.get_children(task):
                     if not child.is_completed():
                         can_be_cleaned = False
                         break
@@ -713,9 +646,7 @@ class TaskGraph(object):
         # Remove the task from the parent graph of all its children, and then
         # remove the task from the graph itself.
         for task in tasks_to_clean:
-            for child in self.get_children(task):
-                self.__parent_task_graph[child].remove(task)
-            del self._task_graph[task]
+            self.remove(task)
 
     def __getitem__(self, slice_obj) -> Union["TaskGraph", Sequence["TaskGraph"]]:
         """Retrieve a slice of the TaskGraph as specified by the `slice_obj`.
@@ -728,21 +659,23 @@ class TaskGraph(object):
         if isinstance(slice_obj, int):
             # Get the slice for a single timestamp.
             tasks = {}
-            for task, children in self._task_graph.items():
-                if task.timestamp == slice_obj:
-                    # Maintain the task dependencies with the same timestamps.
-                    same_timestamp_children = []
-                    for child in children:
-                        if child.timestamp == slice_obj:
-                            same_timestamp_children.append(child)
+            for task in self.filter(lambda task: task.timestamp == slice_obj):
+                # Maintain the task dependencies with the same timestamps.
+                same_timestamp_children = []
+                for child in self.get_children(task):
+                    if child.timestamp == slice_obj:
+                        same_timestamp_children.append(child)
 
-                    # Add the task to the representation.
-                    tasks[task] = same_timestamp_children
+                # Add the task to the representation.
+                tasks[task] = same_timestamp_children
             return TaskGraph(tasks=tasks)
         elif isinstance(slice_obj, slice):
+            max_timestamp = -sys.maxsize
+            for task in self.get_nodes():
+                if task.timestamp > max_timestamp:
+                    max_timestamp = task.timestamp
             return [
-                self[index]
-                for index in range(*slice_obj.indices(self._max_timestamp + 1))
+                self[index] for index in range(*slice_obj.indices(max_timestamp + 1))
             ]
         else:
             raise ValueError(f"Unexpected value while slicing: {slice_obj}")
@@ -757,7 +690,7 @@ class TaskGraph(object):
             `True` if the task is a source task i.e. only has a dependency on
             the same task of the previous timestamp, and `False` otherwise.
         """
-        parents = self.__parent_task_graph[task]
+        parents = self.get_parents(task)
         return len(parents) == 0 or (
             len(parents) == 1
             and parents[0].name == task.name
@@ -774,7 +707,7 @@ class TaskGraph(object):
             A `Sequence[Task]` of tasks that have no dependencies on any
             tasks with the same timestamps.
         """
-        return list(filter(self.is_source_task, self._task_graph.keys()))
+        return self.filter(self.is_source_task)
 
     def dilate(self, difference: int):
         """Dilate the time between occurrence of events of successive
@@ -817,7 +750,7 @@ class TaskGraph(object):
             # Calculate the average of the offsets of the source tasks and
             # offset the remainder of the tasks by the average.
             average_offset = int(sum(offsets) / len(offsets))
-            for task in child_graph._task_graph:
+            for task in child_graph.get_nodes():
                 if not child_graph.is_source_task(task):
                     task._release_time -= average_offset
                     task._deadline -= average_offset
@@ -834,15 +767,17 @@ class TaskGraph(object):
         """
         raise NotImplementedError("Merging of Taskgraphs has not been implemented yet.")
 
-    def __len__(self):
-        return len(self._task_graph)
-
     def __str__(self):
         constructed_string = ""
-        for task, children in self._task_graph.items():
+        for task in iter(self):
             constructed_string += "{}_{}: {}\n".format(
                 task.name,
                 task.timestamp,
-                list(map(lambda t: "{}_{}".format(t.name, t.timestamp), children)),
+                list(
+                    map(
+                        lambda t: "{}_{}".format(t.name, t.timestamp),
+                        self.get_children(task),
+                    )
+                ),
             )
         return constructed_string

@@ -330,17 +330,11 @@ def test_task_graph_index_success():
         }
     )
     assert len(task_graph) == 6, "Incorrect length of TaskGraph."
-    assert (
-        task_graph._max_timestamp == 1
-    ), "Incorrect maximum timestamp maintained in the TaskGraph."
 
     # Slice the TaskGraph.
     task_graph_slice = task_graph[0]
     assert type(task_graph_slice) == TaskGraph, "Incorrect type of slice returned."
     assert len(task_graph_slice) == 3, "Incorrect length of sliced TaskGraph."
-    assert (
-        task_graph_slice._max_timestamp == 0
-    ), "Incorrect maximum timestamp maintained in the sliced TaskGraph."
 
 
 def test_task_graph_index_failure():
@@ -365,9 +359,6 @@ def test_task_graph_index_failure():
         }
     )
     assert len(task_graph) == 6, "Incorrect length of TaskGraph."
-    assert (
-        task_graph._max_timestamp == 1
-    ), "Incorrect maximum timestamp maintained in the TaskGraph."
 
 
 def test_task_graph_slice_success():
@@ -398,9 +389,6 @@ def test_task_graph_slice_success():
         }
     )
     assert len(task_graph) == 9, "Incorrect length of TaskGraph."
-    assert (
-        task_graph._max_timestamp == 2
-    ), "Incorrect maximum timestamp maintained in the TaskGraph."
 
     # Slice the TaskGraph.
     task_graph_slice = task_graph[:2]
@@ -408,12 +396,6 @@ def test_task_graph_slice_success():
     assert len(task_graph_slice) == 2, "Incorrect length of sliced TaskGraph."
     assert len(task_graph_slice[0]) == 3, "Incorrect length of TaskGraph."
     assert len(task_graph_slice[1]) == 3, "Incorrect length of TaskGraph."
-    assert (
-        task_graph_slice[0]._max_timestamp == 0
-    ), "Incorrect maximum timestamp maintained in the sliced TaskGraph."
-    assert (
-        task_graph_slice[1]._max_timestamp == 1
-    ), "Incorrect maximum timestamp maintained in the sliced TaskGraph."
 
 
 def test_is_source_task():

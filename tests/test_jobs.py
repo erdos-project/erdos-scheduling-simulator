@@ -127,9 +127,9 @@ def test_job_depth():
     job_graph.add_job(lidar_job, [lidar_coordinate_mapping_job])
     job_graph.add_job(lidar_coordinate_mapping_job, [perception_job])
 
-    assert job_graph.get_job_depth(camera_job) == 1, "Incorrect job depth."
-    assert job_graph.get_job_depth(lidar_job) == 1, "Incorrect job depth."
+    assert job_graph.get_node_depth(camera_job) == 1, "Incorrect job depth."
+    assert job_graph.get_node_depth(lidar_job) == 1, "Incorrect job depth."
     assert (
-        job_graph.get_job_depth(lidar_coordinate_mapping_job) == 2
+        job_graph.get_node_depth(lidar_coordinate_mapping_job) == 2
     ), "Incorrect job depth."
-    assert job_graph.get_job_depth(perception_job) == 3, "Incorrect job depth."
+    assert job_graph.get_node_depth(perception_job) == 3, "Incorrect job depth."
