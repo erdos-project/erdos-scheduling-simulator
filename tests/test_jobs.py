@@ -130,5 +130,6 @@ def test_job_depth():
     assert job_graph.get_job_depth(camera_job) == 1, "Incorrect job depth."
     assert job_graph.get_job_depth(lidar_job) == 1, "Incorrect job depth."
     assert (
-        job_graph.get_job_depth(lidar_coordinate_mapping_job) == 1
+        job_graph.get_job_depth(lidar_coordinate_mapping_job) == 2
     ), "Incorrect job depth."
+    assert job_graph.get_job_depth(perception_job) == 3, "Incorrect job depth."
