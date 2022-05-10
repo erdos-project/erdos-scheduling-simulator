@@ -109,6 +109,9 @@ class Graph(Generic[T]):
     def get_node_depth(self, node: T) -> int:
         """Retrieves the depth of the node from the graph.
 
+        Note that the method traverses the entire graph (and may visit a node
+        potentially multiple times) and hence may be slow.
+
         Args:
             node: The node whose depth needs to be retrieved.
 
