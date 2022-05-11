@@ -59,7 +59,8 @@ class Task(object):
         return self.id == other.id
 
 
-WorkerPool = namedtuple("WorkerPool", ["name", "id"])
+Resource = namedtuple("Resource", ["name", "id", "quantity"])
+WorkerPool = namedtuple("WorkerPool", ["name", "id", "resources"])
 WorkerPoolStats = namedtuple(
     "WorkerPoolStats", ["simulator_time", "resource_utilizations"]
 )
@@ -84,7 +85,9 @@ SimulatorEnd = namedtuple(
     "SimulatorEnd", ["end_time", "finished_tasks", "missed_deadlines"]
 )
 TaskRelease = namedtuple("TaskRelease", ["simulator_time", "task"])
-TaskPlacement = namedtuple("TaskPlacement", ["simulator_time", "task", "worker_pool"])
+TaskPlacement = namedtuple(
+    "TaskPlacement", ["simulator_time", "task", "worker_pool", "resources"]
+)
 TaskFinished = namedtuple("TaskFinished", ["simulator_time", "task"])
 MissedDeadline = namedtuple("MissedDeadline", ["simulator_time", "task"])
 SchedulerStart = namedtuple(
@@ -206,8 +209,13 @@ class CSVReader(object):
                         )
                     )
                 elif reading[1] == "WORKER_POOL":
+                    resources = [
+                        Resource(*reading[i : i + 3]) for i in range(4, len(reading), 3)
+                    ]
                     worker_pool_memo[reading[3]] = WorkerPool(
-                        name=reading[2], id=uuid.UUID(reading[3])
+                        name=reading[2],
+                        id=uuid.UUID(reading[3]),
+                        resources=resources,
                     )
                 elif reading[1] == "TASK_PLACEMENT":
                     # Update the task's start time (if needed)
@@ -216,11 +224,16 @@ class CSVReader(object):
                     if task.start_time == -1:
                         task.start_time = simulator_time
 
+                    resources = [
+                        Resource(*reading[i : i + 3])
+                        for i in range(6, len(reading), 3)
+                    ]
                     events.append(
                         TaskPlacement(
                             simulator_time=simulator_time,
                             task=tasks_memo[reading[4]],
                             worker_pool=worker_pool_memo[reading[5]],
+                            resources=resources,
                         )
                     )
                 else:
@@ -417,8 +430,11 @@ class CSVReader(object):
             trace["traceEvents"].append(trace_event)
 
         if trace_fmt == "resource":
-            task_to_wp = {
-                task_placement.task: task_placement.worker_pool
+            task_to_wp_resources = {
+                task_placement.task: (
+                    task_placement.worker_pool,
+                    task_placement.resources,
+                )
                 for task_placement in self.get_task_placements(csv_path)
             }
         # Output all the tasks.
@@ -429,32 +445,57 @@ class CSVReader(object):
                     pid, tid = task.name.split(".", 1)
                 else:
                     pid = tid = task.name
+                trace_event = {
+                    "name": f"{task.name}::{task.timestamp}",
+                    "cat": "task,duration",
+                    "ph": "X",
+                    "ts": task.start_time,
+                    "dur": task.completion_time - task.start_time,
+                    "pid": pid,
+                    "tid": tid,
+                    "args": {
+                        "name": task.name,
+                        "id": str(task.id),
+                        "timestamp": task.timestamp,
+                        "release_time": task.release_time,
+                        "runtime": task.runtime,
+                        "deadline": task.deadline,
+                        "start_time": task.start_time,
+                        "completion_time": task.completion_time,
+                        "missed_deadline": task.missed_deadline,
+                    },
+                }
+                trace["traceEvents"].append(trace_event)
             elif trace_fmt == "resource":
-                pid = task_to_wp[task].name
-                tid = task.name
+                pid = task_to_wp_resources[task][0].name
+                tids = [
+                    f"{resource.name}"
+                    for resource in task_to_wp_resources[task][1]
+                ]
+                for tid in tids:
+                    trace_event = {
+                        "name": f"{task.name}::{task.timestamp}",
+                        "cat": "task,duration",
+                        "ph": "X",
+                        "ts": task.start_time,
+                        "dur": task.completion_time - task.start_time,
+                        "pid": pid,
+                        "tid": tid,
+                        "args": {
+                            "name": task.name,
+                            "id": str(task.id),
+                            "timestamp": task.timestamp,
+                            "release_time": task.release_time,
+                            "runtime": task.runtime,
+                            "deadline": task.deadline,
+                            "start_time": task.start_time,
+                            "completion_time": task.completion_time,
+                            "missed_deadline": task.missed_deadline,
+                        },
+                    }
+                    trace["traceEvents"].append(trace_event)
             else:
                 raise ValueError(f"Undefined execution mode: {trace_fmt}")
-            trace_event = {
-                "name": f"{task.name}::{task.timestamp}",
-                "cat": "task,duration",
-                "ph": "X",
-                "ts": task.start_time,
-                "dur": task.completion_time - task.start_time,
-                "pid": pid,
-                "tid": tid,
-                "args": {
-                    "name": task.name,
-                    "id": str(task.id),
-                    "timestamp": task.timestamp,
-                    "release_time": task.release_time,
-                    "runtime": task.runtime,
-                    "deadline": task.deadline,
-                    "start_time": task.start_time,
-                    "completion_time": task.completion_time,
-                    "missed_deadline": task.missed_deadline,
-                },
-            }
-            trace["traceEvents"].append(trace_event)
 
         # Output all the missed deadlines.
         for missed_deadline_event in self.get_missed_deadline_events(csv_path):
@@ -465,21 +506,36 @@ class CSVReader(object):
                     pid, tid = task.name.split(".", 1)
                 else:
                     pid = tid = task.name
+                trace_event = {
+                    "name": f"{task.name}::{task.timestamp}",
+                    "cat": "task,missed,deadline,instant",
+                    "ph": "i",
+                    "ts": task.deadline,
+                    "pid": pid,
+                    "tid": tid,
+                    "s": "t",  # The scope of the missed deadline events is per thread.
+                }
+                trace["traceEvents"].append(trace_event)
             elif trace_fmt == "resource":
-                pid = task_to_wp[task].name
-                tid = task.name
+                pid = task_to_wp_resources[task][0].name
+                tids = [
+                    f"{resource.name}"
+                    for resource in task_to_wp_resources[task][1]
+                ]
+                for tid in tids:
+                    trace_event = {
+                        "name": f"{task.name}::{task.timestamp}",
+                        "cat": "task,missed,deadline,instant",
+                        "ph": "i",
+                        "ts": task.deadline,
+                        "pid": pid,
+                        "tid": tid,
+                        # The scope of the missed deadline events is per thread.
+                        "s": "t",
+                    }
+                    trace["traceEvents"].append(trace_event)
             else:
                 raise ValueError(f"Undefined execution mode: {trace_fmt}")
-            trace_event = {
-                "name": f"{task.name}::{task.timestamp}",
-                "cat": "task,missed,deadline,instant",
-                "ph": "i",
-                "ts": task.deadline,
-                "pid": pid,
-                "tid": tid,
-                "s": "t",  # The scope of the missed deadline events is per thread.
-            }
-            trace["traceEvents"].append(trace_event)
 
         with open(output_path, "w") as f:
             json.dump(trace, f, indent=4, sort_keys=True)

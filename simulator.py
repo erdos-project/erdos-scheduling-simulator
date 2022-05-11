@@ -210,7 +210,15 @@ class Simulator(object):
         self._logger.info("The Worker Pools are: ")
         for worker_pool in worker_pools:
             self._logger.info(f"{worker_pool}")
-            self._csv_logger.debug(f"0,WORKER_POOL,{worker_pool.name},{worker_pool.id}")
+            resources_str = ",".join(
+                [
+                    ",".join((resource.name, resource.id, str(quantity)))
+                    for resource, quantity in worker_pool.resources.resources
+                ]
+            )
+            self._csv_logger.debug(
+                f"0,WORKER_POOL,{worker_pool.name},{worker_pool.id},{resources_str}"
+            )
             for worker in worker_pool.workers:
                 self._logger.info(f"\t{worker}")
         self.__log_utilization(0)
@@ -495,15 +503,22 @@ class Simulator(object):
                 f"{task.id},{event.placement}"
             )
             return
-        self._csv_logger.debug(
-            f"{event.time},TASK_PLACEMENT,{task.name},{task.timestamp},"
-            f"{task.id},{event.placement}"
-        )
-        worker_pool = self._worker_pools[event.placement]
         # Initialize the task at the given placement time, and place it on
         # the WorkerPool.
+        worker_pool = self._worker_pools[event.placement]
         task.start(event.time, self._runtime_variance)
         worker_pool.place_task(task)
+        resource_allocation_str = ",".join(
+            [
+                ",".join((resource.name, resource.id, str(quantity)))
+                for resource, quantity in worker_pool.get_allocated_resources(task)
+            ]
+        )
+
+        self._csv_logger.debug(
+            f"{event.time},TASK_PLACEMENT,{task.name},{task.timestamp},"
+            f"{task.id},{event.placement},{resource_allocation_str}"
+        )
         self._logger.info(f"[{event.time}] Placed {task} on {worker_pool}")
 
     def __handle_task_migration(self, event: Event, task_graph: TaskGraph):
