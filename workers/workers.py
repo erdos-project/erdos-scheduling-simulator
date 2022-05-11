@@ -88,7 +88,7 @@ class Worker(object):
         return placed_tasks
 
     def get_allocated_resources(self, task: Task) -> List[Tuple[Resource, float]]:
-        """Retrieves the resources allocated to a given task from this WorkerPool.
+        """Retrieves the resources allocated to a given task from this Worker.
 
         Args:
             task: The task whose allocated resources need to be retrieved.
