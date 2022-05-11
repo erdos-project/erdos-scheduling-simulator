@@ -206,7 +206,9 @@ class Resources(object):
             if remaining_quantity == 0:
                 break
 
-    def get_allocated_resources(self, task: "Task") -> List[Tuple[Resource, float]]:
+    def get_allocated_resources(
+        self, task: "Task"  # noqa: F821
+    ) -> List[Tuple[Resource, float]]:
         """Retrieves the resources on this set allocated to a given task.
 
         Args:
