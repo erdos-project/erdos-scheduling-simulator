@@ -5,33 +5,50 @@
             {
                 "name": "Worker_1_1",
                 "resources": [
-                    {
-                        "name": "CPU",
-                        "quantity": 12
-                    },
-                    {
-                        "name": "GPU",
-                        "quantity": 5
-                    }
+                    {"name": "CPU", "quantity": 1},
+                    {"name": "CPU", "quantity": 1},
+                    {"name": "CPU", "quantity": 1},
+                    {"name": "CPU", "quantity": 1},
+                    {"name": "CPU", "quantity": 1},
+                    {"name": "CPU", "quantity": 1},
+                    {"name": "CPU", "quantity": 1},
+                    {"name": "CPU", "quantity": 1},
+                    {"name": "CPU", "quantity": 1},
+                    {"name": "CPU", "quantity": 1},
+                    {"name": "CPU", "quantity": 1},
+                    {"name": "CPU", "quantity": 1},
+                    {"name": "GPU", "quantity": 1},
+                    {"name": "GPU", "quantity": 1},
+                    {"name": "GPU", "quantity": 1},
+                    {"name": "GPU", "quantity": 1},
+                    {"name": "GPU", "quantity": 1}
                 ]
             }
         ]
     },
-
     {
         "name": "WorkerPool_2",
         "workers": [
             {
                 "name": "Worker_2_1",
                 "resources": [
-                    {
-                        "name": "CPU",
-                        "quantity": 12
-                    },
-                    {
-                        "name": "GPU",
-                        "quantity": 5
-                    }                    
+                    {"name": "CPU", "quantity": 1},
+                    {"name": "CPU", "quantity": 1},
+                    {"name": "CPU", "quantity": 1},
+                    {"name": "CPU", "quantity": 1},
+                    {"name": "CPU", "quantity": 1},
+                    {"name": "CPU", "quantity": 1},
+                    {"name": "CPU", "quantity": 1},
+                    {"name": "CPU", "quantity": 1},
+                    {"name": "CPU", "quantity": 1},
+                    {"name": "CPU", "quantity": 1},
+                    {"name": "CPU", "quantity": 1},
+                    {"name": "CPU", "quantity": 1},
+                    {"name": "GPU", "quantity": 1},
+                    {"name": "GPU", "quantity": 1},
+                    {"name": "GPU", "quantity": 1},
+                    {"name": "GPU", "quantity": 1},
+                    {"name": "GPU", "quantity": 1}
                 ]
             }
         ]

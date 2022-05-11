@@ -3,7 +3,7 @@ import random
 import uuid
 from copy import copy, deepcopy
 from operator import attrgetter
-from typing import Optional, Sequence, Type
+from typing import List, Optional, Sequence, Tuple, Type
 
 import utils
 from workload import Resource, Resources, Task, TaskGraph, TaskState
@@ -86,6 +86,18 @@ class Worker(object):
         for task, _ in self._placed_tasks.items():
             placed_tasks.append(task)
         return placed_tasks
+
+    def get_allocated_resources(self, task: Task) -> List[Tuple[Resource, float]]:
+        """Retrieves the resources allocated to a given task from this Worker.
+
+        Args:
+            task: The task whose allocated resources need to be retrieved.
+
+        Returns:
+            A list of resource allocations whose each element is a (Resource,
+            quantity allocated) pair.
+        """
+        return self._resources.get_allocated_resources(task)
 
     def step(self, current_time: int, step_size: int = 1) -> Sequence[Task]:
         """Steps all the tasks of this `Worker` by the given `step_size`.
@@ -370,6 +382,18 @@ class WorkerPool(object):
                 f"{final_resources.get_allocated_quantity(resource)},"
                 f"{final_resources.get_available_quantity(resource)}"
             )
+
+    def get_allocated_resources(self, task: Task) -> List[Tuple[Resource, float]]:
+        """Retrieves the resources allocated to a given task from this WorkerPool.
+
+        Args:
+            task: The task whose allocated resources need to be retrieved.
+
+        Returns:
+            A list of resource allocations whose each element is a (Resource,
+            quantity allocated) pair.
+        """
+        return self._workers[self._placed_tasks[task]].get_allocated_resources(task)
 
     @property
     def name(self):
