@@ -4,7 +4,7 @@ import uuid
 from collections import defaultdict
 from copy import copy
 from functools import total_ordering
-from typing import Mapping, Optional
+from typing import List, Mapping, Optional, Tuple
 
 import utils
 
@@ -206,6 +206,18 @@ class Resources(object):
             if remaining_quantity == 0:
                 break
 
+    def get_allocated_resources(self, task: "Task") -> List[Tuple[Resource, float]]:
+        """Retrieves the resources on this set allocated to a given task.
+
+        Args:
+            task: The task whose allocated resources need to be retrieved.
+
+        Returns:
+            A list of resource allocations whose each element is a (Resource,
+            quantity allocated) pair.
+        """
+        return self._current_allocations[task]
+
     def allocate_multiple(self, resources: "Resources", task: "Task"):  # noqa: F821
         """Allocates multiple resources together according to their specified
         quantity.
@@ -292,6 +304,11 @@ class Resources(object):
             self._resource_vector[resource] += quantity
 
         del self._current_allocations[task]
+
+    @property
+    def resources(self) -> List[Tuple[Resource, int]]:
+        """Returns the total resources in this WorkerPool."""
+        return self.__total_resources.items()
 
     def __str__(self):
         return f"Resources({self._resource_vector})"
