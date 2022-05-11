@@ -193,7 +193,7 @@ class Resources(object):
                         (_resource, remaining_quantity)
                     )
                     break
-                else:
+                elif _quantity > 0:
                     if not self.__virtual:
                         self._logger.debug(
                             f"Allocated {_resource} [quantity={_quantity}] "
