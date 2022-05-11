@@ -60,7 +60,7 @@ execute_experiment () {
 	--csv_labels=${SCHEDULER} \
 	--all \
 	--plot \
-	--output_dir=${LOG_DIR}/${LOG_BASE}; then
+	--output_dir=${LOG_DIR}/${LOG_BASE} > /dev/null; then
 	echo "[x] Failed in analyzing the results of ${LOG_BASE}. Exiting."
 	exit 4
     fi
@@ -79,8 +79,6 @@ for WORKER_CONFIG in ${WORKER_CONFIGS[@]}; do
                                 continue
                             fi
 
-                            ((i=i%${PARALLEL_FACTOR})); ((i++==0)) && wait
-
                             LOG_BASE=${EXECUTION_MODE}_scheduler_${SCHEDULER}_horizon_${SCHEDULING_HORIZON}_runtime_${RUNTIME}_timestamps_${MAX_TIMESTAMP}_runtime_var_${RUNTIME_VAR}_deadline_var_${DEADLINE_VAR}_${WORKER_CONFIG}
                             # Synthetic execution mode does not support resource configs.
                             if [[ ${EXECUTION_MODE} != synthetic ]]; then
@@ -89,6 +87,11 @@ for WORKER_CONFIG in ${WORKER_CONFIGS[@]}; do
 
                             mkdir -p ${LOG_DIR}/${LOG_BASE}
                             execute_experiment ${LOG_DIR} ${LOG_BASE} &
+
+			    if [[ $(jobs -r -p | wc -l) -ge $PARALLEL_FACTOR ]]; then
+				echo "[x] Waiting for a job to terminate because $PARALLEL_FACTOR jobs are running."
+		                wait -n 
+			    fi
                         done
                     done
                 done
@@ -96,3 +99,6 @@ for WORKER_CONFIG in ${WORKER_CONFIGS[@]}; do
         done
     done
 done
+
+wait
+echo "[x] Finished executing all experiments."
