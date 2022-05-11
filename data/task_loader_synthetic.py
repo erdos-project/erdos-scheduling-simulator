@@ -298,7 +298,7 @@ class TaskLoaderSynthetic(TaskLoader):
         for timestamp in range(max_timestamp + 1):
             for job in self._job_graph:
                 # All times are in microseconds.
-                if self._job_graph.is_source_job(job):
+                if self._job_graph.is_source(job):
                     # Source jobs are released at a pre-specified interval.
                     release_time = sensor_release_time
                     deadline = sensor_release_time + utils.fuzz_time(
