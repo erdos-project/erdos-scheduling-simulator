@@ -2,7 +2,7 @@ import random
 import uuid
 from typing import Mapping, Optional, Sequence
 
-from .graph import Graph
+from workload.graph import Graph
 
 
 class Job(object):

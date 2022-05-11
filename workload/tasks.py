@@ -9,8 +9,7 @@ from typing import Mapping, Optional, Sequence, Union
 
 import utils
 from workload import Job, Resources
-
-from .graph import Graph
+from workload.graph import Graph
 
 Preempted = namedtuple("Preempted", "preemption_time, restart_time")
 
