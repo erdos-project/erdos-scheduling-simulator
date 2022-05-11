@@ -711,6 +711,9 @@ def log_detailed_task_statistics(
                         (
                             task.timestamp,
                             str(task.id),
+                            task.intended_release_time / 1000
+                            if task.intended_release_time != -1
+                            else "-",
                             task.release_time / 1000,
                             placement.simulator_time / 1000,
                             task.start_time / 1000,
@@ -731,6 +734,7 @@ def log_detailed_task_statistics(
                 headers=[
                     "Time",
                     "ID",
+                    "Int Release",
                     "Release",
                     "Placement",
                     "Start",
