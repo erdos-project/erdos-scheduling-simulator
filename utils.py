@@ -1,5 +1,6 @@
 import logging
 import random
+import sys
 from functools import partial
 from typing import Optional, Sequence, Tuple, Union
 
@@ -47,7 +48,7 @@ def setup_logging(
         return logger
     # Set the file to log to.
     if log_file is None:
-        handler = logging.StreamHandler()
+        handler = logging.StreamHandler(sys.stdout)
     else:
         handler = logging.FileHandler(log_file)
 
