@@ -120,24 +120,19 @@ class CSVReader(object):
                     path_readings.append(line)
                 readings[csv_path] = path_readings
 
-        self._events = CSVReader.parse_events(readings)
+        self._events = {}
+        self._worker_pools = {}
 
-    @staticmethod
-    def parse_events(
-        readings: Mapping[str, Sequence[str]]
-    ) -> Mapping[str, Sequence[tuple]]:
+        self.parse_events(readings)
+
+    def parse_events(self, readings: Mapping[str, Sequence[str]]):
         """Create a sequence of Event tuples from the data read from the CSV
         file.
 
         Args:
             readings (`Sequence[Sequence[str]]`): The readings retrieved from
                 the CSV file.
-
-        Returns:
-            A mapping of CSV name to the sequence of Events converted from the
-            CSV data.
         """
-        parsed_events = {}
         for csv_path, csv_readings in readings.items():
             events = []
             tasks_memo = {}
@@ -225,8 +220,7 @@ class CSVReader(object):
                         task.start_time = simulator_time
 
                     resources = [
-                        Resource(*reading[i : i + 3])
-                        for i in range(6, len(reading), 3)
+                        Resource(*reading[i : i + 3]) for i in range(6, len(reading), 3)
                     ]
                     events.append(
                         TaskPlacement(
@@ -238,15 +232,15 @@ class CSVReader(object):
                     )
                 else:
                     continue
-            parsed_events[csv_path] = events
-        return parsed_events
+            self._events[csv_path] = events
+            self._worker_pools[csv_path] = worker_pool_memo
 
     def get_scheduler_invocations(self, csv_path: str) -> Sequence[Scheduler]:
         """Retrieves a sequence of Scheduler invocations from the CSV.
 
         Args:
-            csv_path (`str`): The path to the CSV file whose worker pool
-                statistics need to be retrieved.
+            csv_path (`str`): The path to the CSV file whose scheduler invocations
+                need to be retrieved.
 
         Returns:
             A `Sequence[Scheduler]` that depicts the number of placed, unplaced
@@ -287,6 +281,19 @@ class CSVReader(object):
                 )
             )
         return scheduler_invocation_events
+
+    def get_worker_pools(self, csv_path: str) -> Sequence[WorkerPool]:
+        """Retrieves the details of the WorkerPool for the given execution.
+
+        Args:
+            csv_path (`str`): The path to the CSV file whose worker pool
+                needs to be retrieved.
+
+        Returns:
+            A `Sequence[WorkerPool]` that depicts the total resources of the WorkerPools
+            used in this execution.
+        """
+        return self._worker_pools[csv_path]
 
     def get_worker_pool_utilizations(self, csv_path: str) -> Sequence[WorkerPoolStats]:
         """Retrieves the statistics of the utilization of the WorkerPool at
@@ -430,6 +437,14 @@ class CSVReader(object):
             trace["traceEvents"].append(trace_event)
 
         if trace_fmt == "resource":
+            resource_ids_to_canonical_names = {}
+            for worker_pool in self.get_worker_pools(csv_path).values():
+                resource_counter = defaultdict(int)
+                for resource in worker_pool.resources:
+                    resource_counter[resource.name] += 1
+                    resource_ids_to_canonical_names[
+                        resource.id
+                    ] = f"{resource.name}_{resource_counter[resource.name]}"
             task_to_wp_resources = {
                 task_placement.task: (
                     task_placement.worker_pool,
@@ -469,7 +484,7 @@ class CSVReader(object):
             elif trace_fmt == "resource":
                 pid = task_to_wp_resources[task][0].name
                 tids = [
-                    f"{resource.name}"
+                    resource_ids_to_canonical_names[resource.id]
                     for resource in task_to_wp_resources[task][1]
                 ]
                 for tid in tids:
@@ -519,7 +534,7 @@ class CSVReader(object):
             elif trace_fmt == "resource":
                 pid = task_to_wp_resources[task][0].name
                 tids = [
-                    f"{resource.name}"
+                    resource_ids_to_canonical_names[resource.id]
                     for resource in task_to_wp_resources[task][1]
                 ]
                 for tid in tids:
