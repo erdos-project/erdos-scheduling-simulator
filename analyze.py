@@ -723,6 +723,9 @@ def log_detailed_task_statistics(
                             task.missed_deadline,
                             (task.completion_time - task.deadline) / 1000,
                             (placement.simulator_time - task.release_time) / 1000,
+                            (task.release_time - task.intended_release_time) / 1000
+                            if task.intended_release_time != -1
+                            else "-",
                         ),
                     )
                 )
@@ -744,6 +747,7 @@ def log_detailed_task_statistics(
                     "X Dline?",
                     "Dline Delay",
                     "Place Delay",
+                    "Rels Delay",
                 ],
                 tablefmt="grid",
                 showindex=True,
