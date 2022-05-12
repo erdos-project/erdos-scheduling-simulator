@@ -447,8 +447,8 @@ class GurobiScheduler2(BaseScheduler):
         self._task_ids_to_start_time = {}
         # Mapping from task id to the var storing the placement.
         self._task_ids_to_placements = defaultdict(list)
-        # Mapping from worker pool index to binary variables, each corresponding to a task.
-        # The variable is set to one if the task is allocated to the work pool.
+        # Mapping from worker pool index to binary variables, each corresponding to a
+        # task. The variable is set to one if the task is allocated to the work pool.
         self._wp_index_to_vars = defaultdict(list)
         self._task_graph = None
         self._worker_pools = None
@@ -521,7 +521,7 @@ class GurobiScheduler2(BaseScheduler):
             var_name: Name to give to the Gurobi binary variable.
 
         Returns:
-            A Gurobi variable that is 1 if the event time is in the interval, 0 otherwise.
+            A Gurobi variable that is 1 if the time is in the interval, 0 otherwise.
         """
         if var_name is None:
             var_name = f"time_{event_time}_in_{start_time},{end_time}"
