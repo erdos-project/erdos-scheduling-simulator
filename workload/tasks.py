@@ -396,7 +396,7 @@ class Task(object):
 
     @property
     def intended_release_time(self):
-        return self._release_time
+        return self._intended_release_time
 
     @property
     def deadline(self):
