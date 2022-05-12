@@ -75,7 +75,7 @@ class TaskLoaderSynthetic(TaskLoader):
         num_perception_sensors: int,
         num_traffic_light_cameras: int,
         deadline_slack_factor: float = 1.2,
-        source_deadline_slack_factor: float = 3.0,
+        periodic_deadline_slack_factor: float = 3.0,
     ):
         """Creates a synthetic Pylot JobGraph.
 
@@ -85,8 +85,9 @@ class TaskLoaderSynthetic(TaskLoader):
                 pipeline has.
             deadline_slack_factor (`float`): Factor multiplied with the task runtimes
                 in order to compute task deadlines.
-            source_deadline_slack_factor (`float`): Factor multiplied with the task
-                runtimes in order to compute task deadlines for source operators..
+            periodi_deadline_slack_factor (`float`): Factor multiplied with the task
+                runtimes in order to compute task deadlines for periodic operators with
+                small runtimes.
 
         Returns:
             A `JobGraph` instance depicting the relation between the different
@@ -97,18 +98,18 @@ class TaskLoaderSynthetic(TaskLoader):
         resources = {}
         gnss = Job(name="gnss")
         runtimes[gnss.name] = 1000
-        deadlines[gnss.name] = runtimes[gnss.name] * source_deadline_slack_factor
+        deadlines[gnss.name] = runtimes[gnss.name] * periodic_deadline_slack_factor
         resources[gnss.name] = Resources(
             resource_vector={Resource("CPU", _id="any"): 1}
         )
         imu = Job(name="imu")
         runtimes[imu.name] = 1000
-        deadlines[imu.name] = runtimes[imu.name] * source_deadline_slack_factor
+        deadlines[imu.name] = runtimes[imu.name] * periodic_deadline_slack_factor
         resources[imu.name] = Resources(resource_vector={Resource("CPU", _id="any"): 1})
         localization = Job(name="localization")
         runtimes[localization.name] = 20000
         deadlines[localization.name] = (
-            runtimes[localization.name] * source_deadline_slack_factor
+            runtimes[localization.name] * periodic_deadline_slack_factor
         )
         resources[localization.name] = Resources(
             resource_vector={Resource("CPU", _id="any"): 1}
@@ -123,7 +124,7 @@ class TaskLoaderSynthetic(TaskLoader):
             cameras.append(Job(name=f"camera_{i}", pipelined=True))
             runtimes[cameras[-1].name] = 10000
             deadlines[cameras[-1].name] = (
-                runtimes[cameras[-1].name] * source_deadline_slack_factor
+                runtimes[cameras[-1].name] * periodic_deadline_slack_factor
             )
             resources[cameras[-1].name] = Resources(
                 resource_vector={Resource("CPU", _id="any"): 1}
@@ -131,7 +132,7 @@ class TaskLoaderSynthetic(TaskLoader):
             lidars.append(Job(name=f"lidar_{i}", pipelined=True))
             runtimes[lidars[-1].name] = 8000
             deadlines[lidars[-1].name] = (
-                runtimes[lidars[-1].name] * source_deadline_slack_factor
+                runtimes[lidars[-1].name] * periodic_deadline_slack_factor
             )
             resources[lidars[-1].name] = Resources(
                 resource_vector={Resource("CPU", _id="any"): 1}
@@ -187,7 +188,7 @@ class TaskLoaderSynthetic(TaskLoader):
             tl_cameras.append(Job(name=f"traffic_light_camera_{i}", pipelined=True))
             runtimes[tl_cameras[-1].name] = 10000
             deadlines[tl_cameras[-1].name] = (
-                runtimes[tl_cameras[-1].name] * source_deadline_slack_factor
+                runtimes[tl_cameras[-1].name] * periodic_deadline_slack_factor
             )
             resources[tl_cameras[-1].name] = Resources(
                 resource_vector={Resource("CPU", _id="any"): 1}
@@ -231,7 +232,9 @@ class TaskLoaderSynthetic(TaskLoader):
         )
         control = Job(name="control", pipelined=False)
         runtimes[control.name] = 1000
-        deadlines[control.name] = runtimes[control.name] * deadline_slack_factor
+        deadlines[control.name] = (
+            runtimes[control.name] * periodic_deadline_slack_factor
+        )
         resources[control.name] = Resources(
             resource_vector={Resource("CPU", _id="any"): 1}
         )

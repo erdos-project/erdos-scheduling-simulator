@@ -371,7 +371,7 @@ class Simulator(object):
                     self._event_queue.add_event(
                         Event(
                             event_type=EventType.TASK_PREEMPT,
-                            time=max(start_time, event.time),
+                            time=event.time,
                             task=task,
                         )
                     )
@@ -431,8 +431,9 @@ class Simulator(object):
         )
         self._csv_logger.debug(
             f"{event.time},TASK_RELEASE,{event.task.name},"
-            f"{event.task.timestamp},{event.task.release_time},"
-            f"{event.task.runtime},{event.task.deadline},{event.task.id}"
+            f"{event.task.timestamp},{event.task.intended_release_time},"
+            f"{event.task.release_time},{event.task.runtime},"
+            f"{event.task.deadline},{event.task.id}"
         )
         # If we are not in the midst of a scheduler invocation and next
         # scheduled invocation is too late, then bring the invocation sooner

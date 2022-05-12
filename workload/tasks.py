@@ -87,6 +87,7 @@ class Task(object):
 
         # The timestamps maintained for each state of the task.
         # (VIRTUAL -> RELEASED)
+        self._intended_release_time = release_time
         self._release_time = release_time
         # (RELEASED -> RUNNING)
         self._start_time = start_time
@@ -392,6 +393,10 @@ class Task(object):
     @property
     def release_time(self):
         return self._release_time
+
+    @property
+    def intended_release_time(self):
+        return self._intended_release_time
 
     @property
     def deadline(self):

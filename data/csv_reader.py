@@ -16,6 +16,7 @@ class Task(object):
         name: str,
         timestamp: int,
         task_id: uuid.UUID,
+        intended_release_time: int,
         release_time: int,
         runtime: int,
         deadline: int,
@@ -27,6 +28,7 @@ class Task(object):
         self.timestamp = timestamp
         self.id = task_id
         # All times are in microseconds.
+        self.intended_release_time = intended_release_time
         self.release_time = release_time
         self.runtime = runtime
         self.deadline = deadline
@@ -156,12 +158,13 @@ class CSVReader(object):
                     task = Task(
                         name=reading[2],
                         timestamp=int(reading[3]),
-                        task_id=uuid.UUID(reading[7]),
-                        release_time=int(reading[4]),
-                        runtime=int(reading[5]),
-                        deadline=int(reading[6]),
+                        task_id=uuid.UUID(reading[8]),
+                        intended_release_time=int(reading[4]),
+                        release_time=int(reading[5]),
+                        runtime=int(reading[6]),
+                        deadline=int(reading[7]),
                     )
-                    tasks_memo[reading[7]] = task
+                    tasks_memo[reading[8]] = task
                     events.append(
                         TaskRelease(simulator_time=int(reading[0]), task=task)
                     )
