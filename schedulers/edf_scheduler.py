@@ -30,7 +30,7 @@ class EDFScheduler(BaseScheduler):
 
     def schedule(
         self, sim_time: int, task_graph: TaskGraph, worker_pools: WorkerPools
-    ) -> (int, Sequence[Tuple[Task, str]]):
+    ) -> (int, Sequence[Tuple[Task, str, int]]):
         """Implements the BaseScheduler's schedule() method using the EDF
         algorithm for scheduling the released tasks across the worker_pools.
         """

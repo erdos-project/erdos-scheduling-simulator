@@ -371,7 +371,7 @@ class Simulator(object):
                     self._event_queue.add_event(
                         Event(
                             event_type=EventType.TASK_PREEMPT,
-                            time=max(start_time, event.time),
+                            time=event.time,
                             task=task,
                         )
                     )
