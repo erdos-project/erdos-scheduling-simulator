@@ -3,7 +3,7 @@ import json
 import uuid
 from collections import defaultdict, namedtuple
 from functools import total_ordering
-from typing import Mapping, Optional, Sequence, Union
+from typing import Mapping, Optional, Sequence, Tuple, Union
 
 import absl  # noqa: F401
 
@@ -405,6 +405,7 @@ class CSVReader(object):
         output_path: str,
         between_time: Union[int, Tuple[int, int]] = None,
         trace_fmt: str = "task",
+        show_deadlines: str = "missed",
     ):
         """Converts the CSV of the events in a simulation execution to a Chrome tracer
         format.
@@ -416,12 +417,16 @@ class CSVReader(object):
             between_time (Union[int, Tuple[int, int]]): Visualize only the tasks that
                 had activity either between the given times or at the given time.
             trace_fmt (str): The format of trace to output (task / resource).
+            show_deadlines (str): Choose between ('never', 'missed', 'always') to
+                affect which deadlines are shown in the trace.
         """
         trace = {
             "traceEvents": [],
             "otherData": {"csv_path": csv_path, "scheduler": scheduler_label},
         }
-        if not isinstance(between_time, int) or len(between_time) != 2:
+        if not isinstance(between_time, int) or (
+            isinstance(between_time, Sequence) and len(between_time) != 2
+        ):
             raise ValueError(
                 "between_time should either be an integer specifying an exact time, "
                 "or a tuple specifying an interval."
@@ -546,9 +551,24 @@ class CSVReader(object):
             else:
                 raise ValueError(f"Undefined execution mode: {trace_fmt}")
 
+        # Find the tasks that conform to the show_deadlines requirements
+        tasks_for_deadline_events = []
+        if show_deadlines == "missed":
+            tasks_for_deadline_events.extend(
+                [
+                    missed_deadline_event.task
+                    for missed_deadline_event in self.get_missed_deadline_events(
+                        csv_path
+                    )
+                ]
+            )
+        elif show_deadlines == "always":
+            tasks_for_deadline_events.extend(
+                [task for task in self.get_tasks(csv_path)]
+            )
+
         # Output all the missed deadlines.
-        for missed_deadline_event in self.get_missed_deadline_events(csv_path):
-            task = missed_deadline_event.task
+        for task in tasks_for_deadline_events:
             # Do not output the tasks if it does not fall within the given time.
             if not check_if_time_intersects(task.start_time, task.completion_time):
                 continue
