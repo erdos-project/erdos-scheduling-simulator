@@ -16,7 +16,7 @@ class MockScheduler(BaseScheduler):
         self._runtime = runtime
         self._task_placement = placement
         self._preemptive = False
-        self._scheduling_horizon = 0
+        self._lookahead = 0
 
     def schedule(
         self, sim_time=None, released_tasks=None, task_graph=None, worker_pools=None
@@ -28,8 +28,8 @@ class MockScheduler(BaseScheduler):
         return self._preemptive
 
     @property
-    def scheduling_horizon(self):
-        return self._scheduling_horizon
+    def lookahead(self):
+        return self._lookahead
 
 
 def __create_default_worker_pool(

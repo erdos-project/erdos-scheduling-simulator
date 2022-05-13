@@ -22,7 +22,7 @@ class Z3Scheduler(BaseScheduler):
         runtime: int = -1,
         goal: str = "max_slack",
         enforce_deadlines: bool = True,
-        scheduling_horizon: int = 0,
+        lookahead: int = 0,
         _flags: Optional["absl.flags"] = None,
     ):
         """Constructs a Z3 scheduler.
@@ -35,12 +35,11 @@ class Z3Scheduler(BaseScheduler):
             goal (`str`): Goal of the scheduler run.
             enforce_deadlines (`bool`): Deadlines must be met or else the
                 `schedule()` will return None.
-            scheduling_horizon (`int`): The scheduler will try to place
-                tasks that are within the scheduling horizon (in us) using
-                estimated task release times.
+            lookahead (`int`): The scheduler will try to place tasks that are within
+                the scheduling lookahead (in us) using estimated task release times.
         """
         super(Z3Scheduler, self).__init__(
-            preemptive, runtime, scheduling_horizon, enforce_deadlines
+            preemptive, runtime, lookahead, enforce_deadlines
         )
         self._goal = goal
         self._time = None
@@ -136,7 +135,7 @@ class Z3Scheduler(BaseScheduler):
         self._worker_pools = worker_pools
 
         tasks = task_graph.get_schedulable_tasks(
-            sim_time, self.scheduling_horizon, self.preemptive, worker_pools
+            sim_time, self.lookahead, self.preemptive, worker_pools
         )
 
         scheduler_start_time = time.time()
@@ -218,7 +217,7 @@ class Z3Scheduler(BaseScheduler):
                     "tasks": self._task_ids_to_task,
                     "task_graph": self._task_graph,
                     "worker_pools": self._worker_pools,
-                    "scheduling_horizon": self._scheduling_horizon,
+                    "lookahead": self._lookahead,
                     "runtime": self.runtime,
                     "placements": self._placements,
                     "cost": self._cost,

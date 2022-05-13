@@ -318,7 +318,7 @@ class Simulator(object):
             currently_placed_tasks.extend(worker_pool.get_placed_tasks())
         schedulable_tasks = task_graph.get_schedulable_tasks(
             event.time,
-            self._scheduler.scheduling_horizon,
+            self._scheduler.lookahead,
             self._scheduler.preemptive,
         )
         self._csv_logger.debug(
@@ -695,7 +695,7 @@ class Simulator(object):
         for worker_pool in self._worker_pools.values():
             running_tasks.extend(worker_pool.get_placed_tasks())
         schedulable_tasks = task_graph.get_schedulable_tasks(
-            event.time, self._scheduler.scheduling_horizon, self._scheduler.preemptive
+            event.time, self._scheduler.lookahead, self._scheduler.preemptive
         )
         next_event = self._event_queue.peek()
 

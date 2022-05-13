@@ -128,10 +128,10 @@ flags.DEFINE_integer(
     "release of a Task in the system.",
 )
 flags.DEFINE_integer(
-    "scheduling_horizon",
+    "scheduler_lookahead",
     0,
     "The scheduler places tasks that are estimated to be released "
-    "within the tine horizon (in us).",
+    "within the scheduling lookahead (in us).",
 )
 flags.DEFINE_bool(
     "enforce_deadlines",
@@ -206,7 +206,7 @@ def main(args):
             runtime=FLAGS.scheduler_runtime,
             goal=FLAGS.ilp_goal,
             enforce_deadlines=FLAGS.enforce_deadlines,
-            scheduling_horizon=FLAGS.scheduling_horizon,
+            lookahead=FLAGS.scheduler_lookahead,
             _flags=FLAGS,
         )
     elif FLAGS.scheduler == "Z3":
@@ -215,7 +215,7 @@ def main(args):
             runtime=FLAGS.scheduler_runtime,
             goal=FLAGS.ilp_goal,
             enforce_deadlines=FLAGS.enforce_deadlines,
-            scheduling_horizon=FLAGS.scheduling_horizon,
+            lookahead=FLAGS.scheduler_lookahead,
             _flags=FLAGS,
         )
     else:

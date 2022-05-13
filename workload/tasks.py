@@ -514,19 +514,20 @@ class TaskGraph(Graph[Task]):
     def get_schedulable_tasks(
         self,
         time: int,
-        horizon: int = 0,
+        lookahead: int = 0,
         preemption: bool = False,
         worker_pools: "WorkerPools" = None,  # noqa: F821
     ) -> Sequence[Task]:
         """Retrieves the all the tasks that are in RELEASED, PREEMPTED, or
-        EVICTED state, and tasks that are expected to be released by time + horizon.
+        EVICTED state, and tasks that are expected to be released by time + lookahead.
 
         Returns:
             A list of tasks.
         """
         tasks = self.filter(
             lambda task: (
-                task.state == TaskState.RELEASED and task.release_time <= time + horizon
+                task.state == TaskState.RELEASED
+                and task.release_time <= time + lookahead
             )
             or task.state == TaskState.PREEMPTED
             or task.state == TaskState.EVICTED
@@ -579,22 +580,22 @@ class TaskGraph(Graph[Task]):
                     estimated_completion_time[child_task] = child_completion_time
                     task_queue.append(child_task)
 
-        # Add the tasks that are within the horizon.
+        # Add the tasks that are within the lookahead.
         tasks.extend(
             self.filter(
                 lambda task: task.state == TaskState.VIRTUAL
                 and task in estimated_completion_time
-                and estimated_completion_time[task] < time + horizon
+                and estimated_completion_time[task] < time + lookahead
             )
         )
 
         assert all(
             map(
                 lambda task: task.release_time is None
-                or task.release_time <= time + horizon,
+                or task.release_time <= time + lookahead,
                 tasks,
             )
-        ), "Tasks send for scheduling beyond the scheduling horizon"
+        ), "Tasks send for scheduling beyond the scheduler lookahead"
         return tasks
 
     def release_tasks(self, time: Optional[int] = None) -> Sequence[Task]:

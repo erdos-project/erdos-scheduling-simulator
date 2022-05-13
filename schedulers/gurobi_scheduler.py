@@ -26,7 +26,7 @@ class GurobiScheduler(BaseScheduler):
         runtime: int = -1,
         goal: str = "max_slack",
         enforce_deadlines: bool = True,
-        scheduling_horizon: int = 0,
+        lookahead: int = 0,
         _flags: Optional["absl.flags"] = None,
     ):
         """Constructs a Gurobi scheduler.
@@ -40,12 +40,11 @@ class GurobiScheduler(BaseScheduler):
                 support feasibility checking.
             enforce_deadlines (`bool`): Deadlines must be met or else the
                 schedule will return None.
-            scheduling_horizon (`int`): The scheduler will try to place
-                tasks that are within the scheduling horizon (in us) using
-                estimated task release times.
+            lookahead (`int`): The scheduler will try to place tasks that are within
+                the scheduling lookahead (in us) using estimated task release times.
         """
         super(GurobiScheduler, self).__init__(
-            preemptive, runtime, scheduling_horizon, enforce_deadlines
+            preemptive, runtime, lookahead, enforce_deadlines
         )
         assert goal != "feasibility", "Gurobi does not support feasibility checking."
         self._goal = goal
@@ -311,7 +310,7 @@ class GurobiScheduler(BaseScheduler):
         self._worker_pools = worker_pools
 
         tasks = task_graph.get_schedulable_tasks(
-            sim_time, self.scheduling_horizon, self.preemptive, worker_pools
+            sim_time, self.lookahead, self.preemptive, worker_pools
         )
 
         scheduler_start_time = time.time()
@@ -403,7 +402,7 @@ class GurobiScheduler(BaseScheduler):
                     "tasks": self._task_ids_to_task,
                     "task_graph": self._task_graph,
                     "worker_pools": self._worker_pools,
-                    "scheduling_horizon": self._scheduling_horizon,
+                    "lookahead": self._lookahead,
                     "runtime": self.runtime,
                     "placements": self._placements,
                     "cost": self._cost,
@@ -418,7 +417,7 @@ class GurobiScheduler2(BaseScheduler):
         runtime: int = -1,
         goal: str = "max_slack",
         enforce_deadlines: bool = True,
-        scheduling_horizon: int = 0,
+        lookahead: int = 0,
         _flags: Optional["absl.flags"] = None,
     ):
         """Constructs a Gurobi scheduler.
@@ -432,12 +431,12 @@ class GurobiScheduler2(BaseScheduler):
                 support feasibility checking.
             enforce_deadlines (`bool`): Deadlines must be met or else the
                 schedule will return None.
-            scheduling_horizon (`int`): The scheduler will try to place
-                tasks that are within the scheduling horizon (in us) using
+            lookahead (`int`): The scheduler will try to place
+                tasks that are within the scheduling lookahead (in us) using
                 estimated task release times.
         """
         super(GurobiScheduler2, self).__init__(
-            preemptive, runtime, scheduling_horizon, enforce_deadlines
+            preemptive, runtime, lookahead, enforce_deadlines
         )
         assert goal != "feasibility", "Gurobi does not support feasibility checking."
         self._goal = goal
@@ -596,7 +595,7 @@ class GurobiScheduler2(BaseScheduler):
         self._worker_pools = worker_pools
 
         tasks = task_graph.get_schedulable_tasks(
-            sim_time, self.scheduling_horizon, self.preemptive, worker_pools
+            sim_time, self.lookahead, self.preemptive, worker_pools
         )
 
         scheduler_start_time = time.time()
@@ -687,7 +686,7 @@ class GurobiScheduler2(BaseScheduler):
                     "tasks": self._task_ids_to_task,
                     "task_graph": self._task_graph,
                     "worker_pools": self._worker_pools,
-                    "scheduling_horizon": self._scheduling_horizon,
+                    "lookahead": self._lookahead,
                     "runtime": self.runtime,
                     "placements": self._placements,
                     "cost": self._cost,

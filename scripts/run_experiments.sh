@@ -4,7 +4,7 @@
 # Scheduler runtimes in us.
 SCHEDULERS=(EDF LSF Z3 Gurobi)
 SCHEDULER_RUNTIMES=(1 1000 5000 10000 -1)
-SCHEDULING_HORIZONS=(0 1000 5000 10000)
+SCHEDULER_LOOKAHEADS=(0 1000 5000 10000)
 RUNTIME_VARIANCES=(0 10)
 DEADLINE_VARIANCES=(0 10)
 MAX_TIMESTAMP=50
@@ -41,7 +41,7 @@ execute_experiment () {
 --runtime_variance=${RUNTIME_VAR}
 --scheduler_runtime=${RUNTIME}
 --scheduler=${SCHEDULER}
---scheduling_horizon=${SCHEDULING_HORIZON}
+--scheduler_lookahead=${SCHEDULER_LOOKAHEAD}
 --log=${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.log
 --csv=${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.csv
 --preemption=False
@@ -73,13 +73,13 @@ for WORKER_CONFIG in ${WORKER_CONFIGS[@]}; do
             for RUNTIME_VAR in ${RUNTIME_VARIANCES[@]}; do
                 for RUNTIME in ${SCHEDULER_RUNTIMES[@]}; do
                     for SCHEDULER in ${SCHEDULERS[@]}; do
-                        for SCHEDULING_HORIZON in ${SCHEDULING_HORIZONS[@]}; do
-                            # Other schedulers do not support scheduling horizons.
-                            if [[ ${SCHEDULING_HORIZON} -ne 0 && ${SCHEDULER} != gurobi && ${SCHEDULER} != z3 ]] ; then
+                        for SCHEDULER_LOOKAHEAD in ${SCHEDULER_LOOKAHEADS[@]}; do
+                            # Other schedulers do not support scheduler lookahead.
+                            if [[ ${SCHEDULER_LOOKAHEAD} -ne 0 && ${SCHEDULER} != gurobi && ${SCHEDULER} != z3 ]] ; then
                                 continue
                             fi
 
-                            LOG_BASE=${EXECUTION_MODE}_scheduler_${SCHEDULER}_horizon_${SCHEDULING_HORIZON}_runtime_${RUNTIME}_timestamps_${MAX_TIMESTAMP}_runtime_var_${RUNTIME_VAR}_deadline_var_${DEADLINE_VAR}_${WORKER_CONFIG}
+                            LOG_BASE=${EXECUTION_MODE}_scheduler_${SCHEDULER}_lookahead_${SCHEDULER_LOOKAHEAD}_runtime_${RUNTIME}_timestamps_${MAX_TIMESTAMP}_runtime_var_${RUNTIME_VAR}_deadline_var_${DEADLINE_VAR}_${WORKER_CONFIG}
                             # Synthetic execution mode does not support resource configs.
                             if [[ ${EXECUTION_MODE} != synthetic ]]; then
                                 LOG_BASE="${LOG_BASE}_${RESOURCE_CONFIG}"
