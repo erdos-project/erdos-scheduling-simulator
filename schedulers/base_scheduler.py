@@ -16,8 +16,8 @@ class BaseScheduler(object):
             are currently running.
         runtime (`int`): The runtime to return to the simulator (in us). If -1,
             the scheduler returns the actual runtime.
-        scheduling_horizon (`int`): The scheduler will try to place tasks that are
-            within the scheduling horizon (in us) using estimated task release times.
+        lookahead (`int`): The scheduler will try to place tasks that are within
+            the scheduling lookahead (in us) using estimated task release times.
         enforce_deadlines (`bool`): If True then deadlines must be met or else the
             `schedule()` will return None.
     """
@@ -26,12 +26,12 @@ class BaseScheduler(object):
         self,
         preemptive: bool = False,
         runtime: int = -1,
-        scheduling_horizon: int = 0,
+        lookahead: int = 0,
         enforce_deadlines: bool = False,
     ):
         self._preemptive = preemptive
         self._runtime = runtime
-        self._scheduling_horizon = scheduling_horizon
+        self._lookahead = lookahead
         self._enforce_deadlines = enforce_deadlines
 
     def schedule(
@@ -77,8 +77,8 @@ class BaseScheduler(object):
         return self._enforce_deadlines
 
     @property
-    def scheduling_horizon(self):
-        return self._scheduling_horizon
+    def lookahead(self):
+        return self._lookahead
 
     def _verify_schedule(
         self, worker_pools: WorkerPools, task_graph: TaskGraph, placements
