@@ -11,7 +11,7 @@ from data import (
     WorkerLoaderBenchmark,
     WorkerLoaderJSON,
 )
-from schedulers import EDFScheduler, GurobiScheduler, LSFScheduler, Z3Scheduler
+from schedulers import EDFScheduler, GurobiScheduler2, LSFScheduler, Z3Scheduler
 from simulator import Simulator
 
 FLAGS = flags.FLAGS
@@ -201,7 +201,7 @@ def main(args):
             preemptive=FLAGS.preemption, runtime=FLAGS.scheduler_runtime, _flags=FLAGS
         )
     elif FLAGS.scheduler == "Gurobi":
-        scheduler = GurobiScheduler(
+        scheduler = GurobiScheduler2(
             preemptive=FLAGS.preemption,
             runtime=FLAGS.scheduler_runtime,
             goal=FLAGS.ilp_goal,
