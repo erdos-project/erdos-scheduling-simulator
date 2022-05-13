@@ -56,11 +56,16 @@ flags.register_multi_flags_validator(
 
 flags.DEFINE_string("output_dir", ".", "The directory to output the graphs to.")
 
-# Enable the restriction of events to a particular regular expression.
+# Enable the restriction of events to a particular regular expression or time.
 flags.DEFINE_string(
     "task_name",
     ".*",
     "Regular expression that restricts the plots to the given tasks.",
+)
+flags.DEFINE_int(
+    "at_time",
+    None,
+    "The time for which to show the results (for Chrome traces) [in microseconds]",
 )
 
 # Execution modes for the script.
@@ -1150,6 +1155,7 @@ def main(argv):
                 scheduler_csv_file,
                 scheduler_label,
                 output_path,
+                at_time=FLAGS.at_time,
                 trace_fmt=FLAGS.chrome_trace,
             )
 

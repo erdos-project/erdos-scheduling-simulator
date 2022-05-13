@@ -403,6 +403,7 @@ class CSVReader(object):
         csv_path: str,
         scheduler_label: str,
         output_path: str,
+        at_time: Optional[int] = None,
         trace_fmt: str = "task",
     ):
         """Converts the CSV of the events in a simulation execution to a Chrome tracer
@@ -412,6 +413,8 @@ class CSVReader(object):
             csv_path (str): The path to the CSV to be converted to Chrome trace.
             output_path (str): The path where the Chrome trace file should be output.
             scheduler_label (str): The name of the scheduler that produced the trace.
+            at_time (Optional[int]): Visualize only the tasks that had activity at the
+                given time.
             trace_fmt (str): The format of trace to output (task / resource).
         """
         trace = {
@@ -421,23 +424,30 @@ class CSVReader(object):
 
         # Output all the scheduler events.
         for scheduler_event in self.get_scheduler_invocations(csv_path):
-            trace_event = {
-                "name": f"{scheduler_label}::{scheduler_event.instance_id}",
-                "cat": "scheduler",
-                "ph": "X",
-                "ts": scheduler_event.start_time,
-                "dur": scheduler_event.runtime,
-                "pid": scheduler_label,
-                "tid": "main",
-                "args": {
-                    "released_tasks": scheduler_event.released_tasks,
-                    "previously_placed_tasks": scheduler_event.previously_placed_tasks,
-                    "total_tasks": scheduler_event.total_tasks,
-                    "placed_tasks": scheduler_event.placed_tasks,
-                    "unplaced_tasks": scheduler_event.unplaced_tasks,
-                },
-            }
-            trace["traceEvents"].append(trace_event)
+            if (
+                at_time
+                and scheduler_event.start_time
+                <= at_time
+                <= scheduler_event.start_time + scheduler_event.runtime
+            ):
+                previously_placed_tasks = scheduler_event.previously_placed_tasks
+                trace_event = {
+                    "name": f"{scheduler_label}::{scheduler_event.instance_id}",
+                    "cat": "scheduler",
+                    "ph": "X",
+                    "ts": scheduler_event.start_time,
+                    "dur": scheduler_event.runtime,
+                    "pid": scheduler_label,
+                    "tid": "main",
+                    "args": {
+                        "released_tasks": scheduler_event.released_tasks,
+                        "previously_placed_tasks": previously_placed_tasks,
+                        "total_tasks": scheduler_event.total_tasks,
+                        "placed_tasks": scheduler_event.placed_tasks,
+                        "unplaced_tasks": scheduler_event.unplaced_tasks,
+                    },
+                }
+                trace["traceEvents"].append(trace_event)
 
         if trace_fmt == "resource":
             resource_ids_to_canonical_names = {}
@@ -457,6 +467,9 @@ class CSVReader(object):
             }
         # Output all the tasks.
         for task in self.get_tasks(csv_path):
+            # Do not output the tasks if it does not fall within the given time.
+            if at_time and not (task.start_time <= at_time <= task.completion_time):
+                continue
             if trace_fmt == "task":
                 if "." in task.name:
                     # pid = operator name, tid = callback name
@@ -518,6 +531,9 @@ class CSVReader(object):
         # Output all the missed deadlines.
         for missed_deadline_event in self.get_missed_deadline_events(csv_path):
             task = missed_deadline_event.task
+            # Do not output the tasks if it does not fall within the given time.
+            if at_time and not (task.start_time <= at_time <= task.completion_time):
+                continue
             if trace_fmt == "task":
                 if "." in task.name:
                     # pid = operator name, tid = callback name
