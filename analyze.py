@@ -74,7 +74,7 @@ flags.register_validator(
 )
 flags.register_validator(
     "between_time",
-    lambda value: len(value) <= 2,
+    lambda value: len(value) <= 2 if value else True,
     message="The between_time flag can have a maximum of two values.",
 )
 
@@ -97,7 +97,7 @@ flags.register_validator(
 # Allow the choice of seeing deadlines in Chrome trace or not.
 flags.DEFINE_enum(
     "show_deadlines",
-    "missed",
+    None,
     ["never", "missed", "always"],
     "Chooses if the deadline events are shown in the chrome trace. "
     "'never' shows no deadline events, 'missed' shows only deadlines that were missed, "
