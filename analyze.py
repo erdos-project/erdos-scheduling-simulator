@@ -62,10 +62,20 @@ flags.DEFINE_string(
     ".*",
     "Regular expression that restricts the plots to the given tasks.",
 )
-flags.DEFINE_int(
-    "at_time",
+flags.DEFINE_list(
+    "between_time",
     None,
     "The time for which to show the results (for Chrome traces) [in microseconds]",
+)
+flags.register_validator(
+    "between_time",
+    lambda value: FLAGS.chrome_trace is not None if value else True,
+    message="The between_time flag can only be used for Chrome traces.",
+)
+flags.register_validator(
+    "between_time",
+    lambda value: len(value.split(",")) <= 2,
+    message="The between_time flag can have a maximum of two values.",
 )
 
 # Execution modes for the script.

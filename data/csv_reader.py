@@ -3,7 +3,7 @@ import json
 import uuid
 from collections import defaultdict, namedtuple
 from functools import total_ordering
-from typing import Mapping, Optional, Sequence
+from typing import Mapping, Optional, Sequence, Union
 
 import absl  # noqa: F401
 
@@ -403,7 +403,7 @@ class CSVReader(object):
         csv_path: str,
         scheduler_label: str,
         output_path: str,
-        at_time: Optional[int] = None,
+        between_time: Union[int, Tuple[int, int]] = None,
         trace_fmt: str = "task",
     ):
         """Converts the CSV of the events in a simulation execution to a Chrome tracer
@@ -413,22 +413,40 @@ class CSVReader(object):
             csv_path (str): The path to the CSV to be converted to Chrome trace.
             output_path (str): The path where the Chrome trace file should be output.
             scheduler_label (str): The name of the scheduler that produced the trace.
-            at_time (Optional[int]): Visualize only the tasks that had activity at the
-                given time.
+            between_time (Union[int, Tuple[int, int]]): Visualize only the tasks that
+                had activity either between the given times or at the given time.
             trace_fmt (str): The format of trace to output (task / resource).
         """
         trace = {
             "traceEvents": [],
             "otherData": {"csv_path": csv_path, "scheduler": scheduler_label},
         }
+        if not isinstance(between_time, int) or len(between_time) != 2:
+            raise ValueError(
+                "between_time should either be an integer specifying an exact time, "
+                "or a tuple specifying an interval."
+            )
+        if show_deadlines not in ("never", "missed", "always"):
+            raise ValueError(
+                f"The value of show_deadlines ({show_deadlines}) must be chosen from "
+                f"(never, missed, always)."
+            )
+
+        def check_if_time_intersects(start_time, end_time):
+            if isinstance(between_time, int):
+                return start_time <= between_time <= end_time
+            elif isinstance(between_time, Sequence):
+                return (
+                    min(end_time, between_time[1]) - max(start_time, between_time[0])
+                ) >= 0
+            else:
+                return True
 
         # Output all the scheduler events.
         for scheduler_event in self.get_scheduler_invocations(csv_path):
-            if (
-                at_time
-                and scheduler_event.start_time
-                <= at_time
-                <= scheduler_event.start_time + scheduler_event.runtime
+            if check_if_time_intersects(
+                scheduler_event.start_time,
+                scheduler_event.start_time + scheduler_event.runtime,
             ):
                 previously_placed_tasks = scheduler_event.previously_placed_tasks
                 trace_event = {
@@ -468,7 +486,7 @@ class CSVReader(object):
         # Output all the tasks.
         for task in self.get_tasks(csv_path):
             # Do not output the tasks if it does not fall within the given time.
-            if at_time and not (task.start_time <= at_time <= task.completion_time):
+            if not check_if_time_intersects(task.start_time, task.completion_time):
                 continue
             if trace_fmt == "task":
                 if "." in task.name:
@@ -532,7 +550,7 @@ class CSVReader(object):
         for missed_deadline_event in self.get_missed_deadline_events(csv_path):
             task = missed_deadline_event.task
             # Do not output the tasks if it does not fall within the given time.
-            if at_time and not (task.start_time <= at_time <= task.completion_time):
+            if not check_if_time_intersects(task.start_time, task.completion_time):
                 continue
             if trace_fmt == "task":
                 if "." in task.name:
