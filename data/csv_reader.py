@@ -3,7 +3,7 @@ import json
 import uuid
 from collections import defaultdict, namedtuple
 from functools import total_ordering
-from typing import Mapping, Optional, Sequence
+from typing import Mapping, Optional, Sequence, Tuple, Union
 
 import absl  # noqa: F401
 
@@ -403,7 +403,9 @@ class CSVReader(object):
         csv_path: str,
         scheduler_label: str,
         output_path: str,
+        between_time: Union[int, Tuple[int, int]] = None,
         trace_fmt: str = "task",
+        show_deadlines: str = "missed",
     ):
         """Converts the CSV of the events in a simulation execution to a Chrome tracer
         format.
@@ -412,32 +414,63 @@ class CSVReader(object):
             csv_path (str): The path to the CSV to be converted to Chrome trace.
             output_path (str): The path where the Chrome trace file should be output.
             scheduler_label (str): The name of the scheduler that produced the trace.
+            between_time (Union[int, Tuple[int, int]]): Visualize only the tasks that
+                had activity either between the given times or at the given time.
             trace_fmt (str): The format of trace to output (task / resource).
+            show_deadlines (str): Choose between ('never', 'missed', 'always') to
+                affect which deadlines are shown in the trace.
         """
         trace = {
             "traceEvents": [],
             "otherData": {"csv_path": csv_path, "scheduler": scheduler_label},
         }
+        if not isinstance(between_time, int) or (
+            isinstance(between_time, Sequence) and len(between_time) != 2
+        ):
+            raise ValueError(
+                "between_time should either be an integer specifying an exact time, "
+                "or a tuple specifying an interval."
+            )
+        if show_deadlines not in ("never", "missed", "always"):
+            raise ValueError(
+                f"The value of show_deadlines ({show_deadlines}) must be chosen from "
+                f"(never, missed, always)."
+            )
+
+        def check_if_time_intersects(start_time, end_time):
+            if isinstance(between_time, int):
+                return start_time <= between_time <= end_time
+            elif isinstance(between_time, Sequence):
+                return (
+                    min(end_time, between_time[1]) - max(start_time, between_time[0])
+                ) >= 0
+            else:
+                return True
 
         # Output all the scheduler events.
         for scheduler_event in self.get_scheduler_invocations(csv_path):
-            trace_event = {
-                "name": f"{scheduler_label}::{scheduler_event.instance_id}",
-                "cat": "scheduler",
-                "ph": "X",
-                "ts": scheduler_event.start_time,
-                "dur": scheduler_event.runtime,
-                "pid": scheduler_label,
-                "tid": "main",
-                "args": {
-                    "released_tasks": scheduler_event.released_tasks,
-                    "previously_placed_tasks": scheduler_event.previously_placed_tasks,
-                    "total_tasks": scheduler_event.total_tasks,
-                    "placed_tasks": scheduler_event.placed_tasks,
-                    "unplaced_tasks": scheduler_event.unplaced_tasks,
-                },
-            }
-            trace["traceEvents"].append(trace_event)
+            if check_if_time_intersects(
+                scheduler_event.start_time,
+                scheduler_event.start_time + scheduler_event.runtime,
+            ):
+                previously_placed_tasks = scheduler_event.previously_placed_tasks
+                trace_event = {
+                    "name": f"{scheduler_label}::{scheduler_event.instance_id}",
+                    "cat": "scheduler",
+                    "ph": "X",
+                    "ts": scheduler_event.start_time,
+                    "dur": scheduler_event.runtime,
+                    "pid": scheduler_label,
+                    "tid": "main",
+                    "args": {
+                        "released_tasks": scheduler_event.released_tasks,
+                        "previously_placed_tasks": previously_placed_tasks,
+                        "total_tasks": scheduler_event.total_tasks,
+                        "placed_tasks": scheduler_event.placed_tasks,
+                        "unplaced_tasks": scheduler_event.unplaced_tasks,
+                    },
+                }
+                trace["traceEvents"].append(trace_event)
 
         if trace_fmt == "resource":
             resource_ids_to_canonical_names = {}
@@ -457,6 +490,9 @@ class CSVReader(object):
             }
         # Output all the tasks.
         for task in self.get_tasks(csv_path):
+            # Do not output the tasks if it does not fall within the given time.
+            if not check_if_time_intersects(task.start_time, task.completion_time):
+                continue
             if trace_fmt == "task":
                 if "." in task.name:
                     # pid = operator name, tid = callback name
@@ -515,9 +551,27 @@ class CSVReader(object):
             else:
                 raise ValueError(f"Undefined execution mode: {trace_fmt}")
 
+        # Find the tasks that conform to the show_deadlines requirements
+        tasks_for_deadline_events = []
+        if show_deadlines == "missed":
+            tasks_for_deadline_events.extend(
+                [
+                    missed_deadline_event.task
+                    for missed_deadline_event in self.get_missed_deadline_events(
+                        csv_path
+                    )
+                ]
+            )
+        elif show_deadlines == "always":
+            tasks_for_deadline_events.extend(
+                [task for task in self.get_tasks(csv_path)]
+            )
+
         # Output all the missed deadlines.
-        for missed_deadline_event in self.get_missed_deadline_events(csv_path):
-            task = missed_deadline_event.task
+        for task in tasks_for_deadline_events:
+            # Do not output the tasks if it does not fall within the given time.
+            if not check_if_time_intersects(task.start_time, task.completion_time):
+                continue
             if trace_fmt == "task":
                 if "." in task.name:
                     # pid = operator name, tid = callback name

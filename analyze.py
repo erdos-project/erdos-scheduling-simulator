@@ -56,11 +56,26 @@ flags.register_multi_flags_validator(
 
 flags.DEFINE_string("output_dir", ".", "The directory to output the graphs to.")
 
-# Enable the restriction of events to a particular regular expression.
+# Enable the restriction of events to a particular regular expression or time.
 flags.DEFINE_string(
     "task_name",
     ".*",
     "Regular expression that restricts the plots to the given tasks.",
+)
+flags.DEFINE_list(
+    "between_time",
+    None,
+    "The time for which to show the results (for Chrome traces) [in microseconds]",
+)
+flags.register_validator(
+    "between_time",
+    lambda value: FLAGS.chrome_trace is not None if value else True,
+    message="The between_time flag can only be used for Chrome traces.",
+)
+flags.register_validator(
+    "between_time",
+    lambda value: len(value) <= 2,
+    message="The between_time flag can have a maximum of two values.",
 )
 
 # Execution modes for the script.
@@ -77,6 +92,21 @@ flags.register_validator(
     "chrome_trace",
     lambda value: value in TRACE_FORMATS if value is not None else True,
     message=f"Only {TRACE_FORMATS} Chrome trace formats are allowed.",
+)
+
+# Allow the choice of seeing deadlines in Chrome trace or not.
+flags.DEFINE_enum(
+    "show_deadlines",
+    "missed",
+    ["never", "missed", "always"],
+    "Chooses if the deadline events are shown in the chrome trace. "
+    "'never' shows no deadline events, 'missed' shows only deadlines that were missed, "
+    "and 'always' shows all deadlines.",
+)
+flags.register_validator(
+    "show_deadlines",
+    lambda value: FLAGS.chrome_trace is not None if value else True,
+    message="The show_deadlines flag can only be used for Chrome traces.",
 )
 
 # Allow the choice of statistics to show for the metrics.
@@ -1146,11 +1176,17 @@ def main(argv):
                 FLAGS.output_dir, filename + f"_{FLAGS.chrome_trace}.json"
             )
             logger.debug(f"Saving trace for {scheduler_csv_file} at {output_path}")
+            if len(FLAGS.between_time) == 1:
+                between_time = int(FLAGS.between_time[0])
+            else:
+                between_time = tuple(map(int, FLAGS.between_time))
             csv_reader.to_chrome_trace(
                 scheduler_csv_file,
                 scheduler_label,
                 output_path,
+                between_time=between_time,
                 trace_fmt=FLAGS.chrome_trace,
+                show_deadlines=FLAGS.show_deadlines,
             )
 
         # Show statistics or plot the requested graphs.
