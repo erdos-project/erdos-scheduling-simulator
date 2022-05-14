@@ -544,7 +544,7 @@ class CSVReader(object):
                 )
                 for task in self.get_tasks(csv_path)
             }
-        # Output all the tasks.
+        # Output all the tasks and the requested deadlines.
         for task in self.get_tasks(csv_path):
             # Do not output the tasks if it does not fall within the given time.
             if not check_if_time_intersects(task.start_time, task.completion_time):
@@ -555,6 +555,8 @@ class CSVReader(object):
                     pid, tid = task.name.split(".", 1)
                 else:
                     pid = tid = task.name
+
+                # Output the task.
                 trace_event = {
                     "name": f"{task.name}::{task.timestamp}",
                     "cat": "task,duration",
@@ -576,6 +578,22 @@ class CSVReader(object):
                     },
                 }
                 trace["traceEvents"].append(trace_event)
+
+                # Output the deadline.
+                if (
+                    show_deadlines == "missed" and task.missed_deadline
+                ) or show_deadlines == "always":
+                    trace_event = {
+                        "name": f"{task.name}::{task.timestamp}",
+                        "cat": "task,missed,deadline,instant",
+                        "ph": "i",
+                        "ts": task.deadline,
+                        "pid": pid,
+                        "tid": tid,
+                        # The scope of the missed deadline events is per thread.
+                        "s": "t",
+                    }
+                    trace["traceEvents"].append(trace_event)
             elif trace_fmt == "resource":
                 pid = task_to_wp_resources[task][0].name
                 tids = [
@@ -583,6 +601,7 @@ class CSVReader(object):
                     for resource in task_to_wp_resources[task][1]
                 ]
                 for tid in tids:
+                    # Output the task.
                     trace_event = {
                         "name": f"{task.name}::{task.timestamp}",
                         "cat": "task,duration",
@@ -604,59 +623,22 @@ class CSVReader(object):
                         },
                     }
                     trace["traceEvents"].append(trace_event)
-            else:
-                raise ValueError(f"Undefined execution mode: {trace_fmt}")
 
-        # Find the tasks that conform to the show_deadlines requirements
-        tasks_for_deadline_events = []
-        if show_deadlines == "missed":
-            tasks_for_deadline_events.extend(
-                [task for task in self.get_tasks(csv_path) if task.missed_deadline]
-            )
-        elif show_deadlines == "always":
-            tasks_for_deadline_events.extend(
-                [task for task in self.get_tasks(csv_path)]
-            )
-
-        # Output all the requested deadlines.
-        for task in tasks_for_deadline_events:
-            # Do not output the tasks if it does not fall within the given time.
-            if not check_if_time_intersects(task.start_time, task.completion_time):
-                continue
-            if trace_fmt == "task":
-                if "." in task.name:
-                    # pid = operator name, tid = callback name
-                    pid, tid = task.name.split(".", 1)
-                else:
-                    pid = tid = task.name
-                trace_event = {
-                    "name": f"{task.name}::{task.timestamp}",
-                    "cat": "task,missed,deadline,instant",
-                    "ph": "i",
-                    "ts": task.deadline,
-                    "pid": pid,
-                    "tid": tid,
-                    "s": "t",  # The scope of the missed deadline events is per thread.
-                }
-                trace["traceEvents"].append(trace_event)
-            elif trace_fmt == "resource":
-                pid = task_to_wp_resources[task][0].name
-                tids = [
-                    resource_ids_to_canonical_names[resource.id]
-                    for resource in task_to_wp_resources[task][1]
-                ]
-                for tid in tids:
-                    trace_event = {
-                        "name": f"{task.name}::{task.timestamp}",
-                        "cat": "task,missed,deadline,instant",
-                        "ph": "i",
-                        "ts": task.deadline,
-                        "pid": pid,
-                        "tid": tid,
-                        # The scope of the missed deadline events is per thread.
-                        "s": "t",
-                    }
-                    trace["traceEvents"].append(trace_event)
+                    # Output the deadline.
+                    if (
+                        show_deadlines == "missed" and task.missed_deadline
+                    ) or show_deadlines == "always":
+                        trace_event = {
+                            "name": f"{task.name}::{task.timestamp}",
+                            "cat": "task,missed,deadline,instant",
+                            "ph": "i",
+                            "ts": task.deadline,
+                            "pid": pid,
+                            "tid": tid,
+                            # The scope of the missed deadline events is per thread.
+                            "s": "t",
+                        }
+                        trace["traceEvents"].append(trace_event)
             else:
                 raise ValueError(f"Undefined execution mode: {trace_fmt}")
 
