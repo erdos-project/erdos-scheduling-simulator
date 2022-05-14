@@ -161,36 +161,75 @@ class Task(object):
         return self.id == other.id
 
 
+class Simulator(object):
+    def __init__(self, csv_path: str, start_time: int, total_tasks: int):
+        self.csv_path = csv_path
+        self.start_time = start_time
+        self.total_tasks = total_tasks
+
+        # Values updated from the SIMULATOR_END event.
+        self.end_time = None
+        self.finished_tasks = None
+        self.missed_deadlines = None
+
+    def update_finish(self, csv_reading: str):
+        """Updates the values of the Simulator based on the SIMULATOR_END event from
+        CSV.
+
+        Args:
+            csv_reading (str): The CSV reading of type `SIMULATOR_END`.
+        """
+        assert (
+            csv_reading[1] == "SIMULATOR_END"
+        ), f"The event {csv_reading[1]} was not of type SIMULATOR_END."
+        self.end_time = int(csv_reading[0])
+        self.finished_tasks = int(csv_reading[2])
+        self.missed_deadlines = int(csv_reading[3])
+
+
+class Scheduler(object):
+    def __init__(
+        self,
+        start_time: int,
+        released_tasks: int,
+        previously_placed_tasks: int,
+        instance_id: int,
+    ):
+        self.start_time = start_time
+        self.released_tasks = released_tasks
+        self.previously_placed_tasks = previously_placed_tasks
+        self.total_tasks = released_tasks + previously_placed_tasks
+        self.instance_id = instance_id
+
+        # Values updated with the SCHEDULER_FINISHED event.
+        self.end_time = None
+        self.runtime = None
+        self.placed_tasks = None
+        self.unplaced_tasks = None
+
+    def update_finish(self, csv_reading: str):
+        """Updates the values of the Scheduler based on the SCHEDULER_FINISHED event
+        from CSV.
+
+        Args:
+            csv_reading (str): The CSV reading of type `SCHEDULER_FINISHED`.
+        """
+        assert (
+            csv_reading[1] == "SCHEDULER_FINISHED"
+        ), f"The event {csv_reading[1]} was not of type SCHEDULER_FINISHED."
+        assert (
+            self.end_time is None
+        ), f"The Scheduler at {self.start_time} was already finished."
+        self.end_time = int(csv_reading[0])
+        self.runtime = int(csv_reading[2])
+        self.placed_tasks = int(csv_reading[3])
+        self.unplaced_tasks = int(csv_reading[4])
+
+
 Resource = namedtuple("Resource", ["name", "id", "quantity"])
 WorkerPool = namedtuple("WorkerPool", ["name", "id", "resources"])
 WorkerPoolStats = namedtuple(
     "WorkerPoolStats", ["simulator_time", "resource_utilizations"]
-)
-Scheduler = namedtuple(
-    "Scheduler",
-    [
-        "start_time",
-        "end_time",
-        "runtime",
-        "released_tasks",
-        "previously_placed_tasks",
-        "total_tasks",
-        "placed_tasks",
-        "unplaced_tasks",
-        "instance_id",
-    ],
-)
-
-# Types for Events in the system.
-SimulatorStart = namedtuple("SimulatorStart", ["start_time", "total_tasks"])
-SimulatorEnd = namedtuple(
-    "SimulatorEnd", ["end_time", "finished_tasks", "missed_deadlines"]
-)
-SchedulerStart = namedtuple(
-    "SchedulerStart", ["simulator_time", "released_tasks", "placed_tasks"]
-)
-SchedulerFinished = namedtuple(
-    "SchedulerFinished", ["simulator_time", "runtime", "placed_tasks", "unplaced_tasks"]
 )
 WorkerPoolUtilization = namedtuple(
     "WorkerPoolUtilization",
@@ -217,6 +256,8 @@ class CSVReader(object):
                 readings[csv_path] = path_readings
 
         self._events = {}
+        self._simulators = {}
+        self._scheduler_invocations = {}
         self._tasks = {}
         self._worker_pools = {}
 
@@ -234,21 +275,20 @@ class CSVReader(object):
             events = []
             tasks_memo = {}
             worker_pool_memo = {}
+            schedulers = []
+            simulator = None
             for reading in csv_readings:
                 if reading[1] == "SIMULATOR_START":
-                    events.append(
-                        SimulatorStart(
-                            start_time=int(reading[0]), total_tasks=int(reading[2])
-                        )
+                    simulator = Simulator(
+                        csv_path=csv_path,
+                        start_time=int(reading[0]),
+                        total_tasks=reading[2],
                     )
                 elif reading[1] == "SIMULATOR_END":
-                    events.append(
-                        SimulatorEnd(
-                            end_time=int(reading[0]),
-                            finished_tasks=int(reading[2]),
-                            missed_deadlines=int(reading[3]),
-                        )
-                    )
+                    assert (
+                        simulator is not None
+                    ), "No SIMULATOR_START found for a corresponding SIMULATOR_END."
+                    simulator.update_finish(reading)
                 elif reading[1] == "TASK_RELEASE":
                     tasks_memo[reading[8]] = Task(
                         name=reading[2],
@@ -266,22 +306,17 @@ class CSVReader(object):
                     # Update the task with the completion event data.
                     tasks_memo[reading[5]].update_missed_deadline(reading)
                 elif reading[1] == "SCHEDULER_START":
-                    events.append(
-                        SchedulerStart(
-                            simulator_time=int(reading[0]),
+                    schedulers.append(
+                        Scheduler(
+                            start_time=int(reading[0]),
                             released_tasks=int(reading[2]),
-                            placed_tasks=int(reading[3]),
+                            previously_placed_tasks=int(reading[3]),
+                            instance_id=len(schedulers) + 1,
                         )
                     )
                 elif reading[1] == "SCHEDULER_FINISHED":
-                    events.append(
-                        SchedulerFinished(
-                            simulator_time=int(reading[0]),
-                            runtime=int(reading[2]),
-                            placed_tasks=int(reading[3]),
-                            unplaced_tasks=int(reading[4]),
-                        )
-                    )
+                    # Update the Scheduler with the completion event data.
+                    schedulers[-1].update_finish(reading)
                 elif reading[1] == "WORKER_POOL_UTILIZATION":
                     events.append(
                         WorkerPoolUtilization(
@@ -309,9 +344,11 @@ class CSVReader(object):
                 else:
                     continue
             self._events[csv_path] = events
+            self._simulators[csv_path] = simulator
             self._tasks[csv_path] = list(
                 sorted(tasks_memo.values(), key=attrgetter("release_time"))
             )
+            self._scheduler_invocations[csv_path] = schedulers
             self._worker_pools[csv_path] = worker_pool_memo
 
     def get_scheduler_invocations(self, csv_path: str) -> Sequence[Scheduler]:
@@ -325,41 +362,7 @@ class CSVReader(object):
             A `Sequence[Scheduler]` that depicts the number of placed, unplaced
             and total tasks, along with the runtime of the invocation.
         """
-        scheduler_events = []
-        for event in self._events[csv_path]:
-            if type(event) == SchedulerStart or type(event) == SchedulerFinished:
-                scheduler_events.append(event)
-
-        # Form scheduler invocation events from the retrieved events.
-        scheduler_invocation_events = []
-        for index, (scheduler_start, scheduler_finish) in enumerate(
-            zip(scheduler_events[::2], scheduler_events[1::2]), start=1
-        ):
-            assert (
-                type(scheduler_start) == SchedulerStart
-            ), "Incorrect type found for scheduler_start event: {}".format(
-                type(scheduler_start)
-            )
-            assert (
-                type(scheduler_finish) == SchedulerFinished
-            ), "Incorrect type found for scheduler_finish event: {}".format(
-                type(scheduler_finish)
-            )
-            scheduler_invocation_events.append(
-                Scheduler(
-                    start_time=scheduler_start.simulator_time,
-                    end_time=scheduler_finish.simulator_time,
-                    runtime=scheduler_finish.runtime,
-                    released_tasks=scheduler_start.released_tasks,
-                    previously_placed_tasks=scheduler_start.placed_tasks,
-                    total_tasks=scheduler_start.released_tasks
-                    + scheduler_start.placed_tasks,
-                    placed_tasks=scheduler_finish.placed_tasks,
-                    unplaced_tasks=scheduler_finish.unplaced_tasks,
-                    instance_id=index,
-                )
-            )
-        return scheduler_invocation_events
+        return self._scheduler_invocations[csv_path]
 
     def get_worker_pools(self, csv_path: str) -> Sequence[WorkerPool]:
         """Retrieves the details of the WorkerPool for the given execution.
@@ -447,10 +450,7 @@ class CSVReader(object):
         Returns:
             The end time of the simulation of the given CSV file.
         """
-        for event in self._events[csv_path]:
-            if type(event) == SimulatorEnd:
-                return event.end_time
-        raise ValueError("No SIMULATOR_END event found in the logs.")
+        return self._simulators[csv_path].end_time
 
     def to_chrome_trace(
         self,
