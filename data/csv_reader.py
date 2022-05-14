@@ -3,6 +3,7 @@ import json
 import uuid
 from collections import defaultdict, namedtuple
 from functools import total_ordering
+from operator import attrgetter
 from typing import Mapping, Optional, Sequence, Tuple, Union
 
 import absl  # noqa: F401
@@ -16,10 +17,10 @@ class Task(object):
         name: str,
         timestamp: int,
         task_id: uuid.UUID,
+        intended_release_time: int,
         release_time: int,
         runtime: int,
         deadline: int,
-        intended_release_time: int = -1,
     ):
         self.name = name
         self.timestamp = timestamp
@@ -185,7 +186,6 @@ SimulatorStart = namedtuple("SimulatorStart", ["start_time", "total_tasks"])
 SimulatorEnd = namedtuple(
     "SimulatorEnd", ["end_time", "finished_tasks", "missed_deadlines"]
 )
-TaskRelease = namedtuple("TaskRelease", ["simulator_time", "task"])
 SchedulerStart = namedtuple(
     "SchedulerStart", ["simulator_time", "released_tasks", "placed_tasks"]
 )
@@ -217,6 +217,7 @@ class CSVReader(object):
                 readings[csv_path] = path_readings
 
         self._events = {}
+        self._tasks = {}
         self._worker_pools = {}
 
         self.parse_events(readings)
@@ -249,18 +250,14 @@ class CSVReader(object):
                         )
                     )
                 elif reading[1] == "TASK_RELEASE":
-                    task = Task(
+                    tasks_memo[reading[8]] = Task(
                         name=reading[2],
                         timestamp=int(reading[3]),
                         task_id=uuid.UUID(reading[8]),
+                        intended_release_time=int(reading[4]),
                         release_time=int(reading[5]),
                         runtime=int(reading[6]),
                         deadline=int(reading[7]),
-                        intended_release_time=int(reading[4]),
-                    )
-                    tasks_memo[reading[8]] = task
-                    events.append(
-                        TaskRelease(simulator_time=int(reading[0]), task=task)
                     )
                 elif reading[1] == "TASK_FINISHED":
                     # Update the task with the completion event data.
@@ -312,6 +309,9 @@ class CSVReader(object):
                 else:
                     continue
             self._events[csv_path] = events
+            self._tasks[csv_path] = list(
+                sorted(tasks_memo.values(), key=attrgetter("release_time"))
+            )
             self._worker_pools[csv_path] = worker_pool_memo
 
     def get_scheduler_invocations(self, csv_path: str) -> Sequence[Scheduler]:
@@ -420,11 +420,7 @@ class CSVReader(object):
             A `Sequence[Task]` that depicts the tasks in the execution,
             ordered by their release time.
         """
-        tasks = []
-        for event in self._events[csv_path]:
-            if type(event) == TaskRelease:
-                tasks.append(event.task)
-        return tasks
+        return self._tasks[csv_path]
 
     def get_tasks_with_placement_issues(self, csv_path: str) -> Sequence[Task]:
         """Retrieves the tasks that had placement issues (i.e., had a TASK_SKIP).
@@ -437,11 +433,9 @@ class CSVReader(object):
             A `Sequence[Task]` that contains the task with placement issues, ordered by
             release time.
         """
-        tasks = []
-        for event in self._events[csv_path]:
-            if type(event) == TaskRelease and len(event.task.skipped_times) > 0:
-                tasks.append(event.task)
-        return tasks
+        return [
+            task for task in self.get_tasks(csv_path) if len(task.skipped_times) > 0
+        ]
 
     def get_simulator_end_time(self, csv_path: str) -> int:
         """Retrieves the time at which the simulator ended.
