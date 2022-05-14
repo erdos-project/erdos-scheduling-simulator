@@ -684,10 +684,8 @@ def analyze_task_placement_delay(
     max_delay = -sys.maxsize
     plot_colors = [colors[label] for label in scheduler_labels]
     for csv_file in scheduler_csv_files:
-        task_placements = csv_reader.get_task_placements(csv_file)
         placement_delay = [
-            (placement.simulator_time - placement.task.release_time) / 1000
-            for placement in task_placements
+            task.get_placement_delay() / 1000 for task in csv_reader.get_tasks(csv_path)
         ]
         placement_delays.append(placement_delay)
         min_delay = min(min_delay, min(placement_delay))
@@ -728,12 +726,6 @@ def log_detailed_task_statistics(
         if re.match(task_name_regex, task.name):
             grouped_tasks[task.name].append(task)
 
-    # Get the placements grouped by the task name.
-    placements = defaultdict(dict)
-    for placement in csv_reader.get_task_placements(csv_file):
-        if re.match(task_name_regex, placement.task.name):
-            placements[placement.task.name][str(placement.task.id)] = placement
-
     # Colorify the results.
     R = "\033[0;31;40m"
     G = "\033[0;32;40m"
@@ -743,7 +735,6 @@ def log_detailed_task_statistics(
     for task_name, tasks in grouped_tasks.items():
         results = []
         for task in tasks:
-            placement = placements[task_name][str(task.id)]
             results.append(
                 tuple(
                     map(
@@ -757,14 +748,14 @@ def log_detailed_task_statistics(
                             if task.intended_release_time != -1
                             else "-",
                             task.release_time / 1000,
-                            placement.simulator_time / 1000,
+                            task.placement_time / 1000,
                             task.start_time / 1000,
                             task.runtime / 1000,
                             task.deadline / 1000,
                             task.completion_time / 1000,
                             task.missed_deadline,
                             task.get_deadline_delay() / 1000,
-                            (placement.simulator_time - task.release_time) / 1000,
+                            task.get_placement_delay() / 1000,
                             task.get_release_delay() / 1000
                             if task.intended_release_time != -1
                             else "-",
@@ -933,12 +924,6 @@ def log_basic_task_statistics(
         if re.match(task_name_regex, task.name):
             tasks[task.name].append(task)
 
-    # Get the placements grouped by the task name.
-    placements = defaultdict(list)
-    for placement in csv_reader.get_task_placements(csv_file):
-        if re.match(task_name_regex, placement.task.name):
-            placements[placement.task.name].append(placement)
-
     # Gather the results.
     results = []
     total_missed_deadline_delays = []
@@ -952,10 +937,7 @@ def log_basic_task_statistics(
         total_missed_deadline_delays.extend(missed_deadline_delays)
 
         # Gather placement delays.
-        placement_delays = [
-            (placement.simulator_time - placement.task.release_time) / 1000
-            for placement in placements[task_name]
-        ]
+        placement_delays = [task.get_placement_delay() / 1000 for task in grouped_tasks]
         total_placement_delays.extend(placement_delays)
 
         results.append(
@@ -1031,19 +1013,11 @@ def log_aggregate_stats(
             if re.match(task_name_regex, task.name):
                 tasks.append(task)
 
-        placements = []
-        for placement in csv_reader.get_task_placements(csv_file):
-            if re.match(task_name_regex, placement.task.name):
-                placements.append(placement)
-
         num_timestamps = FLAGS.max_timestamp if FLAGS.max_timestamp else "-"
         num_missed = len(list(filter(attrgetter("missed_deadline"), tasks)))
 
         placement_delay = stat_function(
-            [
-                (placement.simulator_time - placement.task.release_time) / 1000
-                for placement in placements
-            ]
+            [task.get_placement_delay() / 1000 for task in tasks]
         )
         deadline_delay = stat_function(
             [task.get_deadline_delay() / 1000 for task in tasks]

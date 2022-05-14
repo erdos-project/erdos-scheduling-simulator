@@ -20,7 +20,6 @@ class Task(object):
         runtime: int,
         deadline: int,
         intended_release_time: int = -1,
-        start_time: int = -1,
         completion_time: int = -1,
         missed_deadline: bool = False,
         skipped_times: Sequence[int] = [],
@@ -33,10 +32,16 @@ class Task(object):
         self.release_time = release_time
         self.runtime = runtime
         self.deadline = deadline
-        self.start_time = start_time
         self.completion_time = completion_time
         self.missed_deadline = missed_deadline
         self.skipped_times = skipped_times
+
+        # Values updated from the TASK_PLACEMENT event.
+        self.was_placed = False
+        self.start_time = None
+        self.placement_time = None
+        self.placed_on_worker_pool = None
+        self.resources_used = None
 
     def get_deadline_delay(self) -> int:
         """Retrieve the deadline delay in microseconds.
@@ -64,6 +69,33 @@ class Task(object):
         """
         if self.intended_release_time != -1:
             return self.release_time - self.intended_release_time
+
+    def get_placement_delay(self) -> int:
+        """Retrieve the placement delay in microseconds.
+
+        Returns:
+            The time between the placement of the task and its release.
+        """
+        assert self.was_placed, f"The task {self} was never placed."
+        return self.placement_time - self.release_time
+
+    def update_placement(self, csv_reading: str):
+        """Updates the values of the Task based on the TASK_PLACEMENT event from CSV.
+
+        Args:
+            csv_reading (str): The CSV reading of type `TASK_PLACEMENT`.
+        """
+        assert (
+            csv_reading[1] == "TASK_PLACEMENT"
+        ), f"The event {csv_reading[1]} was not of type TASK_PLACEMENT."
+        assert self.was_placed == False, f"The task {self} was already placed."
+        placement_time = int(csv_reading[0])
+        self.start_time = self.placement_time = placement_time
+        self.placed_on_worker_pool = uuid.UUID(csv_reading[5])
+        self.resources_used = [
+            Resource(*csv_reading[i : i + 3]) for i in range(6, len(csv_reading), 3)
+        ]
+        self.was_placed = True
 
     def __str__(self):
         return f"Task(name={self.name}, timestamp={self.timestamp})"
@@ -116,9 +148,6 @@ SimulatorEnd = namedtuple(
     "SimulatorEnd", ["end_time", "finished_tasks", "missed_deadlines"]
 )
 TaskRelease = namedtuple("TaskRelease", ["simulator_time", "task"])
-TaskPlacement = namedtuple(
-    "TaskPlacement", ["simulator_time", "task", "worker_pool", "resources"]
-)
 TaskFinished = namedtuple("TaskFinished", ["simulator_time", "task"])
 MissedDeadline = namedtuple("MissedDeadline", ["simulator_time", "task"])
 SchedulerStart = namedtuple(
@@ -246,23 +275,8 @@ class CSVReader(object):
                         resources=resources,
                     )
                 elif reading[1] == "TASK_PLACEMENT":
-                    # Update the task's start time (if needed)
-                    task = tasks_memo[reading[4]]
-                    simulator_time = int(reading[0])
-                    if task.start_time == -1:
-                        task.start_time = simulator_time
-
-                    resources = [
-                        Resource(*reading[i : i + 3]) for i in range(6, len(reading), 3)
-                    ]
-                    events.append(
-                        TaskPlacement(
-                            simulator_time=simulator_time,
-                            task=tasks_memo[reading[4]],
-                            worker_pool=worker_pool_memo[reading[5]],
-                            resources=resources,
-                        )
-                    )
+                    # Update the task with the placement event data.
+                    tasks_memo[reading[4]].update_placement(reading)
                 elif reading[1] == "TASK_SKIP":
                     task = tasks_memo[reading[4]]
                     task.skipped_times.append(int(reading[0]))
@@ -382,23 +396,6 @@ class CSVReader(object):
             if type(event) == TaskRelease:
                 tasks.append(event.task)
         return tasks
-
-    def get_task_placements(self, csv_path: str) -> Sequence[TaskPlacement]:
-        """Retrives the task placements events.
-
-        Args:
-            csv_path (`str`): The path to the CSV file whose tasks need to
-                be retrieved.
-
-        Returns:
-            A `Sequence[TaskPlacement]` that contains the task placements,
-            ordered by their placement time.
-        """
-        task_placements = []
-        for event in self._events[csv_path]:
-            if type(event) == TaskPlacement:
-                task_placements.append(event)
-        return task_placements
 
     def get_tasks_with_placement_issues(self, csv_path: str) -> Sequence[Task]:
         """Retrieves the tasks that had placement issues (i.e., had a TASK_SKIP).
@@ -525,7 +522,8 @@ class CSVReader(object):
 
         if trace_fmt == "resource":
             resource_ids_to_canonical_names = {}
-            for worker_pool in self.get_worker_pools(csv_path).values():
+            worker_pools = self.get_worker_pools(csv_path)
+            for worker_pool in worker_pools.values():
                 resource_counter = defaultdict(int)
                 for resource in worker_pool.resources:
                     resource_counter[resource.name] += 1
@@ -533,11 +531,11 @@ class CSVReader(object):
                         resource.id
                     ] = f"{resource.name}_{resource_counter[resource.name]}"
             task_to_wp_resources = {
-                task_placement.task: (
-                    task_placement.worker_pool,
-                    task_placement.resources,
+                task: (
+                    worker_pools[str(task.placed_on_worker_pool)],
+                    task.resources_used,
                 )
-                for task_placement in self.get_task_placements(csv_path)
+                for task in self.get_tasks(csv_path)
             }
         # Output all the tasks.
         for task in self.get_tasks(csv_path):
