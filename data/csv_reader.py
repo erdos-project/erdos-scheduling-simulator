@@ -22,7 +22,6 @@ class Task(object):
         intended_release_time: int = -1,
         completion_time: int = -1,
         missed_deadline: bool = False,
-        skipped_times: Sequence[int] = [],
     ):
         self.name = name
         self.timestamp = timestamp
@@ -34,7 +33,6 @@ class Task(object):
         self.deadline = deadline
         self.completion_time = completion_time
         self.missed_deadline = missed_deadline
-        self.skipped_times = skipped_times
 
         # Values updated from the TASK_PLACEMENT event.
         self.was_placed = False
@@ -42,6 +40,9 @@ class Task(object):
         self.placement_time = None
         self.placed_on_worker_pool = None
         self.resources_used = None
+
+        # Values updated from the TASK_SKIP event.
+        self.skipped_times = []
 
     def get_deadline_delay(self) -> int:
         """Retrieve the deadline delay in microseconds.
@@ -96,6 +97,17 @@ class Task(object):
             Resource(*csv_reading[i : i + 3]) for i in range(6, len(csv_reading), 3)
         ]
         self.was_placed = True
+
+    def update_skip(self, csv_reading: str):
+        """Updates the values of the Task based on the TASK_SKIP event from CSV.
+
+        Args:
+            csv_reading (str): The CSV reading of type `TASK_SKIP`.
+        """
+        assert (
+            csv_reading[1] == "TASK_SKIP"
+        ), f"The event {csv_reading[1]} was not of type TASK_SKIP."
+        self.skipped_times.append(int(csv_reading[0]))
 
     def __str__(self):
         return f"Task(name={self.name}, timestamp={self.timestamp})"
@@ -221,7 +233,6 @@ class CSVReader(object):
                         runtime=int(reading[6]),
                         deadline=int(reading[7]),
                         intended_release_time=int(reading[4]),
-                        skipped_times=[],
                     )
                     tasks_memo[reading[8]] = task
                     events.append(
@@ -278,8 +289,8 @@ class CSVReader(object):
                     # Update the task with the placement event data.
                     tasks_memo[reading[4]].update_placement(reading)
                 elif reading[1] == "TASK_SKIP":
-                    task = tasks_memo[reading[4]]
-                    task.skipped_times.append(int(reading[0]))
+                    # Update the task with the skip data.
+                    tasks_memo[reading[4]].update_skip(reading)
                 else:
                     continue
             self._events[csv_path] = events
