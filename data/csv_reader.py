@@ -20,7 +20,6 @@ class Task(object):
         runtime: int,
         deadline: int,
         intended_release_time: int = -1,
-        completion_time: int = -1,
         missed_deadline: bool = False,
     ):
         self.name = name
@@ -31,7 +30,6 @@ class Task(object):
         self.release_time = release_time
         self.runtime = runtime
         self.deadline = deadline
-        self.completion_time = completion_time
         self.missed_deadline = missed_deadline
 
         # Values updated from the TASK_PLACEMENT event.
@@ -43,6 +41,9 @@ class Task(object):
 
         # Values updated from the TASK_SKIP event.
         self.skipped_times = []
+
+        # Values updated from the TASK_FINISHED event.
+        self.completion_time = completion_time
 
     def get_deadline_delay(self) -> int:
         """Retrieve the deadline delay in microseconds.
@@ -109,6 +110,17 @@ class Task(object):
         ), f"The event {csv_reading[1]} was not of type TASK_SKIP."
         self.skipped_times.append(int(csv_reading[0]))
 
+    def update_finish(self, csv_reading: str):
+        """Updates the values of the Task based on the TASK_FINISHED event from CSV.
+
+        Args:
+            csv_reading (str): The CSV reading of type `TASK_FINISHED`.
+        """
+        assert (
+            csv_reading[1] == "TASK_FINISHED"
+        ), f"The event {csv_reading[1]} was not of type TASK_FINISHED."
+        self.completion_time = int(csv_reading[4])
+
     def __str__(self):
         return f"Task(name={self.name}, timestamp={self.timestamp})"
 
@@ -160,7 +172,6 @@ SimulatorEnd = namedtuple(
     "SimulatorEnd", ["end_time", "finished_tasks", "missed_deadlines"]
 )
 TaskRelease = namedtuple("TaskRelease", ["simulator_time", "task"])
-TaskFinished = namedtuple("TaskFinished", ["simulator_time", "task"])
 MissedDeadline = namedtuple("MissedDeadline", ["simulator_time", "task"])
 SchedulerStart = namedtuple(
     "SchedulerStart", ["simulator_time", "released_tasks", "placed_tasks"]
@@ -239,11 +250,8 @@ class CSVReader(object):
                         TaskRelease(simulator_time=int(reading[0]), task=task)
                     )
                 elif reading[1] == "TASK_FINISHED":
-                    task = tasks_memo[reading[6]]
-                    task.completion_time = int(reading[4])
-                    events.append(
-                        TaskFinished(simulator_time=int(reading[0]), task=task)
-                    )
+                    # Update the task with the completion event data.
+                    tasks_memo[reading[6]].update_finish(reading)
                 elif reading[1] == "MISSED_DEADLINE":
                     task = tasks_memo[reading[5]]
                     task.missed_deadline = True

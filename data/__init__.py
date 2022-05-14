@@ -9,7 +9,6 @@ from .csv_reader import (
     SimulatorEnd,
     SimulatorStart,
     Task,
-    TaskFinished,
     TaskRelease,
     WorkerPool,
     WorkerPoolStats,
