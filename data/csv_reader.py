@@ -93,7 +93,7 @@ class Task(object):
         assert (
             csv_reading[1] == "TASK_PLACEMENT"
         ), f"The event {csv_reading[1]} was not of type TASK_PLACEMENT."
-        assert self.was_placed == False, f"The task {self} was already placed."
+        assert not self.was_placed, f"The task {self} was already placed."
         placement_time = int(csv_reading[0])
         self.start_time = self.placement_time = placement_time
         self.placed_on_worker_pool = uuid.UUID(csv_reading[5])

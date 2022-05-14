@@ -685,7 +685,7 @@ def analyze_task_placement_delay(
     plot_colors = [colors[label] for label in scheduler_labels]
     for csv_file in scheduler_csv_files:
         placement_delay = [
-            task.get_placement_delay() / 1000 for task in csv_reader.get_tasks(csv_path)
+            task.get_placement_delay() / 1000 for task in csv_reader.get_tasks(csv_file)
         ]
         placement_delays.append(placement_delay)
         min_delay = min(min_delay, min(placement_delay))
