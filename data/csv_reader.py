@@ -16,10 +16,10 @@ class Task(object):
         name: str,
         timestamp: int,
         task_id: uuid.UUID,
-        intended_release_time: int,
         release_time: int,
         runtime: int,
         deadline: int,
+        intended_release_time: int = -1,
         start_time: int = -1,
         completion_time: int = -1,
         missed_deadline: bool = False,
@@ -53,6 +53,17 @@ class Task(object):
             f"the missed deadline flag ({self.missed_deadline}."
         )
         return deadline_delay
+
+    def get_release_delay(self) -> Optional[int]:
+        """Retrieve the release delay of the task.
+
+        If no intended release time is found, the method returns None.
+
+        Returns:
+            The time between the intended and the actual release of the task.
+        """
+        if self.intended_release_time != -1:
+            return self.release_time - self.intended_release_time
 
     def __str__(self):
         return f"Task(name={self.name}, timestamp={self.timestamp})"
@@ -177,10 +188,10 @@ class CSVReader(object):
                         name=reading[2],
                         timestamp=int(reading[3]),
                         task_id=uuid.UUID(reading[8]),
-                        intended_release_time=int(reading[4]),
                         release_time=int(reading[5]),
                         runtime=int(reading[6]),
                         deadline=int(reading[7]),
+                        intended_release_time=int(reading[4]),
                         skipped_times=[],
                     )
                     tasks_memo[reading[8]] = task

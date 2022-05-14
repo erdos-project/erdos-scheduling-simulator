@@ -765,7 +765,7 @@ def log_detailed_task_statistics(
                             task.missed_deadline,
                             task.get_deadline_delay() / 1000,
                             (placement.simulator_time - task.release_time) / 1000,
-                            (task.release_time - task.intended_release_time) / 1000
+                            task.get_release_delay() / 1000
                             if task.intended_release_time != -1
                             else "-",
                         ),
