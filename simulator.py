@@ -783,18 +783,15 @@ class Simulator(object):
                 is logged (in us).
         """
         # Cumulate the resources from all the WorkerPools
-        total_resources = Resources(_logger=self._logger)
         for worker_pool in self._worker_pools.values():
-            total_resources += worker_pool.resources
-
-        # Log the utilization of the final set of resources.
-        for resource_name in set(
-            map(attrgetter("name"), total_resources._resource_vector.keys())
-        ):
-            resource = Resource(name=resource_name, _id="any")
-            self._csv_logger.debug(
-                f"{sim_time},WORKER_POOL_UTILIZATION,"
-                f"{resource_name},"
-                f"{total_resources.get_allocated_quantity(resource)},"
-                f"{total_resources.get_available_quantity(resource)}"
-            )
+            worker_pool_resources = worker_pool.resources
+            for resource_name in set(
+                map(lambda value: value[0].name, worker_pool_resources.resources)
+            ):
+                resource = Resource(name=resource_name, _id="any")
+                self._csv_logger.debug(
+                    f"{sim_time},WORKER_POOL_UTILIZATION,{worker_pool.id},"
+                    f"{resource_name},"
+                    f"{worker_pool_resources.get_allocated_quantity(resource)},"
+                    f"{worker_pool_resources.get_available_quantity(resource)}"
+                )

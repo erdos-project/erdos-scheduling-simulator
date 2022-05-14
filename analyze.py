@@ -814,7 +814,7 @@ def analyze_missed_deadlines(
     # Group the missed deadlines by their task name (if regex is matched).
     missed_deadline_by_task_name = defaultdict(list)
     missed_deadline_delays = []
-    for task in csv_reader.get_tasks():
+    for task in csv_reader.get_tasks(scheduler_csv_file):
         if re.match(task_name_regex, task.name) and task.missed_deadline:
             missed_deadline_by_task_name[task.name].append(task)
             missed_deadline_delays.append(task.get_deadline_delay() / 1000)
@@ -1160,17 +1160,21 @@ def main(argv):
                 FLAGS.output_dir, filename + f"_{FLAGS.chrome_trace}.json"
             )
             logger.debug(f"Saving trace for {scheduler_csv_file} at {output_path}")
-            if len(FLAGS.between_time) == 1:
+            if FLAGS.between_time and len(FLAGS.between_time) == 1:
                 between_time = int(FLAGS.between_time[0])
-            else:
+            elif FLAGS.between_time:
                 between_time = tuple(map(int, FLAGS.between_time))
+            else:
+                between_time = None
             csv_reader.to_chrome_trace(
                 scheduler_csv_file,
                 scheduler_label,
                 output_path,
                 between_time=between_time,
                 trace_fmt=FLAGS.chrome_trace,
-                show_deadlines=FLAGS.show_deadlines,
+                show_deadlines=FLAGS.show_deadlines
+                if FLAGS.show_deadlines
+                else "missed",
                 with_placement_issues=FLAGS.with_placement_issues,
             )
 

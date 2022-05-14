@@ -2,7 +2,7 @@ import csv
 import json
 import uuid
 from collections import defaultdict
-from operator import attrgetter
+from operator import add, attrgetter
 from typing import Mapping, Optional, Sequence, Tuple, Union
 
 import absl  # noqa: F401
@@ -52,7 +52,6 @@ class CSVReader(object):
             tasks = {}
             worker_pools = {}
             schedulers = []
-            worker_pool_utilizations = []
             for reading in csv_readings:
                 if reading[1] == "SIMULATOR_START":
                     simulator = Simulator(
@@ -94,12 +93,12 @@ class CSVReader(object):
                     # Update the Scheduler with the completion event data.
                     schedulers[-1].update_finish(reading)
                 elif reading[1] == "WORKER_POOL_UTILIZATION":
-                    worker_pool_utilizations.append(
+                    worker_pools[reading[2]].utilizations.append(
                         WorkerPoolUtilization(
                             simulator_time=int(reading[0]),
-                            resource_name=reading[2],
-                            allocated_quantity=float(reading[3]),
-                            available_quantity=float(reading[4]),
+                            resource_name=reading[3],
+                            allocated_quantity=float(reading[4]),
+                            available_quantity=float(reading[5]),
                         )
                     )
                 elif reading[1] == "WORKER_POOL":
@@ -119,12 +118,11 @@ class CSVReader(object):
                     tasks[reading[4]].update_skip(reading)
                 else:
                     continue
-            simulator.worker_pools = worker_pools
+            simulator.worker_pools = worker_pools.values()
             simulator.tasks = list(
                 sorted(tasks.values(), key=attrgetter("release_time"))
             )
             simulator.scheduler_invocations = schedulers
-            simulator.worker_pool_utilizations = worker_pool_utilizations
             self._simulators[csv_path] = simulator
 
     def get_scheduler_invocations(self, csv_path: str) -> Sequence[Scheduler]:
@@ -166,18 +164,25 @@ class CSVReader(object):
             across all the WorkerPools at each invocation of the scheduler.
         """
         worker_pool_utilizations = defaultdict(list)
-        for utilization in self._simulators[csv_path].worker_pool_utilizations:
-            worker_pool_utilizations[utilization.simulator_time].append(utilization)
+        for worker_pool in self.get_worker_pools(csv_path):
+            for utilization in worker_pool.utilizations:
+                worker_pool_utilizations[utilization.simulator_time].append(utilization)
 
         # Order the utilizations and construct a stats object.
         worker_pool_stats = []
         for simulator_time in sorted(worker_pool_utilizations.keys()):
             utilizations = worker_pool_utilizations[simulator_time]
-            resource_utilizations = {}
+            resource_utilizations = defaultdict(lambda: (0, 0))
             for utilization in utilizations:
-                resource_utilizations[utilization.resource_name] = (
-                    utilization.allocated_quantity,
-                    utilization.available_quantity,
+                resource_utilizations[utilization.resource_name] = tuple(
+                    map(
+                        add,
+                        resource_utilizations[utilization.resource_name],
+                        (
+                            utilization.allocated_quantity,
+                            utilization.available_quantity,
+                        ),
+                    )
                 )
             worker_pool_stats.append(
                 WorkerPoolStats(
@@ -254,8 +259,9 @@ class CSVReader(object):
             "traceEvents": [],
             "otherData": {"csv_path": csv_path, "scheduler": scheduler_label},
         }
-        if not isinstance(between_time, int) or (
-            isinstance(between_time, Sequence) and len(between_time) != 2
+        if between_time and (
+            not isinstance(between_time, int)
+            or (isinstance(between_time, Sequence) and len(between_time) != 2)
         ):
             raise ValueError(
                 "between_time should either be an integer specifying an exact time, "
@@ -304,8 +310,7 @@ class CSVReader(object):
 
         if trace_fmt == "resource":
             resource_ids_to_canonical_names = {}
-            worker_pools = self.get_worker_pools(csv_path)
-            for worker_pool in worker_pools.values():
+            for worker_pool in self.get_worker_pools(csv_path):
                 resource_counter = defaultdict(int)
                 for resource in worker_pool.resources:
                     resource_counter[resource.name] += 1
