@@ -8,6 +8,16 @@ from typing import Mapping, Optional, Sequence, Tuple, Union
 
 import absl  # noqa: F401
 
+Resource = namedtuple("Resource", ["name", "id", "quantity"])
+WorkerPool = namedtuple("WorkerPool", ["name", "id", "resources"])
+WorkerPoolStats = namedtuple(
+    "WorkerPoolStats", ["simulator_time", "resource_utilizations"]
+)
+WorkerPoolUtilization = namedtuple(
+    "WorkerPoolUtilization",
+    ["simulator_time", "resource_name", "allocated_quantity", "available_quantity"],
+)
+
 
 # Types for Objects in the simulation.
 @total_ordering
@@ -35,7 +45,7 @@ class Task(object):
         self.was_placed = False
         self.start_time = None
         self.placement_time = None
-        self.placed_on_worker_pool = None
+        self.worker_pool = None
         self.resources_used = None
 
         # Values updated from the TASK_SKIP event.
@@ -84,11 +94,15 @@ class Task(object):
         assert self.was_placed, f"The task {self} was never placed."
         return self.placement_time - self.release_time
 
-    def update_placement(self, csv_reading: str):
+    def update_placement(
+        self, csv_reading: str, worker_pools: Mapping[str, WorkerPool]
+    ):
         """Updates the values of the Task based on the TASK_PLACEMENT event from CSV.
 
         Args:
             csv_reading (str): The CSV reading of type `TASK_PLACEMENT`.
+            worker_pools (Mapping[str, WorkerPool]): A name to WorkerPool mapping to
+                allow tasks to directly reference WorkerPools.
         """
         assert (
             csv_reading[1] == "TASK_PLACEMENT"
@@ -96,7 +110,7 @@ class Task(object):
         assert not self.was_placed, f"The task {self} was already placed."
         placement_time = int(csv_reading[0])
         self.start_time = self.placement_time = placement_time
-        self.placed_on_worker_pool = uuid.UUID(csv_reading[5])
+        self.worker_pool = worker_pools[csv_reading[5]]
         self.resources_used = [
             Resource(*csv_reading[i : i + 3]) for i in range(6, len(csv_reading), 3)
         ]
@@ -161,32 +175,6 @@ class Task(object):
         return self.id == other.id
 
 
-class Simulator(object):
-    def __init__(self, csv_path: str, start_time: int, total_tasks: int):
-        self.csv_path = csv_path
-        self.start_time = start_time
-        self.total_tasks = total_tasks
-
-        # Values updated from the SIMULATOR_END event.
-        self.end_time = None
-        self.finished_tasks = None
-        self.missed_deadlines = None
-
-    def update_finish(self, csv_reading: str):
-        """Updates the values of the Simulator based on the SIMULATOR_END event from
-        CSV.
-
-        Args:
-            csv_reading (str): The CSV reading of type `SIMULATOR_END`.
-        """
-        assert (
-            csv_reading[1] == "SIMULATOR_END"
-        ), f"The event {csv_reading[1]} was not of type SIMULATOR_END."
-        self.end_time = int(csv_reading[0])
-        self.finished_tasks = int(csv_reading[2])
-        self.missed_deadlines = int(csv_reading[3])
-
-
 class Scheduler(object):
     def __init__(
         self,
@@ -226,15 +214,35 @@ class Scheduler(object):
         self.unplaced_tasks = int(csv_reading[4])
 
 
-Resource = namedtuple("Resource", ["name", "id", "quantity"])
-WorkerPool = namedtuple("WorkerPool", ["name", "id", "resources"])
-WorkerPoolStats = namedtuple(
-    "WorkerPoolStats", ["simulator_time", "resource_utilizations"]
-)
-WorkerPoolUtilization = namedtuple(
-    "WorkerPoolUtilization",
-    ["simulator_time", "resource_name", "allocated_quantity", "available_quantity"],
-)
+class Simulator(object):
+    def __init__(self, csv_path: str, start_time: int, total_tasks: int):
+        self.csv_path = csv_path
+        self.start_time = start_time
+        self.total_tasks = total_tasks
+
+        # Values updated from the SIMULATOR_END event.
+        self.end_time = None
+        self.finished_tasks = None
+        self.missed_deadlines = None
+
+        self.worker_pools = {}
+        self.tasks = []
+        self.scheduler_invocations = []
+        self.worker_pool_utilizations = []
+
+    def update_finish(self, csv_reading: str):
+        """Updates the values of the Simulator based on the SIMULATOR_END event from
+        CSV.
+
+        Args:
+            csv_reading (str): The CSV reading of type `SIMULATOR_END`.
+        """
+        assert (
+            csv_reading[1] == "SIMULATOR_END"
+        ), f"The event {csv_reading[1]} was not of type SIMULATOR_END."
+        self.end_time = int(csv_reading[0])
+        self.finished_tasks = int(csv_reading[2])
+        self.missed_deadlines = int(csv_reading[3])
 
 
 class CSVReader(object):
@@ -255,12 +263,7 @@ class CSVReader(object):
                     path_readings.append(line)
                 readings[csv_path] = path_readings
 
-        self._events = {}
         self._simulators = {}
-        self._scheduler_invocations = {}
-        self._tasks = {}
-        self._worker_pools = {}
-
         self.parse_events(readings)
 
     def parse_events(self, readings: Mapping[str, Sequence[str]]):
@@ -272,11 +275,11 @@ class CSVReader(object):
                 the CSV file.
         """
         for csv_path, csv_readings in readings.items():
-            events = []
-            tasks_memo = {}
-            worker_pool_memo = {}
-            schedulers = []
             simulator = None
+            tasks = {}
+            worker_pools = {}
+            schedulers = []
+            worker_pool_utilizations = []
             for reading in csv_readings:
                 if reading[1] == "SIMULATOR_START":
                     simulator = Simulator(
@@ -290,7 +293,7 @@ class CSVReader(object):
                     ), "No SIMULATOR_START found for a corresponding SIMULATOR_END."
                     simulator.update_finish(reading)
                 elif reading[1] == "TASK_RELEASE":
-                    tasks_memo[reading[8]] = Task(
+                    tasks[reading[8]] = Task(
                         name=reading[2],
                         timestamp=int(reading[3]),
                         task_id=uuid.UUID(reading[8]),
@@ -301,10 +304,10 @@ class CSVReader(object):
                     )
                 elif reading[1] == "TASK_FINISHED":
                     # Update the task with the completion event data.
-                    tasks_memo[reading[6]].update_finish(reading)
+                    tasks[reading[6]].update_finish(reading)
                 elif reading[1] == "MISSED_DEADLINE":
                     # Update the task with the completion event data.
-                    tasks_memo[reading[5]].update_missed_deadline(reading)
+                    tasks[reading[5]].update_missed_deadline(reading)
                 elif reading[1] == "SCHEDULER_START":
                     schedulers.append(
                         Scheduler(
@@ -318,7 +321,7 @@ class CSVReader(object):
                     # Update the Scheduler with the completion event data.
                     schedulers[-1].update_finish(reading)
                 elif reading[1] == "WORKER_POOL_UTILIZATION":
-                    events.append(
+                    worker_pool_utilizations.append(
                         WorkerPoolUtilization(
                             simulator_time=int(reading[0]),
                             resource_name=reading[2],
@@ -330,26 +333,26 @@ class CSVReader(object):
                     resources = [
                         Resource(*reading[i : i + 3]) for i in range(4, len(reading), 3)
                     ]
-                    worker_pool_memo[reading[3]] = WorkerPool(
+                    worker_pools[reading[3]] = WorkerPool(
                         name=reading[2],
                         id=uuid.UUID(reading[3]),
                         resources=resources,
                     )
                 elif reading[1] == "TASK_PLACEMENT":
                     # Update the task with the placement event data.
-                    tasks_memo[reading[4]].update_placement(reading)
+                    tasks[reading[4]].update_placement(reading, worker_pools)
                 elif reading[1] == "TASK_SKIP":
                     # Update the task with the skip data.
-                    tasks_memo[reading[4]].update_skip(reading)
+                    tasks[reading[4]].update_skip(reading)
                 else:
                     continue
-            self._events[csv_path] = events
-            self._simulators[csv_path] = simulator
-            self._tasks[csv_path] = list(
-                sorted(tasks_memo.values(), key=attrgetter("release_time"))
+            simulator.worker_pools = worker_pools
+            simulator.tasks = list(
+                sorted(tasks.values(), key=attrgetter("release_time"))
             )
-            self._scheduler_invocations[csv_path] = schedulers
-            self._worker_pools[csv_path] = worker_pool_memo
+            simulator.scheduler_invocations = schedulers
+            simulator.worker_pool_utilizations = worker_pool_utilizations
+            self._simulators[csv_path] = simulator
 
     def get_scheduler_invocations(self, csv_path: str) -> Sequence[Scheduler]:
         """Retrieves a sequence of Scheduler invocations from the CSV.
@@ -362,7 +365,7 @@ class CSVReader(object):
             A `Sequence[Scheduler]` that depicts the number of placed, unplaced
             and total tasks, along with the runtime of the invocation.
         """
-        return self._scheduler_invocations[csv_path]
+        return self._simulators[csv_path].scheduler_invocations
 
     def get_worker_pools(self, csv_path: str) -> Sequence[WorkerPool]:
         """Retrieves the details of the WorkerPool for the given execution.
@@ -375,7 +378,7 @@ class CSVReader(object):
             A `Sequence[WorkerPool]` that depicts the total resources of the WorkerPools
             used in this execution.
         """
-        return self._worker_pools[csv_path]
+        return self._simulators[csv_path].worker_pools
 
     def get_worker_pool_utilizations(self, csv_path: str) -> Sequence[WorkerPoolStats]:
         """Retrieves the statistics of the utilization of the WorkerPool at
@@ -390,7 +393,7 @@ class CSVReader(object):
             across all the WorkerPools at each invocation of the scheduler.
         """
         worker_pool_utilizations = defaultdict(list)
-        for event in self._events[csv_path]:
+        for utilization in self._simulators[csv_path].worker_pool_utilizations:
             if type(event) == WorkerPoolUtilization:
                 worker_pool_utilizations[event.simulator_time].append(event)
 
@@ -423,7 +426,7 @@ class CSVReader(object):
             A `Sequence[Task]` that depicts the tasks in the execution,
             ordered by their release time.
         """
-        return self._tasks[csv_path]
+        return self._simulators[csv_path].tasks
 
     def get_tasks_with_placement_issues(self, csv_path: str) -> Sequence[Task]:
         """Retrieves the tasks that had placement issues (i.e., had a TASK_SKIP).
@@ -537,13 +540,7 @@ class CSVReader(object):
                     resource_ids_to_canonical_names[
                         resource.id
                     ] = f"{resource.name}_{resource_counter[resource.name]}"
-            task_to_wp_resources = {
-                task: (
-                    worker_pools[str(task.placed_on_worker_pool)],
-                    task.resources_used,
-                )
-                for task in self.get_tasks(csv_path)
-            }
+
         # Output all the tasks and the requested deadlines.
         for task in self.get_tasks(csv_path):
             # Do not output the tasks if it does not fall within the given time.
@@ -595,10 +592,9 @@ class CSVReader(object):
                     }
                     trace["traceEvents"].append(trace_event)
             elif trace_fmt == "resource":
-                pid = task_to_wp_resources[task][0].name
                 tids = [
                     resource_ids_to_canonical_names[resource.id]
-                    for resource in task_to_wp_resources[task][1]
+                    for resource in task.resources_used
                 ]
                 for tid in tids:
                     # Output the task.
@@ -608,7 +604,7 @@ class CSVReader(object):
                         "ph": "X",
                         "ts": task.start_time,
                         "dur": task.completion_time - task.start_time,
-                        "pid": pid,
+                        "pid": task.worker_pool.name,
                         "tid": tid,
                         "args": {
                             "name": task.name,
@@ -633,7 +629,7 @@ class CSVReader(object):
                             "cat": "task,missed,deadline,instant",
                             "ph": "i",
                             "ts": task.deadline,
-                            "pid": pid,
+                            "pid": task.worker_pool.name,
                             "tid": tid,
                             # The scope of the missed deadline events is per thread.
                             "s": "t",
