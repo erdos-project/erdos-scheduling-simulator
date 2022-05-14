@@ -372,16 +372,22 @@ class WorkerPool(object):
             final_resources += worker.resources
 
         # Log the utilization from the final set of resources.
-        for resource_name in set(
-            map(attrgetter("name"), final_resources._resource_vector.keys())
-        ):
-            resource = Resource(name=resource_name, _id="any")
-            csv_logger.debug(
-                f"{sim_time},WORKER_POOL_UTILIZATION,{self.name},"
-                f"{self.id},{resource_name},"
-                f"{final_resources.get_allocated_quantity(resource)},"
-                f"{final_resources.get_available_quantity(resource)}"
-            )
+        resource_utilization = ",".join(
+            [
+                ",".join(
+                    (
+                        resource.name,
+                        str(resource.id),
+                        str(final_resources.get_allocated_quantity(resource)),
+                        str(final_resources.get_available_quantity(resource)),
+                    )
+                )
+                for resource, _ in final_resources.resources
+            ]
+        )
+        csv_logger.debug(
+            f"{sim_time},WORKER_POOL_UTILIZATION,{self.id},{resource_utilization}"
+        )
 
     def get_allocated_resources(self, task: Task) -> List[Tuple[Resource, float]]:
         """Retrieves the resources allocated to a given task from this WorkerPool.
