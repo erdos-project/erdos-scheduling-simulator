@@ -94,7 +94,7 @@ flags.register_validator(
     message=f"Only {TRACE_FORMATS} Chrome trace formats are allowed.",
 )
 
-# Allow the choice of seeing deadlines in Chrome trace or not.
+# Allow the choice of seeing deadlines and tasks with placement issues in Chrome trace.
 flags.DEFINE_enum(
     "show_deadlines",
     None,
@@ -107,6 +107,18 @@ flags.register_validator(
     "show_deadlines",
     lambda value: FLAGS.chrome_trace is not None if value else True,
     message="The show_deadlines flag can only be used for Chrome traces.",
+)
+flags.DEFINE_boolean(
+    "with_placement_issues",
+    False,
+    "Show the tasks with the placement issues between the requested times.",
+)
+flags.register_validator(
+    "with_placement_issues",
+    lambda value: (FLAGS.chrome_trace == "resource" and FLAGS.between_time is not None)
+    if value
+    else True,
+    message="Placement issues require resource traces with limited interval.",
 )
 
 # Allow the choice of statistics to show for the metrics.
@@ -1187,6 +1199,7 @@ def main(argv):
                 between_time=between_time,
                 trace_fmt=FLAGS.chrome_trace,
                 show_deadlines=FLAGS.show_deadlines,
+                with_placement_issues=FLAGS.with_placement_issues,
             )
 
         # Show statistics or plot the requested graphs.

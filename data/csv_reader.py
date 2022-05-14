@@ -23,6 +23,7 @@ class Task(object):
         start_time: int = -1,
         completion_time: int = -1,
         missed_deadline: bool = False,
+        skipped_times: Sequence[int] = [],
     ):
         self.name = name
         self.timestamp = timestamp
@@ -35,6 +36,7 @@ class Task(object):
         self.start_time = start_time
         self.completion_time = completion_time
         self.missed_deadline = missed_deadline
+        self.skipped_times = skipped_times
 
     def __str__(self):
         return f"Task(name={self.name}, timestamp={self.timestamp})"
@@ -163,6 +165,7 @@ class CSVReader(object):
                         release_time=int(reading[5]),
                         runtime=int(reading[6]),
                         deadline=int(reading[7]),
+                        skipped_times=[],
                     )
                     tasks_memo[reading[8]] = task
                     events.append(
@@ -233,6 +236,9 @@ class CSVReader(object):
                             resources=resources,
                         )
                     )
+                elif reading[1] == "TASK_SKIP":
+                    task = tasks_memo[reading[4]]
+                    task.skipped_times.append(int(reading[0]))
                 else:
                     continue
             self._events[csv_path] = events
@@ -367,6 +373,23 @@ class CSVReader(object):
                 task_placements.append(event)
         return task_placements
 
+    def get_tasks_with_placement_issues(self, csv_path: str) -> Sequence[Task]:
+        """Retrieves the tasks that had placement issues (i.e., had a TASK_SKIP).
+
+        Args:
+            csv_path (`str`): The path to the CSV file whose tasks need to
+                be retrieved.
+
+        Returns:
+            A `Sequence[Task]` that contains the task with placement issues, ordered by
+            release time.
+        """
+        tasks = []
+        for event in self._events[csv_path]:
+            if type(event) == TaskRelease and len(event.task.skipped_times) > 0:
+                tasks.append(event.task)
+        return tasks
+
     def get_simulator_end_time(self, csv_path: str) -> int:
         """Retrieves the time at which the simulator ended.
 
@@ -406,6 +429,7 @@ class CSVReader(object):
         between_time: Union[int, Tuple[int, int]] = None,
         trace_fmt: str = "task",
         show_deadlines: str = "missed",
+        with_placement_issues: bool = False,
     ):
         """Converts the CSV of the events in a simulation execution to a Chrome tracer
         format.
@@ -567,7 +591,7 @@ class CSVReader(object):
                 [task for task in self.get_tasks(csv_path)]
             )
 
-        # Output all the missed deadlines.
+        # Output all the requested deadlines.
         for task in tasks_for_deadline_events:
             # Do not output the tasks if it does not fall within the given time.
             if not check_if_time_intersects(task.start_time, task.completion_time):
@@ -608,6 +632,62 @@ class CSVReader(object):
                     trace["traceEvents"].append(trace_event)
             else:
                 raise ValueError(f"Undefined execution mode: {trace_fmt}")
+
+        # If placement issues were requested in resource trace, output all the tasks
+        # with their actual release time and runtime if the skipped events were within
+        # the time frame.
+        if trace_fmt == "resource" and with_placement_issues:
+            for task in self.get_tasks_with_placement_issues(csv_path):
+                if check_if_time_intersects(
+                    task.release_time, task.release_time + task.runtime
+                ):
+                    trace_event = {
+                        "name": f"{task.name}::{task.timestamp}",
+                        "cat": "task,duration",
+                        "ph": "X",
+                        "ts": task.release_time,
+                        "dur": task.runtime,
+                        "pid": "Placement Issues",
+                        "tid": task.name,
+                        "args": {
+                            "name": task.name,
+                            "id": str(task.id),
+                            "timestamp": task.timestamp,
+                            "release_time": task.release_time,
+                            "runtime": task.runtime,
+                            "deadline": task.deadline,
+                            "start_time": task.start_time,
+                            "completion_time": task.completion_time,
+                            "missed_deadline": task.missed_deadline,
+                        },
+                    }
+                    trace["traceEvents"].append(trace_event)
+
+                    # Output the deadline event according to the required strategy.
+                    if show_deadlines == "missed" and task.missed_deadline:
+                        trace_event = {
+                            "name": f"{task.name}::{task.timestamp}",
+                            "cat": "task,missed,deadline,instant",
+                            "ph": "i",
+                            "ts": task.deadline,
+                            "pid": "Placement Issues",
+                            "tid": task.name,
+                            # The scope of the missed deadline events is per thread.
+                            "s": "t",
+                        }
+                        trace["traceEvents"].append(trace_event)
+                    elif show_deadlines == "always":
+                        trace_event = {
+                            "name": f"{task.name}::{task.timestamp}",
+                            "cat": "task,missed,deadline,instant",
+                            "ph": "i",
+                            "ts": task.deadline,
+                            "pid": "Placement Issues",
+                            "tid": task.name,
+                            # The scope of the missed deadline events is per thread.
+                            "s": "t",
+                        }
+                        trace["traceEvents"].append(trace_event)
 
         with open(output_path, "w") as f:
             json.dump(trace, f, indent=4, sort_keys=True)
