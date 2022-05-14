@@ -38,6 +38,22 @@ class Task(object):
         self.missed_deadline = missed_deadline
         self.skipped_times = skipped_times
 
+    def get_deadline_delay(self) -> int:
+        """Retrieve the deadline delay in microseconds.
+
+        If a positive value is returned, the deadline was missed and if a negative
+        value is returned, the deadline was not missed.
+
+        Returns:
+            The time between the completion of the task and the deadline.
+        """
+        deadline_delay = self.completion_time - self.deadline
+        assert (deadline_delay > 0) == self.missed_deadline, (
+            f"Inconsistency between the deadline delay ({deadline_delay}) and "
+            f"the missed deadline flag ({self.missed_deadline}."
+        )
+        return deadline_delay
+
     def __str__(self):
         return f"Task(name={self.name}, timestamp={self.timestamp})"
 

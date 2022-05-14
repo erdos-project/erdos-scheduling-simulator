@@ -624,7 +624,7 @@ def analyze_task_slack(
             tasks.append(task)
 
     # Compute the time between the deadline and the actual completion of the task.
-    slack = [(task.deadline - task.completion_time) / 1000 for task in tasks]
+    slack = [-task.get_deadline_delay() / 1000 for task in tasks]
     logger.debug("================== Actual task completion slack [ms] ===============")
     logger.debug(f"Tasks that match the regex: {task_name_regex}")
     log_statistics(slack, logger, stats)
@@ -763,7 +763,7 @@ def log_detailed_task_statistics(
                             task.deadline / 1000,
                             task.completion_time / 1000,
                             task.missed_deadline,
-                            (task.completion_time - task.deadline) / 1000,
+                            task.get_deadline_delay() / 1000,
                             (placement.simulator_time - task.release_time) / 1000,
                             (task.release_time - task.intended_release_time) / 1000
                             if task.intended_release_time != -1
@@ -827,7 +827,7 @@ def analyze_missed_deadlines(
     for _, task in missed_deadlines:
         if re.match(task_name_regex, task.name):
             missed_deadline_by_task_name[task.name].append(task)
-            missed_deadline_delays.append((task.completion_time - task.deadline) / 1000)
+            missed_deadline_delays.append(task.get_deadline_delay() / 1000)
 
     # Log the results.
     logger.debug("==================  Missed Deadlines ==================")
@@ -836,7 +836,7 @@ def analyze_missed_deadlines(
     for task_name, tasks in missed_deadline_by_task_name.items():
         logger.debug(f"{task_name}")
         missed_deadline_delays_per_task = [
-            (task.completion_time - task.deadline) / 1000 for task in tasks
+            task.get_deadline_delay() / 1000 for task in tasks
         ]
         log_statistics(missed_deadline_delays_per_task, logger, stats, offset="    ")
 
@@ -947,8 +947,7 @@ def log_basic_task_statistics(
         # Gather missed deadline delays.
         missed_deadline_tasks = [task for task in grouped_tasks if task.missed_deadline]
         missed_deadline_delays = [
-            (task.completion_time - task.deadline) / 1000
-            for task in missed_deadline_tasks
+            task.get_deadline_delay() / 1000 for task in missed_deadline_tasks
         ]
         total_missed_deadline_delays.extend(missed_deadline_delays)
 
@@ -1047,7 +1046,7 @@ def log_aggregate_stats(
             ]
         )
         deadline_delay = stat_function(
-            [(task.deadline - task.completion_time) / 1000 for task in tasks]
+            [task.get_deadline_delay() / 1000 for task in tasks]
         )
 
         timestamp_start_end = {}
