@@ -812,11 +812,10 @@ def analyze_missed_deadlines(
         stats (`Union[str, Sequence[str]`): The statistics to show for the metric.
     """
     # Group the missed deadlines by their task name (if regex is matched).
-    missed_deadlines = csv_reader.get_missed_deadline_events(scheduler_csv_file)
     missed_deadline_by_task_name = defaultdict(list)
     missed_deadline_delays = []
-    for _, task in missed_deadlines:
-        if re.match(task_name_regex, task.name):
+    for task in csv_reader.get_tasks():
+        if re.match(task_name_regex, task.name) and task.missed_deadline:
             missed_deadline_by_task_name[task.name].append(task)
             missed_deadline_delays.append(task.get_deadline_delay() / 1000)
 

@@ -2,7 +2,6 @@
 # Export the CSV Reader.
 from .csv_reader import (
     CSVReader,
-    MissedDeadline,
     Scheduler,
     SchedulerFinished,
     SchedulerStart,

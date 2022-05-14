@@ -20,7 +20,6 @@ class Task(object):
         runtime: int,
         deadline: int,
         intended_release_time: int = -1,
-        missed_deadline: bool = False,
     ):
         self.name = name
         self.timestamp = timestamp
@@ -30,7 +29,6 @@ class Task(object):
         self.release_time = release_time
         self.runtime = runtime
         self.deadline = deadline
-        self.missed_deadline = missed_deadline
 
         # Values updated from the TASK_PLACEMENT event.
         self.was_placed = False
@@ -43,7 +41,11 @@ class Task(object):
         self.skipped_times = []
 
         # Values updated from the TASK_FINISHED event.
-        self.completion_time = completion_time
+        self.completion_time = None
+
+        # Values updated from the MISSED_DEADLINE event.
+        self.missed_deadline = False
+        self.deadline_miss_detected_at = None
 
     def get_deadline_delay(self) -> int:
         """Retrieve the deadline delay in microseconds.
@@ -121,6 +123,18 @@ class Task(object):
         ), f"The event {csv_reading[1]} was not of type TASK_FINISHED."
         self.completion_time = int(csv_reading[4])
 
+    def update_missed_deadline(self, csv_reading: str):
+        """Updates the values of the Task based on the MISSED_DEADLINE event from CSV.
+
+        Args:
+            csv_reading (str): The CSV reading of type `MISSED_DEADLINE`.
+        """
+        assert (
+            csv_reading[1] == "MISSED_DEADLINE"
+        ), f"The event {csv_reading[1]} was not of type MISSED_DEADLINE."
+        self.missed_deadline = True
+        self.deadline_miss_detected_at = int(csv_reading[0])
+
     def __str__(self):
         return f"Task(name={self.name}, timestamp={self.timestamp})"
 
@@ -172,7 +186,6 @@ SimulatorEnd = namedtuple(
     "SimulatorEnd", ["end_time", "finished_tasks", "missed_deadlines"]
 )
 TaskRelease = namedtuple("TaskRelease", ["simulator_time", "task"])
-MissedDeadline = namedtuple("MissedDeadline", ["simulator_time", "task"])
 SchedulerStart = namedtuple(
     "SchedulerStart", ["simulator_time", "released_tasks", "placed_tasks"]
 )
@@ -253,11 +266,8 @@ class CSVReader(object):
                     # Update the task with the completion event data.
                     tasks_memo[reading[6]].update_finish(reading)
                 elif reading[1] == "MISSED_DEADLINE":
-                    task = tasks_memo[reading[5]]
-                    task.missed_deadline = True
-                    events.append(
-                        MissedDeadline(simulator_time=int(reading[0]), task=task)
-                    )
+                    # Update the task with the completion event data.
+                    tasks_memo[reading[5]].update_missed_deadline(reading)
                 elif reading[1] == "SCHEDULER_START":
                     events.append(
                         SchedulerStart(
@@ -448,22 +458,6 @@ class CSVReader(object):
                 return event.end_time
         raise ValueError("No SIMULATOR_END event found in the logs.")
 
-    def get_missed_deadline_events(self, csv_path: str) -> Sequence[MissedDeadline]:
-        """Retrieves the missed deadline events.
-
-        Args:
-            csv_path (`str`): The path to the CSV file whose missed deadline
-            events need to be retrieved.
-
-        Returns:
-            A sequence of missed deadline events for the given CSV file.
-        """
-        missed_deadline_events = []
-        for event in self._events[csv_path]:
-            if type(event) == MissedDeadline:
-                missed_deadline_events.append(event)
-        return missed_deadline_events
-
     def to_chrome_trace(
         self,
         csv_path: str,
@@ -623,12 +617,7 @@ class CSVReader(object):
         tasks_for_deadline_events = []
         if show_deadlines == "missed":
             tasks_for_deadline_events.extend(
-                [
-                    missed_deadline_event.task
-                    for missed_deadline_event in self.get_missed_deadline_events(
-                        csv_path
-                    )
-                ]
+                [task for task in self.get_tasks(csv_path) if task.missed_deadline]
             )
         elif show_deadlines == "always":
             tasks_for_deadline_events.extend(
