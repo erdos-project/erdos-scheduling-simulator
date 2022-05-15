@@ -936,9 +936,9 @@ def log_basic_task_statistics(
         total_skipped.extend(skipped_tasks)
 
         # Gather missed deadline delays.
-        missed_deadline_tasks = filter(lambda task: task.missed_deadline, grouped_tasks)
         missed_deadline_delays = [
-            task.get_deadline_delay() / 1000 for task in missed_deadline_tasks
+            task.get_deadline_delay() / 1000
+            for task in filter(lambda task: task.missed_deadline, grouped_tasks)
         ]
         total_missed_deadline_delays.extend(missed_deadline_delays)
 
@@ -950,7 +950,7 @@ def log_basic_task_statistics(
             (
                 task_name,
                 len(grouped_tasks),
-                len(missed_deadline_tasks),
+                len(missed_deadline_delays),
                 len(skipped_tasks),
                 stat_function(missed_deadline_delays)
                 if len(missed_deadline_delays) != 0
