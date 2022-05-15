@@ -932,7 +932,9 @@ def log_basic_task_statistics(
     total_placement_delays = []
     for task_name, grouped_tasks in tasks.items():
         # Gather the number of skipped tasks.
-        skipped_tasks = filter(lambda task: len(task.skipped_times) > 0, grouped_tasks)
+        skipped_tasks = list(
+            filter(lambda task: len(task.skipped_times) > 0, grouped_tasks)
+        )
         total_skipped.extend(skipped_tasks)
 
         # Gather missed deadline delays.
