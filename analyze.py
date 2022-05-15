@@ -754,6 +754,7 @@ def log_detailed_task_statistics(
                             task.deadline / 1000,
                             task.completion_time / 1000,
                             task.missed_deadline,
+                            len(task.skipped_times) > 0,
                             task.get_deadline_delay() / 1000,
                             task.get_placement_delay() / 1000,
                             task.get_release_delay() / 1000
@@ -778,6 +779,7 @@ def log_detailed_task_statistics(
                     "Deadline",
                     "Completion",
                     "X Dline?",
+                    "X Skipped",
                     "Dline Delay",
                     "Place Delay",
                     "Rels Delay",
@@ -926,10 +928,15 @@ def log_basic_task_statistics(
     # Gather the results.
     results = []
     total_missed_deadline_delays = []
+    total_skipped = []
     total_placement_delays = []
     for task_name, grouped_tasks in tasks.items():
+        # Gather the number of skipped tasks.
+        skipped_tasks = filter(lambda task: len(task.skipped_times) > 0, grouped_tasks)
+        total_skipped.extend(skipped_tasks)
+
         # Gather missed deadline delays.
-        missed_deadline_tasks = [task for task in grouped_tasks if task.missed_deadline]
+        missed_deadline_tasks = filter(lambda task: task.missed_deadline, grouped_tasks)
         missed_deadline_delays = [
             task.get_deadline_delay() / 1000 for task in missed_deadline_tasks
         ]
@@ -944,6 +951,7 @@ def log_basic_task_statistics(
                 task_name,
                 len(grouped_tasks),
                 len(missed_deadline_tasks),
+                len(skipped_tasks),
                 stat_function(missed_deadline_delays)
                 if len(missed_deadline_delays) != 0
                 else 0.0,
@@ -955,6 +963,7 @@ def log_basic_task_statistics(
             "Total",
             sum(map(len, tasks.values())),
             len(total_missed_deadline_delays),
+            len(total_skipped),
             stat_function(total_missed_deadline_delays)
             if len(total_missed_deadline_delays) != 0
             else 0.0,
@@ -971,6 +980,7 @@ def log_basic_task_statistics(
                 "Name",
                 "Total",
                 "X Dline?",
+                "# Skipped",
                 "Dline Delay",
                 "Place Delay",
             ],
@@ -1014,6 +1024,7 @@ def log_aggregate_stats(
 
         num_timestamps = FLAGS.max_timestamp if FLAGS.max_timestamp else "-"
         num_missed = len(list(filter(attrgetter("missed_deadline"), tasks)))
+        num_skipped = len(list(filter(lambda task: len(task.skipped_times) > 0, tasks)))
 
         placement_delay = stat_function(
             [task.get_placement_delay() / 1000 for task in tasks]
@@ -1066,6 +1077,7 @@ def log_aggregate_stats(
                 num_timestamps,
                 len(tasks),
                 num_missed,
+                num_skipped,
                 placement_delay,
                 deadline_delay,
                 stat_function(e2e_response_time),
@@ -1085,6 +1097,7 @@ def log_aggregate_stats(
                 "# Time",
                 "# Tasks",
                 "# Missed",
+                "# Skipped",
                 "Placement",
                 "Deadline",
                 "JCT",
