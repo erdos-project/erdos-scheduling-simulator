@@ -255,13 +255,9 @@ class CSVReader(object):
             show_deadlines (str): Choose between ('never', 'missed', 'always') to
                 affect which deadlines are shown in the trace.
         """
-        trace = {
-            "traceEvents": [],
-            "otherData": {"csv_path": csv_path, "scheduler": scheduler_label},
-        }
         if between_time and (
             not isinstance(between_time, int)
-            or (isinstance(between_time, Sequence) and len(between_time) != 2)
+            and (isinstance(between_time, Sequence) and len(between_time) != 2)
         ):
             raise ValueError(
                 "between_time should either be an integer specifying an exact time, "
@@ -282,6 +278,16 @@ class CSVReader(object):
                 ) >= 0
             else:
                 return True
+
+        trace = {
+            "traceEvents": [],
+            "otherData": {
+                "csv_path": csv_path,
+                "scheduler": scheduler_label,
+                "between_time": between_time,
+                "show_deadlines": show_deadlines,
+            },
+        }
 
         # Output all the scheduler events.
         for scheduler_event in self.get_scheduler_invocations(csv_path):
