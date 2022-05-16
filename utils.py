@@ -5,7 +5,11 @@ from functools import partial
 from typing import Optional, Sequence, Tuple, Union
 
 import numpy as np
-from tabulate import tabulate
+
+try:
+    from tabulate import tabulate
+except ImportError:
+    pass
 
 # Mapping between the requested stat values and (functions, helper messages).
 STATS_FUNCTIONS = {
@@ -144,7 +148,7 @@ def log_statistics(
     else:
         requested_stats = [stat for stat in stats]
 
-    if showfmt == "grid":
+    if showfmt == "grid" and "tabulate" in sys.modules:
         results = [len(data), np.mean(data)]
         headers = ["Length", "Average"]
         for stat in requested_stats:
