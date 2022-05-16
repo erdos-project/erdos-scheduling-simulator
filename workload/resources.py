@@ -327,11 +327,12 @@ class Resources(object):
         """
         cls = self.__class__
         instance = cls.__new__(cls)
-        cls.__init__(instance, self._resource_vector, self._logger, True)
+        cls.__init__(instance, self.__total_resources, self._logger, True)
 
         # Copy over the allocations.
         for task, allocations in self._current_allocations.items():
-            instance._current_allocations[task].extend(copy(allocations))
+            for resource, quantity in allocations:
+                instance.allocate(copy(resource), task, quantity)
 
         return instance
 
@@ -344,12 +345,7 @@ class Resources(object):
         """
         cls = self.__class__
         instance = cls.__new__(cls)
-        cls.__init__(instance, self._resource_vector, self._logger, True)
-
-        # Undo the allocations.
-        for allocations in self._current_allocations.values():
-            for resource, quantity in allocations:
-                instance.add_resource(resource, quantity)
+        cls.__init__(instance, self.__total_resources, self._logger, True)
 
         memo[id(self)] = instance
         return instance
