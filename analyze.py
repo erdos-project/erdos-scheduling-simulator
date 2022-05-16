@@ -927,15 +927,24 @@ def log_basic_task_statistics(
 
     # Gather the results.
     results = []
+    total_release_delays = []
+    total_placement_delays = []
     total_missed_deadline_delays = []
     total_skipped = []
-    total_placement_delays = []
     for task_name, grouped_tasks in tasks.items():
         # Gather the number of skipped tasks.
         skipped_tasks = list(
             filter(lambda task: len(task.skipped_times) > 0, grouped_tasks)
         )
         total_skipped.extend(skipped_tasks)
+
+        # Gather release delays.
+        release_delays = [task.get_release_delay() / 1000 for task in grouped_tasks]
+        total_release_delays.extend(release_delays)
+
+        # Gather placement delays.
+        placement_delays = [task.get_placement_delay() / 1000 for task in grouped_tasks]
+        total_placement_delays.extend(placement_delays)
 
         # Gather missed deadline delays.
         missed_deadline_delays = [
@@ -944,20 +953,17 @@ def log_basic_task_statistics(
         ]
         total_missed_deadline_delays.extend(missed_deadline_delays)
 
-        # Gather placement delays.
-        placement_delays = [task.get_placement_delay() / 1000 for task in grouped_tasks]
-        total_placement_delays.extend(placement_delays)
-
         results.append(
             (
                 task_name,
                 len(grouped_tasks),
                 len(missed_deadline_delays),
                 len(skipped_tasks),
+                stat_function(release_delays),
+                stat_function(placement_delays),
                 stat_function(missed_deadline_delays)
                 if len(missed_deadline_delays) != 0
                 else 0.0,
-                stat_function(placement_delays),
             )
         )
     results.append(
@@ -966,10 +972,11 @@ def log_basic_task_statistics(
             sum(map(len, tasks.values())),
             len(total_missed_deadline_delays),
             len(total_skipped),
+            stat_function(total_release_delays),
+            stat_function(total_placement_delays),
             stat_function(total_missed_deadline_delays)
             if len(total_missed_deadline_delays) != 0
             else 0.0,
-            stat_function(total_placement_delays),
         )
     )
 
@@ -983,8 +990,9 @@ def log_basic_task_statistics(
                 "Total",
                 "X Dline?",
                 "# Skipped",
-                "Dline Delay",
+                "Rls Delay",
                 "Place Delay",
+                "Dline Delay",
             ],
             tablefmt="grid",
             showindex=True,
