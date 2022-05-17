@@ -1,106 +1,20 @@
 import csv
 import json
 import uuid
-from collections import defaultdict, namedtuple
-from functools import total_ordering
+from collections import defaultdict
+from operator import add, attrgetter
 from typing import Mapping, Optional, Sequence, Tuple, Union
 
 import absl  # noqa: F401
 
-
-# Types for Objects in the simulation.
-@total_ordering
-class Task(object):
-    def __init__(
-        self,
-        name: str,
-        timestamp: int,
-        task_id: uuid.UUID,
-        intended_release_time: int,
-        release_time: int,
-        runtime: int,
-        deadline: int,
-        start_time: int = -1,
-        completion_time: int = -1,
-        missed_deadline: bool = False,
-    ):
-        self.name = name
-        self.timestamp = timestamp
-        self.id = task_id
-        # All times are in microseconds.
-        self.intended_release_time = intended_release_time
-        self.release_time = release_time
-        self.runtime = runtime
-        self.deadline = deadline
-        self.start_time = start_time
-        self.completion_time = completion_time
-        self.missed_deadline = missed_deadline
-
-    def __str__(self):
-        return f"Task(name={self.name}, timestamp={self.timestamp})"
-
-    def __repr__(self):
-        return str(self)
-
-    def __lt__(self, other):
-        if self == other:
-            return False
-        if self.timestamp > other.timestamp:
-            return False
-        elif self.timestamp == other.timestamp:
-            if self.release_time > other.release_time:
-                return False
-            elif self.release_time == other.release_time:
-                return self.runtime <= other.runtime
-        return True
-
-    def __hash__(self):
-        return hash(repr(self))
-
-    def __eq__(self, other):
-        return self.id == other.id
-
-
-Resource = namedtuple("Resource", ["name", "id", "quantity"])
-WorkerPool = namedtuple("WorkerPool", ["name", "id", "resources"])
-WorkerPoolStats = namedtuple(
-    "WorkerPoolStats", ["simulator_time", "resource_utilizations"]
-)
-Scheduler = namedtuple(
-    "Scheduler",
-    [
-        "start_time",
-        "end_time",
-        "runtime",
-        "released_tasks",
-        "previously_placed_tasks",
-        "total_tasks",
-        "placed_tasks",
-        "unplaced_tasks",
-        "instance_id",
-    ],
-)
-
-# Types for Events in the system.
-SimulatorStart = namedtuple("SimulatorStart", ["start_time", "total_tasks"])
-SimulatorEnd = namedtuple(
-    "SimulatorEnd", ["end_time", "finished_tasks", "missed_deadlines"]
-)
-TaskRelease = namedtuple("TaskRelease", ["simulator_time", "task"])
-TaskPlacement = namedtuple(
-    "TaskPlacement", ["simulator_time", "task", "worker_pool", "resources"]
-)
-TaskFinished = namedtuple("TaskFinished", ["simulator_time", "task"])
-MissedDeadline = namedtuple("MissedDeadline", ["simulator_time", "task"])
-SchedulerStart = namedtuple(
-    "SchedulerStart", ["simulator_time", "released_tasks", "placed_tasks"]
-)
-SchedulerFinished = namedtuple(
-    "SchedulerFinished", ["simulator_time", "runtime", "placed_tasks", "unplaced_tasks"]
-)
-WorkerPoolUtilization = namedtuple(
-    "WorkerPoolUtilization",
-    ["simulator_time", "resource_name", "allocated_quantity", "available_quantity"],
+from data.csv_types import (
+    Resource,
+    Scheduler,
+    Simulator,
+    Task,
+    WorkerPool,
+    WorkerPoolStats,
+    WorkerPoolUtilization,
 )
 
 
@@ -122,9 +36,7 @@ class CSVReader(object):
                     path_readings.append(line)
                 readings[csv_path] = path_readings
 
-        self._events = {}
-        self._worker_pools = {}
-
+        self._simulators = {}
         self.parse_events(readings)
 
     def parse_events(self, readings: Mapping[str, Sequence[str]]):
@@ -136,26 +48,24 @@ class CSVReader(object):
                 the CSV file.
         """
         for csv_path, csv_readings in readings.items():
-            events = []
-            tasks_memo = {}
-            worker_pool_memo = {}
+            simulator = None
+            tasks = {}
+            worker_pools = {}
+            schedulers = []
             for reading in csv_readings:
                 if reading[1] == "SIMULATOR_START":
-                    events.append(
-                        SimulatorStart(
-                            start_time=int(reading[0]), total_tasks=int(reading[2])
-                        )
+                    simulator = Simulator(
+                        csv_path=csv_path,
+                        start_time=int(reading[0]),
+                        total_tasks=reading[2],
                     )
                 elif reading[1] == "SIMULATOR_END":
-                    events.append(
-                        SimulatorEnd(
-                            end_time=int(reading[0]),
-                            finished_tasks=int(reading[2]),
-                            missed_deadlines=int(reading[3]),
-                        )
-                    )
+                    assert (
+                        simulator is not None
+                    ), "No SIMULATOR_START found for a corresponding SIMULATOR_END."
+                    simulator.update_finish(reading)
                 elif reading[1] == "TASK_RELEASE":
-                    task = Task(
+                    tasks[reading[8]] = Task(
                         name=reading[2],
                         timestamp=int(reading[3]),
                         task_id=uuid.UUID(reading[8]),
@@ -164,79 +74,56 @@ class CSVReader(object):
                         runtime=int(reading[6]),
                         deadline=int(reading[7]),
                     )
-                    tasks_memo[reading[8]] = task
-                    events.append(
-                        TaskRelease(simulator_time=int(reading[0]), task=task)
-                    )
                 elif reading[1] == "TASK_FINISHED":
-                    task = tasks_memo[reading[6]]
-                    task.completion_time = int(reading[4])
-                    events.append(
-                        TaskFinished(simulator_time=int(reading[0]), task=task)
-                    )
+                    # Update the task with the completion event data.
+                    tasks[reading[6]].update_finish(reading)
                 elif reading[1] == "MISSED_DEADLINE":
-                    task = tasks_memo[reading[5]]
-                    task.missed_deadline = True
-                    events.append(
-                        MissedDeadline(simulator_time=int(reading[0]), task=task)
-                    )
+                    # Update the task with the completion event data.
+                    tasks[reading[5]].update_missed_deadline(reading)
                 elif reading[1] == "SCHEDULER_START":
-                    events.append(
-                        SchedulerStart(
-                            simulator_time=int(reading[0]),
+                    schedulers.append(
+                        Scheduler(
+                            start_time=int(reading[0]),
                             released_tasks=int(reading[2]),
-                            placed_tasks=int(reading[3]),
+                            previously_placed_tasks=int(reading[3]),
+                            instance_id=len(schedulers) + 1,
                         )
                     )
                 elif reading[1] == "SCHEDULER_FINISHED":
-                    events.append(
-                        SchedulerFinished(
-                            simulator_time=int(reading[0]),
-                            runtime=int(reading[2]),
-                            placed_tasks=int(reading[3]),
-                            unplaced_tasks=int(reading[4]),
-                        )
-                    )
+                    # Update the Scheduler with the completion event data.
+                    schedulers[-1].update_finish(reading)
                 elif reading[1] == "WORKER_POOL_UTILIZATION":
-                    events.append(
+                    worker_pools[reading[2]].utilizations.append(
                         WorkerPoolUtilization(
                             simulator_time=int(reading[0]),
-                            resource_name=reading[2],
-                            allocated_quantity=float(reading[3]),
-                            available_quantity=float(reading[4]),
+                            resource_name=reading[3],
+                            allocated_quantity=float(reading[4]),
+                            available_quantity=float(reading[5]),
                         )
                     )
                 elif reading[1] == "WORKER_POOL":
                     resources = [
                         Resource(*reading[i : i + 3]) for i in range(4, len(reading), 3)
                     ]
-                    worker_pool_memo[reading[3]] = WorkerPool(
+                    worker_pools[reading[3]] = WorkerPool(
                         name=reading[2],
                         id=uuid.UUID(reading[3]),
                         resources=resources,
                     )
                 elif reading[1] == "TASK_PLACEMENT":
-                    # Update the task's start time (if needed)
-                    task = tasks_memo[reading[4]]
-                    simulator_time = int(reading[0])
-                    if task.start_time == -1:
-                        task.start_time = simulator_time
-
-                    resources = [
-                        Resource(*reading[i : i + 3]) for i in range(6, len(reading), 3)
-                    ]
-                    events.append(
-                        TaskPlacement(
-                            simulator_time=simulator_time,
-                            task=tasks_memo[reading[4]],
-                            worker_pool=worker_pool_memo[reading[5]],
-                            resources=resources,
-                        )
-                    )
+                    # Update the task with the placement event data.
+                    tasks[reading[4]].update_placement(reading, worker_pools)
+                elif reading[1] == "TASK_SKIP":
+                    # Update the task with the skip data.
+                    tasks[reading[4]].update_skip(reading)
                 else:
                     continue
-            self._events[csv_path] = events
-            self._worker_pools[csv_path] = worker_pool_memo
+            simulator.worker_pools = worker_pools.values()
+            simulator.tasks = list(
+                sorted(tasks.values(), key=attrgetter("release_time"))
+            )
+            simulator.scheduler_invocations = schedulers
+            self._simulators[csv_path] = simulator
 
     def get_scheduler_invocations(self, csv_path: str) -> Sequence[Scheduler]:
         """Retrieves a sequence of Scheduler invocations from the CSV.
@@ -249,41 +136,7 @@ class CSVReader(object):
             A `Sequence[Scheduler]` that depicts the number of placed, unplaced
             and total tasks, along with the runtime of the invocation.
         """
-        scheduler_events = []
-        for event in self._events[csv_path]:
-            if type(event) == SchedulerStart or type(event) == SchedulerFinished:
-                scheduler_events.append(event)
-
-        # Form scheduler invocation events from the retrieved events.
-        scheduler_invocation_events = []
-        for index, (scheduler_start, scheduler_finish) in enumerate(
-            zip(scheduler_events[::2], scheduler_events[1::2]), start=1
-        ):
-            assert (
-                type(scheduler_start) == SchedulerStart
-            ), "Incorrect type found for scheduler_start event: {}".format(
-                type(scheduler_start)
-            )
-            assert (
-                type(scheduler_finish) == SchedulerFinished
-            ), "Incorrect type found for scheduler_finish event: {}".format(
-                type(scheduler_finish)
-            )
-            scheduler_invocation_events.append(
-                Scheduler(
-                    start_time=scheduler_start.simulator_time,
-                    end_time=scheduler_finish.simulator_time,
-                    runtime=scheduler_finish.runtime,
-                    released_tasks=scheduler_start.released_tasks,
-                    previously_placed_tasks=scheduler_start.placed_tasks,
-                    total_tasks=scheduler_start.released_tasks
-                    + scheduler_start.placed_tasks,
-                    placed_tasks=scheduler_finish.placed_tasks,
-                    unplaced_tasks=scheduler_finish.unplaced_tasks,
-                    instance_id=index,
-                )
-            )
-        return scheduler_invocation_events
+        return self._simulators[csv_path].scheduler_invocations
 
     def get_worker_pools(self, csv_path: str) -> Sequence[WorkerPool]:
         """Retrieves the details of the WorkerPool for the given execution.
@@ -296,7 +149,7 @@ class CSVReader(object):
             A `Sequence[WorkerPool]` that depicts the total resources of the WorkerPools
             used in this execution.
         """
-        return self._worker_pools[csv_path]
+        return self._simulators[csv_path].worker_pools
 
     def get_worker_pool_utilizations(self, csv_path: str) -> Sequence[WorkerPoolStats]:
         """Retrieves the statistics of the utilization of the WorkerPool at
@@ -311,19 +164,25 @@ class CSVReader(object):
             across all the WorkerPools at each invocation of the scheduler.
         """
         worker_pool_utilizations = defaultdict(list)
-        for event in self._events[csv_path]:
-            if type(event) == WorkerPoolUtilization:
-                worker_pool_utilizations[event.simulator_time].append(event)
+        for worker_pool in self.get_worker_pools(csv_path):
+            for utilization in worker_pool.utilizations:
+                worker_pool_utilizations[utilization.simulator_time].append(utilization)
 
         # Order the utilizations and construct a stats object.
         worker_pool_stats = []
         for simulator_time in sorted(worker_pool_utilizations.keys()):
             utilizations = worker_pool_utilizations[simulator_time]
-            resource_utilizations = {}
+            resource_utilizations = defaultdict(lambda: (0, 0))
             for utilization in utilizations:
-                resource_utilizations[utilization.resource_name] = (
-                    utilization.allocated_quantity,
-                    utilization.available_quantity,
+                resource_utilizations[utilization.resource_name] = tuple(
+                    map(
+                        add,
+                        resource_utilizations[utilization.resource_name],
+                        (
+                            utilization.allocated_quantity,
+                            utilization.available_quantity,
+                        ),
+                    )
                 )
             worker_pool_stats.append(
                 WorkerPoolStats(
@@ -344,28 +203,22 @@ class CSVReader(object):
             A `Sequence[Task]` that depicts the tasks in the execution,
             ordered by their release time.
         """
-        tasks = []
-        for event in self._events[csv_path]:
-            if type(event) == TaskRelease:
-                tasks.append(event.task)
-        return tasks
+        return self._simulators[csv_path].tasks
 
-    def get_task_placements(self, csv_path: str) -> Sequence[TaskPlacement]:
-        """Retrives the task placements events.
+    def get_tasks_with_placement_issues(self, csv_path: str) -> Sequence[Task]:
+        """Retrieves the tasks that had placement issues (i.e., had a TASK_SKIP).
 
         Args:
             csv_path (`str`): The path to the CSV file whose tasks need to
                 be retrieved.
 
         Returns:
-            A `Sequence[TaskPlacement]` that contains the task placements,
-            ordered by their placement time.
+            A `Sequence[Task]` that contains the task with placement issues, ordered by
+            release time.
         """
-        task_placements = []
-        for event in self._events[csv_path]:
-            if type(event) == TaskPlacement:
-                task_placements.append(event)
-        return task_placements
+        return [
+            task for task in self.get_tasks(csv_path) if len(task.skipped_times) > 0
+        ]
 
     def get_simulator_end_time(self, csv_path: str) -> int:
         """Retrieves the time at which the simulator ended.
@@ -377,26 +230,7 @@ class CSVReader(object):
         Returns:
             The end time of the simulation of the given CSV file.
         """
-        for event in self._events[csv_path]:
-            if type(event) == SimulatorEnd:
-                return event.end_time
-        raise ValueError("No SIMULATOR_END event found in the logs.")
-
-    def get_missed_deadline_events(self, csv_path: str) -> Sequence[MissedDeadline]:
-        """Retrieves the missed deadline events.
-
-        Args:
-            csv_path (`str`): The path to the CSV file whose missed deadline
-            events need to be retrieved.
-
-        Returns:
-            A sequence of missed deadline events for the given CSV file.
-        """
-        missed_deadline_events = []
-        for event in self._events[csv_path]:
-            if type(event) == MissedDeadline:
-                missed_deadline_events.append(event)
-        return missed_deadline_events
+        return self._simulators[csv_path].end_time
 
     def to_chrome_trace(
         self,
@@ -406,6 +240,7 @@ class CSVReader(object):
         between_time: Union[int, Tuple[int, int]] = None,
         trace_fmt: str = "task",
         show_deadlines: str = "missed",
+        with_placement_issues: bool = False,
     ):
         """Converts the CSV of the events in a simulation execution to a Chrome tracer
         format.
@@ -420,12 +255,9 @@ class CSVReader(object):
             show_deadlines (str): Choose between ('never', 'missed', 'always') to
                 affect which deadlines are shown in the trace.
         """
-        trace = {
-            "traceEvents": [],
-            "otherData": {"csv_path": csv_path, "scheduler": scheduler_label},
-        }
-        if not isinstance(between_time, int) or (
-            isinstance(between_time, Sequence) and len(between_time) != 2
+        if between_time and (
+            not isinstance(between_time, int)
+            and (isinstance(between_time, Sequence) and len(between_time) != 2)
         ):
             raise ValueError(
                 "between_time should either be an integer specifying an exact time, "
@@ -446,6 +278,16 @@ class CSVReader(object):
                 ) >= 0
             else:
                 return True
+
+        trace = {
+            "traceEvents": [],
+            "otherData": {
+                "csv_path": csv_path,
+                "scheduler": scheduler_label,
+                "between_time": between_time,
+                "show_deadlines": show_deadlines,
+            },
+        }
 
         # Output all the scheduler events.
         for scheduler_event in self.get_scheduler_invocations(csv_path):
@@ -474,21 +316,15 @@ class CSVReader(object):
 
         if trace_fmt == "resource":
             resource_ids_to_canonical_names = {}
-            for worker_pool in self.get_worker_pools(csv_path).values():
+            for worker_pool in self.get_worker_pools(csv_path):
                 resource_counter = defaultdict(int)
                 for resource in worker_pool.resources:
                     resource_counter[resource.name] += 1
                     resource_ids_to_canonical_names[
                         resource.id
                     ] = f"{resource.name}_{resource_counter[resource.name]}"
-            task_to_wp_resources = {
-                task_placement.task: (
-                    task_placement.worker_pool,
-                    task_placement.resources,
-                )
-                for task_placement in self.get_task_placements(csv_path)
-            }
-        # Output all the tasks.
+
+        # Output all the tasks and the requested deadlines.
         for task in self.get_tasks(csv_path):
             # Do not output the tasks if it does not fall within the given time.
             if not check_if_time_intersects(task.start_time, task.completion_time):
@@ -499,6 +335,8 @@ class CSVReader(object):
                     pid, tid = task.name.split(".", 1)
                 else:
                     pid = tid = task.name
+
+                # Output the task.
                 trace_event = {
                     "name": f"{task.name}::{task.timestamp}",
                     "cat": "task,duration",
@@ -520,20 +358,36 @@ class CSVReader(object):
                     },
                 }
                 trace["traceEvents"].append(trace_event)
+
+                # Output the deadline.
+                if (
+                    show_deadlines == "missed" and task.missed_deadline
+                ) or show_deadlines == "always":
+                    trace_event = {
+                        "name": f"{task.name}::{task.timestamp}",
+                        "cat": "task,missed,deadline,instant",
+                        "ph": "i",
+                        "ts": task.deadline,
+                        "pid": pid,
+                        "tid": tid,
+                        # The scope of the missed deadline events is per thread.
+                        "s": "t",
+                    }
+                    trace["traceEvents"].append(trace_event)
             elif trace_fmt == "resource":
-                pid = task_to_wp_resources[task][0].name
                 tids = [
                     resource_ids_to_canonical_names[resource.id]
-                    for resource in task_to_wp_resources[task][1]
+                    for resource in task.resources_used
                 ]
                 for tid in tids:
+                    # Output the task.
                     trace_event = {
                         "name": f"{task.name}::{task.timestamp}",
                         "cat": "task,duration",
                         "ph": "X",
                         "ts": task.start_time,
                         "dur": task.completion_time - task.start_time,
-                        "pid": pid,
+                        "pid": task.worker_pool.name,
                         "tid": tid,
                         "args": {
                             "name": task.name,
@@ -548,66 +402,80 @@ class CSVReader(object):
                         },
                     }
                     trace["traceEvents"].append(trace_event)
+
+                    # Output the deadline.
+                    if (
+                        show_deadlines == "missed" and task.missed_deadline
+                    ) or show_deadlines == "always":
+                        trace_event = {
+                            "name": f"{task.name}::{task.timestamp}",
+                            "cat": "task,missed,deadline,instant",
+                            "ph": "i",
+                            "ts": task.deadline,
+                            "pid": task.worker_pool.name,
+                            "tid": tid,
+                            # The scope of the missed deadline events is per thread.
+                            "s": "t",
+                        }
+                        trace["traceEvents"].append(trace_event)
             else:
                 raise ValueError(f"Undefined execution mode: {trace_fmt}")
 
-        # Find the tasks that conform to the show_deadlines requirements
-        tasks_for_deadline_events = []
-        if show_deadlines == "missed":
-            tasks_for_deadline_events.extend(
-                [
-                    missed_deadline_event.task
-                    for missed_deadline_event in self.get_missed_deadline_events(
-                        csv_path
-                    )
-                ]
-            )
-        elif show_deadlines == "always":
-            tasks_for_deadline_events.extend(
-                [task for task in self.get_tasks(csv_path)]
-            )
-
-        # Output all the missed deadlines.
-        for task in tasks_for_deadline_events:
-            # Do not output the tasks if it does not fall within the given time.
-            if not check_if_time_intersects(task.start_time, task.completion_time):
-                continue
-            if trace_fmt == "task":
-                if "." in task.name:
-                    # pid = operator name, tid = callback name
-                    pid, tid = task.name.split(".", 1)
-                else:
-                    pid = tid = task.name
-                trace_event = {
-                    "name": f"{task.name}::{task.timestamp}",
-                    "cat": "task,missed,deadline,instant",
-                    "ph": "i",
-                    "ts": task.deadline,
-                    "pid": pid,
-                    "tid": tid,
-                    "s": "t",  # The scope of the missed deadline events is per thread.
-                }
-                trace["traceEvents"].append(trace_event)
-            elif trace_fmt == "resource":
-                pid = task_to_wp_resources[task][0].name
-                tids = [
-                    resource_ids_to_canonical_names[resource.id]
-                    for resource in task_to_wp_resources[task][1]
-                ]
-                for tid in tids:
+        # If placement issues were requested in resource trace, output all the tasks
+        # with their actual release time and runtime if the skipped events were within
+        # the time frame.
+        if trace_fmt == "resource" and with_placement_issues:
+            for task in self.get_tasks_with_placement_issues(csv_path):
+                if check_if_time_intersects(
+                    task.release_time, task.release_time + task.runtime
+                ):
                     trace_event = {
                         "name": f"{task.name}::{task.timestamp}",
-                        "cat": "task,missed,deadline,instant",
-                        "ph": "i",
-                        "ts": task.deadline,
-                        "pid": pid,
-                        "tid": tid,
-                        # The scope of the missed deadline events is per thread.
-                        "s": "t",
+                        "cat": "task,duration",
+                        "ph": "X",
+                        "ts": task.release_time,
+                        "dur": task.runtime,
+                        "pid": "Placement Issues",
+                        "tid": task.name,
+                        "args": {
+                            "name": task.name,
+                            "id": str(task.id),
+                            "timestamp": task.timestamp,
+                            "release_time": task.release_time,
+                            "runtime": task.runtime,
+                            "deadline": task.deadline,
+                            "start_time": task.start_time,
+                            "completion_time": task.completion_time,
+                            "missed_deadline": task.missed_deadline,
+                        },
                     }
                     trace["traceEvents"].append(trace_event)
-            else:
-                raise ValueError(f"Undefined execution mode: {trace_fmt}")
+
+                    # Output the deadline event according to the required strategy.
+                    if show_deadlines == "missed" and task.missed_deadline:
+                        trace_event = {
+                            "name": f"{task.name}::{task.timestamp}",
+                            "cat": "task,missed,deadline,instant",
+                            "ph": "i",
+                            "ts": task.deadline,
+                            "pid": "Placement Issues",
+                            "tid": task.name,
+                            # The scope of the missed deadline events is per thread.
+                            "s": "t",
+                        }
+                        trace["traceEvents"].append(trace_event)
+                    elif show_deadlines == "always":
+                        trace_event = {
+                            "name": f"{task.name}::{task.timestamp}",
+                            "cat": "task,missed,deadline,instant",
+                            "ph": "i",
+                            "ts": task.deadline,
+                            "pid": "Placement Issues",
+                            "tid": task.name,
+                            # The scope of the missed deadline events is per thread.
+                            "s": "t",
+                        }
+                        trace["traceEvents"].append(trace_event)
 
         with open(output_path, "w") as f:
             json.dump(trace, f, indent=4, sort_keys=True)

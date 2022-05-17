@@ -357,14 +357,12 @@ class WorkerPool(object):
             worker.can_accomodate_task(task) for worker in self._workers.values()
         )
 
-    def log_utilization(self, csv_logger: logging.Logger, sim_time: int):
-        """Logs the utilization of the resources of a particular WorkerPool.
+    def get_utilization(self) -> str:
+        """Retrieves the utilization of the resources of a particular WorkerPool in
+        CSV format.
 
-        Args:
-            csv_logger (`logging.Logger`): The logger to utilize to log the
-                resource utilization.
-            sim_time (`int`): The simulation time at which the utilization
-                is logged (in us).
+        Returns:
+            The utilization of the WorkerPool in CSV format.
         """
         # Add the resources of all the workers in this pool.
         final_resources = Resources(_logger=logging.getLogger("dummy"))
@@ -372,16 +370,20 @@ class WorkerPool(object):
             final_resources += worker.resources
 
         # Log the utilization from the final set of resources.
-        for resource_name in set(
-            map(attrgetter("name"), final_resources._resource_vector.keys())
-        ):
-            resource = Resource(name=resource_name, _id="any")
-            csv_logger.debug(
-                f"{sim_time},WORKER_POOL_UTILIZATION,{self.name},"
-                f"{self.id},{resource_name},"
-                f"{final_resources.get_allocated_quantity(resource)},"
-                f"{final_resources.get_available_quantity(resource)}"
-            )
+        resource_utilization = ",".join(
+            [
+                ",".join(
+                    (
+                        resource.name,
+                        str(resource.id),
+                        str(final_resources.get_allocated_quantity(resource)),
+                        str(final_resources.get_available_quantity(resource)),
+                    )
+                )
+                for resource, _ in final_resources.resources
+            ]
+        )
+        return resource_utilization
 
     def get_allocated_resources(self, task: Task) -> List[Tuple[Resource, float]]:
         """Retrieves the resources allocated to a given task from this WorkerPool.

@@ -6,6 +6,11 @@ from typing import Optional, Sequence, Tuple, Union
 
 import numpy as np
 
+try:
+    from tabulate import tabulate
+except ImportError:
+    pass
+
 # Mapping between the requested stat values and (functions, helper messages).
 STATS_FUNCTIONS = {
     "min": (np.min, "Minimum"),
@@ -111,6 +116,7 @@ def log_statistics(
     logger: logging.Logger,
     stats: Union[str, Sequence[str]] = "all",
     offset: Optional[str] = "    ",
+    showfmt: str = "grid",
 ):
     """Logs the requested statistics from the given data.
 
@@ -122,6 +128,7 @@ def log_statistics(
         logger (`logging.Logger`): The logger to use for logging the stats.
         stats (`Union[str, Sequence[str]]`): The stats to be logged.
         offset (`Optional[str]`): The space offset to use for logging.
+        showfmt (`Optional[str]`): The output format for the statistics.
     """
     if stats == "all":
         requested_stats = [
@@ -141,8 +148,17 @@ def log_statistics(
     else:
         requested_stats = [stat for stat in stats]
 
-    logger.debug(f"{offset}Number of values: {len(data)}")
-    logger.debug(f"{offset}Average: {np.mean(data)}")
-    for stat in requested_stats:
-        method, helper = STATS_FUNCTIONS[stat]
-        logger.debug(f"{offset}{helper}: {method(data)}")
+    if showfmt == "grid" and "tabulate" in sys.modules:
+        results = [len(data), np.mean(data)]
+        headers = ["Length", "Average"]
+        for stat in requested_stats:
+            method, helper = STATS_FUNCTIONS[stat]
+            results.append(method(data))
+            headers.append(helper)
+        logger.debug("\n" + tabulate([results], headers=headers, tablefmt="grid"))
+    else:
+        logger.debug(f"{offset}Number of values: {len(data)}")
+        logger.debug(f"{offset}Average: {np.mean(data)}")
+        for stat in requested_stats:
+            method, helper = STATS_FUNCTIONS[stat]
+            logger.debug(f"{offset}{helper}: {method(data)}")

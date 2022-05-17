@@ -94,7 +94,7 @@ flags.register_validator(
     message=f"Only {TRACE_FORMATS} Chrome trace formats are allowed.",
 )
 
-# Allow the choice of seeing deadlines in Chrome trace or not.
+# Allow the choice of seeing deadlines and tasks with placement issues in Chrome trace.
 flags.DEFINE_enum(
     "show_deadlines",
     None,
@@ -107,6 +107,18 @@ flags.register_validator(
     "show_deadlines",
     lambda value: FLAGS.chrome_trace is not None if value else True,
     message="The show_deadlines flag can only be used for Chrome traces.",
+)
+flags.DEFINE_boolean(
+    "with_placement_issues",
+    False,
+    "Show the tasks with the placement issues between the requested times.",
+)
+flags.register_validator(
+    "with_placement_issues",
+    lambda value: (FLAGS.chrome_trace == "resource" and FLAGS.between_time is not None)
+    if value
+    else True,
+    message="Placement issues require resource traces with limited interval.",
 )
 
 # Allow the choice of statistics to show for the metrics.
@@ -612,7 +624,7 @@ def analyze_task_slack(
             tasks.append(task)
 
     # Compute the time between the deadline and the actual completion of the task.
-    slack = [(task.deadline - task.completion_time) / 1000 for task in tasks]
+    slack = [-task.get_deadline_delay() / 1000 for task in tasks]
     logger.debug("================== Actual task completion slack [ms] ===============")
     logger.debug(f"Tasks that match the regex: {task_name_regex}")
     log_statistics(slack, logger, stats)
@@ -672,10 +684,8 @@ def analyze_task_placement_delay(
     max_delay = -sys.maxsize
     plot_colors = [colors[label] for label in scheduler_labels]
     for csv_file in scheduler_csv_files:
-        task_placements = csv_reader.get_task_placements(csv_file)
         placement_delay = [
-            (placement.simulator_time - placement.task.release_time) / 1000
-            for placement in task_placements
+            task.get_placement_delay() / 1000 for task in csv_reader.get_tasks(csv_file)
         ]
         placement_delays.append(placement_delay)
         min_delay = min(min_delay, min(placement_delay))
@@ -716,12 +726,6 @@ def log_detailed_task_statistics(
         if re.match(task_name_regex, task.name):
             grouped_tasks[task.name].append(task)
 
-    # Get the placements grouped by the task name.
-    placements = defaultdict(dict)
-    for placement in csv_reader.get_task_placements(csv_file):
-        if re.match(task_name_regex, placement.task.name):
-            placements[placement.task.name][str(placement.task.id)] = placement
-
     # Colorify the results.
     R = "\033[0;31;40m"
     G = "\033[0;32;40m"
@@ -731,7 +735,6 @@ def log_detailed_task_statistics(
     for task_name, tasks in grouped_tasks.items():
         results = []
         for task in tasks:
-            placement = placements[task_name][str(task.id)]
             results.append(
                 tuple(
                     map(
@@ -745,15 +748,16 @@ def log_detailed_task_statistics(
                             if task.intended_release_time != -1
                             else "-",
                             task.release_time / 1000,
-                            placement.simulator_time / 1000,
+                            task.placement_time / 1000,
                             task.start_time / 1000,
                             task.runtime / 1000,
                             task.deadline / 1000,
                             task.completion_time / 1000,
                             task.missed_deadline,
-                            (task.completion_time - task.deadline) / 1000,
-                            (placement.simulator_time - task.release_time) / 1000,
-                            (task.release_time - task.intended_release_time) / 1000
+                            len(task.skipped_times) > 0,
+                            task.get_deadline_delay() / 1000,
+                            task.get_placement_delay() / 1000,
+                            task.get_release_delay() / 1000
                             if task.intended_release_time != -1
                             else "-",
                         ),
@@ -775,6 +779,7 @@ def log_detailed_task_statistics(
                     "Deadline",
                     "Completion",
                     "X Dline?",
+                    "X Skipped",
                     "Dline Delay",
                     "Place Delay",
                     "Rels Delay",
@@ -809,13 +814,12 @@ def analyze_missed_deadlines(
         stats (`Union[str, Sequence[str]`): The statistics to show for the metric.
     """
     # Group the missed deadlines by their task name (if regex is matched).
-    missed_deadlines = csv_reader.get_missed_deadline_events(scheduler_csv_file)
     missed_deadline_by_task_name = defaultdict(list)
     missed_deadline_delays = []
-    for _, task in missed_deadlines:
-        if re.match(task_name_regex, task.name):
+    for task in csv_reader.get_tasks(scheduler_csv_file):
+        if re.match(task_name_regex, task.name) and task.missed_deadline:
             missed_deadline_by_task_name[task.name].append(task)
-            missed_deadline_delays.append((task.completion_time - task.deadline) / 1000)
+            missed_deadline_delays.append(task.get_deadline_delay() / 1000)
 
     # Log the results.
     logger.debug("==================  Missed Deadlines ==================")
@@ -824,7 +828,7 @@ def analyze_missed_deadlines(
     for task_name, tasks in missed_deadline_by_task_name.items():
         logger.debug(f"{task_name}")
         missed_deadline_delays_per_task = [
-            (task.completion_time - task.deadline) / 1000 for task in tasks
+            task.get_deadline_delay() / 1000 for task in tasks
         ]
         log_statistics(missed_deadline_delays_per_task, logger, stats, offset="    ")
 
@@ -921,41 +925,45 @@ def log_basic_task_statistics(
         if re.match(task_name_regex, task.name):
             tasks[task.name].append(task)
 
-    # Get the placements grouped by the task name.
-    placements = defaultdict(list)
-    for placement in csv_reader.get_task_placements(csv_file):
-        if re.match(task_name_regex, placement.task.name):
-            placements[placement.task.name].append(placement)
-
     # Gather the results.
     results = []
-    total_missed_deadline_delays = []
+    total_release_delays = []
     total_placement_delays = []
+    total_missed_deadline_delays = []
+    total_skipped = []
     for task_name, grouped_tasks in tasks.items():
-        # Gather missed deadline delays.
-        missed_deadline_tasks = [task for task in grouped_tasks if task.missed_deadline]
-        missed_deadline_delays = [
-            (task.completion_time - task.deadline) / 1000
-            for task in missed_deadline_tasks
-        ]
-        total_missed_deadline_delays.extend(missed_deadline_delays)
+        # Gather the number of skipped tasks.
+        skipped_tasks = list(
+            filter(lambda task: len(task.skipped_times) > 0, grouped_tasks)
+        )
+        total_skipped.extend(skipped_tasks)
+
+        # Gather release delays.
+        release_delays = [task.get_release_delay() / 1000 for task in grouped_tasks]
+        total_release_delays.extend(release_delays)
 
         # Gather placement delays.
-        placement_delays = [
-            (placement.simulator_time - placement.task.release_time) / 1000
-            for placement in placements[task_name]
-        ]
+        placement_delays = [task.get_placement_delay() / 1000 for task in grouped_tasks]
         total_placement_delays.extend(placement_delays)
+
+        # Gather missed deadline delays.
+        missed_deadline_delays = [
+            task.get_deadline_delay() / 1000
+            for task in filter(lambda task: task.missed_deadline, grouped_tasks)
+        ]
+        total_missed_deadline_delays.extend(missed_deadline_delays)
 
         results.append(
             (
                 task_name,
                 len(grouped_tasks),
-                len(missed_deadline_tasks),
+                len(missed_deadline_delays),
+                len(skipped_tasks),
+                stat_function(release_delays),
+                stat_function(placement_delays),
                 stat_function(missed_deadline_delays)
                 if len(missed_deadline_delays) != 0
                 else 0.0,
-                stat_function(placement_delays),
             )
         )
     results.append(
@@ -963,10 +971,12 @@ def log_basic_task_statistics(
             "Total",
             sum(map(len, tasks.values())),
             len(total_missed_deadline_delays),
+            len(total_skipped),
+            stat_function(total_release_delays),
+            stat_function(total_placement_delays),
             stat_function(total_missed_deadline_delays)
             if len(total_missed_deadline_delays) != 0
             else 0.0,
-            stat_function(total_placement_delays),
         )
     )
 
@@ -979,8 +989,10 @@ def log_basic_task_statistics(
                 "Name",
                 "Total",
                 "X Dline?",
-                "Dline Delay",
+                "# Skipped",
+                "Rls Delay",
                 "Place Delay",
+                "Dline Delay",
             ],
             tablefmt="grid",
             showindex=True,
@@ -1020,22 +1032,15 @@ def log_aggregate_stats(
             if re.match(task_name_regex, task.name):
                 tasks.append(task)
 
-        placements = []
-        for placement in csv_reader.get_task_placements(csv_file):
-            if re.match(task_name_regex, placement.task.name):
-                placements.append(placement)
-
         num_timestamps = FLAGS.max_timestamp if FLAGS.max_timestamp else "-"
         num_missed = len(list(filter(attrgetter("missed_deadline"), tasks)))
+        num_skipped = len(list(filter(lambda task: len(task.skipped_times) > 0, tasks)))
 
         placement_delay = stat_function(
-            [
-                (placement.simulator_time - placement.task.release_time) / 1000
-                for placement in placements
-            ]
+            [task.get_placement_delay() / 1000 for task in tasks]
         )
         deadline_delay = stat_function(
-            [(task.deadline - task.completion_time) / 1000 for task in tasks]
+            [task.get_deadline_delay() / 1000 for task in tasks]
         )
 
         timestamp_start_end = {}
@@ -1082,6 +1087,7 @@ def log_aggregate_stats(
                 num_timestamps,
                 len(tasks),
                 num_missed,
+                num_skipped,
                 placement_delay,
                 deadline_delay,
                 stat_function(e2e_response_time),
@@ -1101,6 +1107,7 @@ def log_aggregate_stats(
                 "# Time",
                 "# Tasks",
                 "# Missed",
+                "# Skipped",
                 "Placement",
                 "Deadline",
                 "JCT",
@@ -1176,17 +1183,22 @@ def main(argv):
                 FLAGS.output_dir, filename + f"_{FLAGS.chrome_trace}.json"
             )
             logger.debug(f"Saving trace for {scheduler_csv_file} at {output_path}")
-            if len(FLAGS.between_time) == 1:
+            if FLAGS.between_time and len(FLAGS.between_time) == 1:
                 between_time = int(FLAGS.between_time[0])
-            else:
+            elif FLAGS.between_time:
                 between_time = tuple(map(int, FLAGS.between_time))
+            else:
+                between_time = None
             csv_reader.to_chrome_trace(
                 scheduler_csv_file,
                 scheduler_label,
                 output_path,
                 between_time=between_time,
                 trace_fmt=FLAGS.chrome_trace,
-                show_deadlines=FLAGS.show_deadlines,
+                show_deadlines=FLAGS.show_deadlines
+                if FLAGS.show_deadlines
+                else "missed",
+                with_placement_issues=FLAGS.with_placement_issues,
             )
 
         # Show statistics or plot the requested graphs.

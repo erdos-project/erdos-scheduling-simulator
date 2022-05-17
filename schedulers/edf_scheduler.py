@@ -5,6 +5,7 @@ from typing import Optional, Sequence, Tuple
 
 import absl  # noqa: F401
 
+import utils
 from schedulers import BaseScheduler
 from workers import WorkerPools
 from workload import Task, TaskGraph
@@ -27,6 +28,14 @@ class EDFScheduler(BaseScheduler):
         _flags: Optional["absl.flags"] = None,
     ):
         super(EDFScheduler, self).__init__(preemptive, runtime)
+        if _flags:
+            self._logger = utils.setup_logging(
+                name=self.__class__.__name__,
+                log_file=_flags.log_file_name,
+                log_level=_flags.log_level,
+            )
+        else:
+            self._logger = utils.setup_logging(name=self.__class__.__name__)
 
     def schedule(
         self, sim_time: int, task_graph: TaskGraph, worker_pools: WorkerPools
@@ -59,15 +68,30 @@ class EDFScheduler(BaseScheduler):
         # need be.
         placements = []
         for task in ordered_tasks:
+            self._logger.debug(f"Trying to schedule {task}.")
             is_task_placed = False
             for worker_pool in schedulable_worker_pools._wps:
                 if worker_pool.can_accomodate_task(task):
                     worker_pool.place_task(task, dry_run=True)
                     is_task_placed = True
                     placements.append((task, worker_pool.id, sim_time))
+                    self._logger.debug(
+                        f"Placed {task} on Worker Pool ({worker_pool.id}) to be "
+                        f"started at {sim_time}"
+                    )
                     break
 
             if not is_task_placed:
+                utilizations = "\n".join(
+                    [
+                        f"{worker_pool.id},{worker_pool.get_utilization()}"
+                        for worker_pool in schedulable_worker_pools._wps
+                    ]
+                )
+                self._logger.debug(
+                    f"Failed to place {task} because the state of the worker pools "
+                    f"was: \n{utilizations}."
+                )
                 placements.append((task, None, None))
 
         end_time = time.time()
