@@ -10,7 +10,7 @@ import absl  # noqa: F401
 import utils
 from schedulers import BaseScheduler
 from workers import WorkerPool, WorkerPools
-from workload import JobGraph, Resource, Resources, Task, TaskGraph
+from workload import JobGraph, Resource, Resources, Task, TaskGraph, TaskState
 
 
 @total_ordering
@@ -361,6 +361,7 @@ class Simulator(object):
             f"{num_placed},{num_unplaced}"
         )
 
+        placement_events = []
         for task, placement, start_time in self._last_task_placement:
             if task.is_complete():
                 # Task completd before the scheduler finished.
@@ -368,7 +369,7 @@ class Simulator(object):
             if placement is None:
                 if task.worker_pool_id:
                     self._logger.info(f"[{event.time}] Task {task} was preempted")
-                    self._event_queue.add_event(
+                    placement_events.append(
                         Event(
                             event_type=EventType.TASK_PREEMPT,
                             time=event.time,
@@ -385,7 +386,7 @@ class Simulator(object):
                 # Task remained on the same worker pool.
                 pass
             elif task.worker_pool_id is None:
-                self._event_queue.add_event(
+                placement_events.append(
                     Event(
                         event_type=EventType.TASK_PLACEMENT,
                         time=max(start_time, event.time),
@@ -394,7 +395,15 @@ class Simulator(object):
                     )
                 )
             else:
-                self._event_queue.add_event(
+                # Preempt all the tasks first so the resources are cleared.
+                placement_events.append(
+                    Event(
+                        event_type=EventType.TASK_PREEMPT,
+                        time=max(start_time, event.time),
+                        task=task,
+                    )
+                )
+                placement_events.append(
                     Event(
                         event_type=EventType.TASK_MIGRATION,
                         time=max(start_time, event.time),
@@ -402,6 +411,10 @@ class Simulator(object):
                         placement=placement,
                     )
                 )
+
+        # Sort the events so that preemptions and migrations happen first.
+        for placement_event in sorted(placement_events):
+            self._event_queue.add_event(placement_event)
 
         # Now that all the tasks are placed, log the worker resource utilization.
         self.__log_utilization(event.time)
@@ -524,11 +537,26 @@ class Simulator(object):
 
     def __handle_task_migration(self, event: Event, task_graph: TaskGraph):
         task = event.task
-        prev_worker_pool = self._worker_pools[task.worker_pool_id]
-        prev_worker_pool.remove_task(task)
-        task.preempt(event.time)
-        task.resume(event.time)
+        assert (
+            task.state == TaskState.PREEMPTED
+        ), f"The {task} was not PREEMPTED before being MIGRATED."
+
+        last_preemption = task.last_preemption
+        assert last_preemption is not None, f"The {task} did not have a preemption."
+        self._logger.info(
+            f"[{event.time}] Migrating {task} from {last_preemption.old_worker_pool} "
+            f"to {event.placement}."
+        )
+        self._logger.debug(
+            f"[event.time] The resource requirements of {task} were "
+            f"{task.resource_requirements}."
+        )
+        task.resume(event.time, worker_pool_id=event.placement)
         cur_worker_pool = self._worker_pools[event.placement]
+        self._logger.debug(
+            f"[{event.time}] The state of the "
+            f"WorkerPool({event.placement}) is {cur_worker_pool.resources}."
+        )
         cur_worker_pool.place_task(task)
         resource_allocation_str = ",".join(
             [
@@ -538,11 +566,8 @@ class Simulator(object):
         )
         self._csv_logger.debug(
             f"{event.time},TASK_MIGRATED,{task.name},{task.timestamp},{task.id},"
-            f"{prev_worker_pool.id},{event.placement},{resource_allocation_str}"
-        )
-        self._logger.info(
-            f"[{event.time}] Migrated {task} from {prev_worker_pool} to "
-            f"{cur_worker_pool}"
+            f"{last_preemption.old_worker_pool},{event.placement},"
+            f"{resource_allocation_str}"
         )
 
     def __handle_event(self, event: Event, task_graph: TaskGraph) -> bool:

@@ -283,7 +283,7 @@ class WorkerPool(object):
                     break
 
         if placement is None:
-            raise ValueError(f"The task ({task}) could not be placed.")
+            raise ValueError(f"The {task} could not be placed on {self.id} WorkerPool.")
         else:
             self._workers[placement].place_task(task)
             self._placed_tasks[task] = placement
