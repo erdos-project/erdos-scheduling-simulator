@@ -524,16 +524,22 @@ class Simulator(object):
 
     def __handle_task_migration(self, event: Event, task_graph: TaskGraph):
         task = event.task
-        self._csv_logger.debug(
-            f"{event.time},TASK_MIGRATED,{task.name},{task.timestamp},{task.id},"
-            f"{task.worker_pool_id},{event.placement}"
-        )
         prev_worker_pool = self._worker_pools[task.worker_pool_id]
         prev_worker_pool.remove_task(task)
         task.preempt(event.time)
         task.resume(event.time)
         cur_worker_pool = self._worker_pools[event.placement]
         cur_worker_pool.place_task(task)
+        resource_allocation_str = ",".join(
+            [
+                ",".join((resource.name, resource.id, str(quantity)))
+                for resource, quantity in cur_worker_pool.get_allocated_resources(task)
+            ]
+        )
+        self._csv_logger.debug(
+            f"{event.time},TASK_MIGRATED,{task.name},{task.timestamp},{task.id},"
+            f"{prev_worker_pool.id},{event.placement},{resource_allocation_str}"
+        )
         self._logger.info(
             f"[{event.time}] Migrated {task} from {prev_worker_pool} to "
             f"{cur_worker_pool}"
