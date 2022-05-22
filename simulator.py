@@ -520,7 +520,9 @@ class Simulator(object):
         # Initialize the task at the given placement time, and place it on
         # the WorkerPool.
         worker_pool = self._worker_pools[event.placement]
-        task.start(event.time, self._runtime_variance)
+        task.start(
+            event.time, worker_pool_id=event.placement, variance=self._runtime_variance
+        )
         worker_pool.place_task(task)
         resource_allocation_str = ",".join(
             [

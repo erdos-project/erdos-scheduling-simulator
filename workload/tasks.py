@@ -178,7 +178,7 @@ class Task(object):
         """Steps the task for the given `step_size` (default 1 time step).
 
         Args:
-            current_time (`in`): The current time of the simulator (in us).
+            current_time (`int`): The current time of the simulator (in us).
             step_size (`int`): The amount of time (in us) for which to step
                 the task.
 
@@ -265,6 +265,7 @@ class Task(object):
         self.last_preemption.new_worker_pool = new_worker_pool
         self._last_step_time = time
         self._state = TaskState.RUNNING
+        self._worker_pool_id = new_worker_pool
 
     def finish(self, time: int):
         """Completes the execution of the task at the given simulation time.
@@ -282,6 +283,8 @@ class Task(object):
             self._state = TaskState.COMPLETED
         else:
             self._state = TaskState.EVICTED
+
+        self._worker_pool_id = None
         self._logger.debug(f"Finished execution of {self} at time {time}")
         # TODO (Sukrit): We should notify the `Job` of the completion of this
         # particular task, so it can release new tasks to the scheduler.

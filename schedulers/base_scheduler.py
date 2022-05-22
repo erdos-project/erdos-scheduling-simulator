@@ -126,5 +126,5 @@ class BaseScheduler(object):
             assert wp.can_accomodate_task(
                 task
             ), f"WorkerPool {wp.id} doesn't have resources for {task.id}"
-            wp.place_task(task, dry_run=True)
+            wp.place_task(task)
             heapq.heappush(task_completion, (start_time + task.runtime, wp_id, task))

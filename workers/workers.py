@@ -251,7 +251,7 @@ class WorkerPool(object):
                 self._logger.debug(f"Adding {worker} to {self}")
                 self._workers[worker.id] = worker
 
-    def place_task(self, task: Task, dry_run: bool = False):
+    def place_task(self, task: Task):
         """Places the task on this `WorkerPool`.
 
         The caller must ensure that the `WorkerPool` has enough resources to
@@ -260,7 +260,6 @@ class WorkerPool(object):
 
         Args:
             task (`Task`): The task to be placed in this `WorkerPool`.
-            dry_run (`bool`): If False, then the task's worker pool id is not updated.
 
         Raises:
             `ValueError` if the task could not be placed due to insufficient
@@ -287,15 +286,12 @@ class WorkerPool(object):
         else:
             self._workers[placement].place_task(task)
             self._placed_tasks[task] = placement
-            if not dry_run:
-                task._worker_pool_id = self.id
 
-    def remove_task(self, task: Task, dry_run: bool = False):
+    def remove_task(self, task: Task):
         """Removes the task from this `WorkerPool`.
 
         Args:
             task (`Task`): The task to be placed on this `WorkerPool`.
-            dry_run (`bool`): If False, then the task's worker pool id is not updated.
 
         Raises:
             `ValueError` if the task was not placed on this worker pool.
@@ -304,8 +300,6 @@ class WorkerPool(object):
             raise ValueError(f"The task {task} was not placed on {self.id} WorkerPool.")
         # Deallocate the resources and remove the placed task.
         self._workers[self._placed_tasks[task]].remove_task(task)
-        if not dry_run:
-            task._worker_pool_id = None
         del self._placed_tasks[task]
 
     def get_placed_tasks(self) -> Sequence[Task]:
