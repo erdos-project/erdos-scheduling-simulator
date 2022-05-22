@@ -11,10 +11,6 @@ import utils
 from workload import Job, Resources
 from workload.graph import Graph
 
-Preemption = namedtuple(
-    "Preemption", "preemption_time, old_worker_pool, restart_time, new_worker_pool"
-)
-
 
 class TaskState(Enum):
     """Represents the different states that a Task can potentially be in."""
@@ -59,6 +55,13 @@ class Task(object):
         _logger(`Optional[logging.Logger]`): The logger to use to log the
             results of the execution.
     """
+
+    class Preemption:
+        def __init__(self, preemption_time, old_worker_pool):
+            self.preemption_time = preemption_time
+            self.old_worker_pool = old_worker_pool
+            self.restart_time = None
+            self.new_worker_pool = None
 
     def __init__(
         self,
@@ -129,6 +132,7 @@ class Task(object):
     def start(
         self,
         time: Optional[int] = None,
+        worker_pool_id: Optional[int] = None,
         variance: Optional[int] = 0,
     ):
         """Begins the execution of the task at the given simulator time.
@@ -137,6 +141,8 @@ class Task(object):
             time (`Optional[int]`): The simulation time (in us) at which to
                 begin the task. If None, should be specified at task
                 construction.
+            worker_pool_id (`Optional[str]`): The ID of the WorkerPool that
+                the task will be started on.
             variance (`Optional[int]`): The percentage variation to add to
                 the runtime of the task.
 
@@ -166,6 +172,7 @@ class Task(object):
         self._last_step_time = time
         self._state = TaskState.RUNNING
         self.update_remaining_time(remaining_time)
+        self._worker_pool_id = worker_pool_id
 
     def step(self, current_time: int, step_size: int = 1) -> bool:
         """Steps the task for the given `step_size` (default 1 time step).
@@ -221,11 +228,9 @@ class Task(object):
             f"Transitioning {self} to {TaskState.PREEMPTED} at time {time}"
         )
         self._preemptions.append(
-            Preemption(
+            Task.Preemption(
                 preemption_time=time,
                 old_worker_pool=self._worker_pool_id,
-                restart_time=None,
-                new_worker_pool=None,
             )
         )
         self._state = TaskState.PREEMPTED
@@ -256,8 +261,8 @@ class Task(object):
             f"{self.preemption_time} to {TaskState.RUNNING} at "
             f"time {time} on WorkerPool ({new_worker_pool})"
         )
-        self.last_preemption._replace(restart_time=time)
-        self.last_preemption._replace(new_worker_pool=new_worker_pool)
+        self.last_preemption.restart_time = time
+        self.last_preemption.new_worker_pool = new_worker_pool
         self._last_step_time = time
         self._state = TaskState.RUNNING
 
@@ -439,7 +444,7 @@ class Task(object):
         return self.last_preemption.preemption_time if self.last_preemption else -1
 
     @property
-    def last_preemption(self) -> Optional[Preemption]:
+    def last_preemption(self) -> Optional["Task.Preemption"]:
         return None if len(self._preemptions) == 0 else self._preemptions[-1]
 
     @property
