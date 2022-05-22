@@ -26,6 +26,7 @@ class EventType(Enum):
     SCHEDULER_START = 6  # Requires the simulator to invoke the scheduler.
     SCHEDULER_FINISHED = 7  # Signifies the end of the scheduler loop.
     SIMULATOR_END = 8  # Signify the end of the simulator loop.
+    LOG_UTILIZATION = 9  # Ask the simulator to log the utilization of the worker pools.
 
     def __lt__(self, other):
         # This method is used to order events in the event queue. We prioritize
@@ -396,6 +397,9 @@ class Simulator(object):
                 )
             else:
                 # Preempt all the tasks first so the resources are cleared.
+                # TODO (Sukrit): Should the task be preempted at the current moment and
+                # the migration pushed to later, or should the start_time signify the
+                # moment these two events happen in tandem.
                 placement_events.append(
                     Event(
                         event_type=EventType.TASK_PREEMPT,
@@ -416,8 +420,11 @@ class Simulator(object):
         for placement_event in sorted(placement_events):
             self._event_queue.add_event(placement_event)
 
-        # Now that all the tasks are placed, log the worker resource utilization.
-        self.__log_utilization(event.time)
+        # Now that all the tasks are placed, ask the simulator to log the resource
+        # utilization.
+        self._event_queue.add_event(
+            Event(event_type=EventType.LOG_UTILIZATION, time=event.time)
+        )
 
         # Reset the available tasks and the last task placement.
         self._last_task_placement = []
@@ -625,6 +632,8 @@ class Simulator(object):
             self.__handle_scheduler_start(event, task_graph)
         elif event.event_type == EventType.SCHEDULER_FINISHED:
             self.__handle_scheduler_finish(event, task_graph)
+        elif event.event_type == EventType.LOG_UTILIZATION:
+            self.__log_utilization(event.time)
         else:
             raise ValueError(f"[{event.time}] Retrieved event of unknown type: {event}")
         return False
