@@ -351,9 +351,12 @@ class WorkerPool(object):
             worker.can_accomodate_task(task) for worker in self._workers.values()
         )
 
-    def get_utilization(self) -> str:
+    def get_utilization(self) -> Sequence[str]:
         """Retrieves the utilization of the resources of a particular WorkerPool in
         CSV format.
+
+        The format of the output is:
+        List["ResourceName,ResourceID,AllocatedQuantity,AvailableQuantity"]
 
         Returns:
             The utilization of the WorkerPool in CSV format.
@@ -364,19 +367,17 @@ class WorkerPool(object):
             final_resources += worker.resources
 
         # Log the utilization from the final set of resources.
-        resource_utilization = ",".join(
-            [
-                ",".join(
-                    (
-                        resource.name,
-                        str(resource.id),
-                        str(final_resources.get_allocated_quantity(resource)),
-                        str(final_resources.get_available_quantity(resource)),
-                    )
+        resource_utilization = [
+            ",".join(
+                (
+                    resource.name,
+                    str(resource.id),
+                    str(final_resources.get_allocated_quantity(resource)),
+                    str(final_resources.get_available_quantity(resource)),
                 )
-                for resource, _ in final_resources.resources
-            ]
-        )
+            )
+            for resource, _ in final_resources.resources
+        ]
         return resource_utilization
 
     def get_allocated_resources(self, task: Task) -> List[Tuple[Resource, float]]:
