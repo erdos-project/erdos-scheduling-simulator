@@ -326,4 +326,4 @@ def test_simulator_handle_event():
         ),
         task_graph=TaskGraph(),
     )
-    assert len(simulator._event_queue) == 6, "Incorrect length of EventQueue."
+    assert len(simulator._event_queue) == 7, "Incorrect length of EventQueue."
