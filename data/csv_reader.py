@@ -119,9 +119,9 @@ class CSVReader(object):
                 elif reading[1] == "TASK_PREEMPT":
                     # Update the placement with the preemption time.
                     tasks[reading[4]].update_preempt(reading)
-                elif reading[1] == "TASK_MIGRATION":
+                elif reading[1] == "TASK_MIGRATED":
                     # Update the placement with the migration time.
-                    tasks[reading[4]].update_migration(reading)
+                    tasks[reading[4]].update_migration(reading, worker_pools)
                 else:
                     continue
             simulator.worker_pools = worker_pools.values()

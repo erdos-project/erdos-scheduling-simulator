@@ -157,12 +157,16 @@ class Task(object):
         ), f"The event {csv_reading[1]} was not of type TASK_PREEMPT."
         self.placements[-1].completion_time = int(csv_reading[0])
 
-    def update_migration(self, csv_reading: str):
+    def update_migration(
+        self, csv_reading: str, worker_pools: Mapping[str, WorkerPool]
+    ):
         """Updates the placement information of the Task based on the TASK_MIGRATED
         event from CSV.
 
         Args:
             csv_reading (str): The CSV reading of type `TASK_MIGRATED`.
+            worker_pools (Mapping[str, WorkerPool]): A name to WorkerPool mapping to
+                allow tasks to directly reference WorkerPools.
         """
         assert (
             csv_reading[1] == "TASK_MIGRATED"
@@ -175,10 +179,10 @@ class Task(object):
             ],
         )
         self.placements.append(placement)
-        if not self.start_time or self.start_time > placement_time:
-            self.start_time = placement_time
-        if not self.placement_time or self.placement_time > placement_time:
-            self.placement_time = placement_time
+        if not self.start_time or self.start_time > placement.placement_time:
+            self.start_time = placement.placement_time
+        if not self.placement_time or self.placement_time > placement.placement_time:
+            self.placement_time = placement.placement_time
 
     def update_finish(self, csv_reading: str):
         """Updates the values of the Task based on the TASK_FINISHED event from CSV.
