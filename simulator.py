@@ -420,12 +420,6 @@ class Simulator(object):
         for placement_event in sorted(placement_events):
             self._event_queue.add_event(placement_event)
 
-        # Now that all the tasks are placed, ask the simulator to log the resource
-        # utilization.
-        self._event_queue.add_event(
-            Event(event_type=EventType.LOG_UTILIZATION, time=event.time)
-        )
-
         # Reset the available tasks and the last task placement.
         self._last_task_placement = []
 
@@ -441,6 +435,12 @@ class Simulator(object):
         self._event_queue.add_event(next_sched_event)
         self._logger.info(
             f"[{event.time}] Added {next_sched_event} to the event queue."
+        )
+
+        # Now that all the tasks are placed, ask the simulator to log the resource
+        # utilization and quit later, if requested.
+        self._event_queue.add_event(
+            Event(event_type=EventType.LOG_UTILIZATION, time=event.time)
         )
 
     def __handle_task_release(self, event: Event):
