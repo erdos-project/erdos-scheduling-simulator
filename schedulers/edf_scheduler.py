@@ -28,15 +28,9 @@ class EDFScheduler(BaseScheduler):
         runtime: int = -1,
         _flags: Optional["absl.flags"] = None,
     ):
-        super(EDFScheduler, self).__init__(preemptive, runtime)
-        if _flags:
-            self._logger = utils.setup_logging(
-                name=self.__class__.__name__,
-                log_file=_flags.log_file_name,
-                log_level=_flags.log_level,
-            )
-        else:
-            self._logger = utils.setup_logging(name=self.__class__.__name__)
+        super(EDFScheduler, self).__init__(
+            preemptive=preemptive, runtime=runtime, _flags=_flags
+        )
 
     def schedule(
         self, sim_time: int, task_graph: TaskGraph, worker_pools: WorkerPools

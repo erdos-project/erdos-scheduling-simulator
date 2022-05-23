@@ -39,7 +39,7 @@ class Z3Scheduler(BaseScheduler):
                 the scheduling lookahead (in us) using estimated task release times.
         """
         super(Z3Scheduler, self).__init__(
-            preemptive, runtime, lookahead, enforce_deadlines
+            preemptive, runtime, lookahead, enforce_deadlines, _flags
         )
         self._goal = goal
         self._time = None
@@ -53,16 +53,6 @@ class Z3Scheduler(BaseScheduler):
         self._task_graph = None
         self._worker_pools = None
         self._placements = []
-        # Set up the logger.
-        self._flags = _flags
-        if _flags:
-            self._logger = utils.setup_logging(
-                name=self.__class__.__name__,
-                log_file=_flags.log_file_name,
-                log_level=_flags.log_level,
-            )
-        else:
-            self._logger = utils.setup_logging(name=self.__class__.__name__)
 
     def _add_task_timing_constraints(self, s):
         for task_id, task in self._task_ids_to_task.items():

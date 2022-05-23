@@ -44,7 +44,7 @@ class GurobiScheduler(BaseScheduler):
                 the scheduling lookahead (in us) using estimated task release times.
         """
         super(GurobiScheduler, self).__init__(
-            preemptive, runtime, lookahead, enforce_deadlines
+            preemptive, runtime, lookahead, enforce_deadlines, _flags
         )
         assert goal != "feasibility", "Gurobi does not support feasibility checking."
         self._goal = goal
@@ -62,16 +62,6 @@ class GurobiScheduler(BaseScheduler):
         self._task_graph = None
         self._worker_pools = None
         self._placements = []
-        # Set up the loggers.
-        self._flags = _flags
-        if _flags:
-            self._logger = utils.setup_logging(
-                name=self.__class__.__name__,
-                log_file=_flags.log_file_name,
-                log_level=_flags.log_level,
-            )
-        else:
-            self._logger = utils.setup_logging(name=self.__class__.__name__)
 
     def _add_variables(
         self,

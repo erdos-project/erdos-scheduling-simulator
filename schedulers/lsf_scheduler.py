@@ -27,7 +27,9 @@ class LSFScheduler(BaseScheduler):
         runtime: int = -1,
         _flags: Optional["absl.flags"] = None,
     ):
-        super(LSFScheduler, self).__init__(preemptive, runtime)
+        super(LSFScheduler, self).__init__(
+            preemptive=preemptive, runtime=runtime, _flags=_flags
+        )
 
     def schedule(
         self, sim_time: int, task_graph: TaskGraph, worker_pools: WorkerPools

@@ -25,7 +25,9 @@ class FIFOScheduler(BaseScheduler):
         _flags: Optional["absl.flags"] = None,
     ):
         assert not preemptive, "FIFO scheduler is not preemptive"
-        super(FIFOScheduler, self).__init__(preemptive, runtime)
+        super(FIFOScheduler, self).__init__(
+            preemptive=preemptive, runtime=runtime, _flags=_flags
+        )
 
     def schedule(
         self, sim_time: int, task_graph: TaskGraph, worker_pools: WorkerPools

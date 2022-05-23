@@ -4,6 +4,7 @@ from typing import Optional, Sequence, Tuple
 
 import absl  # noqa: F401
 
+import utils
 from workers import WorkerPools
 from workload import Task, TaskGraph
 
@@ -20,6 +21,8 @@ class BaseScheduler(object):
             the scheduling lookahead (in us) using estimated task release times.
         enforce_deadlines (`bool`): If True then deadlines must be met or else the
             `schedule()` will return None.
+        _flags (`Optional[absl.flags]`): The runtime flags that are used to initialize
+            a logger instance.
     """
 
     def __init__(
@@ -28,18 +31,27 @@ class BaseScheduler(object):
         runtime: int = -1,
         lookahead: int = 0,
         enforce_deadlines: bool = False,
+        _flags: Optional["absl.flags"] = None,
     ):
         self._preemptive = preemptive
         self._runtime = runtime
         self._lookahead = lookahead
         self._enforce_deadlines = enforce_deadlines
+        self._flags = _flags
+        if self._flags:
+            self._logger = utils.setup_logging(
+                name=self.__class__.__name__,
+                log_file=self._flags.log_file_name,
+                log_level=self._flags.log_level,
+            )
+        else:
+            self._logger = utils.setup_logging(name=self.__class__.__name__)
 
     def schedule(
         self,
         sim_time: int,
         task_graph: TaskGraph,
         worker_pools: "WorkerPools",  # noqa: F821
-        _flags: Optional["absl.flags"] = None,
     ) -> (int, Sequence[Tuple[Task, str, int]]):
         """Abstract method to be implemented by derived classes to allow the
         scheduling of tasks.
