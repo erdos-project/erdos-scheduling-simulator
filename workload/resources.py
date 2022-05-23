@@ -123,7 +123,7 @@ class Resources(object):
 
     def get_allocated_resources(
         self, task: "Task"  # noqa: F821
-    ) -> List[Tuple[Resource, float]]:
+    ) -> List[Tuple[Resource, int]]:
         """Retrieves the resources on this set allocated to a given task.
 
         Args:
@@ -134,6 +134,25 @@ class Resources(object):
             quantity allocated) pair.
         """
         return self._current_allocations[task]
+
+    def get_allocated_tasks(self, resource: Resource) -> List[Tuple["Task", int]]:
+        """Retrieves the list of (task, quantity) pairs that the requested `resource`
+        has been allocated to.
+
+        Args:
+            resource (`Resource`): The resource whose allocated tasks are being
+                requested.
+
+        Returns:
+            A `List[Tuple[Task, int]]` signifying the `task` and the quantity allocated
+            to it.
+        """
+        allocated_tasks = []
+        for task, allocations in self._current_allocations.items():
+            for (allocated_resource, allocated_quantity) in allocations:
+                if resource == allocated_resource:
+                    allocated_tasks.append((task, allocated_quantity))
+        return allocated_tasks
 
     def allocate_multiple(self, resources: "Resources", task: "Task"):  # noqa: F821
         """Allocates multiple resources together according to their specified
@@ -166,7 +185,7 @@ class Resources(object):
                 )
             self.allocate(resource, task, quantity)
 
-    def get_available_quantity(self, resource: Resource) -> float:
+    def get_available_quantity(self, resource: Resource) -> int:
         """Provides the quantity of the available resources of the given type.
 
         If the resource has a specific `id`, then the quantity of that resource
@@ -186,7 +205,7 @@ class Resources(object):
                 resource_quantity += _quantity
         return resource_quantity
 
-    def get_allocated_quantity(self, resource: Resource) -> float:
+    def get_allocated_quantity(self, resource: Resource) -> int:
         """Get the quantity of the given `resource` that has been allocated.
 
         Args:
@@ -194,14 +213,27 @@ class Resources(object):
                 to be computed.
 
         Returns:
-            An `int` quantity of the `resource` that has been allocated.
+            A `int` quantity of the `resource` that has been allocated.
+        """
+        available_quantity = self.get_available_quantity(resource)
+        total_quantity = self.get_total_quantity(resource)
+        return total_quantity - available_quantity
+
+    def get_total_quantity(self, resource: Resource) -> int:
+        """Get the total quantity of the given `resource`.
+
+        Args:
+            resource (`Resource`): The resource whose total quantity needs to be
+                computed.
+
+        Returns:
+            An `int` total quantity of the `resource`.
         """
         total_quantity = 0
         for _resource, _quantity in self.__total_resources.items():
             if _resource == resource:
                 total_quantity += _quantity
-        available_quantity = self.get_available_quantity(resource)
-        return total_quantity - available_quantity
+        return total_quantity
 
     def deallocate(self, task: "Task"):  # noqa: F821
         """Deallocates the resources assigned to the particular `task`.

@@ -307,6 +307,49 @@ def test_deallocation_of_resources():
     ), "Incorrect quantity of the GPU resource."
 
 
+def test_retrieval_allocated_resources_task():
+    """Tests that the correct resources allocated to a Task are retrieved."""
+    cpu_resource_1 = Resource(name="CPU")
+    cpu_resource_2 = Resource(name="CPU")
+    gpu_resource_1 = Resource(name="GPU")
+    resources = Resources({cpu_resource_1: 5, cpu_resource_2: 5, gpu_resource_1: 10})
+
+    cpu_resource_any = Resource(name="CPU", _id="any")
+    gpu_resource_any = Resource(name="GPU", _id="any")
+
+    task = create_default_task()
+    resources.allocate(cpu_resource_1, task, 5)
+    resources.allocate(gpu_resource_1, task, 5)
+
+    allocations = resources.get_allocated_resources(task)
+    assert len(allocations) == 2, "Incorrect number of allocations were retrieved."
+    assert allocations[0] == (cpu_resource_1, 5), "Incorrect allocation retrieved."
+    assert allocations[1] == (gpu_resource_1, 5), "Incorrect allocation retrieved."
+
+
+def test_retrieval_allocated_tasks_resource():
+    """Tests that the correct resources allocated to a Task are retrieved."""
+    cpu_resource_1 = Resource(name="CPU")
+    cpu_resource_2 = Resource(name="CPU")
+    gpu_resource_1 = Resource(name="GPU")
+    resources = Resources({cpu_resource_1: 5, cpu_resource_2: 5, gpu_resource_1: 10})
+
+    cpu_resource_any = Resource(name="CPU", _id="any")
+    gpu_resource_any = Resource(name="GPU", _id="any")
+
+    task_1 = create_default_task()
+    resources.allocate(cpu_resource_1, task_1, 5)
+    resources.allocate(gpu_resource_1, task_1, 5)
+
+    task_2 = create_default_task()
+    resources.allocate(gpu_resource_1, task_2, 5)
+
+    allocations = resources.get_allocated_tasks(gpu_resource_1)
+    assert len(allocations) == 2, "Incorrect number of allocations were retrieved."
+    assert allocations[0] == (task_1, 5), "Incorrect allocation retrieved."
+    assert allocations[1] == (task_2, 5), "Incorrect allocation retrieved."
+
+
 def test_resources_copy():
     """Test that Resources are correctly copied."""
     cpu_resource_1 = Resource(name="CPU")
