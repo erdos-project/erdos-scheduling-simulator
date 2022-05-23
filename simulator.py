@@ -397,13 +397,10 @@ class Simulator(object):
                 )
             else:
                 # Preempt all the tasks first so the resources are cleared.
-                # TODO (Sukrit): Should the task be preempted at the current moment and
-                # the migration pushed to later, or should the start_time signify the
-                # moment these two events happen in tandem.
                 placement_events.append(
                     Event(
                         event_type=EventType.TASK_PREEMPT,
-                        time=max(start_time, event.time),
+                        time=event.time,
                         task=task,
                     )
                 )
