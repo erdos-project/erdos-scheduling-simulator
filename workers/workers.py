@@ -490,11 +490,7 @@ class WorkerPools(object):
         """
         # Unique list of resource names -- not relying on set stability.
         resource_names = list(
-            {
-                r.name
-                for wp in self.worker_pools
-                for r in wp.resources._resource_vector.keys()
-            }
+            {r.name for wp in self.worker_pools for r in wp.resources}
         )
         # Uniquify scrambles the order.
         resource_names.sort()

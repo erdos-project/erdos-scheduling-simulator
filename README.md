@@ -2,7 +2,8 @@
 
 ## Installation
 
-To install the repository and set up the required paths, run
+To install the repository and set up the required paths, install Python 3.7+,
+and run
 
 ```console
 python3 setup.py develop

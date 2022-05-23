@@ -537,9 +537,7 @@ class GurobiScheduler2(BaseScheduler):
         total_resources = Resources(_logger=self._logger)
         for wp in self._worker_pools.worker_pools:
             total_resources += wp.resources
-        res_names = set(
-            map(attrgetter("name"), total_resources._resource_vector.keys())
-        )
+        res_names = set(map(attrgetter("name"), total_resources))
 
         for task_id in self._task_ids_to_start_time.keys():
             event_time = self._task_ids_to_start_time[task_id]

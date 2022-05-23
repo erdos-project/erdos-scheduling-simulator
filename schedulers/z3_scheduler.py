@@ -89,7 +89,7 @@ class Z3Scheduler(BaseScheduler):
             # for res in task.resource_requirements._resource_vector.keys():
             # TODO: Add constraints for all resources once multi-dimensional
             # requirements are supported.
-            resource = next(iter(task.resource_requirements._resource_vector))
+            resource = next(task.resource_requirements)
             (start_index, end_index) = res_type_to_index_range[resource.name]
             s.add(self._task_ids_to_placement[task_id] >= start_index)
             s.add(self._task_ids_to_placement[task_id] < end_index)

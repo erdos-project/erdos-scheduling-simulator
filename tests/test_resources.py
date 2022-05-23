@@ -456,3 +456,24 @@ def test_resources_addition():
     assert (
         final_resources.get_allocated_quantity(gpu_resource_2) == 5
     ), "Incorrect quantity of allocated GPU resources."
+
+
+def test_resources_iteration():
+    """Test that the iteration over the Resources maintains the correct order."""
+    # Construct the first set of Resources.
+    cpu_resource_1 = Resource(name="CPU")
+    cpu_resource_2 = Resource(name="CPU")
+    gpu_resource_1 = Resource(name="GPU")
+    resources = Resources({cpu_resource_1: 5, cpu_resource_2: 5, gpu_resource_1: 10})
+
+    # Ensure that the order of the iteration is correct.
+    order = [cpu_resource_1, cpu_resource_2, gpu_resource_1]
+    for index, resource in enumerate(resources):
+        assert order[index] == resource, "The wrong item was yielded by the iterator."
+
+    # Add a new Resource and ensure that the order is still maintained.
+    gpu_resource_2 = Resource(name="GPU")
+    resources.add_resource(gpu_resource_2, 5)
+    order.append(gpu_resource_2)
+    for index, resource in enumerate(resources):
+        assert order[index] == resource, "The wrong item was yielded by the iterator."

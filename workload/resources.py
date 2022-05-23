@@ -2,7 +2,7 @@ import logging
 from collections import defaultdict
 from copy import copy
 from functools import total_ordering
-from typing import List, Mapping, Optional, Tuple
+from typing import Generator, List, Mapping, Optional, Tuple
 
 import utils
 from workload import Resource
@@ -288,6 +288,13 @@ class Resources(object):
             else:
                 return False
         return True
+
+    def __iter__(self) -> Generator[Resource, None, None]:
+        """Iterates over the set of Resources in the order of defined priority."""
+        # This depends on the language specification of Python3.7+ to maintain the
+        # order over the inserted resource instances.
+        for resource in self._resource_vector.keys():
+            yield resource
 
     def __add__(self, other: "Resources") -> "Resources":
         """Adds the availability and the allocations of the Resources in self
