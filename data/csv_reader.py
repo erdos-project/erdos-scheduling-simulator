@@ -1,6 +1,5 @@
 import csv
 import json
-import uuid
 from collections import defaultdict
 from operator import add, attrgetter
 from typing import Mapping, Optional, Sequence, Tuple, Union
@@ -68,7 +67,7 @@ class CSVReader(object):
                     tasks[reading[8]] = Task(
                         name=reading[2],
                         timestamp=int(reading[3]),
-                        task_id=uuid.UUID(reading[8]),
+                        task_id=reading[8],
                         intended_release_time=int(reading[4]),
                         release_time=int(reading[5]),
                         runtime=int(reading[6]),
@@ -107,7 +106,7 @@ class CSVReader(object):
                     ]
                     worker_pools[reading[3]] = WorkerPool(
                         name=reading[2],
-                        id=uuid.UUID(reading[3]),
+                        id=reading[3],
                         resources=resources,
                     )
                 elif reading[1] == "TASK_PLACEMENT":
@@ -116,6 +115,12 @@ class CSVReader(object):
                 elif reading[1] == "TASK_SKIP":
                     # Update the task with the skip data.
                     tasks[reading[4]].update_skip(reading)
+                elif reading[1] == "TASK_PREEMPT":
+                    # Update the placement with the preemption time.
+                    tasks[reading[4]].update_preempt(reading)
+                elif reading[1] == "TASK_MIGRATED":
+                    # Update the placement with the migration time.
+                    tasks[reading[4]].update_migration(reading, worker_pools)
                 else:
                     continue
             simulator.worker_pools = worker_pools.values()
@@ -269,7 +274,7 @@ class CSVReader(object):
                 f"(never, missed, always)."
             )
 
-        def check_if_time_intersects(start_time, end_time):
+        def check_if_time_intersects(between_time, start_time, end_time):
             if isinstance(between_time, int):
                 return start_time <= between_time <= end_time
             elif isinstance(between_time, Sequence):
@@ -292,6 +297,7 @@ class CSVReader(object):
         # Output all the scheduler events.
         for scheduler_event in self.get_scheduler_invocations(csv_path):
             if check_if_time_intersects(
+                between_time,
                 scheduler_event.start_time,
                 scheduler_event.start_time + scheduler_event.runtime,
             ):
@@ -327,7 +333,9 @@ class CSVReader(object):
         # Output all the tasks and the requested deadlines.
         for task in self.get_tasks(csv_path):
             # Do not output the tasks if it does not fall within the given time.
-            if not check_if_time_intersects(task.start_time, task.completion_time):
+            if not check_if_time_intersects(
+                between_time, task.start_time, task.completion_time
+            ):
                 continue
             if trace_fmt == "task":
                 if "." in task.name:
@@ -336,28 +344,32 @@ class CSVReader(object):
                 else:
                     pid = tid = task.name
 
-                # Output the task.
-                trace_event = {
-                    "name": f"{task.name}::{task.timestamp}",
-                    "cat": "task,duration",
-                    "ph": "X",
-                    "ts": task.start_time,
-                    "dur": task.completion_time - task.start_time,
-                    "pid": pid,
-                    "tid": tid,
-                    "args": {
-                        "name": task.name,
-                        "id": str(task.id),
-                        "timestamp": task.timestamp,
-                        "release_time": task.release_time,
-                        "runtime": task.runtime,
-                        "deadline": task.deadline,
-                        "start_time": task.start_time,
-                        "completion_time": task.completion_time,
-                        "missed_deadline": task.missed_deadline,
-                    },
-                }
-                trace["traceEvents"].append(trace_event)
+                # Output the task's placement as individual elements.
+                for placement in task.placements:
+                    trace_event = {
+                        "name": f"{task.name}::{task.timestamp}",
+                        "cat": "task,duration",
+                        "ph": "X",
+                        "ts": placement.placement_time,
+                        "dur": placement.completion_time - placement.placement_time,
+                        "pid": pid,
+                        "tid": tid,
+                        "args": {
+                            "name": task.name,
+                            "id": str(task.id),
+                            "timestamp": task.timestamp,
+                            "intended_release_time": task.intended_release_time,
+                            "release_time": task.release_time,
+                            "runtime": task.runtime,
+                            "deadline": task.deadline,
+                            "start_time": task.start_time,
+                            "completion_time": task.completion_time,
+                            "missed_deadline": task.missed_deadline,
+                            "placements": task.placements,
+                            "skipped_times": task.skipped_times,
+                        },
+                    }
+                    trace["traceEvents"].append(trace_event)
 
                 # Output the deadline.
                 if (
@@ -375,49 +387,58 @@ class CSVReader(object):
                     }
                     trace["traceEvents"].append(trace_event)
             elif trace_fmt == "resource":
-                tids = [
-                    resource_ids_to_canonical_names[resource.id]
-                    for resource in task.resources_used
-                ]
-                for tid in tids:
-                    # Output the task.
-                    trace_event = {
-                        "name": f"{task.name}::{task.timestamp}",
-                        "cat": "task,duration",
-                        "ph": "X",
-                        "ts": task.start_time,
-                        "dur": task.completion_time - task.start_time,
-                        "pid": task.worker_pool.name,
-                        "tid": tid,
-                        "args": {
-                            "name": task.name,
-                            "id": str(task.id),
-                            "timestamp": task.timestamp,
-                            "release_time": task.release_time,
-                            "runtime": task.runtime,
-                            "deadline": task.deadline,
-                            "start_time": task.start_time,
-                            "completion_time": task.completion_time,
-                            "missed_deadline": task.missed_deadline,
-                        },
-                    }
-                    trace["traceEvents"].append(trace_event)
-
-                    # Output the deadline.
-                    if (
-                        show_deadlines == "missed" and task.missed_deadline
-                    ) or show_deadlines == "always":
+                # Output the task's placement as individual elements.
+                for placement in task.placements:
+                    tids = [
+                        resource_ids_to_canonical_names[resource.id]
+                        for resource in placement.resources_used
+                    ]
+                    for tid in tids:
                         trace_event = {
                             "name": f"{task.name}::{task.timestamp}",
-                            "cat": "task,missed,deadline,instant",
-                            "ph": "i",
-                            "ts": task.deadline,
-                            "pid": task.worker_pool.name,
+                            "cat": "task,duration",
+                            "ph": "X",
+                            "ts": placement.placement_time,
+                            "dur": placement.completion_time - placement.placement_time,
+                            "pid": placement.worker_pool.name,
                             "tid": tid,
-                            # The scope of the missed deadline events is per thread.
-                            "s": "t",
+                            "args": {
+                                "name": task.name,
+                                "id": str(task.id),
+                                "timestamp": task.timestamp,
+                                "intended_release_time": task.intended_release_time,
+                                "release_time": task.release_time,
+                                "runtime": task.runtime,
+                                "deadline": task.deadline,
+                                "start_time": task.start_time,
+                                "completion_time": task.completion_time,
+                                "missed_deadline": task.missed_deadline,
+                                "placements": task.placements,
+                                "skipped_times": task.skipped_times,
+                            },
                         }
                         trace["traceEvents"].append(trace_event)
+
+                        # Output the deadline.
+                        if (
+                            show_deadlines == "missed" and task.missed_deadline
+                        ) or show_deadlines == "always":
+                            if check_if_time_intersects(
+                                task.deadline,
+                                placement.placement_time,
+                                placement.completion_time,
+                            ):
+                                trace_event = {
+                                    "name": f"{task.name}::{task.timestamp}",
+                                    "cat": "task,missed,deadline,instant",
+                                    "ph": "i",
+                                    "ts": task.deadline,
+                                    "pid": task.worker_pool.name,
+                                    "tid": tid,
+                                    # The scope of missed deadline events is per thread.
+                                    "s": "t",
+                                }
+                                trace["traceEvents"].append(trace_event)
             else:
                 raise ValueError(f"Undefined execution mode: {trace_fmt}")
 
@@ -427,7 +448,7 @@ class CSVReader(object):
         if trace_fmt == "resource" and with_placement_issues:
             for task in self.get_tasks_with_placement_issues(csv_path):
                 if check_if_time_intersects(
-                    task.release_time, task.release_time + task.runtime
+                    between_time, task.release_time, task.release_time + task.runtime
                 ):
                     trace_event = {
                         "name": f"{task.name}::{task.timestamp}",
@@ -441,30 +462,23 @@ class CSVReader(object):
                             "name": task.name,
                             "id": str(task.id),
                             "timestamp": task.timestamp,
+                            "intended_release_time": task.intended_release_time,
                             "release_time": task.release_time,
                             "runtime": task.runtime,
                             "deadline": task.deadline,
                             "start_time": task.start_time,
                             "completion_time": task.completion_time,
                             "missed_deadline": task.missed_deadline,
+                            "placements": task.placements,
+                            "skipped_times": task.skipped_times,
                         },
                     }
                     trace["traceEvents"].append(trace_event)
 
                     # Output the deadline event according to the required strategy.
-                    if show_deadlines == "missed" and task.missed_deadline:
-                        trace_event = {
-                            "name": f"{task.name}::{task.timestamp}",
-                            "cat": "task,missed,deadline,instant",
-                            "ph": "i",
-                            "ts": task.deadline,
-                            "pid": "Placement Issues",
-                            "tid": task.name,
-                            # The scope of the missed deadline events is per thread.
-                            "s": "t",
-                        }
-                        trace["traceEvents"].append(trace_event)
-                    elif show_deadlines == "always":
+                    if (
+                        show_deadlines == "missed" and task.missed_deadline
+                    ) or show_deadlines == "always":
                         trace_event = {
                             "name": f"{task.name}::{task.timestamp}",
                             "cat": "task,missed,deadline,instant",
@@ -478,4 +492,6 @@ class CSVReader(object):
                         trace["traceEvents"].append(trace_event)
 
         with open(output_path, "w") as f:
-            json.dump(trace, f, indent=4, sort_keys=True)
+            json.dump(
+                trace, f, default=lambda obj: obj.__dict__, indent=4, sort_keys=True
+            )

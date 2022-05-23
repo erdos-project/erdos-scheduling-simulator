@@ -251,7 +251,7 @@ class WorkerPool(object):
                 self._logger.debug(f"Adding {worker} to {self}")
                 self._workers[worker.id] = worker
 
-    def place_task(self, task: Task, dry_run: bool = False):
+    def place_task(self, task: Task):
         """Places the task on this `WorkerPool`.
 
         The caller must ensure that the `WorkerPool` has enough resources to
@@ -260,7 +260,6 @@ class WorkerPool(object):
 
         Args:
             task (`Task`): The task to be placed in this `WorkerPool`.
-            dry_run (`bool`): If False, then the task's worker pool id is not updated.
 
         Raises:
             `ValueError` if the task could not be placed due to insufficient
@@ -283,19 +282,16 @@ class WorkerPool(object):
                     break
 
         if placement is None:
-            raise ValueError(f"The task ({task}) could not be placed.")
+            raise ValueError(f"The {task} could not be placed on {self.id} WorkerPool.")
         else:
             self._workers[placement].place_task(task)
             self._placed_tasks[task] = placement
-            if not dry_run:
-                task._worker_pool_id = self.id
 
-    def remove_task(self, task: Task, dry_run: bool = False):
+    def remove_task(self, task: Task):
         """Removes the task from this `WorkerPool`.
 
         Args:
             task (`Task`): The task to be placed on this `WorkerPool`.
-            dry_run (`bool`): If False, then the task's worker pool id is not updated.
 
         Raises:
             `ValueError` if the task was not placed on this worker pool.
@@ -304,8 +300,6 @@ class WorkerPool(object):
             raise ValueError(f"The task {task} was not placed on {self.id} WorkerPool.")
         # Deallocate the resources and remove the placed task.
         self._workers[self._placed_tasks[task]].remove_task(task)
-        if not dry_run:
-            task._worker_pool_id = None
         del self._placed_tasks[task]
 
     def get_placed_tasks(self) -> Sequence[Task]:
@@ -357,9 +351,12 @@ class WorkerPool(object):
             worker.can_accomodate_task(task) for worker in self._workers.values()
         )
 
-    def get_utilization(self) -> str:
+    def get_utilization(self) -> Sequence[str]:
         """Retrieves the utilization of the resources of a particular WorkerPool in
         CSV format.
+
+        The format of the output is:
+        List["ResourceName,ResourceID,AllocatedQuantity,AvailableQuantity"]
 
         Returns:
             The utilization of the WorkerPool in CSV format.
@@ -370,19 +367,17 @@ class WorkerPool(object):
             final_resources += worker.resources
 
         # Log the utilization from the final set of resources.
-        resource_utilization = ",".join(
-            [
-                ",".join(
-                    (
-                        resource.name,
-                        str(resource.id),
-                        str(final_resources.get_allocated_quantity(resource)),
-                        str(final_resources.get_available_quantity(resource)),
-                    )
+        resource_utilization = [
+            ",".join(
+                (
+                    resource.name,
+                    str(resource.id),
+                    str(final_resources.get_allocated_quantity(resource)),
+                    str(final_resources.get_available_quantity(resource)),
                 )
-                for resource, _ in final_resources.resources
-            ]
-        )
+            )
+            for resource, _ in final_resources.resources
+        ]
         return resource_utilization
 
     def get_allocated_resources(self, task: Task) -> List[Tuple[Resource, float]]:

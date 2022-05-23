@@ -11,8 +11,6 @@ import utils
 from workload import Job, Resources
 from workload.graph import Graph
 
-Preempted = namedtuple("Preempted", "preemption_time, restart_time")
-
 
 class TaskState(Enum):
     """Represents the different states that a Task can potentially be in."""
@@ -58,6 +56,13 @@ class Task(object):
             results of the execution.
     """
 
+    class Preemption:
+        def __init__(self, preemption_time, old_worker_pool):
+            self.preemption_time = preemption_time
+            self.old_worker_pool = old_worker_pool
+            self.restart_time = None
+            self.new_worker_pool = None
+
     def __init__(
         self,
         name: str,
@@ -94,7 +99,7 @@ class Task(object):
         # (RUNNING -> EVICTED / COMPLETED)
         self._completion_time = completion_time
         # (RUNNING -> PREEMPTED)
-        self._preemption_times = []
+        self._preemptions = []
 
         # The data required for managing the execution of a particular task.
         self._remaining_time = runtime
@@ -127,6 +132,7 @@ class Task(object):
     def start(
         self,
         time: Optional[int] = None,
+        worker_pool_id: Optional[int] = None,
         variance: Optional[int] = 0,
     ):
         """Begins the execution of the task at the given simulator time.
@@ -135,6 +141,8 @@ class Task(object):
             time (`Optional[int]`): The simulation time (in us) at which to
                 begin the task. If None, should be specified at task
                 construction.
+            worker_pool_id (`Optional[str]`): The ID of the WorkerPool that
+                the task will be started on.
             variance (`Optional[int]`): The percentage variation to add to
                 the runtime of the task.
 
@@ -164,12 +172,13 @@ class Task(object):
         self._last_step_time = time
         self._state = TaskState.RUNNING
         self.update_remaining_time(remaining_time)
+        self._worker_pool_id = worker_pool_id
 
     def step(self, current_time: int, step_size: int = 1) -> bool:
         """Steps the task for the given `step_size` (default 1 time step).
 
         Args:
-            current_time (`in`): The current time of the simulator (in us).
+            current_time (`int`): The current time of the simulator (in us).
             step_size (`int`): The amount of time (in us) for which to step
                 the task.
 
@@ -218,30 +227,45 @@ class Task(object):
         self._logger.debug(
             f"Transitioning {self} to {TaskState.PREEMPTED} at time {time}"
         )
-        self._preemption_times.append(Preempted(time, -1))
+        self._preemptions.append(
+            Task.Preemption(
+                preemption_time=time,
+                old_worker_pool=self._worker_pool_id,
+            )
+        )
         self._state = TaskState.PREEMPTED
         self._worker_pool_id = None
 
-    def resume(self, time: int):
+    def resume(self, time: int, worker_pool_id: Optional[str] = None):
         """Continues the execution of the task at the given simulation time.
+
+        If the `worker_pool_id` passed is `None`, it is assumed that the task
+        will be restarted at the old worker pool.
 
         Args:
             time (`int`): The simulation time (in us) at which to restart the
                 task.
+            worker_pool_id (`Optional[str]`): The ID of the WorkerPool that
+                the task will be resumed on.
 
         Raises:
             `ValueError` if task is not PREEMPTED.
         """
         if self.state != TaskState.PREEMPTED:
             raise ValueError(f"Task {self.id} is not PREEMPTED right now.")
+        new_worker_pool = (
+            worker_pool_id if worker_pool_id else self.last_preemption.old_worker_pool
+        )
         self._logger.debug(
             f"Transitioning {self} which was PREEMPTED at "
-            f"{self._preemption_times[-1].preemption_time} to {TaskState.RUNNING} at "
-            f"time {time}"
+            f"{self.preemption_time} to {TaskState.RUNNING} at "
+            f"time {time} on WorkerPool ({new_worker_pool})"
         )
-        self._preemption_times[-1]._replace(restart_time=time)
+        self.last_preemption.restart_time = time
+        self.last_preemption.new_worker_pool = new_worker_pool
         self._last_step_time = time
         self._state = TaskState.RUNNING
+        self._worker_pool_id = new_worker_pool
 
     def finish(self, time: int):
         """Completes the execution of the task at the given simulation time.
@@ -259,6 +283,8 @@ class Task(object):
             self._state = TaskState.COMPLETED
         else:
             self._state = TaskState.EVICTED
+
+        self._worker_pool_id = None
         self._logger.debug(f"Finished execution of {self} at time {time}")
         # TODO (Sukrit): We should notify the `Job` of the completion of this
         # particular task, so it can release new tasks to the scheduler.
@@ -344,14 +370,16 @@ class Task(object):
                 f"Task(name={self.name}, id={self.id}, job={self.job}, "
                 f"timestamp={self.timestamp}, state={self.state}, "
                 f"start_time={self.start_time}, deadline={self.deadline}, "
-                f"remaining_time={self.remaining_time})"
+                f"remaining_time={self.remaining_time}, "
+                f"worker_pool={self.worker_pool_id})"
             )
         elif self.state == TaskState.PREEMPTED:
             return (
                 f"Task(name={self.name}, id={self.id}, job={self.job}, "
                 f"timestamp={self.timestamp}, state={self.state}, "
                 f"preemption_time={self.preemption_time}, deadline={self.deadline}, "
-                f"remaining_time={self.remaining_time})"
+                f"remaining_time={self.remaining_time}, "
+                f"old_worker_pool={self.last_preemption.old_worker_pool})"
             )
         elif self.is_complete():
             return (
@@ -416,7 +444,11 @@ class Task(object):
 
     @property
     def preemption_time(self):
-        return self._preemption_times[-1].preemption_time
+        return self.last_preemption.preemption_time if self.last_preemption else -1
+
+    @property
+    def last_preemption(self) -> Optional["Task.Preemption"]:
+        return None if len(self._preemptions) == 0 else self._preemptions[-1]
 
     @property
     def remaining_time(self):

@@ -1,4 +1,3 @@
-import uuid
 from collections import namedtuple
 from functools import total_ordering
 from typing import Mapping, Optional, Sequence, Tuple, Union
@@ -14,11 +13,24 @@ WorkerPoolUtilization = namedtuple(
 
 
 class WorkerPool(object):
-    def __init__(self, name: str, id: uuid.UUID, resources: Sequence[Resource]):
+    def __init__(self, name: str, id: str, resources: Sequence[Resource]):
         self.name = name
         self.id = id
         self.resources = resources
         self.utilizations: Sequence[WorkerPoolUtilization] = []
+
+
+class Placement(object):
+    def __init__(
+        self,
+        placement_time: int,
+        worker_pool: WorkerPool,
+        resources_used: Sequence[Resource],
+    ):
+        self.placement_time = placement_time
+        self.worker_pool = worker_pool
+        self.resources_used = resources_used
+        self.completion_time = None
 
 
 @total_ordering
@@ -27,7 +39,7 @@ class Task(object):
         self,
         name: str,
         timestamp: int,
-        task_id: uuid.UUID,
+        task_id: str,
         intended_release_time: int,
         release_time: int,
         runtime: int,
@@ -42,12 +54,10 @@ class Task(object):
         self.runtime = runtime
         self.deadline = deadline
 
-        # Values updated from the TASK_PLACEMENT event.
-        self.was_placed = False
+        # Values updated from the TASK_PLACEMENT events.
+        self.placements = []
         self.start_time = None
         self.placement_time = None
-        self.worker_pool = None
-        self.resources_used = None
 
         # Values updated from the TASK_SKIP event.
         self.skipped_times = []
@@ -108,14 +118,20 @@ class Task(object):
         assert (
             csv_reading[1] == "TASK_PLACEMENT"
         ), f"The event {csv_reading[1]} was not of type TASK_PLACEMENT."
-        assert not self.was_placed, f"The task {self} was already placed."
+
         placement_time = int(csv_reading[0])
-        self.start_time = self.placement_time = placement_time
-        self.worker_pool = worker_pools[csv_reading[5]]
-        self.resources_used = [
-            Resource(*csv_reading[i : i + 3]) for i in range(6, len(csv_reading), 3)
-        ]
-        self.was_placed = True
+        placement = Placement(
+            placement_time=placement_time,
+            worker_pool=worker_pools[csv_reading[5]],
+            resources_used=[
+                Resource(*csv_reading[i : i + 3]) for i in range(6, len(csv_reading), 3)
+            ],
+        )
+        self.placements.append(placement)
+        if not self.start_time or self.start_time > placement_time:
+            self.start_time = placement_time
+        if not self.placement_time or self.placement_time > placement_time:
+            self.placement_time = placement_time
 
     def update_skip(self, csv_reading: str):
         """Updates the values of the Task based on the TASK_SKIP event from CSV.
@@ -128,6 +144,45 @@ class Task(object):
         ), f"The event {csv_reading[1]} was not of type TASK_SKIP."
         self.skipped_times.append(int(csv_reading[0]))
 
+    def update_preempt(self, csv_reading: str):
+        """Updates the placement information of the Task based on the TASK_PREEMPT
+        event from CSV.
+
+        Args:
+            csv_reading (str): The CSV reading of type `TASK_PREEMPT`.
+        """
+        assert (
+            csv_reading[1] == "TASK_PREEMPT"
+        ), f"The event {csv_reading[1]} was not of type TASK_PREEMPT."
+        self.placements[-1].completion_time = int(csv_reading[0])
+
+    def update_migration(
+        self, csv_reading: str, worker_pools: Mapping[str, WorkerPool]
+    ):
+        """Updates the placement information of the Task based on the TASK_MIGRATED
+        event from CSV.
+
+        Args:
+            csv_reading (str): The CSV reading of type `TASK_MIGRATED`.
+            worker_pools (Mapping[str, WorkerPool]): A name to WorkerPool mapping to
+                allow tasks to directly reference WorkerPools.
+        """
+        assert (
+            csv_reading[1] == "TASK_MIGRATED"
+        ), f"The event {csv_reading[1]} was not of type TASK_MIGRATED."
+        placement = Placement(
+            placement_time=int(csv_reading[0]),
+            worker_pool=worker_pools[csv_reading[5]],
+            resources_used=[
+                Resource(*csv_reading[i : i + 3]) for i in range(7, len(csv_reading), 3)
+            ],
+        )
+        self.placements.append(placement)
+        if not self.start_time or self.start_time > placement.placement_time:
+            self.start_time = placement.placement_time
+        if not self.placement_time or self.placement_time > placement.placement_time:
+            self.placement_time = placement.placement_time
+
     def update_finish(self, csv_reading: str):
         """Updates the values of the Task based on the TASK_FINISHED event from CSV.
 
@@ -138,6 +193,7 @@ class Task(object):
             csv_reading[1] == "TASK_FINISHED"
         ), f"The event {csv_reading[1]} was not of type TASK_FINISHED."
         self.completion_time = int(csv_reading[4])
+        self.placements[-1].completion_time = int(csv_reading[4])
 
     def update_missed_deadline(self, csv_reading: str):
         """Updates the values of the Task based on the MISSED_DEADLINE event from CSV.
@@ -150,6 +206,10 @@ class Task(object):
         ), f"The event {csv_reading[1]} was not of type MISSED_DEADLINE."
         self.missed_deadline = True
         self.deadline_miss_detected_at = int(csv_reading[0])
+
+    @property
+    def was_placed(self):
+        return len(self.placements) > 0
 
     def __str__(self):
         return f"Task(name={self.name}, timestamp={self.timestamp})"

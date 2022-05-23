@@ -1,3 +1,4 @@
+import os
 import time
 from copy import copy, deepcopy
 from operator import attrgetter
@@ -55,6 +56,12 @@ class EDFScheduler(BaseScheduler):
             # Create a virtual WorkerPool set to try scheduling decisions on.
             schedulable_worker_pools = copy(worker_pools)
 
+        for worker_pool in schedulable_worker_pools._wps:
+            self._logger.debug(
+                f"[{sim_time}] The state of {worker_pool} is:{os.linesep}"
+                f"{os.linesep.join(worker_pool.get_utilization())}"
+            )
+
         # Sort the tasks according to their deadlines, and place them on the
         # worker pools.
         start_time = time.time()
@@ -68,29 +75,32 @@ class EDFScheduler(BaseScheduler):
         # need be.
         placements = []
         for task in ordered_tasks:
-            self._logger.debug(f"Trying to schedule {task}.")
+            self._logger.debug(
+                f"[{sim_time}] {self.__class__.__name__} trying to schedule {task} "
+                f"with the resource requirements {task.resource_requirements}."
+            )
             is_task_placed = False
             for worker_pool in schedulable_worker_pools._wps:
                 if worker_pool.can_accomodate_task(task):
-                    worker_pool.place_task(task, dry_run=True)
+                    worker_pool.place_task(task)
                     is_task_placed = True
                     placements.append((task, worker_pool.id, sim_time))
                     self._logger.debug(
-                        f"Placed {task} on Worker Pool ({worker_pool.id}) to be "
-                        f"started at {sim_time}"
+                        f"[{sim_time}] Placed {task} on Worker Pool ({worker_pool.id})"
+                        f" to be started at {sim_time}."
                     )
                     break
 
-            if not is_task_placed:
-                utilizations = "\n".join(
-                    [
-                        f"{worker_pool.id},{worker_pool.get_utilization()}"
-                        for worker_pool in schedulable_worker_pools._wps
-                    ]
-                )
+            if is_task_placed:
+                for worker_pool in schedulable_worker_pools._wps:
+                    self._logger.debug(
+                        f"[{sim_time}] The state of {worker_pool} is:{os.linesep}"
+                        f"{os.linesep.join(worker_pool.get_utilization())}"
+                    )
+            else:
                 self._logger.debug(
-                    f"Failed to place {task} because the state of the worker pools "
-                    f"was: \n{utilizations}."
+                    f"[{sim_time}] Failed to place {task} because no worker pool "
+                    f"could accomodate the resource requirements."
                 )
                 placements.append((task, None, None))
 
