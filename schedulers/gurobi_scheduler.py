@@ -470,7 +470,7 @@ class GurobiScheduler2(BaseScheduler):
                 model.addVar(vtype=gp.GRB.BINARY, name=f"no_placement_{task.id}")
             ]
             w_index = 1
-            for wp in self._worker_pools._wps:
+            for wp in self._worker_pools.worker_pools:
                 # Add a variable which is set to 1 if a task is placed on the
                 # variable's associated worker pool.
                 placement_var = model.addVar(
@@ -535,7 +535,7 @@ class GurobiScheduler2(BaseScheduler):
             )
 
         total_resources = Resources(_logger=self._logger)
-        for wp in self._worker_pools._wps:
+        for wp in self._worker_pools.worker_pools:
             total_resources += wp.resources
         res_names = set(
             map(attrgetter("name"), total_resources._resource_vector.keys())
@@ -555,7 +555,7 @@ class GurobiScheduler2(BaseScheduler):
                 # )
 
             w_index = 1
-            for wp in self._worker_pools._wps:
+            for wp in self._worker_pools.worker_pools:
                 for res_name in res_names:
                     resource = Resource(name=res_name, _id="any")
                     # Place constraints to ensure that worker pool's resources are not
@@ -631,7 +631,7 @@ class GurobiScheduler2(BaseScheduler):
                 placement = None
                 if unscheduled == 0:
                     w_index = 1
-                    for wp in worker_pools._wps:
+                    for wp in worker_pools.worker_pools:
                         scheduled = int(placement_vars[w_index].X)
                         if scheduled:
                             placement = wp.id

@@ -60,7 +60,7 @@ class LSFScheduler(BaseScheduler):
         placements = []
         for task in ordered_tasks:
             is_task_placed = False
-            for worker_pool in schedulable_worker_pools._wps:
+            for worker_pool in schedulable_worker_pools.worker_pools:
                 if worker_pool.can_accomodate_task(task):
                     worker_pool.place_task(task)
                     is_task_placed = True
