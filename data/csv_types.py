@@ -1,4 +1,3 @@
-import uuid
 from collections import namedtuple
 from functools import total_ordering
 from typing import Mapping, Optional, Sequence, Tuple, Union
@@ -14,7 +13,7 @@ WorkerPoolUtilization = namedtuple(
 
 
 class WorkerPool(object):
-    def __init__(self, name: str, id: uuid.UUID, resources: Sequence[Resource]):
+    def __init__(self, name: str, id: str, resources: Sequence[Resource]):
         self.name = name
         self.id = id
         self.resources = resources
@@ -40,7 +39,7 @@ class Task(object):
         self,
         name: str,
         timestamp: int,
-        task_id: uuid.UUID,
+        task_id: str,
         intended_release_time: int,
         release_time: int,
         runtime: int,

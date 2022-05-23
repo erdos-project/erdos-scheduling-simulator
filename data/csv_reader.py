@@ -1,6 +1,5 @@
 import csv
 import json
-import uuid
 from collections import defaultdict
 from operator import add, attrgetter
 from typing import Mapping, Optional, Sequence, Tuple, Union
@@ -68,7 +67,7 @@ class CSVReader(object):
                     tasks[reading[8]] = Task(
                         name=reading[2],
                         timestamp=int(reading[3]),
-                        task_id=uuid.UUID(reading[8]),
+                        task_id=reading[8],
                         intended_release_time=int(reading[4]),
                         release_time=int(reading[5]),
                         runtime=int(reading[6]),
@@ -107,7 +106,7 @@ class CSVReader(object):
                     ]
                     worker_pools[reading[3]] = WorkerPool(
                         name=reading[2],
-                        id=uuid.UUID(reading[3]),
+                        id=reading[3],
                         resources=resources,
                     )
                 elif reading[1] == "TASK_PLACEMENT":
@@ -493,4 +492,6 @@ class CSVReader(object):
                         trace["traceEvents"].append(trace_event)
 
         with open(output_path, "w") as f:
-            json.dump(trace, f, indent=4, sort_keys=True)
+            json.dump(
+                trace, f, default=lambda obj: obj.__dict__, indent=4, sort_keys=True
+            )
