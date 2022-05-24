@@ -138,6 +138,5 @@ class BaseScheduler(object):
             assert wp.can_accomodate_task(
                 task
             ), f"WorkerPool {wp.id} doesn't have resources for {task.id}"
-            # TODO (Ionel): The removal of `dry_run` breaks the ILP schedulers. Fix.
             wp.place_task(task)
             heapq.heappush(task_completion, (start_time + task.runtime, wp_id, task))

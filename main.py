@@ -141,7 +141,7 @@ flags.DEFINE_bool(
 flags.DEFINE_enum(
     "ilp_goal",
     "max_slack",
-    ["feasibility", "max_slack"],
+    ["max_slack"],
     "Sets the goal of the ILP solver.",
 )
 
