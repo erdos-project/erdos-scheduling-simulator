@@ -365,7 +365,7 @@ class CSVReader(object):
                             "start_time": task.start_time,
                             "completion_time": task.completion_time,
                             "missed_deadline": task.missed_deadline,
-                            "placements": task.placements,
+                            "placement": placement,
                             "skipped_times": task.skipped_times,
                         },
                     }
@@ -413,7 +413,7 @@ class CSVReader(object):
                                 "start_time": task.start_time,
                                 "completion_time": task.completion_time,
                                 "missed_deadline": task.missed_deadline,
-                                "placements": task.placements,
+                                "placement": placement,
                                 "skipped_times": task.skipped_times,
                             },
                         }
@@ -469,7 +469,6 @@ class CSVReader(object):
                             "start_time": task.start_time,
                             "completion_time": task.completion_time,
                             "missed_deadline": task.missed_deadline,
-                            "placements": task.placements,
                             "skipped_times": task.skipped_times,
                         },
                     }
