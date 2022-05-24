@@ -565,20 +565,18 @@ class Simulator(object):
             f"{task.resource_requirements}."
         )
 
-        cur_worker_pool = self._worker_pools[event.placement]
-        success = cur_worker_pool.place_task(task)
+        worker_pool = self._worker_pools[event.placement]
+        success = worker_pool.place_task(task)
         if success:
             task.resume(event.time, worker_pool_id=event.placement)
             self._logger.debug(
                 f"[{event.time}] The state of the "
-                f"WorkerPool({event.placement}) is {cur_worker_pool.resources}."
+                f"WorkerPool({event.placement}) is {worker_pool.resources}."
             )
             resource_allocation_str = ",".join(
                 [
                     ",".join((resource.name, resource.id, str(quantity)))
-                    for resource, quantity in cur_worker_pool.get_allocated_resources(
-                        task
-                    )
+                    for resource, quantity in worker_pool.get_allocated_resources(task)
                 ]
             )
             self._csv_logger.debug(

@@ -102,11 +102,15 @@ class GurobiBaseScheduler(BaseScheduler):
         if var_name is None:
             var_name = f"time_{event_time}_in_{start_time},{end_time}"
         in_var = self._model.addVar(vtype=gp.GRB.BINARY, name=var_name)
-        M = 1000000
+        or_var = self._model.addVar(vtype=gp.GRB.BINARY, name="or_" + var_name)
+        M = 100000000
+        # If in_var == 1 then start_time <= event_time <= end_time.
         self._model.addConstr(event_time >= start_time - M * (1 - in_var))
-        self._model.addConstr(event_time <= start_time - 1 + M * in_var)
         self._model.addConstr(event_time <= end_time + M * (1 - in_var))
-        self._model.addConstr(event_time >= end_time + 1 - M * in_var)
+        # If in_var == 0 & or_var == 0 then event_time <= start_time - 1
+        self._model.addConstr(event_time <= start_time - 1 + M * (in_var + or_var))
+        # If in_var == 0 & or_var == 1 then event_time >= end_time + 1
+        self._model.addConstr(event_time >= end_time + 1 - M * (in_var + 1 - or_var))
         return in_var
 
     def _in_interval_approximate(self, event_time, start_time, end_time):
@@ -225,6 +229,7 @@ class GurobiScheduler(GurobiBaseScheduler):
         self._task_graph = task_graph
         self._worker_pools = worker_pools
         self._model = gp.Model("RAP")
+        self._model.Params.LogToConsole = 0
         self._model.Params.OptimalityTol = 0.005
         self._model.Params.IntFeasTol = 0.01
         # self._model.Params.TimeLimit = 1  # In seconds.
@@ -499,6 +504,7 @@ class GurobiScheduler2(GurobiBaseScheduler):
         self._task_graph = task_graph
         self._worker_pools = worker_pools
         self._model = gp.Model("RAP")
+        self._model.Params.LogToConsole = 0
         self._model.Params.OptimalityTol = 0.005
         self._model.Params.IntFeasTol = 0.01
         # self._model.Params.TimeLimit = 1  # In seconds.
