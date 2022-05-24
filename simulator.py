@@ -752,10 +752,13 @@ class Simulator(object):
                 f"the event queue. Ending the loop."
             )
             return Event(event_type=EventType.SIMULATOR_END, time=event.time + 1)
-        elif len(schedulable_tasks) == 0:
-            # If there are no schedulable tasks currently, adjust the scheduler
-            # invocation time according to either the time of invocation of the
-            # next event, or the minimum completion time of a running task.
+        elif len(schedulable_tasks) == 0 or all(
+            task.state == TaskState.RUNNING for task in schedulable_tasks
+        ):
+            # If there are no schedulable tasks currently, or all schedulable tasks are
+            # already running (in a preemptive scheduling scenario), djust the
+            # scheduler invocation time according to either the time of invocation of
+            # the next event, or the minimum completion time of a running task.
             minimum_running_task_completion_time = (
                 self._simulator_time
                 + min(map(attrgetter("remaining_time"), running_tasks), default=0)
