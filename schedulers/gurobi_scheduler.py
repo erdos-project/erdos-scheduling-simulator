@@ -208,6 +208,35 @@ class GurobiScheduler(GurobiBaseScheduler):
         # or not.
         self._task_ids_to_scheduled_flag = {}
 
+    def _initialize_state(
+        self, sim_time: int, task_graph: TaskGraph, worker_pools: WorkerPools
+    ):
+        tasks = task_graph.get_schedulable_tasks(
+            sim_time, self.lookahead, self.preemptive, worker_pools
+        )
+        self._time = sim_time
+        # Rest the state.
+        self._task_ids_to_task = {}
+        for task in tasks:
+            self._task_ids_to_task[task.id] = task
+        self._task_ids_to_start_time = {}
+        self._task_ids_to_resources = defaultdict(list)
+        self._task_ids_to_gain = {}
+        self._task_graph = task_graph
+        self._worker_pools = worker_pools
+        self._model = gp.Model("RAP")
+        self._model.Params.OptimalityTol = 0.005
+        self._model.Params.IntFeasTol = 0.01
+        # self._model.Params.TimeLimit = 1  # In seconds.
+        # Sets the solver method to concurrent and deterministic.
+        # self._model.Params.Method = 4
+        (
+            self._res_type_index_range,
+            self._res_index_to_wp_id,
+            self._res_index_to_wp_index,
+            self._num_workers,
+        ) = worker_pools.get_resource_ilp_encoding()
+
     def _add_variables(self):
         num_resources = len(self._res_index_to_wp_index.keys())
         # We are solving for start_times and placements while maximizin gains.
@@ -314,34 +343,6 @@ class GurobiScheduler(GurobiBaseScheduler):
                         self._model.addConstr(prev_worker_var == worker_var)
                     prev_worker_var = worker_var
 
-    def _add_objective(self):
-        def sum_gains(lst):
-            return functools.reduce(lambda a, b: a + b, lst, 0)
-
-        for task_id, task in self._task_ids_to_task.items():
-            # If the task is scheduled, then the gain is defined as slack
-            # (i.e., deadline - finish time). Otherwise, set the gain to a very
-            # small value.
-            start_time = self._task_ids_to_start_time[task_id]
-            self._model.addConstr(
-                (self._task_ids_to_scheduled_flag[task_id] == 0)
-                >> (
-                    task.deadline - start_time - task.remaining_time
-                    == self._task_ids_to_gain[task_id]
-                )
-            )
-            self._model.addConstr(
-                (self._task_ids_to_scheduled_flag[task_id] == 1)
-                >> (
-                    MIN_TASK_GAIN + task.deadline - start_time - task.remaining_time
-                    == self._task_ids_to_gain[task_id]
-                )
-            )
-
-        self._model.setObjective(
-            sum_gains(self._task_ids_to_gain.values()), gp.GRB.MAXIMIZE
-        )
-
     def _add_task_resource_constraints(self):
         num_resources = len(self._res_index_to_wp_index.keys())
         # Tasks using the same resources must not overlap.
@@ -424,34 +425,33 @@ class GurobiScheduler(GurobiBaseScheduler):
                             )
                         )
 
-    def _initialize_state(
-        self, sim_time: int, task_graph: TaskGraph, worker_pools: WorkerPools
-    ):
-        tasks = task_graph.get_schedulable_tasks(
-            sim_time, self.lookahead, self.preemptive, worker_pools
+    def _add_objective(self):
+        def sum_gains(lst):
+            return functools.reduce(lambda a, b: a + b, lst, 0)
+
+        for task in self._task_ids_to_task.values():
+            # If the task is scheduled, then the gain is defined as slack
+            # (i.e., deadline - finish time). Otherwise, set the gain to a very
+            # small value.
+            start_time = self._task_ids_to_start_time[task.id]
+            self._model.addConstr(
+                (self._task_ids_to_scheduled_flag[task.id] == 0)
+                >> (
+                    task.deadline - start_time - task.remaining_time
+                    == self._task_ids_to_gain[task.id]
+                )
+            )
+            self._model.addConstr(
+                (self._task_ids_to_scheduled_flag[task.id] == 1)
+                >> (
+                    MIN_TASK_GAIN + task.deadline - start_time - task.remaining_time
+                    == self._task_ids_to_gain[task.id]
+                )
+            )
+
+        self._model.setObjective(
+            sum_gains(self._task_ids_to_gain.values()), gp.GRB.MAXIMIZE
         )
-        self._time = sim_time
-        # Rest the state.
-        self._task_ids_to_task = {}
-        for task in tasks:
-            self._task_ids_to_task[task.id] = task
-        self._task_ids_to_start_time = {}
-        self._task_ids_to_resources = defaultdict(list)
-        self._task_ids_to_gain = {}
-        self._task_graph = task_graph
-        self._worker_pools = worker_pools
-        self._model = gp.Model("RAP")
-        self._model.Params.OptimalityTol = 0.005
-        self._model.Params.IntFeasTol = 0.01
-        # self._model.Params.TimeLimit = 1  # In seconds.
-        # Sets the solver method to concurrent and deterministic.
-        # self._model.Params.Method = 4
-        (
-            self._res_type_index_range,
-            self._res_index_to_wp_id,
-            self._res_index_to_wp_index,
-            self._num_workers,
-        ) = worker_pools.get_resource_ilp_encoding()
 
     def _get_task_placement(self, task):
         res_index = int(self._task_ids_to_resources[task.id][0].X)
@@ -482,6 +482,29 @@ class GurobiScheduler2(GurobiBaseScheduler):
         # task. The variable is set to one if the task is allocated to the work pool.
         self._wp_index_to_vars = defaultdict(list)
 
+    def _initialize_state(
+        self, sim_time: int, task_graph: TaskGraph, worker_pools: WorkerPools
+    ):
+        tasks = task_graph.get_schedulable_tasks(
+            sim_time, self.lookahead, self.preemptive, worker_pools
+        )
+        self._time = sim_time
+        # Reset the state.
+        self._task_ids_to_task = {}
+        for task in tasks:
+            self._task_ids_to_task[task.id] = task
+        self._task_ids_to_start_time = {}
+        self._task_ids_to_placements = defaultdict(list)
+        self._wp_index_to_vars = defaultdict(list)
+        self._task_graph = task_graph
+        self._worker_pools = worker_pools
+        self._model = gp.Model("RAP")
+        self._model.Params.OptimalityTol = 0.005
+        self._model.Params.IntFeasTol = 0.01
+        # self._model.Params.TimeLimit = 1  # In seconds.
+        # Sets the solver method to concurrent and deterministic.
+        # self._model.Params.Method = 4
+
     def _add_variables(self):
         for task in self._task_ids_to_task.values():
             # Add a variable to store the start time of the task.
@@ -491,7 +514,7 @@ class GurobiScheduler2(GurobiBaseScheduler):
                     self._time, task.release_time
                 ),  # Start times cannot be less than sim time.
                 ub=self._time + self.lookahead,
-                name=f"start_time_task_{task.id}",
+                name=f"start_time_{task.id}",
             )
             # Add a variable which encodes if the task is scheduled or not.
             self._task_ids_to_placements[task.id] = [
@@ -524,13 +547,17 @@ class GurobiScheduler2(GurobiBaseScheduler):
         )
 
         for task_id in self._task_ids_to_start_time.keys():
+            # At each task start time find all the running tasks.
             event_time = self._task_ids_to_start_time[task_id]
             # event_time = self._task_ids_to_task[task_id].release_time
             overlap_vars = {}
             for task in self._task_ids_to_task.values():
                 start_time = self._task_ids_to_start_time[task.id]
                 overlap_vars[task.id] = self._in_interval(
-                    event_time, start_time, start_time + task.remaining_time
+                    event_time,
+                    start_time,
+                    start_time + task.remaining_time,
+                    var_name=f"overlap_{task_id}_with_{task.id}",
                 )
                 # overlap_vars[task.id] = self._in_interval_approximate(
                 #     event_time, task.release_time, task.deadline
@@ -552,7 +579,8 @@ class GurobiScheduler2(GurobiBaseScheduler):
                             )
                             for (task, worker_var) in self._wp_index_to_vars[w_index]
                         )
-                        <= available
+                        <= available,
+                        name=f"time_{task_id}_worker_{w_index}_res_{res_name}",
                     )
                 w_index += 1
 
@@ -561,37 +589,17 @@ class GurobiScheduler2(GurobiBaseScheduler):
         for task in self._task_ids_to_task.values():
             skipped = self._task_ids_to_placements[task.id][0]
             start_time = self._task_ids_to_start_time[task.id]
-            objective.add(
-                (1 - skipped) * (task.deadline - task.remaining_time - start_time)
-            )
-            objective.add(
-                skipped
-                * (MIN_TASK_GAIN + task.deadline - task.remaining_time - start_time)
-            )
+            if self._goal == "max_slack":
+                objective.add(
+                    (1 - skipped) * (task.deadline - task.remaining_time - start_time)
+                )
+                objective.add(
+                    skipped
+                    * (MIN_TASK_GAIN + task.deadline - task.remaining_time - start_time)
+                )
+            else:
+                raise ValueError("Goal {self._goal} not supported.")
         self._model.setObjective(objective, gp.GRB.MAXIMIZE)
-
-    def _initialize_state(
-        self, sim_time: int, task_graph: TaskGraph, worker_pools: WorkerPools
-    ):
-        tasks = task_graph.get_schedulable_tasks(
-            sim_time, self.lookahead, self.preemptive, worker_pools
-        )
-        self._time = sim_time
-        # Reset the state.
-        self._task_ids_to_task = {}
-        for task in tasks:
-            self._task_ids_to_task[task.id] = task
-        self._task_ids_to_start_time = {}
-        self._task_ids_to_placements = defaultdict(list)
-        self._wp_index_to_vars = defaultdict(list)
-        self._task_graph = task_graph
-        self._worker_pools = worker_pools
-        self._model = gp.Model("RAP")
-        self._model.Params.OptimalityTol = 0.005
-        self._model.Params.IntFeasTol = 0.01
-        # self._model.Params.TimeLimit = 1  # In seconds.
-        # Sets the solver method to concurrent and deterministic.
-        # self._model.Params.Method = 4
 
     def _get_task_placement(self, task):
         placement_vars = self._task_ids_to_placements[task.id]
