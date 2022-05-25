@@ -53,16 +53,6 @@ class GurobiBaseScheduler(BaseScheduler):
         self._task_graph = None
         self._worker_pools = None
         self._placements = []
-        # Set up the loggers.
-        self._flags = _flags
-        if _flags:
-            self._logger = utils.setup_logging(
-                name=self.__class__.__name__,
-                log_file=_flags.log_file_name,
-                log_level=_flags.log_level,
-            )
-        else:
-            self._logger = utils.setup_logging(name=self.__class__.__name__)
 
     def _add_task_timing_constraints(self):
         for task_id, task in self._task_ids_to_task.items():
