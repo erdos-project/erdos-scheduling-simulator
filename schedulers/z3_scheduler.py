@@ -129,10 +129,7 @@ class Z3Scheduler(BaseScheduler):
         )
 
         scheduler_start_time = time.time()
-        if self._goal != "feasibility":
-            s = Optimize()
-        else:
-            s = Solver()
+        s = Optimize()
 
         for task in tasks:
             self._task_ids_to_task[task.id] = task
@@ -150,8 +147,7 @@ class Z3Scheduler(BaseScheduler):
         self._add_task_resource_constraints(s, res_type_to_index_range)
         self._add_task_dependency_constraints(s)
 
-        if self._goal != "feasibility":
-            result = s.maximize(sum_costs(self._task_ids_to_cost.values()))
+        result = s.maximize(sum_costs(self._task_ids_to_cost.values()))
 
         schedulable = s.check()
         scheduler_end_time = time.time()
@@ -164,15 +160,12 @@ class Z3Scheduler(BaseScheduler):
         #     log_dir = self._flags.ilp_log_dir + f"{self._goal}.smt"
         #     with open(log_dir, "w") as outfile:
         #         outfile.write(s.sexpr())
-        #         if self._goal == 'feasibility':
-        #             outfile.write("(check-sat)")
 
         self._cost = sys.maxsize
         self._logger.debug(f"Solver found {schedulable} solution")
         if schedulable != unsat:
-            if self._goal != "feasibility":
-                self._cost = s.lower(result)
-                self._logger.debug(f"Solver found solution with cost {self._cost}")
+            self._cost = s.lower(result)
+            self._logger.debug(f"Solver found solution with cost {self._cost}")
             self._placements = []
             for task_id, task in self._task_ids_to_task.items():
                 start_time = int(str(s.model()[self._task_ids_to_start_time[task_id]]))
