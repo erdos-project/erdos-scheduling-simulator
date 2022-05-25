@@ -66,13 +66,22 @@ class JobGraph(Graph[Job]):
     Args:
         jobs: A Mapping from a set of `Job`s to their children that needs to be
             initialized into a `JobGraph`.
+        completion_time: The completion time to assign to this `JobGraph`. If `None`,
+            the completion time will be computed as the sum of the runtime of the
+            longest path in the graph.
     """
 
     def __init__(
         self,
         jobs: Optional[Mapping[Job, Sequence[Job]]] = {},
+        completion_time: Optional[int] = None,
     ):
         super().__init__(jobs)
+        self._completion_time = (
+            completion_time
+            if completion_time or len(self) == 0
+            else sum(job.runtime for job in self.get_longest_path())
+        )
 
     def add_job(self, job: Job, children: Optional[Sequence[Job]] = []):
         """Adds the job to the graph along with the given children.
@@ -87,3 +96,9 @@ class JobGraph(Graph[Job]):
         """Ensures that the source operators pipeline tasks."""
         for job in self.get_sources():
             job._pipelined = True
+
+    @property
+    def completion_time(self):
+        if not self._completion_time and len(self) != 0:
+            self._completion_time = sum(job.runtime for job in self.get_longest_path())
+        return self._completion_time

@@ -212,3 +212,22 @@ def test_longest_path():
         lidar_coordinate_mapping_job,
         perception_job,
     ], "Incorrect longest path retrieved from the graph."
+
+
+def test_completion_time():
+    """Test that the correct completion time is computed for the graph."""
+    camera_job = Job(name="Camera", runtime=1000)
+    lidar_job = Job(name="Lidar", runtime=1000)
+    lidar_coordinate_mapping_job = Job(name="LidarToCameraMapping", runtime=1000)
+    perception_job = Job(name="Perception", runtime=1000)
+    job_graph = JobGraph(
+        jobs={
+            camera_job: [perception_job],
+            lidar_job: [lidar_coordinate_mapping_job],
+            lidar_coordinate_mapping_job: [perception_job],
+        }
+    )
+
+    assert (
+        job_graph.completion_time == 3000
+    ), "Incorrect completion time returned for the JobGraph."
