@@ -3,7 +3,7 @@ from workload import Job, Resource, Resources, Task
 
 def create_default_task(
     name=None,
-    job=Job(name="Perception"),
+    job=Job(name="Perception", runtime=1000),
     resource_requirements=Resources(
         resource_vector={Resource(name="CPU", _id="any"): 1}
     ),

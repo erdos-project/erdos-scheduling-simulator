@@ -289,8 +289,8 @@ def test_simulator_handle_event():
     assert return_value, "Incorrect return value for event type."
 
     # Test the TASK_FINISHED event.
-    perception_task = create_default_task(job=Job(name="Perception"))
-    planning_task = create_default_task(job=Job(name="Planning"))
+    perception_task = create_default_task(job=Job(name="Perception", runtime=1000))
+    planning_task = create_default_task(job=Job(name="Planning", runtime=1000))
     task_graph = TaskGraph()
     task_graph.add_task(perception_task, [planning_task])
     perception_task.release(2)

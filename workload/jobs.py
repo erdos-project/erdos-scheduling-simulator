@@ -15,14 +15,16 @@ class Job(object):
     scheduled by a `Scheduler`.
 
     Args:
-        name: The name of the ERDOS operator that corresponds to this job.
+        name: The name of the ERDOS operator that corresponds to this Job.
+        runtime: The expected runtime of the tasks created from this Job.
         pipelined (`bool`): True if job's tasks from different timestamps can run
             in parallel.
     """
 
-    def __init__(self, name: str, pipelined: bool = False):
+    def __init__(self, name: str, runtime: int, pipelined: bool = False):
         self._name = name
         self._id = uuid.UUID(int=random.getrandbits(128), version=4)
+        self._runtime = runtime
         self._pipelined = pipelined
 
     @property
@@ -32,6 +34,10 @@ class Job(object):
     @property
     def id(self):
         return str(self._id)
+
+    @property
+    def runtime(self):
+        return self._runtime
 
     @property
     def pipelined(self):

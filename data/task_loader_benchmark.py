@@ -34,7 +34,10 @@ class TaskLoaderBenchmark(TaskLoader):
         else:
             self._logger = utils.setup_logging(name=self.__class__.__name__)
 
-        self._jobs = [Job(name=f"Job_{index}") for index in range(0, num_jobs)]
+        self._jobs = [
+            Job(name=f"Job_{index}", runtime=task_runtime)
+            for index in range(0, num_jobs)
+        ]
         self._job_graph = JobGraph()
         # Note: The jobs are independent.
         for job in self._jobs:
@@ -56,7 +59,7 @@ class TaskLoaderBenchmark(TaskLoader):
                     f"{job.name}_task_{index}",
                     job=job,
                     resource_requirements=resource_requirements,
-                    runtime=_flags.task_runtime,
+                    runtime=job.runtime,
                     deadline=task_deadline,
                     timestamp=0,
                     release_time=0,
