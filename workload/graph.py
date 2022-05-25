@@ -14,8 +14,8 @@ T = TypeVar("T")
 
 
 class Graph(Generic[T]):
-    """A `Graph` represents a directed graph of dependencies that is used to back the
-    `JobGraph` and the `TaskGraph` representation."""
+    """A `Graph` represents a directed acyclic graph of dependencies that is used to 
+    back the `JobGraph` and the `TaskGraph` representation."""
 
     def __init__(self, nodes: Optional[Mapping[T, Sequence[T]]] = {}):
         self._graph = defaultdict(list)
@@ -175,12 +175,74 @@ class Graph(Generic[T]):
         visited_nodes = set()
         frontier = deque(self.get_sources())
         while len(frontier) > 0:
-            job = frontier.popleft()
-            visited_nodes.add(job)
-            for child in self.get_children(job):
+            node = frontier.popleft()
+            visited_nodes.add(node)
+            for child in self.get_children(node):
                 if all(parent in visited_nodes for parent in self.get_parents(child)):
                     frontier.append(child)
-            yield job
+            yield node
+
+    def depth_first(self, node=None) -> Generator[T, None, None]:
+        """Iterates over the graph in a depth-first manner.
+
+        Args:
+            node: The node to start the depth-first search from.
+        """
+        visited_nodes = set()
+        frontier = deque(self.get_sources() if node is None else node)
+        while len(frontier) > 0:
+            node = frontier.pop()
+            visited_nodes.add(node)
+            yield node
+            for child in self.get_children(node):
+                if child not in visited_nodes:
+                    frontier.append(child)
+
+    def topological_sort(self) -> List[T]:
+        """Compute the topological sort ordering of the directed acyclic graph.
+
+        Returns:
+            The topological sorting of the given graph.
+        """
+        visited_nodes = set()
+        topological_sort = []
+
+        def sort(node):
+            visited_nodes.add(node)
+            for child in self.get_children(node):
+                if child not in visited_nodes:
+                    sort(child)
+            topological_sort.append(node)
+
+        for node in self._graph:
+            if node not in visited_nodes:
+                sort(node)
+
+        return topological_sort[::-1]
+
+    def get_longest_path(self) -> List[T]:
+        """Retrieves the longest path in the graph that goes from a source node to a
+        sink node.
+
+        Returns:
+            A `List[T]` that contains an ordered list of nodes that form the longest
+            path from a source node to a sink node.
+        """
+        longest_path_length = defaultdict(int)
+        predecessor = {}
+
+        for node in self.topological_sort():
+            for child in self.get_children(node):
+                if longest_path_length[child] <= longest_path_length[node] + 1:
+                    longest_path_length[child] = longest_path_length[node] + 1
+                    predecessor[child] = node
+
+        start_node, length = max(longest_path_length.items(), key=lambda val: val[1])
+        longest_path = [start_node]
+        for _ in range(length):
+            start_node = predecessor[start_node]
+            longest_path.append(start_node)
+        return longest_path[::-1]
 
     def __iter__(self):
         for item in self.breadth_first():

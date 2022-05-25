@@ -117,6 +117,33 @@ def test_iteration_jobgraph():
     ], "Incorrect BFS traversal returned by the JobGraph."
 
 
+def test_depth_first_jobgraph():
+    """Test the DFS traversal over the JobGraph."""
+    job_graph = JobGraph()
+    camera_job, lidar_job = Job(name="Camera"), Job(name="Lidar")
+    lidar_coordinate_mapping_job = Job(name="LidarToCameraMapping")
+    perception_job = Job(name="Perception")
+    job_graph.add_job(camera_job, [perception_job])
+    job_graph.add_job(lidar_job, [lidar_coordinate_mapping_job])
+    job_graph.add_job(lidar_coordinate_mapping_job, [perception_job])
+
+    traversal = []
+    for job in job_graph.depth_first():
+        traversal.append(job)
+
+    assert traversal == [
+        camera_job,
+        perception_job,
+        lidar_job,
+        lidar_coordinate_mapping_job,
+    ] or traversal == [
+        lidar_job,
+        lidar_coordinate_mapping_job,
+        perception_job,
+        camera_job,
+    ], "Incorrect DFS traversal returned by the JobGraph."
+
+
 def test_job_depth():
     """Test that the depth of each Job is correct."""
     job_graph = JobGraph()
@@ -133,3 +160,44 @@ def test_job_depth():
         job_graph.get_node_depth(lidar_coordinate_mapping_job) == 2
     ), "Incorrect job depth."
     assert job_graph.get_node_depth(perception_job) == 3, "Incorrect job depth."
+
+
+def test_topological_sort():
+    """Test that the correct topological sort order of the graph is returned."""
+    job_graph = JobGraph()
+    job_0, job_1, job_2 = Job(name="Job 0"), Job(name="Job 1"), Job(name="Job 2")
+    job_3, job_4, job_5 = Job(name="Job 3"), Job(name="Job 4"), Job(name="Job 5")
+    job_graph.add_job(job_5, [job_0, job_2])
+    job_graph.add_job(job_4, [job_0, job_1])
+    job_graph.add_job(job_2, [job_3])
+    job_graph.add_job(job_3, [job_1])
+
+    topological_sort = job_graph.topological_sort()
+    assert len(topological_sort) == 6, "Wrong length of sorting returned."
+    for node in job_graph.get_nodes():
+        node_index = topological_sort.index(node)
+        for child in job_graph.get_children(node):
+            assert (
+                topological_sort.index(child) > node_index
+            ), f"The edge from {node} to {child} was in the wrong order."
+
+
+def test_longest_path():
+    """Test that the correct longest path in the graph is returned."""
+    job_graph = JobGraph()
+    camera_job, lidar_job = Job(name="Camera"), Job(name="Lidar")
+    lidar_coordinate_mapping_job = Job(name="LidarToCameraMapping")
+    perception_job = Job(name="Perception")
+    job_graph.add_job(camera_job, [perception_job])
+    job_graph.add_job(lidar_job, [lidar_coordinate_mapping_job])
+    job_graph.add_job(lidar_coordinate_mapping_job, [perception_job])
+
+    longest_path = job_graph.get_longest_path()
+    assert (
+        len(longest_path) == 3
+    ), "Incorrect longest path length retrieved from the graph."
+    assert longest_path == [
+        lidar_job,
+        lidar_coordinate_mapping_job,
+        perception_job,
+    ], "Incorrect longest path retrieved from the graph."

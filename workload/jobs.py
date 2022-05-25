@@ -56,9 +56,16 @@ class JobGraph(Graph[Job]):
 
     A `JobGraph` is a static entity that defines the relationship between the
     different `Job`s of the application.
+
+    Args:
+        jobs: A Mapping from a set of `Job`s to their children that needs to be
+            initialized into a `JobGraph`.
     """
 
-    def __init__(self, jobs: Optional[Mapping[Job, Sequence[Job]]] = {}):
+    def __init__(
+        self,
+        jobs: Optional[Mapping[Job, Sequence[Job]]] = {},
+    ):
         super().__init__(jobs)
 
     def add_job(self, job: Job, children: Optional[Sequence[Job]] = []):
