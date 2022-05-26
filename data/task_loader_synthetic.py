@@ -59,6 +59,7 @@ class TaskLoaderSynthetic(TaskLoader):
             (_flags.min_deadline_variance, _flags.max_deadline_variance),
             deadlines,
             resources,
+            _flags.use_end_to_end_deadlines,
             task_logger,
         )
         self._logger.debug(f"Created {len(self._tasks)} Tasks")
@@ -277,19 +278,31 @@ class TaskLoaderSynthetic(TaskLoader):
         deadline_variance: Tuple[int, int],
         deadlines: Mapping[str, int],
         resources: Mapping[str, Sequence[Resources]],
+        use_end_to_end_deadlines: bool = False,
         logger: Optional[logging.Logger] = None,
     ):
+        def get_deadline(job, timestamp):
+            if use_end_to_end_deadlines:
+                job_name = f"e2e-{timestamp}"
+                if job_name not in deadlines:
+                    deadlines[job_name] = utils.fuzz_time(
+                        self._job_graph.completion_time, deadline_variance
+                    )
+                return deadlines[job_name]
+            else:
+                return utils.fuzz_time(deadlines[job_name], deadline_variance)
+
         tasks = {}
         sensor_release_time = 0
         for timestamp in range(max_timestamp + 1):
             for job in self._job_graph:
                 # All times are in microseconds.
-                if self._job_graph.is_source(job):
+                if self._job_graph.is_source(job) or use_end_to_end_deadlines:
                     # Source jobs are released at a pre-specified interval.
+                    # If we use end-to-end deadlines, then all tasks must have same
+                    # deadline.
                     release_time = sensor_release_time
-                    deadline = sensor_release_time + utils.fuzz_time(
-                        deadlines[job.name], deadline_variance
-                    )
+                    deadline = sensor_release_time + get_deadline(job, timestamp)
                 else:
                     # Non-Source jobs are released as soon as all of their dependencies
                     # are estimated to be satisfied.
@@ -305,9 +318,7 @@ class TaskLoaderSynthetic(TaskLoader):
                             tasks[(job.name, timestamp - 1)].release_time + job.runtime,
                         )
                     )
-                    deadline = release_time + utils.fuzz_time(
-                        deadlines[job.name], deadline_variance
-                    )
+                    deadline = release_time + get_deadline(job, timestamp)
 
                 # Create the task.
                 task = Task(
