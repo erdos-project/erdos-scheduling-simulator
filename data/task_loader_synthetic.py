@@ -290,7 +290,7 @@ class TaskLoaderSynthetic(TaskLoader):
                     )
                 return deadlines[job_name]
             else:
-                return utils.fuzz_time(deadlines[job_name], deadline_variance)
+                return utils.fuzz_time(deadlines[job.name], deadline_variance)
 
         tasks = {}
         sensor_release_time = 0
