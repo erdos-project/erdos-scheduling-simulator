@@ -14,7 +14,7 @@ T = TypeVar("T")
 
 
 class Graph(Generic[T]):
-    """A `Graph` represents a directed acyclic graph of dependencies that is used to 
+    """A `Graph` represents a directed acyclic graph of dependencies that is used to
     back the `JobGraph` and the `TaskGraph` representation."""
 
     def __init__(self, nodes: Optional[Mapping[T, Sequence[T]]] = {}):

@@ -314,9 +314,6 @@ def test_retrieval_allocated_resources_task():
     gpu_resource_1 = Resource(name="GPU")
     resources = Resources({cpu_resource_1: 5, cpu_resource_2: 5, gpu_resource_1: 10})
 
-    cpu_resource_any = Resource(name="CPU", _id="any")
-    gpu_resource_any = Resource(name="GPU", _id="any")
-
     task = create_default_task()
     resources.allocate(cpu_resource_1, task, 5)
     resources.allocate(gpu_resource_1, task, 5)
@@ -333,9 +330,6 @@ def test_retrieval_allocated_tasks_resource():
     cpu_resource_2 = Resource(name="CPU")
     gpu_resource_1 = Resource(name="GPU")
     resources = Resources({cpu_resource_1: 5, cpu_resource_2: 5, gpu_resource_1: 10})
-
-    cpu_resource_any = Resource(name="CPU", _id="any")
-    gpu_resource_any = Resource(name="GPU", _id="any")
 
     task_1 = create_default_task()
     resources.allocate(cpu_resource_1, task_1, 5)

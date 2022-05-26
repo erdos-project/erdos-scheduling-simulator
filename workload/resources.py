@@ -135,7 +135,10 @@ class Resources(object):
         """
         return self._current_allocations[task]
 
-    def get_allocated_tasks(self, resource: Resource) -> List[Tuple["Task", int]]:
+    def get_allocated_tasks(
+        self,
+        resource: Resource,
+    ) -> List[Tuple["Task", int]]:  # noqa: F821
         """Retrieves the list of (task, quantity) pairs that the requested `resource`
         has been allocated to.
 
