@@ -331,8 +331,9 @@ def test_place_task_on_worker_pool():
             resource_vector={Resource(name="GPU", _id="any"): 2}
         )
     )
-    with pytest.raises(ValueError):
-        worker_pool.place_task(task_three)
+    assert (
+        worker_pool.place_task(task_three) is False
+    ), "Task should have not been placed."
 
     # Place another task on the WorkerPool.
     task_four = create_default_task(

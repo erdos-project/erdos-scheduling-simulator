@@ -126,6 +126,10 @@ class Task(object):
             raise ValueError(f"Cannot release {self.id} which is in state {self.state}")
         if time is not None:
             self._release_time = time
+            if self._release_time > self._deadline:
+                self._logger.warning(
+                    "Task {self} released at {time}, which is after its deadline"
+                )
 
         self._state = TaskState.RELEASED
 

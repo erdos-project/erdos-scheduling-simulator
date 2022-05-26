@@ -251,7 +251,7 @@ class WorkerPool(object):
                 self._logger.debug(f"Adding {worker} to {self}")
                 self._workers[worker.id] = worker
 
-    def place_task(self, task: Task):
+    def place_task(self, task: Task) -> bool:
         """Places the task on this `WorkerPool`.
 
         The caller must ensure that the `WorkerPool` has enough resources to
@@ -261,9 +261,8 @@ class WorkerPool(object):
         Args:
             task (`Task`): The task to be placed in this `WorkerPool`.
 
-        Raises:
-            `ValueError` if the task could not be placed due to insufficient
-            resources.
+        Returns:
+            False if the task could not be placed due to insufficient resources.
         """
         placement = None
         if self._scheduler is not None:
@@ -282,10 +281,14 @@ class WorkerPool(object):
                     break
 
         if placement is None:
-            raise ValueError(f"The {task} could not be placed on {self.id} WorkerPool.")
+            self._logger.warning(
+                f"The {task} could not be placed on {self.id} WorkerPool."
+            )
+            return False
         else:
             self._workers[placement].place_task(task)
             self._placed_tasks[task] = placement
+            return True
 
     def remove_task(self, task: Task):
         """Removes the task from this `WorkerPool`.

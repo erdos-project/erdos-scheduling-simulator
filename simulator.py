@@ -524,22 +524,29 @@ class Simulator(object):
         # Initialize the task at the given placement time, and place it on
         # the WorkerPool.
         worker_pool = self._worker_pools[event.placement]
-        task.start(
-            event.time, worker_pool_id=event.placement, variance=self._runtime_variance
-        )
-        worker_pool.place_task(task)
-        resource_allocation_str = ",".join(
-            [
-                ",".join((resource.name, resource.id, str(quantity)))
-                for resource, quantity in worker_pool.get_allocated_resources(task)
-            ]
-        )
+        success = worker_pool.place_task(task)
+        if success:
+            task.start(
+                event.time,
+                worker_pool_id=event.placement,
+                variance=self._runtime_variance,
+            )
+            resource_allocation_str = ",".join(
+                [
+                    ",".join((resource.name, resource.id, str(quantity)))
+                    for resource, quantity in worker_pool.get_allocated_resources(task)
+                ]
+            )
 
-        self._csv_logger.debug(
-            f"{event.time},TASK_PLACEMENT,{task.name},{task.timestamp},"
-            f"{task.id},{event.placement},{resource_allocation_str}"
-        )
-        self._logger.info(f"[{event.time}] Placed {task} on {worker_pool}")
+            self._csv_logger.debug(
+                f"{event.time},TASK_PLACEMENT,{task.name},{task.timestamp},"
+                f"{task.id},{event.placement},{resource_allocation_str}"
+            )
+            self._logger.info(f"[{event.time}] Placed {task} on {worker_pool}")
+        else:
+            self._logger.warning(
+                f"[{event.time}] Task {task} cannot be placed on worker {worker_pool}"
+            )
 
     def __handle_task_migration(self, event: Event, task_graph: TaskGraph):
         task = event.task
@@ -557,24 +564,30 @@ class Simulator(object):
             f"[event.time] The resource requirements of {task} were "
             f"{task.resource_requirements}."
         )
-        task.resume(event.time, worker_pool_id=event.placement)
-        cur_worker_pool = self._worker_pools[event.placement]
-        self._logger.debug(
-            f"[{event.time}] The state of the "
-            f"WorkerPool({event.placement}) is {cur_worker_pool.resources}."
-        )
-        cur_worker_pool.place_task(task)
-        resource_allocation_str = ",".join(
-            [
-                ",".join((resource.name, resource.id, str(quantity)))
-                for resource, quantity in cur_worker_pool.get_allocated_resources(task)
-            ]
-        )
-        self._csv_logger.debug(
-            f"{event.time},TASK_MIGRATED,{task.name},{task.timestamp},{task.id},"
-            f"{last_preemption.old_worker_pool},{event.placement},"
-            f"{resource_allocation_str}"
-        )
+
+        worker_pool = self._worker_pools[event.placement]
+        success = worker_pool.place_task(task)
+        if success:
+            task.resume(event.time, worker_pool_id=event.placement)
+            self._logger.debug(
+                f"[{event.time}] The state of the "
+                f"WorkerPool({event.placement}) is {worker_pool.resources}."
+            )
+            resource_allocation_str = ",".join(
+                [
+                    ",".join((resource.name, resource.id, str(quantity)))
+                    for resource, quantity in worker_pool.get_allocated_resources(task)
+                ]
+            )
+            self._csv_logger.debug(
+                f"{event.time},TASK_MIGRATED,{task.name},{task.timestamp},{task.id},"
+                f"{last_preemption.old_worker_pool},{event.placement},"
+                f"{resource_allocation_str}"
+            )
+        else:
+            self._logger.warning(
+                f"[{event.time}] Task {task} cannot be migrated to worker {worker_pool}"
+            )
 
     def __handle_event(self, event: Event, task_graph: TaskGraph) -> bool:
         """Handles the next event from the EventQueue.
