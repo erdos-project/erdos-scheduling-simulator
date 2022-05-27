@@ -281,7 +281,8 @@ class GurobiScheduler(GurobiBaseScheduler):
                         vtype=gp.GRB.INTEGER,
                         lb=-1,
                         ub=num_resources - 1,
-                        name=f"resource_task_{task.unique_name}_{resource.name}_{index}",
+                        name=f"resource_task_{task.unique_name}_"
+                        f"{resource.name}_{index}",
                     )
                     # Stores the id of worker containing the resource that got
                     # allocated to the task.
@@ -505,7 +506,8 @@ class GurobiScheduler2(GurobiBaseScheduler):
         self._model = gp.Model("RAP")
         self._model.Params.LogToConsole = 0
         self._model.Params.OptimalityTol = 0.0005
-        # If the tolerance is too high, then the solver might pick an incorrect solution.
+        # If the tolerance is too high, then the solver might pick an incorrect
+        # solution.
         self._model.Params.IntFeasTol = 0.00001
         # self._model.Params.TimeLimit = 1  # In seconds.
         # Sets the solver method to concurrent and deterministic.
@@ -566,7 +568,8 @@ class GurobiScheduler2(GurobiBaseScheduler):
                     event_time,
                     start_time,
                     start_time + task.remaining_time,
-                    var_name=f"overlap_{task_event.unique_name}_with_{task.unique_name}",
+                    var_name=f"overlap_{task_event.unique_name}_with_"
+                    f"{task.unique_name}",
                 )
                 # overlap_vars[task.id] = self._in_interval_approximate(
                 #     event_time, task.release_time, task.deadline
