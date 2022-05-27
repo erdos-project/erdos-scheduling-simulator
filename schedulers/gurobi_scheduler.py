@@ -16,7 +16,7 @@ from workload import Resource, Resources, TaskGraph, TaskState
 
 # Minimum task gain constant, which is used to set the benefit of leaving a task
 # unscheduled. It is equivalent to missing a task deadline by 100 seconds.
-MIN_TASK_GAIN = -100 * 1000 * 1000
+MIN_TASK_GAIN = -100 * 10**6
 
 
 class GurobiBaseScheduler(BaseScheduler):
@@ -93,14 +93,18 @@ class GurobiBaseScheduler(BaseScheduler):
             var_name = f"time_{event_time}_in_{start_time},{end_time}"
         in_var = self._model.addVar(vtype=gp.GRB.BINARY, name=var_name)
         or_var = self._model.addVar(vtype=gp.GRB.BINARY, name="or_" + var_name)
-        M = 100000000
         # If in_var == 1 then start_time <= event_time <= end_time.
-        self._model.addConstr(event_time >= start_time - M * (1 - in_var))
-        self._model.addConstr(event_time <= end_time + M * (1 - in_var))
+        self._model.addConstr((in_var == 1) >> (event_time >= start_time))
+        self._model.addConstr((in_var == 1) >> (event_time <= end_time))
+        M = 2 * 1000 * 1000
         # If in_var == 0 & or_var == 0 then event_time <= start_time - 1
-        self._model.addConstr(event_time <= start_time - 1 + M * (in_var + or_var))
+        self._model.addConstr(
+            (in_var == 0) >> (event_time <= start_time - 1 + M * or_var)
+        )
         # If in_var == 0 & or_var == 1 then event_time >= end_time + 1
-        self._model.addConstr(event_time >= end_time + 1 - M * (in_var + 1 - or_var))
+        self._model.addConstr(
+            (in_var == 0) >> (event_time >= end_time + 1 - M * (1 - or_var))
+        )
         return in_var
 
     def _in_interval_approximate(self, event_time, start_time, end_time):
@@ -120,7 +124,7 @@ class GurobiBaseScheduler(BaseScheduler):
 
         self._model.optimize()
         scheduler_end_time = time.time()
-        runtime = int((scheduler_end_time - scheduler_start_time) * 1000000)
+        runtime = int((scheduler_end_time - scheduler_start_time) * 10**6)
         self._logger.info(f"Scheduler wall-clock runtime: {runtime}")
         if self.runtime != -1:
             runtime = self.runtime
@@ -128,9 +132,9 @@ class GurobiBaseScheduler(BaseScheduler):
         if self._model.status == gp.GRB.OPTIMAL:
             self._logger.debug(f"Found optimal value: {self._model.objVal}")
             self._placements = []
-            self._gain = int(self._model.objVal)
+            self._gain = round(self._model.objVal)
             for task_id, task in self._task_ids_to_task.items():
-                start_time = int(self._task_ids_to_start_time[task.id].X)
+                start_time = round(self._task_ids_to_start_time[task.id].X)
                 placement = self._get_task_placement(task)
                 if start_time <= sim_time + runtime * 2:
                     # We only place the tasks with a start time earlier than
@@ -153,6 +157,7 @@ class GurobiBaseScheduler(BaseScheduler):
             else:
                 self._logger.debug(f"Solver failed with status: {self._model.status}")
                 self.log_solver_internal()
+            raise ValueError("Model should never be infeasible")
         # Log the scheduler run.
         self.log()
         return runtime, self._placements
@@ -166,8 +171,8 @@ class GurobiBaseScheduler(BaseScheduler):
                 self._logger.debug(f"Constraint: {c}")
 
     def log(self):
-        if self._flags is not None and self._flags.scheduler_log_file_name is not None:
-            with open(self._flags.scheduler_log_file_name, "wb") as log_file:
+        if self._flags is not None and self._flags.scheduler_log_base_name is not None:
+            with open(self._flags.scheduler_log_base_name + ".pkl", "wb") as log_file:
                 logged_data = {
                     "time": self._time,
                     "tasks": self._task_ids_to_task,
@@ -179,6 +184,8 @@ class GurobiBaseScheduler(BaseScheduler):
                     "gain": self._gain,
                 }
                 pickle.dump(logged_data, log_file)
+            self._model.write(self._flags.scheduler_log_base_name + ".sol")
+            self._model.write(self._flags.scheduler_log_base_name + ".lp")
 
 
 class GurobiScheduler(GurobiBaseScheduler):
@@ -220,8 +227,8 @@ class GurobiScheduler(GurobiBaseScheduler):
         self._worker_pools = worker_pools
         self._model = gp.Model("RAP")
         self._model.Params.LogToConsole = 0
-        self._model.Params.OptimalityTol = 0.005
-        self._model.Params.IntFeasTol = 0.01
+        self._model.Params.OptimalityTol = 0.0005
+        self._model.Params.IntFeasTol = 0.00001
         # self._model.Params.TimeLimit = 1  # In seconds.
         # Sets the solver method to concurrent and deterministic.
         # self._model.Params.Method = 4
@@ -451,7 +458,7 @@ class GurobiScheduler(GurobiBaseScheduler):
         )
 
     def _get_task_placement(self, task):
-        res_index = int(self._task_ids_to_resources[task.id][0].X)
+        res_index = round(self._task_ids_to_resources[task.id][0].X)
         if res_index == -1:
             # The task has been left unscheduled.
             placement = None
@@ -497,8 +504,9 @@ class GurobiScheduler2(GurobiBaseScheduler):
         self._worker_pools = worker_pools
         self._model = gp.Model("RAP")
         self._model.Params.LogToConsole = 0
-        self._model.Params.OptimalityTol = 0.005
-        self._model.Params.IntFeasTol = 0.01
+        self._model.Params.OptimalityTol = 0.0005
+        # If the tolerance is too high, then the solver might pick an incorrect solution.
+        self._model.Params.IntFeasTol = 0.00001
         # self._model.Params.TimeLimit = 1  # In seconds.
         # Sets the solver method to concurrent and deterministic.
         # self._model.Params.Method = 4
@@ -605,12 +613,12 @@ class GurobiScheduler2(GurobiBaseScheduler):
 
     def _get_task_placement(self, task):
         placement_vars = self._task_ids_to_placements[task.id]
-        unscheduled = int(placement_vars[0].X)
+        unscheduled = round(placement_vars[0].X)
         placement = None
         if unscheduled == 0:
             w_index = 1
             for wp in self._worker_pools._wps:
-                scheduled = int(placement_vars[w_index].X)
+                scheduled = round(placement_vars[w_index].X)
                 if scheduled:
                     placement = wp.id
                     break

@@ -193,8 +193,8 @@ class Z3Scheduler(BaseScheduler):
         return runtime, self._placements
 
     def log(self):
-        if self._flags is not None and self._flags.scheduler_log_file_name is not None:
-            with open(self._flags.scheduler_log_file_name, "wb") as log_file:
+        if self._flags is not None and self._flags.scheduler_log_base_name is not None:
+            with open(self._flags.scheduler_log_base_name + ".pkl", "wb") as log_file:
                 logged_data = {
                     "time": self._time,
                     "tasks": self._task_ids_to_task,

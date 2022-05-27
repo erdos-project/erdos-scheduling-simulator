@@ -414,7 +414,7 @@ class Task(object):
 
     @property
     def unique_name(self):
-        return self._name + ":" + str(self._timestamp)
+        return self._name + "@" + str(self._timestamp)
 
     @property
     def id(self):

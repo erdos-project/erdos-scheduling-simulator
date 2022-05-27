@@ -36,7 +36,9 @@ flags.DEFINE_string(
     short_name="csv",
 )
 flags.DEFINE_string(
-    "scheduler_log_file_name", None, "Name of the file to log the scheduler runs."
+    "scheduler_log_base_name",
+    None,
+    "Base name to use to log info about scheduler runs.",
 )
 flags.DEFINE_string("log_level", "debug", "Level of logging.")
 flags.DEFINE_string(
