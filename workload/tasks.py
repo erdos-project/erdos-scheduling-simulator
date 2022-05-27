@@ -128,7 +128,9 @@ class Task(object):
             self._release_time = time
             if self._release_time > self._deadline:
                 self._logger.warning(
-                    "Task {self} released at {time}, which is after its deadline"
+                    f"Task {self} released at {time}, which is after its deadline "
+                    f"{self._deadline}. Intended release time was "
+                    f"{self.intended_release_time}"
                 )
 
         self._state = TaskState.RELEASED
@@ -409,6 +411,10 @@ class Task(object):
     @property
     def name(self):
         return self._name
+
+    @property
+    def unique_name(self):
+        return self._name + ":" + str(self._timestamp)
 
     @property
     def id(self):
