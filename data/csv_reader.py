@@ -112,7 +112,7 @@ class CSVReader(object):
                 elif reading[1] == "TASK_PLACEMENT":
                     # Update the task with the placement event data.
                     tasks[reading[4]].update_placement(reading, worker_pools)
-                elif reading[1] == "TASK_SKIP":
+                elif reading[1] == "TASK_SKIP" and reading[4] in tasks:
                     # Update the task with the skip data.
                     tasks[reading[4]].update_skip(reading)
                 elif reading[1] == "TASK_PREEMPT":
@@ -296,6 +296,9 @@ class CSVReader(object):
 
         # Output all the scheduler events.
         for scheduler_event in self.get_scheduler_invocations(csv_path):
+            if scheduler_event.runtime is None:
+                # In case the simulation didn't finish the last scheduler run.
+                break
             if check_if_time_intersects(
                 between_time,
                 scheduler_event.start_time,
@@ -346,6 +349,9 @@ class CSVReader(object):
 
                 # Output the task's placement as individual elements.
                 for placement in task.placements:
+                    if placement.completion_time is None:
+                        # In case the task didn't finish in the simulation.
+                        continue
                     trace_event = {
                         "name": f"{task.name}::{task.timestamp}",
                         "cat": "task,duration",
@@ -389,6 +395,9 @@ class CSVReader(object):
             elif trace_fmt == "resource":
                 # Output the task's placement as individual elements.
                 for placement in task.placements:
+                    if placement.completion_time is None:
+                        # In case the task didn't finish by the end of the simulation.
+                        continue
                     tids = [
                         resource_ids_to_canonical_names[resource.id]
                         for resource in placement.resources_used
@@ -433,7 +442,7 @@ class CSVReader(object):
                                     "cat": "task,missed,deadline,instant",
                                     "ph": "i",
                                     "ts": task.deadline,
-                                    "pid": task.worker_pool.name,
+                                    "pid": placement.worker_pool.name,
                                     "tid": tid,
                                     # The scope of missed deadline events is per thread.
                                     "s": "t",
