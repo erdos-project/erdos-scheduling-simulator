@@ -136,15 +136,7 @@ class GurobiBaseScheduler(BaseScheduler):
             for task_id, task in self._task_ids_to_task.items():
                 start_time = round(self._task_ids_to_start_time[task.id].X)
                 placement = self._get_task_placement(task)
-                if start_time <= sim_time + runtime * 2:
-                    # We only place the tasks with a start time earlier than
-                    # the estimated end time of the next scheduler run.
-                    # Therefore, a task can progress before the next scheduler
-                    # finishes. However, the next scheduler will assume that
-                    # the task is not running while considering for placement.
-                    self._placements.append((task, placement, start_time))
-                else:
-                    self._placements.append((task, None, None))
+                self._placements.append((task, placement, start_time))
             self._verify_schedule(worker_pools, self._task_graph, self._placements)
         else:
             self._placements = [
@@ -534,12 +526,15 @@ class GurobiScheduler2(GurobiBaseScheduler):
             for wp in self._worker_pools._wps:
                 # Add a variable which is set to 1 if a task is placed on the
                 # variable's associated worker pool.
-                placement_var = self._model.addVar(
-                    vtype=gp.GRB.BINARY,
-                    name=f"placement_{task.unique_name}_worker_{w_index}",
-                )
-                self._task_ids_to_placements[task.id].append(placement_var)
-                self._wp_index_to_vars[w_index].append((task, placement_var))
+                if self.preemptive or wp.can_accomodate_task(task):
+                    # If the scheduler is not preemptive, then only add the variable if
+                    # the task fits on the worker.
+                    placement_var = self._model.addVar(
+                        vtype=gp.GRB.BINARY,
+                        name=f"placement_{task.unique_name}_worker_{w_index}",
+                    )
+                    self._task_ids_to_placements[task.id].append(placement_var)
+                    self._wp_index_to_vars[w_index].append((task, placement_var))
                 w_index += 1
 
     def _add_task_resource_constraints(self):
@@ -564,16 +559,19 @@ class GurobiScheduler2(GurobiBaseScheduler):
             overlap_vars = {}
             for task in self._task_ids_to_task.values():
                 start_time = self._task_ids_to_start_time[task.id]
-                overlap_vars[task.id] = self._in_interval(
-                    event_time,
-                    start_time,
-                    start_time + task.remaining_time,
-                    var_name=f"overlap_{task_event.unique_name}_with_"
-                    f"{task.unique_name}",
-                )
-                # overlap_vars[task.id] = self._in_interval_approximate(
-                #     event_time, task.release_time, task.deadline
-                # )
+                if task.id != task_id:
+                    overlap_vars[task.id] = self._in_interval(
+                        event_time,
+                        start_time,
+                        start_time + task.remaining_time,
+                        var_name=f"overlap_{task_event.unique_name}_with_"
+                        f"{task.unique_name}",
+                    )
+                    # overlap_vars[task.id] = self._in_interval_approximate(
+                    #     event_time, task.release_time, task.deadline
+                    # )
+                else:
+                    overlap_vars[task.id] = 1
 
             w_index = 1
             for wp in self._worker_pools._wps:
