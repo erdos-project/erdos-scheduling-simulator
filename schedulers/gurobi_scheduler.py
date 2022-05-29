@@ -526,15 +526,12 @@ class GurobiScheduler2(GurobiBaseScheduler):
             for wp in self._worker_pools._wps:
                 # Add a variable which is set to 1 if a task is placed on the
                 # variable's associated worker pool.
-                if self.preemptive or wp.can_accomodate_task(task):
-                    # If the scheduler is not preemptive, then only add the variable if
-                    # the task fits on the worker.
-                    placement_var = self._model.addVar(
-                        vtype=gp.GRB.BINARY,
-                        name=f"placement_{task.unique_name}_worker_{w_index}",
-                    )
-                    self._task_ids_to_placements[task.id].append(placement_var)
-                    self._wp_index_to_vars[w_index].append((task, placement_var))
+                placement_var = self._model.addVar(
+                    vtype=gp.GRB.BINARY,
+                    name=f"placement_{task.unique_name}_worker_{w_index}",
+                )
+                self._task_ids_to_placements[task.id].append(placement_var)
+                self._wp_index_to_vars[w_index].append((task, placement_var))
                 w_index += 1
 
     def _add_task_resource_constraints(self):
@@ -607,6 +604,11 @@ class GurobiScheduler2(GurobiBaseScheduler):
                 objective.add(
                     skipped
                     * (MIN_TASK_GAIN + task.deadline - task.remaining_time - start_time)
+                )
+            elif self._goal == "min_placement_delay":
+                objective.add((1 - skipped) * (task.release_time - start_time))
+                objective.add(
+                    skipped * (MIN_TASK_GAIN + task.release_time - start_time)
                 )
             else:
                 raise ValueError("Goal {self._goal} not supported.")
