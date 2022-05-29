@@ -15,8 +15,8 @@ from workers import WorkerPools
 from workload import Resource, Resources, TaskGraph, TaskState
 
 # Minimum task gain constant, which is used to set the benefit of leaving a task
-# unscheduled. It is equivalent to missing a task deadline by 100 seconds.
-MIN_TASK_GAIN = -100 * 10**6
+# unscheduled. It is equivalent to missing a task deadline by 3 seconds.
+MIN_TASK_GAIN = -3 * 10**6
 
 
 class GurobiBaseScheduler(BaseScheduler):
@@ -77,18 +77,7 @@ class GurobiBaseScheduler(BaseScheduler):
                         <= self._task_ids_to_start_time[child_task.id]
                     )
 
-    def _in_interval(self, event_time, start_time, end_time, var_name=None):
-        """Adds constraints to check if event time is in [start, end] time interval.
-
-        Args:
-            event_time: The time of the event to check if is in the interval.
-            start_time: The start of the time interval.
-            end_time: The end of the time interval.
-            var_name: Name to give to the Gurobi binary variable.
-
-        Returns:
-            A Gurobi variable that is 1 if the time is in the interval, 0 otherwise.
-        """
+    def _in_interval_slow(self, event_time, start_time, end_time, var_name=None):
         if var_name is None:
             var_name = f"time_{event_time}_in_{start_time},{end_time}"
         in_var = self._model.addVar(vtype=gp.GRB.BINARY, name=var_name)
@@ -106,6 +95,28 @@ class GurobiBaseScheduler(BaseScheduler):
             (in_var == 0) >> (event_time >= end_time + 1 - M * (1 - or_var))
         )
         return in_var
+
+    def _in_interval(self, event_time, start_time, end_time, var_name=None):
+        """Adds constraints to check if event time is in [start, end] time interval.
+
+        Args:
+            event_time: The time of the event to check if is in the interval.
+            start_time: The start of the time interval.
+            end_time: The end of the time interval.
+            var_name: Name to give to the Gurobi binary variable.
+
+        Returns:
+            A Gurobi variable that is 1 if the time is in the interval, 0 otherwise.
+        """
+        if var_name is None:
+            var_name = f"time_{event_time}_in_{start_time},{end_time}"
+        in_vars = self._model.addVars(3, vtype=gp.GRB.BINARY, name=var_name)
+        self._model.addConstr((in_vars[0] == 1) >> (event_time >= start_time))
+        self._model.addConstr((in_vars[0] == 1) >> (event_time <= end_time))
+        self._model.addConstr((in_vars[1] == 1) >> (event_time <= start_time - 1))
+        self._model.addConstr((in_vars[2] == 1) >> (event_time >= end_time + 1))
+        self._model.addConstr(gp.quicksum(in_vars) == 1)
+        return in_vars[0]
 
     def _in_interval_approximate(self, event_time, start_time, end_time):
         if start_time <= event_time and event_time <= end_time:
@@ -136,7 +147,15 @@ class GurobiBaseScheduler(BaseScheduler):
             for task_id, task in self._task_ids_to_task.items():
                 start_time = round(self._task_ids_to_start_time[task.id].X)
                 placement = self._get_task_placement(task)
-                self._placements.append((task, placement, start_time))
+                if start_time <= sim_time + runtime * 2:
+                    # We only place the tasks with a start time earlier than
+                    # the estimated end time of the next scheduler run.
+                    # Therefore, a task can progress before the next scheduler
+                    # finishes. However, the next scheduler will assume that
+                    # the task is not running while considering for placement.
+                    self._placements.append((task, placement, start_time))
+                else:
+                    self._placements.append((task, None, None))
             self._verify_schedule(worker_pools, self._task_graph, self._placements)
         else:
             self._placements = [
