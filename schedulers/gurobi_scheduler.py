@@ -156,6 +156,7 @@ class GurobiBaseScheduler(BaseScheduler):
                     self._placements.append((task, placement, start_time))
                 else:
                     self._placements.append((task, None, None))
+            self.log()
             self._verify_schedule(worker_pools, self._task_graph, self._placements)
         else:
             self._placements = [
@@ -168,9 +169,8 @@ class GurobiBaseScheduler(BaseScheduler):
             else:
                 self._logger.debug(f"Solver failed with status: {self._model.status}")
                 self.log_solver_internal()
+            self.log()
             raise ValueError("Model should never be infeasible")
-        # Log the scheduler run.
-        self.log()
         return runtime, self._placements
 
     def log_solver_internal(self):
@@ -188,7 +188,7 @@ class GurobiBaseScheduler(BaseScheduler):
                     "time": self._time,
                     "tasks": self._task_ids_to_task,
                     "task_graph": self._task_graph,
-                    "worker_pools": self._worker_pools,
+                    # "worker_pools": self._worker_pools,
                     "lookahead": self._lookahead,
                     "runtime": self.runtime,
                     "placements": self._placements,
@@ -560,13 +560,6 @@ class GurobiScheduler2(GurobiBaseScheduler):
                 gp.quicksum(p for p in self._task_ids_to_placements[task_id]) == 1
             )
 
-        total_resources = Resources(_logger=self._logger)
-        for wp in self._worker_pools._wps:
-            total_resources += wp.resources
-        res_names = set(
-            map(attrgetter("name"), total_resources._resource_vector.keys())
-        )
-
         for task_id in self._task_ids_to_start_time.keys():
             # At each task start time find all the running tasks.
             task_event = self._task_ids_to_task[task_id]
@@ -588,11 +581,12 @@ class GurobiScheduler2(GurobiBaseScheduler):
                     # )
                 else:
                     overlap_vars[task.id] = 1
-
-            w_index = 1
-            for wp in self._worker_pools._wps:
-                for res_name in res_names:
-                    resource = Resource(name=res_name, _id="any")
+            for res, quantity in task_event.resource_requirements.resources:
+                if quantity == 0:
+                    continue
+                resource = Resource(name=res.name, _id="any")
+                w_index = 1
+                for wp in self._worker_pools._wps:
                     # Place constraints to ensure that worker pool's resources are not
                     # exceeded.
                     available = wp.resources.get_available_quantity(resource)
@@ -607,9 +601,9 @@ class GurobiScheduler2(GurobiBaseScheduler):
                         )
                         <= available,
                         name=f"time_{task_event.unique_name}_worker_{w_index}_"
-                        f"res_{res_name}",
+                        f"res_{res.name}",
                     )
-                w_index += 1
+                    w_index += 1
 
     def _add_objective(self):
         objective = gp.QuadExpr()
@@ -627,7 +621,7 @@ class GurobiScheduler2(GurobiBaseScheduler):
             elif self._goal == "min_placement_delay":
                 objective.add((1 - skipped) * (task.release_time - start_time))
                 objective.add(
-                    skipped * (MIN_TASK_GAIN + task.release_time - start_time)
+                    skipped * (MIN_TASK_GAIN + (task.release_time - start_time))
                 )
             else:
                 raise ValueError("Goal {self._goal} not supported.")
