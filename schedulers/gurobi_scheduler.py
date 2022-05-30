@@ -25,7 +25,7 @@ class GurobiBaseScheduler(BaseScheduler):
         enforce_deadlines: bool = True,
         lookahead: int = 0,
         _flags: Optional["absl.flags"] = None,
-        _time_unit: str = "ms",
+        _time_unit: str = "us",
     ):
         """Constructs a Gurobi scheduler.
 
@@ -167,7 +167,7 @@ class GurobiBaseScheduler(BaseScheduler):
                 transformed_runtime = runtime
                 if self._time_unit == "ms":
                     # Transform start time back to us before it is returned.
-                    transformed_runtime = math.round(runtime / 1000)
+                    transformed_runtime = math.ceil(runtime / 1000)
                 if (
                     start_time
                     <= self.get_time(self._time_unit) + transformed_runtime * 2
@@ -243,7 +243,7 @@ class GurobiScheduler(GurobiBaseScheduler):
         enforce_deadlines: bool = True,
         lookahead: int = 0,
         _flags: Optional["absl.flags"] = None,
-        _time_unit: str = "ms",
+        _time_unit: str = "us",
     ):
         super(GurobiScheduler, self).__init__(
             preemptive, runtime, goal, enforce_deadlines, lookahead, _flags, _time_unit
@@ -541,7 +541,7 @@ class GurobiScheduler2(GurobiBaseScheduler):
         enforce_deadlines: bool = True,
         lookahead: int = 0,
         _flags: Optional["absl.flags"] = None,
-        _time_unit: str = "ms",
+        _time_unit: str = "us",
     ):
         super(GurobiScheduler2, self).__init__(
             preemptive, runtime, goal, enforce_deadlines, lookahead, _flags, _time_unit
