@@ -74,7 +74,8 @@ class GurobiBaseScheduler(BaseScheduler):
                 )
             # Start at or after release time. No need to add this constraint because
             # we set a lower bound on the start time variables.
-            # self._model.addConstr(task.get_release_time(self._time_unit) <= start_time)
+            # self._model.addConstr(
+            #     task.get_release_time(self._time_unit) <= start_time)
 
     def _add_task_dependency_constraints(self):
         for task_id, task in self._task_ids_to_task.items():
@@ -623,7 +624,9 @@ class GurobiScheduler2(GurobiBaseScheduler):
             # At each task start time find all the running tasks.
             task_event = self._task_ids_to_task[task_id]
             event_time = self._task_ids_to_start_time[task_id]
-            # event_time = self._task_ids_to_task[task_id].get_release_time(self._time_unit)
+            # event_time = self._task_ids_to_task[task_id].get_release_time(
+            #     self._time_unit
+            # )
             overlap_vars = {}
             for task in self._task_ids_to_task.values():
                 start_time = self._task_ids_to_start_time[task.id]
@@ -636,7 +639,9 @@ class GurobiScheduler2(GurobiBaseScheduler):
                         f"{task.unique_name}",
                     )
                     # overlap_vars[task.id] = self._in_interval_approximate(
-                    #     event_time, task.get_release_time(self._time_unit), task.get_deadline(self._time_unit)
+                    #     event_time,
+                    #     task.get_release_time(self._time_unit),
+                    #     task.get_deadline(self._time_unit),
                     # )
                 else:
                     overlap_vars[task.id] = 1
