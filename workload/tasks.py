@@ -1,4 +1,5 @@
 import logging
+import math
 import random
 import sys
 import uuid
@@ -432,6 +433,15 @@ class Task(object):
     def release_time(self):
         return self._release_time
 
+    def get_release_time(self, unit="us"):
+        if unit == "us":
+            return self._release_time
+        elif unit == "ms":
+            # Round up to return a conservative estimate of the exact release time.
+            return math.ceil(self._release_time / 1000)
+        else:
+            raise ValueError(f"Unit {unit} not supported")
+
     @property
     def intended_release_time(self):
         return self._intended_release_time
@@ -439,6 +449,15 @@ class Task(object):
     @property
     def deadline(self):
         return self._deadline
+
+    def get_deadline(self, unit="us"):
+        if unit == "us":
+            return self._deadline
+        elif unit == "ms":
+            # Round down to return a conservative estimate of the deadline.
+            return math.floor(self._deadline / 1000)
+        else:
+            raise ValueError(f"Unit {unit} not supported")
 
     @property
     def job(self):
@@ -463,6 +482,15 @@ class Task(object):
     @property
     def remaining_time(self):
         return self._remaining_time
+
+    def get_remaining_time(self, unit="us"):
+        if unit == "us":
+            return self._remaining_time
+        elif unit == "ms":
+            # Round up to return a conservative estimate of the exact remaining time.
+            return math.ceil(self._remaining_time / 1000)
+        else:
+            raise ValueError(f"Unit {unit} not supported")
 
     @property
     def completion_time(self):

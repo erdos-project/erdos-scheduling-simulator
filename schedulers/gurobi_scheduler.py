@@ -1,4 +1,5 @@
 import functools
+import math
 import pickle
 import sys
 import time
@@ -14,10 +15,6 @@ from schedulers import BaseScheduler
 from workers import WorkerPools
 from workload import Resource, Resources, TaskGraph, TaskState
 
-# Minimum task gain constant, which is used to set the benefit of leaving a task
-# unscheduled. It is equivalent to missing a task deadline by 3 seconds.
-MIN_TASK_GAIN = -3 * 10**6
-
 
 class GurobiBaseScheduler(BaseScheduler):
     def __init__(
@@ -28,6 +25,7 @@ class GurobiBaseScheduler(BaseScheduler):
         enforce_deadlines: bool = True,
         lookahead: int = 0,
         _flags: Optional["absl.flags"] = None,
+        _time_unit: str = "ms",
     ):
         """Constructs a Gurobi scheduler.
 
@@ -41,12 +39,24 @@ class GurobiBaseScheduler(BaseScheduler):
                 schedule will return None.
             lookahead (`int`): The scheduler will try to place tasks that are within
                 the scheduling lookahead (in us) using estimated task release times.
+            time_unit (`str`): Controls what time units the scheduler uses. If it uses
+                ms then the scheduler is faster, but only places tasks at the
+                granularity.
         """
         super(GurobiBaseScheduler, self).__init__(
             preemptive, runtime, lookahead, enforce_deadlines, _flags
         )
         self._goal = goal
         self._time = None
+        self._time_unit = _time_unit
+        # Minimum task gain constant, which is used to set the benefit of leaving a task
+        # unscheduled. It is equivalent to missing a task deadline by 3 seconds.
+        if _time_unit == "us":
+            self._min_task_gain = -3 * 10**6
+        elif _time_unit == "ms":
+            self._min_task_gain = -3 * 10**3
+        else:
+            raise ValueError(f"Unit {self._time_unit} not supported")
         self._task_ids_to_task = {}
         # Mapping from task id to the var storing the task start time.
         self._task_ids_to_start_time = {}
@@ -58,10 +68,13 @@ class GurobiBaseScheduler(BaseScheduler):
         for task_id, task in self._task_ids_to_task.items():
             start_time = self._task_ids_to_start_time[task_id]
             if self._enforce_deadlines:
-                self._model.addConstr(start_time + task.remaining_time <= task.deadline)
+                self._model.addConstr(
+                    start_time + task.get_remaining_time(self._time_unit)
+                    <= task.get_deadline(self._time_unit)
+                )
             # Start at or after release time. No need to add this constraint because
             # we set a lower bound on the start time variables.
-            # self._model.addConstr(task.release_time <= start_time)
+            # self._model.addConstr(task.get_release_time(self._time_unit) <= start_time)
 
     def _add_task_dependency_constraints(self):
         for task_id, task in self._task_ids_to_task.items():
@@ -73,7 +86,8 @@ class GurobiBaseScheduler(BaseScheduler):
                 # then the child task does not have a start_time variable.
                 if child_task.id in self._task_ids_to_start_time:
                     self._model.addConstr(
-                        self._task_ids_to_start_time[task_id] + task.remaining_time
+                        self._task_ids_to_start_time[task_id]
+                        + task.get_remaining_time(self._time_unit)
                         <= self._task_ids_to_start_time[child_task.id]
                     )
 
@@ -85,7 +99,10 @@ class GurobiBaseScheduler(BaseScheduler):
         # If in_var == 1 then start_time <= event_time <= end_time.
         self._model.addConstr((in_var == 1) >> (event_time >= start_time))
         self._model.addConstr((in_var == 1) >> (event_time <= end_time))
-        M = 2 * 1000 * 1000
+        if self._time_unit == "us":
+            M = 2 * 10**6
+        elif self._time_unit == "ms":
+            M = 2 * 10**3
         # If in_var == 0 & or_var == 0 then event_time <= start_time - 1
         self._model.addConstr(
             (in_var == 0) >> (event_time <= start_time - 1 + M * or_var)
@@ -147,12 +164,22 @@ class GurobiBaseScheduler(BaseScheduler):
             for task_id, task in self._task_ids_to_task.items():
                 start_time = round(self._task_ids_to_start_time[task.id].X)
                 placement = self._get_task_placement(task)
-                if start_time <= sim_time + runtime * 2:
+                transformed_runtime = runtime
+                if self._time_unit == "ms":
+                    # Transform start time back to us before it is returned.
+                    transformed_runtime = math.round(runtime / 1000)
+                if (
+                    start_time
+                    <= self.get_time(self._time_unit) + transformed_runtime * 2
+                ):
                     # We only place the tasks with a start time earlier than
                     # the estimated end time of the next scheduler run.
                     # Therefore, a task can progress before the next scheduler
                     # finishes. However, the next scheduler will assume that
                     # the task is not running while considering for placement.
+                    if self._time_unit == "ms":
+                        # Transform start time back to us before it is returned.
+                        start_time *= 1000
                     self._placements.append((task, placement, start_time))
                 else:
                     self._placements.append((task, None, None))
@@ -198,6 +225,14 @@ class GurobiBaseScheduler(BaseScheduler):
             self._model.write(self._flags.scheduler_log_base_name + ".sol")
             self._model.write(self._flags.scheduler_log_base_name + ".lp")
 
+    def get_time(self, unit="us"):
+        if unit == "us":
+            return self._time
+        elif unit == "ms":
+            return self._time // 1000
+        else:
+            raise ValueError(f"Unit {unit} not supported")
+
 
 class GurobiScheduler(GurobiBaseScheduler):
     def __init__(
@@ -208,9 +243,10 @@ class GurobiScheduler(GurobiBaseScheduler):
         enforce_deadlines: bool = True,
         lookahead: int = 0,
         _flags: Optional["absl.flags"] = None,
+        _time_unit: str = "ms",
     ):
         super(GurobiScheduler, self).__init__(
-            preemptive, runtime, goal, enforce_deadlines, lookahead, _flags
+            preemptive, runtime, goal, enforce_deadlines, lookahead, _flags, _time_unit
         )
         # Mapping from task id to the var storing the task resource placement.
         self._task_ids_to_resources = defaultdict(list)
@@ -238,8 +274,12 @@ class GurobiScheduler(GurobiBaseScheduler):
         self._worker_pools = worker_pools
         self._model = gp.Model("RAP")
         self._model.Params.LogToConsole = 0
-        self._model.Params.OptimalityTol = 0.0005
-        self._model.Params.IntFeasTol = 0.00001
+        if self._time_unit == "us":
+            self._model.Params.OptimalityTol = 0.0005
+            self._model.Params.IntFeasTol = 0.00001
+        elif self._time_unit == "ms":
+            self._model.Params.OptimalityTol = 0.005
+            self._model.Params.IntFeasTol = 0.01
         # self._model.Params.TimeLimit = 1  # In seconds.
         # Sets the solver method to concurrent and deterministic.
         # self._model.Params.Method = 4
@@ -257,17 +297,20 @@ class GurobiScheduler(GurobiBaseScheduler):
             # Add a variable to store the gain of the task assignment.
             self._task_ids_to_gain[task.id] = self._model.addVar(
                 vtype=gp.GRB.INTEGER,
-                lb=MIN_TASK_GAIN,
-                ub=task.deadline
-                - self._time
-                - task.remaining_time,  # Task cannot start before sim time.
+                lb=self._min_task_gain,
+                ub=task.get_deadline(self._time_unit)
+                - self.get_time(self._time_unit)
+                - task.get_remaining_time(
+                    self._time_unit
+                ),  # Task cannot start before sim time.
                 name=f"gain_task_{task.unique_name}",
             )
             # Add a variable to store the start time of the task.
             self._task_ids_to_start_time[task.id] = self._model.addVar(
                 vtype=gp.GRB.INTEGER,
                 lb=max(
-                    self._time, task.release_time
+                    self.get_time(self._time_unit),
+                    task.get_release_time(self._time_unit),
                 ),  # Start times cannot be less than sim time.
                 name=f"start_time_task_{task.unique_name}",
             )
@@ -362,7 +405,12 @@ class GurobiScheduler(GurobiBaseScheduler):
         # Tasks using the same resources must not overlap.
         if len(self._task_ids_to_task) == 0:
             return
-        max_deadline = max([task.deadline for task in self._task_ids_to_task.values()])
+        max_deadline = max(
+            [
+                task.get_deadline(self._time_unit)
+                for task in self._task_ids_to_task.values()
+            ]
+        )
         tasks = self._task_ids_to_task.items()
         # For every task pair we need to ensure that if the tasks utilize the same
         # resource then their execution does not overlap.
@@ -427,7 +475,7 @@ class GurobiScheduler(GurobiBaseScheduler):
                             >> (
                                 self._task_ids_to_start_time[t1_id]
                                 - self._task_ids_to_start_time[t2_id]
-                                - task2.remaining_time
+                                - task2.get_remaining_time(self._time_unit)
                                 >= max_deadline * or_var
                             )
                         )
@@ -436,7 +484,7 @@ class GurobiScheduler(GurobiBaseScheduler):
                             >> (
                                 self._task_ids_to_start_time[t2_id]
                                 - self._task_ids_to_start_time[t1_id]
-                                - task1.remaining_time
+                                - task1.get_remaining_time(self._time_unit)
                                 >= max_deadline * (1 - or_var)
                             )
                         )
@@ -453,14 +501,19 @@ class GurobiScheduler(GurobiBaseScheduler):
             self._model.addConstr(
                 (self._task_ids_to_scheduled_flag[task.id] == 0)
                 >> (
-                    task.deadline - start_time - task.remaining_time
+                    task.get_deadline(self._time_unit)
+                    - start_time
+                    - task.get_remaining_time(self._time_unit)
                     == self._task_ids_to_gain[task.id]
                 )
             )
             self._model.addConstr(
                 (self._task_ids_to_scheduled_flag[task.id] == 1)
                 >> (
-                    MIN_TASK_GAIN + task.deadline - start_time - task.remaining_time
+                    self._min_task_gain
+                    + task.get_deadline(self._time_unit)
+                    - start_time
+                    - task.get_remaining_time(self._time_unit)
                     == self._task_ids_to_gain[task.id]
                 )
             )
@@ -488,9 +541,10 @@ class GurobiScheduler2(GurobiBaseScheduler):
         enforce_deadlines: bool = True,
         lookahead: int = 0,
         _flags: Optional["absl.flags"] = None,
+        _time_unit: str = "ms",
     ):
         super(GurobiScheduler2, self).__init__(
-            preemptive, runtime, goal, enforce_deadlines, lookahead, _flags
+            preemptive, runtime, goal, enforce_deadlines, lookahead, _flags, _time_unit
         )
         # Mapping from task id to the var storing the placement.
         self._task_ids_to_placements = defaultdict(list)
@@ -516,10 +570,14 @@ class GurobiScheduler2(GurobiBaseScheduler):
         self._worker_pools = worker_pools
         self._model = gp.Model("RAP")
         self._model.Params.LogToConsole = 0
-        self._model.Params.OptimalityTol = 0.0005
-        # If the tolerance is too high, then the solver might pick an incorrect
-        # solution.
-        self._model.Params.IntFeasTol = 0.00001
+        if self._time_unit == "us":
+            self._model.Params.OptimalityTol = 0.0005
+            self._model.Params.IntFeasTol = 0.00001
+        elif self._time_unit == "ms":
+            # If the tolerance is too high, then the solver might pick an incorrect
+            # solution.
+            self._model.Params.OptimalityTol = 0.005
+            self._model.Params.IntFeasTol = 0.01
         # self._model.Params.TimeLimit = 1  # In seconds.
         # Sets the solver method to concurrent and deterministic.
         # self._model.Params.Method = 4
@@ -530,9 +588,10 @@ class GurobiScheduler2(GurobiBaseScheduler):
             self._task_ids_to_start_time[task.id] = self._model.addVar(
                 vtype=gp.GRB.INTEGER,
                 lb=max(
-                    self._time, task.release_time
+                    self.get_time(self._time_unit),
+                    task.get_release_time(self._time_unit),
                 ),  # Start times cannot be less than sim time.
-                ub=self._time + self.lookahead,
+                ub=self.get_time(self._time_unit) + self.get_lookahead(self._time_unit),
                 name=f"start_time_{task.unique_name}",
             )
             # Add a variable which encodes if the task is scheduled or not.
@@ -564,7 +623,7 @@ class GurobiScheduler2(GurobiBaseScheduler):
             # At each task start time find all the running tasks.
             task_event = self._task_ids_to_task[task_id]
             event_time = self._task_ids_to_start_time[task_id]
-            # event_time = self._task_ids_to_task[task_id].release_time
+            # event_time = self._task_ids_to_task[task_id].get_release_time(self._time_unit)
             overlap_vars = {}
             for task in self._task_ids_to_task.values():
                 start_time = self._task_ids_to_start_time[task.id]
@@ -572,12 +631,12 @@ class GurobiScheduler2(GurobiBaseScheduler):
                     overlap_vars[task.id] = self._in_interval(
                         event_time,
                         start_time,
-                        start_time + task.remaining_time,
+                        start_time + task.get_remaining_time(self._time_unit),
                         var_name=f"overlap_{task_event.unique_name}_with_"
                         f"{task.unique_name}",
                     )
                     # overlap_vars[task.id] = self._in_interval_approximate(
-                    #     event_time, task.release_time, task.deadline
+                    #     event_time, task.get_release_time(self._time_unit), task.get_deadline(self._time_unit)
                     # )
                 else:
                     overlap_vars[task.id] = 1
@@ -612,16 +671,33 @@ class GurobiScheduler2(GurobiBaseScheduler):
             start_time = self._task_ids_to_start_time[task.id]
             if self._goal == "max_slack":
                 objective.add(
-                    (1 - skipped) * (task.deadline - task.remaining_time - start_time)
+                    (1 - skipped)
+                    * (
+                        task.get_deadline(self._time_unit)
+                        - task.get_remaining_time(self._time_unit)
+                        - start_time
+                    )
                 )
                 objective.add(
                     skipped
-                    * (MIN_TASK_GAIN + task.deadline - task.remaining_time - start_time)
+                    * (
+                        self._min_task_gain
+                        + task.get_deadline(self._time_unit)
+                        - task.get_remaining_time(self._time_unit)
+                        - start_time
+                    )
                 )
             elif self._goal == "min_placement_delay":
-                objective.add((1 - skipped) * (task.release_time - start_time))
                 objective.add(
-                    skipped * (MIN_TASK_GAIN + (task.release_time - start_time))
+                    (1 - skipped)
+                    * (task.get_release_time(self._time_unit) - start_time)
+                )
+                objective.add(
+                    skipped
+                    * (
+                        self._min_task_gain
+                        + (task.get_release_time(self._time_unit) - start_time)
+                    )
                 )
             else:
                 raise ValueError("Goal {self._goal} not supported.")

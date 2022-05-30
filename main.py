@@ -210,6 +210,7 @@ def main(args):
             enforce_deadlines=FLAGS.enforce_deadlines,
             lookahead=FLAGS.scheduler_lookahead,
             _flags=FLAGS,
+            _time_unit="ms",
         )
     elif FLAGS.scheduler == "Z3":
         scheduler = Z3Scheduler(
