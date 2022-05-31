@@ -92,6 +92,14 @@ class BaseScheduler(object):
     def lookahead(self):
         return self._lookahead
 
+    def get_lookahead(self, unit="us"):
+        if unit == "us":
+            return self._lookahead
+        elif unit == "ms":
+            return self._lookahead // 1000
+        else:
+            raise ValueError(f"Unit {unit} not supported")
+
     def _verify_schedule(
         self, worker_pools: WorkerPools, task_graph: TaskGraph, placements
     ):
