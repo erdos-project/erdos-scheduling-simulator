@@ -36,7 +36,9 @@ flags.DEFINE_string(
     short_name="csv",
 )
 flags.DEFINE_string(
-    "scheduler_log_file_name", None, "Name of the file to log the scheduler runs."
+    "scheduler_log_base_name",
+    None,
+    "Base name to use to log info about scheduler runs.",
 )
 flags.DEFINE_string("log_level", "debug", "Level of logging.")
 flags.DEFINE_string(
@@ -141,7 +143,7 @@ flags.DEFINE_bool(
 flags.DEFINE_enum(
     "ilp_goal",
     "max_slack",
-    ["max_slack"],
+    ["max_slack", "min_placement_delay"],
     "Sets the goal of the ILP solver.",
 )
 
@@ -208,6 +210,7 @@ def main(args):
             enforce_deadlines=FLAGS.enforce_deadlines,
             lookahead=FLAGS.scheduler_lookahead,
             _flags=FLAGS,
+            _time_unit="ms",
         )
     elif FLAGS.scheduler == "Z3":
         scheduler = Z3Scheduler(

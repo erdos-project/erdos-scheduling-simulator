@@ -172,15 +172,7 @@ class Z3Scheduler(BaseScheduler):
                 placement = res_index_to_wp_id[
                     int(str(s.model()[self._task_ids_to_placement[task_id]]))
                 ]
-                if start_time <= sim_time + runtime * 2:
-                    # We only place the tasks with a start time earlier than
-                    # the estimated end time of the next scheduler run.
-                    # Therefore, a task can progress before the next scheduler
-                    # finishes. However, the next scheduler will assume that
-                    # the task is not running while considering for placement.
-                    self._placements.append((task, placement, start_time))
-                else:
-                    self._placements.append((task, None, None))
+                self._placements.append((task, placement, start_time))
             self._verify_schedule(
                 self._worker_pools, self._task_graph, self._placements
             )
@@ -193,8 +185,8 @@ class Z3Scheduler(BaseScheduler):
         return runtime, self._placements
 
     def log(self):
-        if self._flags is not None and self._flags.scheduler_log_file_name is not None:
-            with open(self._flags.scheduler_log_file_name, "wb") as log_file:
+        if self._flags is not None and self._flags.scheduler_log_base_name is not None:
+            with open(self._flags.scheduler_log_base_name + ".pkl", "wb") as log_file:
                 logged_data = {
                     "time": self._time,
                     "tasks": self._task_ids_to_task,
