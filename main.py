@@ -84,6 +84,11 @@ flags.DEFINE_integer(
     "Maximum timestamp of tasks to load from the JSON file.",
     short_name="max",
 )
+flags.DEFINE_bool(
+    "use_end_to_end_deadlines",
+    False,
+    "If True, then the end-to-end deadline for a JobGraph is assigned to tasks.",
+)
 flags.DEFINE_integer(
     "min_deadline_variance",
     0,

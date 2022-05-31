@@ -7,6 +7,7 @@ from operator import attrgetter
 from typing import Mapping, Optional, Sequence, Tuple
 
 import absl  # noqa: F401
+import numpy as np
 import pydot
 
 import utils
@@ -140,10 +141,16 @@ class TaskLoaderJSON(TaskLoader):
             A `Mapping[str, Job]` with the Job information retrieved from the
             `json_entries`.
         """
-        jobs = {}
+        job_to_duration_mapping = defaultdict(list)
         for entry in json_entries:
-            if entry["pid"] not in jobs:
-                jobs[entry["pid"]] = Job(name=entry["pid"], pipelined=False)
+            job_to_duration_mapping[entry["pid"]].append(entry["dur"])
+
+        jobs = {}
+        for job_name, durations in job_to_duration_mapping.items():
+            jobs[job_name] = Job(
+                name=job_name, runtime=np.mean(durations), pipelined=False
+            )
+
         return jobs
 
     @staticmethod

@@ -602,7 +602,7 @@ class GurobiScheduler2(GurobiBaseScheduler):
                 )
             ]
             w_index = 1
-            for wp in self._worker_pools._wps:
+            for wp in self._worker_pools.worker_pools:
                 # Add a variable which is set to 1 if a task is placed on the
                 # variable's associated worker pool.
                 placement_var = self._model.addVar(

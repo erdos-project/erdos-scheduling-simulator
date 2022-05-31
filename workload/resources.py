@@ -1,96 +1,11 @@
 import logging
-import random
-import uuid
 from collections import defaultdict
 from copy import copy
 from functools import total_ordering
-from typing import List, Mapping, Optional, Tuple
+from typing import Generator, List, Mapping, Optional, Tuple
 
 import utils
-
-
-class Resource(object):
-    """A `Resource` object is used to represent a particular resource in the
-    system, and contains metadata about if its available or allocated to a
-    particular task.
-
-    Args:
-        name (`str`): The name of the resource.
-        id (`uuid`): The ID of the resource.
-    """
-
-    def __init__(self, name: str, _id: Optional[str] = None):
-        """Initialize a Resource.
-
-        Args:
-            name (`str`): The name of the resource.
-            _id (`Optional[str]`): The ID of the resource. Use `any` to
-                represent a general resource of the given name.
-        """
-        if _id is not None and _id != "any":
-            raise ValueError("The acceptable values of _id are None / 'any'")
-        self._name = name
-        self._id = (
-            uuid.UUID(int=random.getrandbits(128), version=4) if _id is None else _id
-        )
-
-    @property
-    def name(self):
-        return self._name
-
-    @property
-    def id(self):
-        return str(self._id)
-
-    def __str__(self):
-        return f"Resource(name={self.name}, id={self.id})"
-
-    def __repr__(self):
-        return str(self)
-
-    def __hash__(self):
-        return hash((self.name, self.id))
-
-    def __copy__(self):
-        """Copies self and returns a new instance of Resources that shares
-        the same reference to the UUID that backs the original instance."""
-        cls = self.__class__
-        instance = cls.__new__(cls)
-        cls.__init__(instance, name=self.name)
-        instance._id = self._id
-        return instance
-
-    def __deepcopy__(self, memo):
-        """Deepcopies self and returns a new instance of Resources that has a
-        new instance of the UUID with the same value as the original."""
-        cls = self.__class__
-        instance = cls.__new__(cls)
-        cls.__init__(instance, name=self.name)
-        instance._id = uuid.UUID(self.id)
-        memo[id(self)] = instance
-        return instance
-
-    def __eq__(self, other: "Resource"):
-        """Checks if the current resource is equal to the other.
-
-        To be equivalent, the Resources must have the same name and IDs, or
-        one or both of them must have the 'any' ID.
-
-        Args:
-            other (`Resource`): The other resource to compare to.
-
-        Returns:
-           A boolean representing whether this Resource is of the particular
-           type.
-        """
-        if self.name == other.name:
-            if (
-                self.id == "any"
-                or other.id == "any"
-                or uuid.UUID(self.id) == uuid.UUID(other.id)
-            ):
-                return True
-        return False
+from workload import Resource
 
 
 @total_ordering
@@ -208,7 +123,7 @@ class Resources(object):
 
     def get_allocated_resources(
         self, task: "Task"  # noqa: F821
-    ) -> List[Tuple[Resource, float]]:
+    ) -> List[Tuple[Resource, int]]:
         """Retrieves the resources on this set allocated to a given task.
 
         Args:
@@ -219,6 +134,28 @@ class Resources(object):
             quantity allocated) pair.
         """
         return self._current_allocations[task]
+
+    def get_allocated_tasks(
+        self,
+        resource: Resource,
+    ) -> List[Tuple["Task", int]]:  # noqa: F821
+        """Retrieves the list of (task, quantity) pairs that the requested `resource`
+        has been allocated to.
+
+        Args:
+            resource (`Resource`): The resource whose allocated tasks are being
+                requested.
+
+        Returns:
+            A `List[Tuple[Task, int]]` signifying the `task` and the quantity allocated
+            to it.
+        """
+        allocated_tasks = []
+        for task, allocations in self._current_allocations.items():
+            for (allocated_resource, allocated_quantity) in allocations:
+                if resource == allocated_resource:
+                    allocated_tasks.append((task, allocated_quantity))
+        return allocated_tasks
 
     def allocate_multiple(self, resources: "Resources", task: "Task"):  # noqa: F821
         """Allocates multiple resources together according to their specified
@@ -251,7 +188,7 @@ class Resources(object):
                 )
             self.allocate(resource, task, quantity)
 
-    def get_available_quantity(self, resource: Resource) -> float:
+    def get_available_quantity(self, resource: Resource) -> int:
         """Provides the quantity of the available resources of the given type.
 
         If the resource has a specific `id`, then the quantity of that resource
@@ -271,7 +208,7 @@ class Resources(object):
                 resource_quantity += _quantity
         return resource_quantity
 
-    def get_allocated_quantity(self, resource: Resource) -> float:
+    def get_allocated_quantity(self, resource: Resource) -> int:
         """Get the quantity of the given `resource` that has been allocated.
 
         Args:
@@ -279,14 +216,27 @@ class Resources(object):
                 to be computed.
 
         Returns:
-            An `int` quantity of the `resource` that has been allocated.
+            A `int` quantity of the `resource` that has been allocated.
+        """
+        available_quantity = self.get_available_quantity(resource)
+        total_quantity = self.get_total_quantity(resource)
+        return total_quantity - available_quantity
+
+    def get_total_quantity(self, resource: Resource) -> int:
+        """Get the total quantity of the given `resource`.
+
+        Args:
+            resource (`Resource`): The resource whose total quantity needs to be
+                computed.
+
+        Returns:
+            An `int` total quantity of the `resource`.
         """
         total_quantity = 0
         for _resource, _quantity in self.__total_resources.items():
             if _resource == resource:
                 total_quantity += _quantity
-        available_quantity = self.get_available_quantity(resource)
-        return total_quantity - available_quantity
+        return total_quantity
 
     def deallocate(self, task: "Task"):  # noqa: F821
         """Deallocates the resources assigned to the particular `task`.
@@ -373,6 +323,13 @@ class Resources(object):
             else:
                 return False
         return True
+
+    def __iter__(self) -> Generator[Resource, None, None]:
+        """Iterates over the set of Resources in the order of defined priority."""
+        # This depends on the language specification of Python3.7+ to maintain the
+        # order over the inserted resource instances.
+        for resource in self._resource_vector.keys():
+            yield resource
 
     def __add__(self, other: "Resources") -> "Resources":
         """Adds the availability and the allocations of the Resources in self

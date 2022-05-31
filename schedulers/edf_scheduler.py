@@ -50,7 +50,7 @@ class EDFScheduler(BaseScheduler):
             # Create a virtual WorkerPool set to try scheduling decisions on.
             schedulable_worker_pools = copy(worker_pools)
 
-        for worker_pool in schedulable_worker_pools._wps:
+        for worker_pool in schedulable_worker_pools.worker_pools:
             self._logger.debug(
                 f"[{sim_time}] The state of {worker_pool} is:{os.linesep}"
                 f"{os.linesep.join(worker_pool.get_utilization())}"
@@ -74,7 +74,7 @@ class EDFScheduler(BaseScheduler):
                 f"with the resource requirements {task.resource_requirements}."
             )
             is_task_placed = False
-            for worker_pool in schedulable_worker_pools._wps:
+            for worker_pool in schedulable_worker_pools.worker_pools:
                 if worker_pool.can_accomodate_task(task):
                     worker_pool.place_task(task)
                     is_task_placed = True
@@ -86,7 +86,7 @@ class EDFScheduler(BaseScheduler):
                     break
 
             if is_task_placed:
-                for worker_pool in schedulable_worker_pools._wps:
+                for worker_pool in schedulable_worker_pools.worker_pools:
                     self._logger.debug(
                         f"[{sim_time}] The state of {worker_pool} is:{os.linesep}"
                         f"{os.linesep.join(worker_pool.get_utilization())}"

@@ -134,7 +134,7 @@ class BaseScheduler(object):
         # Check if resource requirements are satisfied.
         placed_tasks.sort(key=lambda e: e[2])
         wps = deepcopy(worker_pools)
-        id_to_wp = {wp.id: wp for wp in wps._wps}
+        id_to_wp = {wp.id: wp for wp in wps.worker_pools}
         # A heap storing the task in order of their completion time.
         task_completion = []
         for task, wp_id, start_time in placed_tasks:

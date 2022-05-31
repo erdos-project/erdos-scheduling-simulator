@@ -39,7 +39,6 @@ class TaskLoaderSynthetic(TaskLoader):
         (
             self._jobs,
             self._job_graph,
-            runtimes,
             deadlines,
             resources,
         ) = TaskLoaderSynthetic._TaskLoaderSynthetic__create_job_graph(
@@ -58,9 +57,9 @@ class TaskLoaderSynthetic(TaskLoader):
             _flags.timestamp_difference,
             _flags.runtime_variance,
             (_flags.min_deadline_variance, _flags.max_deadline_variance),
-            runtimes,
             deadlines,
             resources,
+            _flags.use_end_to_end_deadlines,
             task_logger,
         )
         self._logger.debug(f"Created {len(self._tasks)} Tasks")
@@ -85,7 +84,7 @@ class TaskLoaderSynthetic(TaskLoader):
                 pipeline has.
             deadline_slack_factor (`float`): Factor multiplied with the task runtimes
                 in order to compute task deadlines.
-            periodi_deadline_slack_factor (`float`): Factor multiplied with the task
+            periodic_deadline_slack_factor (`float`): Factor multiplied with the task
                 runtimes in order to compute task deadlines for periodic operators with
                 small runtimes.
 
@@ -93,23 +92,19 @@ class TaskLoaderSynthetic(TaskLoader):
             A `JobGraph` instance depicting the relation between the different
             `Job`s.
         """
-        runtimes = {}
         deadlines = {}
         resources = {}
-        gnss = Job(name="gnss")
-        runtimes[gnss.name] = 1000
-        deadlines[gnss.name] = runtimes[gnss.name] * periodic_deadline_slack_factor
+        gnss = Job(name="gnss", runtime=1000)
+        deadlines[gnss.name] = gnss.runtime * periodic_deadline_slack_factor
         resources[gnss.name] = Resources(
             resource_vector={Resource("CPU", _id="any"): 1}
         )
-        imu = Job(name="imu")
-        runtimes[imu.name] = 1000
-        deadlines[imu.name] = runtimes[imu.name] * periodic_deadline_slack_factor
+        imu = Job(name="imu", runtime=1000)
+        deadlines[imu.name] = imu.runtime * periodic_deadline_slack_factor
         resources[imu.name] = Resources(resource_vector={Resource("CPU", _id="any"): 1})
-        localization = Job(name="localization")
-        runtimes[localization.name] = 20000
+        localization = Job(name="localization", runtime=20000)
         deadlines[localization.name] = (
-            runtimes[localization.name] * periodic_deadline_slack_factor
+            localization.runtime * periodic_deadline_slack_factor
         )
         resources[localization.name] = Resources(
             resource_vector={Resource("CPU", _id="any"): 1}
@@ -121,26 +116,23 @@ class TaskLoaderSynthetic(TaskLoader):
         object_localization = []
         lane_detectors = []
         for i in range(num_perception_sensors):
-            cameras.append(Job(name=f"camera_{i}", pipelined=True))
-            runtimes[cameras[-1].name] = 10000
+            cameras.append(Job(name=f"camera_{i}", runtime=10000, pipelined=True))
             deadlines[cameras[-1].name] = (
-                runtimes[cameras[-1].name] * periodic_deadline_slack_factor
+                cameras[-1].runtime * periodic_deadline_slack_factor
             )
             resources[cameras[-1].name] = Resources(
                 resource_vector={Resource("CPU", _id="any"): 1}
             )
-            lidars.append(Job(name=f"lidar_{i}", pipelined=True))
-            runtimes[lidars[-1].name] = 8000
+            lidars.append(Job(name=f"lidar_{i}", runtime=8000, pipelined=True))
             deadlines[lidars[-1].name] = (
-                runtimes[lidars[-1].name] * periodic_deadline_slack_factor
+                lidars[-1].runtime * periodic_deadline_slack_factor
             )
             resources[lidars[-1].name] = Resources(
                 resource_vector={Resource("CPU", _id="any"): 1}
             )
-            detectors.append(Job(name=f"detection_{i}", pipelined=True))
-            runtimes[detectors[-1].name] = 130000
+            detectors.append(Job(name=f"detection_{i}", runtime=130000, pipelined=True))
             deadlines[detectors[-1].name] = (
-                runtimes[detectors[-1].name] * deadline_slack_factor
+                detectors[-1].runtime * deadline_slack_factor
             )
             resources[detectors[-1].name] = Resources(
                 resource_vector={
@@ -148,11 +140,8 @@ class TaskLoaderSynthetic(TaskLoader):
                     Resource("CPU", _id="any"): 1,
                 }
             )
-            trackers.append(Job(name=f"tracker_{i}", pipelined=False))
-            runtimes[trackers[-1].name] = 50000
-            deadlines[trackers[-1].name] = (
-                runtimes[trackers[-1].name] * deadline_slack_factor
-            )
+            trackers.append(Job(name=f"tracker_{i}", runtime=50000, pipelined=False))
+            deadlines[trackers[-1].name] = trackers[-1].runtime * deadline_slack_factor
             resources[trackers[-1].name] = Resources(
                 resource_vector={
                     Resource("GPU", _id="any"): 1,
@@ -160,19 +149,19 @@ class TaskLoaderSynthetic(TaskLoader):
                 }
             )
             object_localization.append(
-                Job(name=f"obj_localization_{i}", pipelined=True)
+                Job(name=f"obj_localization_{i}", runtime=20000, pipelined=True)
             )
-            runtimes[object_localization[-1].name] = 20000
             deadlines[object_localization[-1].name] = (
-                runtimes[object_localization[-1].name] * deadline_slack_factor
+                object_localization[-1].runtime * deadline_slack_factor
             )
             resources[object_localization[-1].name] = Resources(
                 resource_vector={Resource("CPU", _id="any"): 4}
             )
-            lane_detectors.append(Job(name=f"lane_detection_{i}", pipelined=True))
-            runtimes[lane_detectors[-1].name] = 90000
+            lane_detectors.append(
+                Job(name=f"lane_detection_{i}", runtime=90000, pipelined=True)
+            )
             deadlines[lane_detectors[-1].name] = (
-                runtimes[lane_detectors[-1].name] * deadline_slack_factor
+                lane_detectors[-1].runtime * deadline_slack_factor
             )
             resources[lane_detectors[-1].name] = Resources(
                 resource_vector={
@@ -185,18 +174,20 @@ class TaskLoaderSynthetic(TaskLoader):
         tl_detectors = []
         tl_object_localization = []
         for i in range(num_traffic_light_cameras):
-            tl_cameras.append(Job(name=f"traffic_light_camera_{i}", pipelined=True))
-            runtimes[tl_cameras[-1].name] = 10000
+            tl_cameras.append(
+                Job(name=f"traffic_light_camera_{i}", runtime=10000, pipelined=True)
+            )
             deadlines[tl_cameras[-1].name] = (
-                runtimes[tl_cameras[-1].name] * periodic_deadline_slack_factor
+                tl_cameras[-1].runtime * periodic_deadline_slack_factor
             )
             resources[tl_cameras[-1].name] = Resources(
                 resource_vector={Resource("CPU", _id="any"): 1}
             )
-            tl_detectors.append(Job(name=f"tl_detection_{i}", pipelined=True))
-            runtimes[tl_detectors[-1].name] = 95000
+            tl_detectors.append(
+                Job(name=f"tl_detection_{i}", runtime=95000, pipelined=True)
+            )
             deadlines[tl_detectors[-1].name] = (
-                runtimes[tl_detectors[-1].name] * deadline_slack_factor
+                tl_detectors[-1].runtime * deadline_slack_factor
             )
             resources[tl_detectors[-1].name] = Resources(
                 resource_vector={
@@ -205,36 +196,30 @@ class TaskLoaderSynthetic(TaskLoader):
                 }
             )
             tl_object_localization.append(
-                Job(name=f"tl_obj_localization_{i}", pipelined=True)
+                Job(name=f"tl_obj_localization_{i}", runtime=10000, pipelined=True)
             )
-            runtimes[tl_object_localization[-1].name] = 10000
             deadlines[tl_object_localization[-1].name] = (
-                runtimes[tl_object_localization[-1].name] * deadline_slack_factor
+                tl_object_localization[-1].runtime * deadline_slack_factor
             )
             resources[tl_object_localization[-1].name] = Resources(
                 resource_vector={Resource("CPU", _id="any"): 1}
             )
 
-        prediction = Job(name="prediction", pipelined=False)
-        runtimes[prediction.name] = 30000
-        deadlines[prediction.name] = runtimes[prediction.name] * deadline_slack_factor
+        prediction = Job(name="prediction", runtime=30000, pipelined=False)
+        deadlines[prediction.name] = prediction.runtime * deadline_slack_factor
         resources[prediction.name] = Resources(
             resource_vector={
                 Resource("GPU", _id="any"): 1,
                 Resource("CPU", _id="any"): 1,
             }
         )
-        planning = Job(name="planning", pipelined=False)
-        runtimes[planning.name] = 50000
-        deadlines[planning.name] = runtimes[planning.name] * deadline_slack_factor
+        planning = Job(name="planning", runtime=50000, pipelined=False)
+        deadlines[planning.name] = planning.runtime * deadline_slack_factor
         resources[planning.name] = Resources(
             resource_vector={Resource("CPU", _id="any"): 8}
         )
-        control = Job(name="control", pipelined=False)
-        runtimes[control.name] = 1000
-        deadlines[control.name] = (
-            runtimes[control.name] * periodic_deadline_slack_factor
-        )
+        control = Job(name="control", runtime=1000, pipelined=False)
+        deadlines[control.name] = control.runtime * periodic_deadline_slack_factor
         resources[control.name] = Resources(
             resource_vector={Resource("CPU", _id="any"): 1}
         )
@@ -283,7 +268,7 @@ class TaskLoaderSynthetic(TaskLoader):
             + tl_detectors
             + tl_object_localization
         )
-        return jobs, job_graph, runtimes, deadlines, resources
+        return jobs, job_graph, deadlines, resources
 
     def create_tasks(
         self,
@@ -291,28 +276,38 @@ class TaskLoaderSynthetic(TaskLoader):
         timestamp_difference: int,
         runtime_variance: int,
         deadline_variance: Tuple[int, int],
-        runtimes: Mapping[str, int],
         deadlines: Mapping[str, int],
         resources: Mapping[str, Sequence[Resources]],
+        use_end_to_end_deadlines: bool = False,
         logger: Optional[logging.Logger] = None,
     ):
+        def get_deadline(job, timestamp):
+            if use_end_to_end_deadlines:
+                job_name = f"e2e-{timestamp}"
+                if job_name not in deadlines:
+                    deadlines[job_name] = utils.fuzz_time(
+                        self._job_graph.completion_time, deadline_variance
+                    )
+                return deadlines[job_name]
+            else:
+                return utils.fuzz_time(deadlines[job.name], deadline_variance)
+
         tasks = {}
         sensor_release_time = 0
         for timestamp in range(max_timestamp + 1):
             for job in self._job_graph:
                 # All times are in microseconds.
-                if self._job_graph.is_source(job):
+                if self._job_graph.is_source(job) or use_end_to_end_deadlines:
                     # Source jobs are released at a pre-specified interval.
+                    # If we use end-to-end deadlines, then all tasks must have same
+                    # deadline.
                     release_time = sensor_release_time
-                    deadline = sensor_release_time + utils.fuzz_time(
-                        deadlines[job.name], deadline_variance
-                    )
+                    deadline = sensor_release_time + get_deadline(job, timestamp)
                 else:
                     # Non-Source jobs are released as soon as all of their dependencies
                     # are estimated to be satisfied.
                     max_estimated_parent_completion_time = max(
-                        tasks[(parent.name, timestamp)].release_time
-                        + runtimes[parent.name]
+                        tasks[(parent.name, timestamp)].release_time + parent.runtime
                         for parent in self._job_graph.get_parents(job)
                     )
                     release_time = (
@@ -320,20 +315,17 @@ class TaskLoaderSynthetic(TaskLoader):
                         if job.pipelined or timestamp == 0
                         else max(
                             max_estimated_parent_completion_time,
-                            tasks[(job.name, timestamp - 1)].release_time
-                            + runtimes[job.name],
+                            tasks[(job.name, timestamp - 1)].release_time + job.runtime,
                         )
                     )
-                    deadline = release_time + utils.fuzz_time(
-                        deadlines[job.name], deadline_variance
-                    )
+                    deadline = release_time + get_deadline(job, timestamp)
 
                 # Create the task.
                 task = Task(
                     job.name,
                     job,
                     resource_requirements=resources[job.name],
-                    runtime=utils.fuzz_time(runtimes[job.name], (0, runtime_variance)),
+                    runtime=utils.fuzz_time(job.runtime, (0, runtime_variance)),
                     deadline=deadline,
                     timestamp=timestamp,
                     release_time=release_time,

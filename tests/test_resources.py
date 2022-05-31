@@ -307,6 +307,43 @@ def test_deallocation_of_resources():
     ), "Incorrect quantity of the GPU resource."
 
 
+def test_retrieval_allocated_resources_task():
+    """Tests that the correct resources allocated to a Task are retrieved."""
+    cpu_resource_1 = Resource(name="CPU")
+    cpu_resource_2 = Resource(name="CPU")
+    gpu_resource_1 = Resource(name="GPU")
+    resources = Resources({cpu_resource_1: 5, cpu_resource_2: 5, gpu_resource_1: 10})
+
+    task = create_default_task()
+    resources.allocate(cpu_resource_1, task, 5)
+    resources.allocate(gpu_resource_1, task, 5)
+
+    allocations = resources.get_allocated_resources(task)
+    assert len(allocations) == 2, "Incorrect number of allocations were retrieved."
+    assert allocations[0] == (cpu_resource_1, 5), "Incorrect allocation retrieved."
+    assert allocations[1] == (gpu_resource_1, 5), "Incorrect allocation retrieved."
+
+
+def test_retrieval_allocated_tasks_resource():
+    """Tests that the correct resources allocated to a Task are retrieved."""
+    cpu_resource_1 = Resource(name="CPU")
+    cpu_resource_2 = Resource(name="CPU")
+    gpu_resource_1 = Resource(name="GPU")
+    resources = Resources({cpu_resource_1: 5, cpu_resource_2: 5, gpu_resource_1: 10})
+
+    task_1 = create_default_task()
+    resources.allocate(cpu_resource_1, task_1, 5)
+    resources.allocate(gpu_resource_1, task_1, 5)
+
+    task_2 = create_default_task()
+    resources.allocate(gpu_resource_1, task_2, 5)
+
+    allocations = resources.get_allocated_tasks(gpu_resource_1)
+    assert len(allocations) == 2, "Incorrect number of allocations were retrieved."
+    assert allocations[0] == (task_1, 5), "Incorrect allocation retrieved."
+    assert allocations[1] == (task_2, 5), "Incorrect allocation retrieved."
+
+
 def test_resources_copy():
     """Test that Resources are correctly copied."""
     cpu_resource_1 = Resource(name="CPU")
@@ -456,3 +493,24 @@ def test_resources_addition():
     assert (
         final_resources.get_allocated_quantity(gpu_resource_2) == 5
     ), "Incorrect quantity of allocated GPU resources."
+
+
+def test_resources_iteration():
+    """Test that the iteration over the Resources maintains the correct order."""
+    # Construct the first set of Resources.
+    cpu_resource_1 = Resource(name="CPU")
+    cpu_resource_2 = Resource(name="CPU")
+    gpu_resource_1 = Resource(name="GPU")
+    resources = Resources({cpu_resource_1: 5, cpu_resource_2: 5, gpu_resource_1: 10})
+
+    # Ensure that the order of the iteration is correct.
+    order = [cpu_resource_1, cpu_resource_2, gpu_resource_1]
+    for index, resource in enumerate(resources):
+        assert order[index] == resource, "The wrong item was yielded by the iterator."
+
+    # Add a new Resource and ensure that the order is still maintained.
+    gpu_resource_2 = Resource(name="GPU")
+    resources.add_resource(gpu_resource_2, 5)
+    order.append(gpu_resource_2)
+    for index, resource in enumerate(resources):
+        assert order[index] == resource, "The wrong item was yielded by the iterator."

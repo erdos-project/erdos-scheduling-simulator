@@ -15,14 +15,16 @@ class Job(object):
     scheduled by a `Scheduler`.
 
     Args:
-        name: The name of the ERDOS operator that corresponds to this job.
+        name: The name of the ERDOS operator that corresponds to this Job.
+        runtime: The expected runtime of the tasks created from this Job.
         pipelined (`bool`): True if job's tasks from different timestamps can run
             in parallel.
     """
 
-    def __init__(self, name: str, pipelined: bool = False):
+    def __init__(self, name: str, runtime: int, pipelined: bool = False):
         self._name = name
         self._id = uuid.UUID(int=random.getrandbits(128), version=4)
+        self._runtime = runtime
         self._pipelined = pipelined
 
     @property
@@ -32,6 +34,10 @@ class Job(object):
     @property
     def id(self):
         return str(self._id)
+
+    @property
+    def runtime(self):
+        return self._runtime
 
     @property
     def pipelined(self):
@@ -56,10 +62,26 @@ class JobGraph(Graph[Job]):
 
     A `JobGraph` is a static entity that defines the relationship between the
     different `Job`s of the application.
+
+    Args:
+        jobs: A Mapping from a set of `Job`s to their children that needs to be
+            initialized into a `JobGraph`.
+        completion_time: The completion time to assign to this `JobGraph`. If `None`,
+            the completion time will be computed as the sum of the runtime of the
+            longest path in the graph.
     """
 
-    def __init__(self, jobs: Optional[Mapping[Job, Sequence[Job]]] = {}):
+    def __init__(
+        self,
+        jobs: Optional[Mapping[Job, Sequence[Job]]] = {},
+        completion_time: Optional[int] = None,
+    ):
         super().__init__(jobs)
+        self._completion_time = (
+            completion_time
+            if completion_time or len(self) == 0
+            else sum(job.runtime for job in self.get_longest_path())
+        )
 
     def add_job(self, job: Job, children: Optional[Sequence[Job]] = []):
         """Adds the job to the graph along with the given children.
@@ -74,3 +96,9 @@ class JobGraph(Graph[Job]):
         """Ensures that the source operators pipeline tasks."""
         for job in self.get_sources():
             job._pipelined = True
+
+    @property
+    def completion_time(self):
+        if not self._completion_time and len(self) != 0:
+            self._completion_time = sum(job.runtime for job in self.get_longest_path())
+        return self._completion_time

@@ -480,7 +480,7 @@ class WorkerPools(object):
 
     def get_placed_tasks(self):
         placed_tasks = []
-        for wp in self._wps:
+        for wp in self.worker_pools:
             placed_tasks.extend(wp.get_placed_tasks())
         return placed_tasks
 
@@ -493,7 +493,7 @@ class WorkerPools(object):
         """
         # Unique list of resource names -- not relying on set stability.
         resource_names = list(
-            {r.name for wp in self._wps for r in wp.resources._resource_vector.keys()}
+            {r.name for wp in self.worker_pools for r in wp.resources}
         )
         # Uniquify scrambles the order.
         resource_names.sort()
@@ -504,7 +504,7 @@ class WorkerPools(object):
         start_range_index = 0
         for res_name in resource_names:
             cur_range_index = start_range_index
-            for index, wp in enumerate(self._wps):
+            for index, wp in enumerate(self.worker_pools):
                 res_available = wp.resources.get_available_quantity(
                     Resource(name=res_name, _id="any")
                 )
@@ -520,17 +520,27 @@ class WorkerPools(object):
             res_type_to_index_range,
             res_index_to_wp_id,
             res_index_to_wp_index,
-            len(self._wps),
+            len(self.worker_pools),
         )
+
+    @property
+    def worker_pools(self) -> Sequence[WorkerPool]:
+        """Retrieve the collection of :py:class:`WorkerPool` instances stored in this
+        instance.
+
+        Returns:
+            A `Sequence[WorkerPool]` stored in this instance of WorkerPools.
+        """
+        return self._wps
 
     def __copy__(self):
         cls = self.__class__
         instance = cls.__new__(cls)
-        cls.__init__(instance, [copy(wp) for wp in self._wps])
+        cls.__init__(instance, [copy(wp) for wp in self.worker_pools])
         return instance
 
     def __deepcopy__(self, memo):
         cls = self.__class__
         instance = cls.__new__(cls)
-        cls.__init__(instance, [deepcopy(wp) for wp in self._wps])
+        cls.__init__(instance, [deepcopy(wp) for wp in self.worker_pools])
         return instance

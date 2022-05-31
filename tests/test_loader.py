@@ -7,14 +7,15 @@ def test_create_jobs():
     """Tests the __create_jobs method of the TaskLoaderJSON."""
     jobs = TaskLoaderJSON._TaskLoaderJSON__create_jobs(
         [
-            {"pid": "perception_operator"},
-            {"pid": "prediction_operator"},
-            {"pid": "planning_operator"},
+            {"pid": "perception_operator", "dur": 1000},
+            {"pid": "prediction_operator", "dur": 1000},
+            {"pid": "planning_operator", "dur": 1000},
         ]
     )
     assert len(jobs) == 3, "Incorrect number of Jobs returned."
     assert (
         jobs["perception_operator"].name == "perception_operator"
+        and jobs["perception_operator"].runtime == 1000
     ), "Incorrect Job returned."
 
 
@@ -66,7 +67,7 @@ def test_create_tasks():
         }
     ]
     jobs = {
-        "perception_operator": Job(name="perception_operator"),
+        "perception_operator": Job(name="Perception", runtime=1000),
     }
     resources = {
         "perception_operator.on_watermark": [
@@ -89,9 +90,9 @@ def test_create_tasks():
 def test_create_jobgraph():
     """Tests the construction of a JobGraph by the TaskLoaderJSON."""
     jobs = {
-        "perception_operator": Job(name="perception_operator"),
-        "prediction_operator": Job(name="prediction_operator"),
-        "planning_operator": Job(name="planning_operator"),
+        "perception_operator": Job(name="Perception", runtime=1000),
+        "prediction_operator": Job(name="Prediction", runtime=1000),
+        "planning_operator": Job(name="Planning", runtime=1000),
     }
     edges = [
         ("perception_operator", "prediction_operator"),
@@ -116,9 +117,9 @@ def test_create_taskgraph():
     """Tests the construction of a TaskGraph by the TaskLoaderJSON."""
     # Create the JobGraph first.
     jobs = {
-        "perception_operator": Job(name="perception_operator", pipelined=True),
-        "prediction_operator": Job(name="prediction_operator"),
-        "planning_operator": Job(name="planning_operator"),
+        "perception_operator": Job(name="Perception", runtime=1000, pipelined=True),
+        "prediction_operator": Job(name="Prediction", runtime=1000),
+        "planning_operator": Job(name="Planning", runtime=1000),
     }
     edges = [
         ("perception_operator", "prediction_operator"),
