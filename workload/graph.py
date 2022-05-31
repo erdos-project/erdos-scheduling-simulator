@@ -201,22 +201,32 @@ class Graph(Generic[T]):
     def topological_sort(self) -> List[T]:
         """Compute the topological sort ordering of the directed acyclic graph.
 
+        This method can be used to check if there are cycles in the graph.
+
         Returns:
             The topological sorting of the given graph.
+
+        Raises:
+            `RuntimeError` if the graph has a cycle.
         """
-        visited_nodes = set()
+        node_marks = {node: "Unmarked" for node in self.get_nodes()}
         topological_sort = []
 
-        def sort(node):
-            visited_nodes.add(node)
+        def visit(node):
+            if node_marks[node] == "Permanent":
+                return
+            elif node_marks[node] == "Temporary":
+                raise RuntimeError("The given graph is not a DAG.")
+            node_marks[node] = "Temporary"
             for child in self.get_children(node):
-                if child not in visited_nodes:
-                    sort(child)
+                visit(child)
+            node_marks[node] = "Permanent"
             topological_sort.append(node)
 
-        for node in self._graph:
-            if node not in visited_nodes:
-                sort(node)
+        while any(mark != "Permanent" for mark in node_marks.values()):
+            for node, mark in node_marks.items():
+                if mark == "Unmarked":
+                    visit(node)
 
         return topological_sort[::-1]
 

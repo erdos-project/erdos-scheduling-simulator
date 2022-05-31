@@ -171,7 +171,7 @@ def test_job_depth():
     assert job_graph.get_node_depth(perception_job) == 3, "Incorrect job depth."
 
 
-def test_topological_sort():
+def test_topological_sort_success():
     """Test that the correct topological sort order of the graph is returned."""
     job_graph = JobGraph()
     job_0, job_1 = Job(name="Job 0", runtime=1000), Job(name="Job 1", runtime=1000)
@@ -190,6 +190,21 @@ def test_topological_sort():
             assert (
                 topological_sort.index(child) > node_index
             ), f"The edge from {node} to {child} was in the wrong order."
+
+
+def test_topological_sort_fail():
+    """Test that the topological sort method raises an error if the graph is not DAG."""
+    job_graph = JobGraph()
+    job_0, job_1 = Job(name="Job 0", runtime=1000), Job(name="Job 1", runtime=1000)
+    job_2, job_3 = Job(name="Job 2", runtime=1000), Job(name="Job 3", runtime=1000)
+    job_4, job_5 = Job(name="Job 4", runtime=1000), Job(name="Job 5", runtime=1000)
+    job_graph.add_job(job_5, [job_0, job_2])
+    job_graph.add_job(job_4, [job_0, job_1])
+    job_graph.add_job(job_2, [job_3])
+    job_graph.add_job(job_3, [job_1, job_5])
+
+    with pytest.raises(RuntimeError):
+        job_graph.topological_sort()
 
 
 def test_longest_path():
