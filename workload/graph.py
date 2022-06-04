@@ -106,30 +106,33 @@ class Graph(Generic[T]):
         """
         return self._graph.keys()
 
-    def get_node_depth(self, node: T) -> int:
-        """Retrieves the depth of the node from the graph.
-
-        Note that the method traverses the entire graph (and may visit a node
-        potentially multiple times) and hence may be slow.
+    def get_node_depth(self, node: T, func=max) -> int:
+        """Retrieves the depth of the node from the directed acyclic graph.
 
         Args:
             node: The node whose depth needs to be retrieved.
+            func: min/max to choose which depth to retrieve of the node.
 
         Returns:
             The depth of the node with the depth of a source node being 1.
 
         Raises:
-            `ValueError` if the node is not found in the graph.
+            `ValueError` if the node is not found in the graph, and `RuntimeError` if
+            the graph has a cycle.
         """
         if node not in self._graph:
             raise ValueError(f"The node {node} was not found in the graph.")
 
-        return (
-            1
-            if self.is_source(node)
-            else max(self.get_node_depth(parent) for parent in self.get_parents(node))
-            + 1
-        )
+        node_to_depth = defaultdict(lambda: 1)
+        for _node in self.topological_sort():
+            if len(self.get_parents(_node)) > 0:
+                node_to_depth[_node] = (
+                    func([node_to_depth[parent] for parent in self.get_parents(_node)])
+                    + 1
+                )
+
+            if node == _node:
+                return node_to_depth[node]
 
     def is_source(self, node: T) -> bool:
         """Checks whether the given node is a source.
