@@ -185,14 +185,14 @@ class Graph(Generic[T]):
                     frontier.append(child)
             yield node
 
-    def depth_first(self, node=None) -> Generator[T, None, None]:
+    def depth_first(self, node: T = None) -> Generator[T, None, None]:
         """Iterates over the graph in a depth-first manner.
 
         Args:
             node: The node to start the depth-first search from.
         """
         visited_nodes = set()
-        frontier = deque(self.get_sources() if node is None else node)
+        frontier = deque(self.get_sources() if node is None else [node])
         while len(frontier) > 0:
             node = frontier.pop()
             visited_nodes.add(node)
@@ -256,6 +256,41 @@ class Graph(Generic[T]):
             start_node = predecessor[start_node]
             longest_path.append(start_node)
         return longest_path[::-1]
+
+    def are_dependent(self, node_1: T, node_2: T) -> bool:
+        """Check if `node_1` and `node_2` are dependent on each other.
+
+        Args:
+            node_1: The first node to check the dependency with.
+            node_2: The second node to check the dependency with.
+
+        Returns:
+            `True` if either the first or the second node are dependent on each other
+            and `False` otherwise.
+
+        Raises:
+            `RuntimeError` if the graph contains a cycle.
+        """
+        # Find depths of both of the nodes in the graph.
+        node_1_depth = self.get_node_depth(node_1)
+        node_2_depth = self.get_node_depth(node_2)
+
+        def check_dependency(top_node, bottom_node):
+            # Checks the dependency between a node of lower depth (`top_node`) and a
+            # node of higher depth (`bottom_node`)
+            for child_node in self.depth_first(top_node):
+                if child_node == bottom_node:
+                    return True
+            return False
+
+        if node_1_depth == node_2_depth:
+            # If the two nodes are on the same depth, they can execute in parallel,
+            # and are not dependent on each other.
+            return False
+        elif node_1_depth > node_2_depth:
+            return check_dependency(node_2, node_1)
+        else:
+            return check_dependency(node_1, node_2)
 
     def __iter__(self):
         for item in self.breadth_first():
