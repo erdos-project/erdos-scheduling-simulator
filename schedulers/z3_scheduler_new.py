@@ -300,13 +300,34 @@ class Z3Scheduler(BaseScheduler):
         self, optimizer, tasks_to_variables, task_graph
     ):
         for _, variables in tasks_to_variables.items():
-            for parent in task_graph.get_parents(variables.task):
-                if parent.unique_name in tasks_to_variables:
-                    parent = tasks_to_variables[parent.unique_name]
-                    optimizer.add(
-                        variables.start_time
-                        >= parent.start_time + parent.task.get_remaining_time()
-                    )
+            task = variables.task
+            parent_variables = [
+                tasks_to_variables[parent.unique_name]
+                for parent in task_graph.get_parents(task)
+                if parent.unique_name in tasks_to_variables
+            ]
+            # Ensure that the task is placed, only if all of its parents were placed.
+            optimizer.add(
+                z3.Implies(
+                    variables.is_placed,
+                    z3.And([parent.is_placed for parent in parent_variables]),
+                )
+            )
+
+            # Ensure that if the task is placed, that it is only started once all
+            # of its parents are finished.
+            optimizer.add(
+                z3.Implies(
+                    variables.is_placed,
+                    z3.And(
+                        [
+                            variables.start_time
+                            >= parent.start_time + parent.task.get_remaining_time()
+                            for parent in parent_variables
+                        ]
+                    ),
+                )
+            )
 
     def _add_resource_constraints(
         self, optimizer, tasks_to_variables, task_graph, workers
