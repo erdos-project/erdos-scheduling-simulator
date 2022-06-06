@@ -87,13 +87,21 @@ class TaskOptimizerVariables:
         if enforce_deadlines:
             # Ensure that the deadlines are met.
             optimizer.add(
-                self.start_time + self.task.get_remaining_time() <= self.task.deadline
+                z3.Implies(
+                    self.is_placed,
+                    self.start_time + self.task.get_remaining_time()
+                    <= self.task.deadline,
+                )
             )
         else:
             # Add a soft constraint to ensure the achievement of the deadline.
+            # Also, tell Z3 to prefer placing tasks.
             optimizer.add_soft(
                 self.start_time + self.task.get_remaining_time() <= self.task.deadline,
                 weight=DEADLINE_ACHIEVEMENT_WEIGHT,
+            )
+            optimizer.add_soft(
+                self.is_placed == True, weight=DEADLINE_ACHIEVEMENT_WEIGHT
             )
 
     def _initialize_placement_constraints(self, optimizer, workers):
@@ -236,7 +244,7 @@ class Z3Scheduler(BaseScheduler):
                 worker_to_worker_pool[worker.id] = worker_pool.id
 
         # Construct the Optimizer, generate the variables and add constraints.
-        start_time = time.time()
+        scheduler_start_time = time.time()
         optimizer = z3.Optimize()
         tasks_to_variables = self._add_variables(
             optimizer, tasks_to_be_scheduled, workers
@@ -257,18 +265,15 @@ class Z3Scheduler(BaseScheduler):
                     worker_pool_id = worker_to_worker_pool[worker.id]
                     start_time = model[variables.start_time].as_long()
                     placements.append((variables.task, worker_pool_id, start_time))
-                    pass
                 else:
                     placements.append((variables.task, None, None))
         else:
             for task_name, variables in tasks_to_variables.items():
                 placements.append((variables.task, None, None))
-        end_time = time.time()
-        runtime = (
-            int((end_time - start_time) * 1000000)
-            if self.runtime == -1
-            else self.runtime
-        )
+        scheduler_end_time = time.time()
+        scheduler_runtime = int((scheduler_end_time - scheduler_start_time) * 1e6)
+        self._logger.debug("The runtime of the scheduler was: {scheduler_runtime} us.")
+        runtime = scheduler_runtime if self.runtime == -1 else self.runtime
 
         print(f"The system was {optimizer.check()}")
         print(f"The model was {optimizer.model()}")
