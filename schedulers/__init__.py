@@ -5,4 +5,4 @@ from .base_scheduler import BaseScheduler
 from .edf_scheduler import EDFScheduler
 from .gurobi_scheduler import GurobiScheduler, GurobiScheduler2
 from .lsf_scheduler import LSFScheduler
-from .z3_scheduler import Z3Scheduler
+from .z3_scheduler_new import Z3Scheduler
