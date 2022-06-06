@@ -1,3 +1,4 @@
+import time
 from collections import defaultdict
 from typing import Mapping, Optional, Sequence, Tuple
 
@@ -234,6 +235,7 @@ class Z3Scheduler(BaseScheduler):
                 worker_to_worker_pool[worker.id] = worker_pool.id
 
         # Construct the Optimizer, generate the variables and add constraints.
+        start_time = time.time()
         optimizer = z3.Optimize()
         tasks_to_variables = self._add_variables(
             optimizer, tasks_to_be_scheduled, workers
@@ -260,11 +262,17 @@ class Z3Scheduler(BaseScheduler):
         else:
             for task_name, variables in tasks_to_variables.items():
                 placements.append((variables.task, None, None))
+        end_time = time.time()
+        runtime = (
+            int((end_time - start_time) * 1000000)
+            if self.runtime == -1
+            else self.runtime
+        )
 
         print(f"The system was {optimizer.check()}")
         print(f"The model was {optimizer.model()}")
         print(f"The placements were: {placements}")
-        return 0, placements
+        return runtime, placements
 
     def _add_variables(
         self,
@@ -377,9 +385,6 @@ class Z3Scheduler(BaseScheduler):
                                 f"{worker.name}_{resource.name}_independent_"
                                 f"{task_name}_{dependency_name}"
                             )
-                            print("Adding a check for: "
-                                f"{worker.name}_{resource.name}_independent_"
-                                f"{task_name}_{dependency_name}")
                             optimizer.add(
                                 worker_resource_variable
                                 == (
