@@ -222,6 +222,10 @@ class Z3Scheduler(BaseScheduler):
         tasks_to_be_scheduled = task_graph.get_schedulable_tasks(
             sim_time, self.lookahead, self.preemptive, worker_pools
         )
+        self._logger.debug(
+            f"The scheduler received {len(tasks_to_be_scheduled)} "
+            f"tasks to be scheduled."
+        )
 
         # TODO (Sukrit): Reconstruct a worker pool based on the preemptive nature of
         # the scheduler.
@@ -235,7 +239,6 @@ class Z3Scheduler(BaseScheduler):
             for worker in worker_pool.workers:
                 workers[2**worker_index] = worker
                 worker_index += 1
-        print(f"The workers were: {workers}")
 
         # Construct a mapping from the worker to the WorkerPool to which it belongs.
         worker_to_worker_pool = {}
@@ -272,7 +275,7 @@ class Z3Scheduler(BaseScheduler):
                 placements.append((variables.task, None, None))
         scheduler_end_time = time.time()
         scheduler_runtime = int((scheduler_end_time - scheduler_start_time) * 1e6)
-        self._logger.debug("The runtime of the scheduler was: {scheduler_runtime} us.")
+        self._logger.debug(f"The runtime of the scheduler was: {scheduler_runtime} us.")
         runtime = scheduler_runtime if self.runtime == -1 else self.runtime
 
         print(f"The system was {optimizer.check()}")
