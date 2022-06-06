@@ -260,6 +260,7 @@ class Z3Scheduler(BaseScheduler):
         # Add the objectives, and return the results.
         self._add_objective(optimizer, tasks_to_variables)
         placements = []
+        self._logger.debug(f"The scheduler returned: {optimizer.check()}.")
         if optimizer.check() == z3.sat:
             model = optimizer.model()
             for task_name, variables in tasks_to_variables.items():
@@ -277,10 +278,6 @@ class Z3Scheduler(BaseScheduler):
         scheduler_runtime = int((scheduler_end_time - scheduler_start_time) * 1e6)
         self._logger.debug(f"The runtime of the scheduler was: {scheduler_runtime} us.")
         runtime = scheduler_runtime if self.runtime == -1 else self.runtime
-
-        print(f"The system was {optimizer.check()}")
-        print(f"The model was {optimizer.model()}")
-        print(f"The placements were: {placements}")
         return runtime, placements
 
     def _add_variables(
