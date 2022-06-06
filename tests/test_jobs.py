@@ -264,10 +264,10 @@ def test_task_independency_same_level():
     )
 
     assert (
-        job_graph.are_dependent(lidar_coordinate_logger_job, perception_job) == False
+        job_graph.are_dependent(lidar_coordinate_logger_job, perception_job) is False
     ), "The two jobs are not dependent on each other."
     assert (
-        job_graph.are_dependent(perception_job, lidar_coordinate_logger_job) == False
+        job_graph.are_dependent(perception_job, lidar_coordinate_logger_job) is False
     ), "The two jobs are not dependent on each other."
 
 
@@ -289,10 +289,10 @@ def test_task_independency_different_level():
     )
 
     assert (
-        job_graph.are_dependent(lidar_coordinate_logger_job, prediction_job) == False
+        job_graph.are_dependent(lidar_coordinate_logger_job, prediction_job) is False
     ), "The two jobs are not dependent on each other."
     assert (
-        job_graph.are_dependent(prediction_job, lidar_coordinate_logger_job) == False
+        job_graph.are_dependent(prediction_job, lidar_coordinate_logger_job) is False
     ), "The two jobs are not dependent on each other."
 
 
@@ -313,9 +313,9 @@ def test_task_dependency():
         }
     )
 
-    assert (
-        job_graph.are_dependent(lidar_job, prediction_job) == True
+    assert job_graph.are_dependent(
+        lidar_job, prediction_job
     ), "The two jobs are not dependent on each other."
-    assert (
-        job_graph.are_dependent(prediction_job, lidar_job) == True
+    assert job_graph.are_dependent(
+        prediction_job, lidar_job
     ), "The two jobs are not dependent on each other."

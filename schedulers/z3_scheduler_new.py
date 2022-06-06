@@ -2,6 +2,7 @@ import time
 from collections import defaultdict
 from typing import Mapping, Optional, Sequence, Tuple
 
+import absl  # noqa: F401
 import z3
 
 from schedulers import BaseScheduler
@@ -293,10 +294,10 @@ class Z3Scheduler(BaseScheduler):
         for _, variables in tasks_to_variables.items():
             for parent in task_graph.get_parents(variables.task):
                 if parent.unique_name in tasks_to_variables:
-                    parent_variables = tasks_to_variables[parent.unique_name]
+                    parent = tasks_to_variables[parent.unique_name]
                     optimizer.add(
                         variables.start_time
-                        >= parent.start_time + parent.get_remaining_time()
+                        >= parent.start_time + parent.task.get_remaining_time()
                     )
 
     def _add_resource_constraints(
