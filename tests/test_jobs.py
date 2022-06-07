@@ -246,3 +246,76 @@ def test_completion_time():
     assert (
         job_graph.completion_time == 3000
     ), "Incorrect completion time returned for the JobGraph."
+
+
+def test_task_independency_same_level():
+    """Test that two independent jobs at the same level are not dependent."""
+    camera_job = Job(name="Camera", runtime=1000)
+    lidar_job = Job(name="Lidar", runtime=1000)
+    lidar_coordinate_mapping_job = Job(name="LidarToCameraMapping", runtime=1000)
+    lidar_coordinate_logger_job = Job(name="LidarToCameraMappingLogger", runtime=1000)
+    perception_job = Job(name="Perception", runtime=1000)
+    job_graph = JobGraph(
+        jobs={
+            camera_job: [perception_job],
+            lidar_job: [lidar_coordinate_mapping_job],
+            lidar_coordinate_mapping_job: [perception_job, lidar_coordinate_logger_job],
+        }
+    )
+
+    assert (
+        job_graph.are_dependent(lidar_coordinate_logger_job, perception_job) is False
+    ), "The two jobs are not dependent on each other."
+    assert (
+        job_graph.are_dependent(perception_job, lidar_coordinate_logger_job) is False
+    ), "The two jobs are not dependent on each other."
+
+
+def test_task_independency_different_level():
+    """Test that two independent jobs at different levels are not dependent."""
+    camera_job = Job(name="Camera", runtime=1000)
+    lidar_job = Job(name="Lidar", runtime=1000)
+    lidar_coordinate_mapping_job = Job(name="LidarToCameraMapping", runtime=1000)
+    lidar_coordinate_logger_job = Job(name="LidarToCameraMappingLogger", runtime=1000)
+    perception_job = Job(name="Perception", runtime=1000)
+    prediction_job = Job(name="Prediction", runtime=1000)
+    job_graph = JobGraph(
+        jobs={
+            camera_job: [perception_job],
+            lidar_job: [lidar_coordinate_mapping_job],
+            lidar_coordinate_mapping_job: [perception_job, lidar_coordinate_logger_job],
+            perception_job: [prediction_job],
+        }
+    )
+
+    assert (
+        job_graph.are_dependent(lidar_coordinate_logger_job, prediction_job) is False
+    ), "The two jobs are not dependent on each other."
+    assert (
+        job_graph.are_dependent(prediction_job, lidar_coordinate_logger_job) is False
+    ), "The two jobs are not dependent on each other."
+
+
+def test_task_dependency():
+    """Test that two dependent jobs at different levels are dependent."""
+    camera_job = Job(name="Camera", runtime=1000)
+    lidar_job = Job(name="Lidar", runtime=1000)
+    lidar_coordinate_mapping_job = Job(name="LidarToCameraMapping", runtime=1000)
+    lidar_coordinate_logger_job = Job(name="LidarToCameraMappingLogger", runtime=1000)
+    perception_job = Job(name="Perception", runtime=1000)
+    prediction_job = Job(name="Prediction", runtime=1000)
+    job_graph = JobGraph(
+        jobs={
+            camera_job: [perception_job],
+            lidar_job: [lidar_coordinate_mapping_job],
+            lidar_coordinate_mapping_job: [perception_job, lidar_coordinate_logger_job],
+            perception_job: [prediction_job],
+        }
+    )
+
+    assert job_graph.are_dependent(
+        lidar_job, prediction_job
+    ), "The two jobs are not dependent on each other."
+    assert job_graph.are_dependent(
+        prediction_job, lidar_job
+    ), "The two jobs are not dependent on each other."
