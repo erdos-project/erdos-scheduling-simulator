@@ -62,8 +62,8 @@ def test_z3_scheduling_deadline_enforcement():
 
     assert len(placements) == 1, "Incorrect length of placements retrieved."
     assert placements[0][0] == camera_task_1, "Incorrect task retrieved for placement."
-    assert placements[0][1] == None, "Incorrect WorkerPoolID retrieved."
-    assert placements[0][2] == None, "Incorrect start time retrieved."
+    assert placements[0][1] is None, "Incorrect WorkerPoolID retrieved."
+    assert placements[0][2] is None, "Incorrect start time retrieved."
 
     # Create the softly enforce deadlines scheduler.
     scheduler = Z3Scheduler(
@@ -316,11 +316,11 @@ def test_z3_respects_dependencies_under_constrained_resources():
     assert placements[0][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
     assert placements[0][2] == 0, "Incorrect start time retrieved."
     assert placements[1][0] == camera_task_2, "Incorrect task retrieved for placement."
-    assert placements[1][1] == None, "Incorrect WorkerPoolID retrieved."
+    assert placements[1][1] is None, "Incorrect WorkerPoolID retrieved."
     assert (
         placements[2][0] == perception_task_2
     ), "Incorrect task retrieved for placement."
-    assert placements[2][1] == None, "Incorrect WorkerPoolID retrieved."
+    assert placements[2][1] is None, "Incorrect WorkerPoolID retrieved."
 
 
 def test_z3_respects_worker_resource_constraints():
@@ -364,7 +364,7 @@ def test_z3_respects_worker_resource_constraints():
     runtime, placements = scheduler.schedule(0, task_graph, worker_pools)
     assert len(placements) == 2, "Incorrect length of placements retrieved."
     assert (
-        placements[0][1] == None or placements[1][1] == None
+        placements[0][1] is None or placements[1][1] is None
     ), "One of the tasks should not be placed."
 
 
@@ -416,7 +416,7 @@ def test_z3_does_not_schedule_across_workers():
     assert placements[0][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
     assert placements[0][2] == 0, "Incorrect start time retrieved."
     assert placements[1][0] == camera_task_2, "Incorrect task retrieved for placement."
-    assert placements[1][1] == None, "Incorrect WorkerPoolID retrieved."
+    assert placements[1][1] is None, "Incorrect WorkerPoolID retrieved."
 
 
 def test_z3_not_work_conserving():

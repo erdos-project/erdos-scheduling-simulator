@@ -101,7 +101,7 @@ class TaskOptimizerVariables:
                 weight=DEADLINE_ACHIEVEMENT_WEIGHT,
             )
             optimizer.add_soft(
-                self.is_placed == True, weight=DEADLINE_ACHIEVEMENT_WEIGHT
+                self.is_placed == True, weight=DEADLINE_ACHIEVEMENT_WEIGHT  # noqa: E712
             )
 
     def _initialize_placement_constraints(self, optimizer, workers):
