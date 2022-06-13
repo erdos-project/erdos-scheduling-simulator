@@ -70,10 +70,10 @@ class BaseScheduler(object):
                 do the placement across.
 
         Returns:
-            (scheduler_runtime, task_placement) where `scheduler_runtime` is an 
-            `EventTime` depicting the runtime of the scheduler (in us), and 
-            `task_placement` is a sequence of tuples depicting the (Task, 
-            ID of the Worker Pool where the task should be placed, 
+            (scheduler_runtime, task_placement) where `scheduler_runtime` is an
+            `EventTime` depicting the runtime of the scheduler (in us), and
+            `task_placement` is a sequence of tuples depicting the (Task,
+            ID of the Worker Pool where the task should be placed,
             Start time of the task (in us)).
         """
         raise NotImplementedError(

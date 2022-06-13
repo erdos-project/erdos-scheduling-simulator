@@ -27,10 +27,10 @@ def test_time_construction_success():
 def test_time_construction_fail():
     """Test that EventTime fails construction with the wrong unit or wrong time type."""
     with pytest.raises(ValueError):
-        test_time_ns = EventTime(100, "ns")
+        EventTime(100, "ns")
 
     with pytest.raises(ValueError):
-        test_time_ms = EventTime("100.0", EventTime.Unit.MS)
+        EventTime("100.0", EventTime.Unit.MS)
 
 
 def test_time_unit_conversions():
@@ -135,10 +135,11 @@ def test_time_equivalence():
     assert test_time_ms == test_time_us, "Incorrect equality."
     assert test_time_ms != EventTime(200, EventTime.Unit.US), "Incorrect equality."
 
+
 def test_time_comparisons():
     """Test that the comparison methods work correctly."""
     test_time_us = EventTime(200, EventTime.Unit.US)
-    test_time_ms = EventTime(2, EventTime.Unit.MS) 
+    test_time_ms = EventTime(2, EventTime.Unit.MS)
 
     assert test_time_us < test_time_ms, "Incorrect < comparison."
     assert test_time_ms > test_time_us, "Incorrect > comparison."

@@ -260,8 +260,8 @@ def test_completion_time():
         }
     )
 
-    assert (
-        job_graph.completion_time == EventTime(3000, EventTime.Unit.US)
+    assert job_graph.completion_time == EventTime(
+        3000, EventTime.Unit.US
     ), "Incorrect completion time returned for the JobGraph."
 
 
