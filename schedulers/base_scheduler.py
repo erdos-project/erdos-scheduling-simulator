@@ -4,7 +4,7 @@ from typing import Optional, Sequence, Tuple
 
 import absl  # noqa: F401
 
-import utils
+from utils import EventTime, setup_logging
 from workers import WorkerPools
 from workload import Task, TaskGraph
 
@@ -15,9 +15,9 @@ class BaseScheduler(object):
     Args:
         preemptive (`bool`): If `True`, the scheduler can preempt the tasks that
             are currently running.
-        runtime (`int`): The runtime to return to the simulator (in us). If -1,
+        runtime (`EventTime`): The runtime to return to the simulator (in us). If -1,
             the scheduler returns the actual runtime.
-        lookahead (`int`): The scheduler will try to place tasks that are within
+        lookahead (`EventTime`): The scheduler will try to place tasks that are within
             the scheduling lookahead (in us) using estimated task release times.
         enforce_deadlines (`bool`): If True then deadlines must be met or else the
             `schedule()` will return None.
@@ -28,46 +28,53 @@ class BaseScheduler(object):
     def __init__(
         self,
         preemptive: bool = False,
-        runtime: int = -1,
-        lookahead: int = 0,
+        runtime: EventTime = EventTime(time=-1, unit=EventTime.Unit.US),
+        lookahead: EventTime = EventTime(time=0, unit=EventTime.Unit.US),
         enforce_deadlines: bool = False,
         _flags: Optional["absl.flags"] = None,
     ):
+        if type(runtime) != EventTime:
+            raise ValueError(f"Incorrect type for runtime: {type(runtime)}")
+        if type(lookahead) != EventTime:
+            raise ValueError(f"Incorrect type for lookahead: {type(lookahead)}")
+
         self._preemptive = preemptive
         self._runtime = runtime
         self._lookahead = lookahead
         self._enforce_deadlines = enforce_deadlines
         self._flags = _flags
+
         if self._flags:
-            self._logger = utils.setup_logging(
+            self._logger = setup_logging(
                 name=self.__class__.__name__,
                 log_file=self._flags.log_file_name,
                 log_level=self._flags.log_level,
             )
         else:
-            self._logger = utils.setup_logging(name=self.__class__.__name__)
+            self._logger = setup_logging(name=self.__class__.__name__)
 
     def schedule(
         self,
-        sim_time: int,
+        sim_time: EventTime,
         task_graph: TaskGraph,
         worker_pools: "WorkerPools",  # noqa: F821
-    ) -> (int, Sequence[Tuple[Task, str, int]]):
+    ) -> (EventTime, Sequence[Tuple[Task, str, EventTime]]):
         """Abstract method to be implemented by derived classes to allow the
         scheduling of tasks.
 
         Args:
-            sim_time (`int`): The time in us at which the scheduler is invoked.
+            sim_time (`EventTime`): The time in us at which the scheduler is invoked.
             task_graph (`TaskGraph`): The state of the TaskGraph at this
                 invocation including the future set of VIRTUAL tasks.
             worker_pools (`WorkerPools`): The set of worker pools to
                 do the placement across.
 
         Returns:
-            (scheduler_runtime, task_placement) where `scheduler_runtime` is a `int`
-            depicting the runtime of the scheduler (in us), and `task_placement` is
-            a sequence of tuples depicting the (Task, ID of the Worker Pool where
-            the task should be placed, Start time of the task (in us)).
+            (scheduler_runtime, task_placement) where `scheduler_runtime` is an 
+            `EventTime` depicting the runtime of the scheduler (in us), and 
+            `task_placement` is a sequence of tuples depicting the (Task, 
+            ID of the Worker Pool where the task should be placed, 
+            Start time of the task (in us)).
         """
         raise NotImplementedError(
             "The `schedule()` method has not been " "implemented."

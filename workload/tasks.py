@@ -8,7 +8,7 @@ from enum import Enum
 from functools import total_ordering
 from typing import Mapping, Optional, Sequence, Union
 
-import utils
+from utils import EventTime, fuzz_time, setup_logging
 from workload import Job, Resources
 from workload.graph import Graph
 
@@ -40,17 +40,17 @@ class Task(object):
         job (`Job`): The job that created this particular task.
         resource_requirements (`Resources`): The set of resources required by
             this task.
-        release_time (`int`): The time at which the task was released by the
+        release_time (`EventTime`): The time at which the task was released by the
             job (in us).
-        runtime (`int`): The expected runtime (in us) of this task.
-        deadline (`int`): The absolute deadline by which the task should complete.
+        runtime (`EventTime`): The expected runtime (in us) of this task.
+        deadline (`EventTime`): The absolute deadline by which the task should complete.
         state (`TaskState`): Defines the state of the task.
         timestamp (`int`): The timestamp for the Task (single dimension).
-        start_time (`int`): The time (in us) at which the task was started
+        start_time (`EventTime`): The time (in us) at which the task was started
             (only available if state != TaskState.RELEASED, -1 otherwise)
-        remaining_time (`int`): The time (in us) remaining to finish the
+        remaining_time (`EventTime`): The time (in us) remaining to finish the
             completion of the task.
-        completion_time (`int`): The time (in us) at which the task completed
+        completion_time (`EventTime`): The time (in us) at which the task completed
             / was preempted (only available if state is either
             EVICTED / COMPLETED, -1 otherwise)
         _logger(`Optional[logging.Logger]`): The logger to use to log the
@@ -69,19 +69,37 @@ class Task(object):
         name: str,
         job: Job,
         resource_requirements: Resources,
-        runtime: int,
-        deadline: int,
+        runtime: EventTime,
+        deadline: EventTime,
         timestamp: int = None,
-        release_time: Optional[int] = -1,
-        start_time: Optional[int] = -1,
-        completion_time: Optional[int] = -1,
+        release_time: Optional[EventTime] = EventTime(-1, EventTime.Unit.US),
+        start_time: Optional[EventTime] = EventTime(-1, EventTime.Unit.US),
+        completion_time: Optional[EventTime] = EventTime(-1, EventTime.Unit.US),
         _logger: Optional[logging.Logger] = None,
     ):
+        # Check the types of the arguments.
+        if type(runtime) != EventTime:
+            raise ValueError(f"Invalid type received for runtime: {type(runtime)}")
+        if type(deadline) != EventTime:
+            raise ValueError(f"Invalid type received for deadline: {type(deadline)}")
+        if type(release_time) != EventTime:
+            raise ValueError(
+                f"Invalid type received for release_time: {type(release_time)}"
+            )
+        if type(start_time) != EventTime:
+            raise ValueError(
+                f"Invalid type received for start_time: {type(start_time)}"
+            )
+        if type(completion_time) != EventTime:
+            raise ValueError(
+                f"Invalid type received for completion_time: {type(completion_time)}"
+            )
+
         # Set up the logger.
         if _logger:
             self._logger = _logger
         else:
-            self._logger = utils.setup_logging(name=f"{name}_{timestamp}")
+            self._logger = setup_logging(name=f"{name}_{timestamp}")
 
         self._name = name
         self._creating_job = job
@@ -109,16 +127,17 @@ class Task(object):
         # ID of the worker pool on which the task is running.
         self._worker_pool_id = None
 
-    def release(self, time: Optional[int] = None):
+    def release(self, time: Optional[EventTime] = None):
         """Release the task and transition away from the virtual state.
 
         Args:
-            time (`Optional[int]`): The simulation time (in us) at which to
-                release the task. If None, should be specified at task
-                construction.
+            time (`Optional[EventTime]`): The simulation time (in us) at which to
+                release the task. If None, should be specified at task construction.
         """
         self._logger.debug(f"Transitioning {self} to {TaskState.RELEASED}")
-        if time is None and self._release_time == -1:
+        if time and type(time) != EventTime:
+            raise ValueError(f"Invalid type received for time: {type(time)}")
+        if time is None and self._release_time == EventTime(-1, EventTime.Unit.US):
             raise ValueError(
                 "Release time should be specified either while "
                 "creating the Task or when releasing it."
@@ -138,16 +157,15 @@ class Task(object):
 
     def start(
         self,
-        time: Optional[int] = None,
+        time: Optional[EventTime] = None,
         worker_pool_id: Optional[int] = None,
         variance: Optional[int] = 0,
     ):
         """Begins the execution of the task at the given simulator time.
 
         Args:
-            time (`Optional[int]`): The simulation time (in us) at which to
-                begin the task. If None, should be specified at task
-                construction.
+            time (`Optional[EventTime]`): The simulation time (in us) at which to
+                begin the task. If None, should be specified at task construction.
             worker_pool_id (`Optional[str]`): The ID of the WorkerPool that
                 the task will be started on.
             variance (`Optional[int]`): The percentage variation to add to
@@ -161,13 +179,15 @@ class Task(object):
                 f"Only RELEASED or PREEMPTED tasks can be started. "
                 f"Task is in state {self.state}"
             )
+        if type(time) != EventTime:
+            raise ValueError(f"Invalid type received for time: {type(time)}")
         if time is None and self._start_time == -1:
             raise ValueError(
                 "Start time should be specified either while "
                 "creating the Task or when starting it."
             )
 
-        remaining_time = utils.fuzz_time(self._remaining_time, (0, variance))
+        remaining_time = fuzz_time(self._remaining_time, (0, variance))
         self._logger.debug(
             f"Transitioning {self} to {TaskState.RUNNING} at time {time} "
             f"with the remaining time {remaining_time}"
@@ -181,17 +201,27 @@ class Task(object):
         self.update_remaining_time(remaining_time)
         self._worker_pool_id = worker_pool_id
 
-    def step(self, current_time: int, step_size: int = 1) -> bool:
+    def step(
+        self,
+        current_time: EventTime,
+        step_size: EventTime = EventTime(1, EventTime.Unit.US),
+    ) -> bool:
         """Steps the task for the given `step_size` (default 1 time step).
 
         Args:
-            current_time (`int`): The current time of the simulator (in us).
-            step_size (`int`): The amount of time (in us) for which to step
+            current_time (`EventTime`): The current time of the simulator (in us).
+            step_size (`EventTime`): The amount of time (in us) for which to step
                 the task.
 
         Returns:
             `True` if the task has finished execution, `False` otherwise.
         """
+        if type(current_time) != EventTime:
+            raise ValueError(
+                f"Invalid type received for current_time: {type(current_time)}"
+            )
+        if type(step_size) != EventTime:
+            raise ValueError(f"Invalid type received for step_size: {type(step_size)}")
         if (
             self.state != TaskState.RUNNING
             or self.start_time > current_time + step_size
@@ -206,9 +236,9 @@ class Task(object):
 
         # Task can be run, step through the task's execution.
         execution_time = current_time + step_size - self._last_step_time
-        if self._remaining_time - execution_time <= 0:
+        if self._remaining_time - execution_time <= EventTime(0, EventTime.Unit.US):
             self._last_step_time = current_time + self._remaining_time
-            self._remaining_time = 0
+            self._remaining_time = EventTime(0, EventTime.Unit.US)
             self.finish(self._last_step_time)
             return True
         else:
@@ -220,15 +250,18 @@ class Task(object):
             )
             return False
 
-    def preempt(self, time: int):
+    def preempt(self, time: EventTime):
         """Preempts the task at the given simulation time.
 
         Args:
-            time (`int`): The simulation time (in us) at which to preempt the task.
+            time (`EventTime`): The simulation time (in us) at which to preempt the
+                task.
 
         Raises:
             `ValueError` if task is not RUNNING.
         """
+        if type(time) != EventTime:
+            raise ValueError(f"Invalid type received for time: {type(time)}")
         if self.state != TaskState.RUNNING:
             raise ValueError(f"Task {self.id} is not RUNNING right now.")
         self._logger.debug(
@@ -243,14 +276,14 @@ class Task(object):
         self._state = TaskState.PREEMPTED
         self._worker_pool_id = None
 
-    def resume(self, time: int, worker_pool_id: Optional[str] = None):
+    def resume(self, time: EventTime, worker_pool_id: Optional[str] = None):
         """Continues the execution of the task at the given simulation time.
 
         If the `worker_pool_id` passed is `None`, it is assumed that the task
         will be restarted at the old worker pool.
 
         Args:
-            time (`int`): The simulation time (in us) at which to restart the
+            time (`EventTime`): The simulation time (in us) at which to restart the
                 task.
             worker_pool_id (`Optional[str]`): The ID of the WorkerPool that
                 the task will be resumed on.
@@ -258,6 +291,8 @@ class Task(object):
         Raises:
             `ValueError` if task is not PREEMPTED.
         """
+        if type(time) != EventTime:
+            raise ValueError(f"Invalid type received for time: {type(time)}")
         if self.state != TaskState.PREEMPTED:
             raise ValueError(f"Task {self.id} is not PREEMPTED right now.")
         new_worker_pool = (
@@ -274,19 +309,21 @@ class Task(object):
         self._state = TaskState.RUNNING
         self._worker_pool_id = new_worker_pool
 
-    def finish(self, time: int):
+    def finish(self, time: EventTime):
         """Completes the execution of the task at the given simulation time.
 
         If the remaining time is not 0, the task is considered to be preempted.
 
         Args:
-            time (`int`): The simulation time (in us) at which the task was
+            time (`EventTime`): The simulation time (in us) at which the task was
                 finished.
         """
+        if type(time) != EventTime:
+            raise ValueError(f"Invalid type received for time: {type(time)}")
         if self.state not in [TaskState.RUNNING, TaskState.PREEMPTED]:
             raise ValueError(f"Task {self.id} is not RUNNING or PREEMPTED right now.")
         self._completion_time = time
-        if self._remaining_time == 0:
+        if self._remaining_time == EventTime(0, EventTime.Unit.US):
             self._state = TaskState.COMPLETED
         else:
             self._state = TaskState.EVICTED
@@ -296,36 +333,44 @@ class Task(object):
         # TODO (Sukrit): We should notify the `Job` of the completion of this
         # particular task, so it can release new tasks to the scheduler.
 
-    def update_remaining_time(self, time: int):
+    def update_remaining_time(self, time: EventTime):
         """Updates the remaining time of the task to simulate any runtime
         variabilities.
 
         Args:
-            time (`int`): The new remaining time (in us) to update the task
+            time (`EventTime`): The new remaining time (in us) to update the task
                 with.
 
         Raises:
             `ValueError` if the task is COMPLETED / EVICTED, or time < 0.
         """
+        if type(time) != EventTime:
+            raise ValueError(f"Invalid type received for time: {type(time)}")
         if self.is_complete():
             raise ValueError(
                 f"The remaining time of COMPLETED/EVICTED "
                 f"task {self.id} cannot be updated."
             )
-        if time < 0:
-            raise ValueError("Trying to set a negative value for " "remaining time.")
+        if time < EventTime(0, EventTime.Unit.US):
+            raise ValueError("Trying to set a negative value for remaining time.")
         self._remaining_time = time
 
-    def update_deadline(self, new_deadline: int):
+    def update_deadline(self, new_deadline: EventTime):
         """Updates the absolute deadline of the task to simulate any dynamic deadlines.
 
         Args:
-            new_deadline (`int`): The new aboslute deadline (in us) to update the task
-                with.
+            new_deadline (`EventTime`): The new aboslute deadline (in us) to update
+                the task with.
 
         Raises:
             `ValueError` if the new_deadline < 0.
         """
+        if type(new_deadline) != EventTime:
+            raise ValueError(
+                f"Invalid type received for new_deadline: {type(new_deadline)}"
+            )
+        if new_deadline < EventTime(0, EventTime.Unit.US):
+            raise ValueError("Trying to set a negative value for the deadline.")
         self._deadline = new_deadline
 
     def is_complete(self) -> bool:
@@ -348,13 +393,13 @@ class Task(object):
 
     def __str__(self):
         if self.state == TaskState.VIRTUAL:
-            if self.release_time == -1:
+            if self.release_time == EventTime(-1, EventTime.Unit.US):
                 return (
                     f"Task(name={self.name}, id={self.id}, job={self.job}, "
                     f"timestamp={self.timestamp}, state={self.state})"
                 )
             else:
-                if self.deadline == -1:
+                if self.deadline == EventTime(-1, EventTime.Unit.US):
                     return (
                         f"Task(name={self.name}, id={self.id}, job={self.job}, "
                         f"timestamp={self.timestamp}, state={self.state}, "
@@ -433,12 +478,12 @@ class Task(object):
     def release_time(self):
         return self._release_time
 
-    def get_release_time(self, unit="us"):
-        if unit == "us":
-            return self._release_time
-        elif unit == "ms":
+    def get_release_time(self, unit=EventTime.Unit.US):
+        if unit == EventTime.Unit.US:
+            return self._release_time.time
+        elif unit == EventTime.Unit.MS:
             # Round up to return a conservative estimate of the exact release time.
-            return math.ceil(self._release_time / 1000)
+            return math.ceil(self._release_time.time / 1000)
         else:
             raise ValueError(f"Unit {unit} not supported")
 
@@ -450,12 +495,12 @@ class Task(object):
     def deadline(self):
         return self._deadline
 
-    def get_deadline(self, unit="us"):
-        if unit == "us":
-            return self._deadline
-        elif unit == "ms":
+    def get_deadline(self, unit=EventTime.Unit.US):
+        if unit == EventTime.Unit.US:
+            return self._deadline.time
+        elif unit == EventTime.Unit.MS:
             # Round down to return a conservative estimate of the deadline.
-            return math.floor(self._deadline / 1000)
+            return math.floor(self._deadline.time / 1000)
         else:
             raise ValueError(f"Unit {unit} not supported")
 
@@ -483,12 +528,12 @@ class Task(object):
     def remaining_time(self):
         return self._remaining_time
 
-    def get_remaining_time(self, unit="us"):
-        if unit == "us":
-            return self._remaining_time
-        elif unit == "ms":
+    def get_remaining_time(self, unit=EventTime.Unit.US):
+        if unit == EventTime.Unit.US:
+            return self._remaining_time.time
+        elif unit == EventTime.Unit.MS:
             # Round up to return a conservative estimate of the exact remaining time.
-            return math.ceil(self._remaining_time / 1000)
+            return math.ceil(self._remaining_time.time / 1000)
         else:
             raise ValueError(f"Unit {unit} not supported")
 
@@ -526,7 +571,9 @@ class TaskGraph(Graph[Task]):
         """
         self.add_node(task, *children)
 
-    def notify_task_completion(self, task: Task, finish_time: int) -> Sequence[Task]:
+    def notify_task_completion(
+        self, task: Task, finish_time: EventTime
+    ) -> Sequence[Task]:
         """Notify the completion of the task.
 
         The caller must set the type of the task completion before invoking
@@ -534,7 +581,7 @@ class TaskGraph(Graph[Task]):
 
         Args:
             task (`Task`): The task that has finished execution.
-            finish_time (`int`): The time (in us) at which the task finished.
+            finish_time (`EventTime`): The time (in us) at which the task finished.
 
         Returns:
             The set of tasks released by the completion of this task.
@@ -542,6 +589,10 @@ class TaskGraph(Graph[Task]):
         Raises:
             `ValueError` if an incomplete task is passed.
         """
+        if type(finish_time) != EventTime:
+            raise ValueError(
+                f"Invalid type received for finish_time: {type(finish_time)}"
+            )
         # Ensure that the task is actually complete.
         if not task.is_complete():
             raise ValueError(f"Cannot notify TaskGraph of an incomplete task: {task}")
@@ -554,7 +605,7 @@ class TaskGraph(Graph[Task]):
                 # simulatenously with the argument parent task given to this method.
                 continue
             if all(map(lambda task: task.is_complete(), self.get_parents(child))):
-                if child.release_time == -1:
+                if child.release_time == EventTime(-1, EventTime.Unit.US):
                     # If the child does not have a release time, then set it to now,
                     # which is the time of the completion of the last parent task.
                     child.release(finish_time)
@@ -583,8 +634,8 @@ class TaskGraph(Graph[Task]):
 
     def get_schedulable_tasks(
         self,
-        time: int,
-        lookahead: int = 0,
+        time: EventTime,
+        lookahead: EventTime = EventTime(0, EventTime.Unit.US),
         preemption: bool = False,
         worker_pools: "WorkerPools" = None,  # noqa: F821
     ) -> Sequence[Task]:
@@ -594,6 +645,10 @@ class TaskGraph(Graph[Task]):
         Returns:
             A list of tasks.
         """
+        if type(time) != EventTime:
+            raise ValueError(f"Invalid type received for time: {type(time)}")
+        if type(lookahead) != EventTime:
+            raise ValueError(f"Invalid type received for time: {type(lookahead)}")
         tasks = self.filter(
             lambda task: (
                 task.state == TaskState.RELEASED
@@ -668,7 +723,7 @@ class TaskGraph(Graph[Task]):
         ), "Tasks send for scheduling beyond the scheduler lookahead"
         return tasks
 
-    def release_tasks(self, time: Optional[int] = None) -> Sequence[Task]:
+    def release_tasks(self, time: Optional[EventTime] = None) -> Sequence[Task]:
         """Releases the set of tasks that have no dependencies and are thus
         available to run.
 
@@ -784,7 +839,7 @@ class TaskGraph(Graph[Task]):
         """
         return self.filter(self.is_source_task)
 
-    def dilate(self, difference: int):
+    def dilate(self, difference: EventTime):
         """Dilate the time between occurrence of events of successive
         logical timestamps according to the given difference.
 
@@ -798,9 +853,13 @@ class TaskGraph(Graph[Task]):
         time of the actual tasks.
 
         Args:
-            difference (`int`): The time difference (in us) to keep between the
+            difference (`EventTime`): The time difference (in us) to keep between the
                 occurrence of two source Tasks of different timestamps.
         """
+        if type(difference) != EventTime:
+            raise ValueError(
+                f"Invalid type received for difference: {type(difference)}"
+            )
         for parent_graph, child_graph in zip(self[0:], self[1:]):
             # Fix the offsets of the source tasks according to the release
             # time of the parents.
@@ -824,11 +883,12 @@ class TaskGraph(Graph[Task]):
 
             # Calculate the average of the offsets of the source tasks and
             # offset the remainder of the tasks by the average.
-            average_offset = int(sum(offsets) / len(offsets))
+            summed_offset = sum(offsets, start=EventTime(0, EventTime.Unit.US))
+            average_offset = int(summed_offset.time / len(offsets))
             for task in child_graph.get_nodes():
                 if not child_graph.is_source_task(task):
-                    task._release_time -= average_offset
-                    task._deadline -= average_offset
+                    task._release_time -= EventTime(average_offset, summed_offset.unit)
+                    task._deadline -= EventTime(average_offset, summed_offset.unit)
 
     def merge(self, task_graphs: Sequence["TaskGraph"]) -> "TaskGraph":
         """Merge the given task_graphs after ordering them by timestamps.

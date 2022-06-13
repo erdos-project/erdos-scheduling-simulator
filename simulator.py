@@ -7,8 +7,8 @@ from typing import Optional, Sequence, Type
 
 import absl  # noqa: F401
 
-import utils
 from schedulers import BaseScheduler
+from utils import EventTime, setup_csv_logging, setup_logging
 from workers import WorkerPool, WorkerPools
 from workload import JobGraph, Resource, Resources, Task, TaskGraph, TaskState
 
@@ -40,19 +40,19 @@ class Event(object):
 
     Args:
         event_type (`EventType`): The type of the event.
-        time (`int`): The simulator time (in us) at which the event occurred.
+        time (`EventTime`): The simulator time at which the event occurred.
         task (`Optional[Task]`): The task associated with this event if it is
             of type `TASK_RELEASE` or `TASK_FINISHED`.
 
     Raises:
         `ValueError` if the event is of type `TASK_RELEASE` or `TASK_FINISHED`
-        and no associated task is provided.
+        and no associated task is provided, or if the time is not of type `EventTime`.
     """
 
     def __init__(
         self,
         event_type: EventType,
-        time: int,
+        time: EventTime,
         task: Optional[Task] = None,
         placement: Optional[str] = None,
     ):
@@ -68,6 +68,8 @@ class Event(object):
             if event_type in [EventType.TASK_PLACEMENT, EventType.TASK_MIGRATION]:
                 if placement is None:
                     raise ValueError(f"No placement provided with {event_type}")
+        if type(time) != EventTime:
+            raise ValueError(f"Invalid type for time: {type(time)}")
         self._event_type = event_type
         self._time = time
         self._task = task
@@ -82,15 +84,13 @@ class Event(object):
         if self.task is None:
             return f"Event(time={self.time}, type={self.event_type})"
         else:
-            return (
-                f"Event(time={self.time}, type={self.event_type}, " f"task={self.task})"
-            )
+            return f"Event(time={self.time}, type={self.event_type}, task={self.task})"
 
     def __repr__(self):
         return str(self)
 
     @property
-    def time(self) -> int:
+    def time(self) -> EventTime:
         return self._time
 
     @property
@@ -169,10 +169,10 @@ class Simulator(object):
             the set of available tasks at a regular interval.
         job_graph (`JobGraph`): A static directed graph that represents the
             known structure of the computation.
-        loop_timeout (`int`) [default=sys.maxsize]: The simulator time (in us)
-            upto which to run the loop. The default runs until we have
-             exhausted all the events in the system.
-        scheduler_frequency (`int`) [default=-1]: The time (in us) between two
+        loop_timeout (`EventTime`) [default=sys.maxsize]: The simulator time (in us)
+            upto which to run the loop. The default runs until we have exhausted all
+            the events in the system.
+        scheduler_frequency (`EventTime`) [default=-1]: The time (in us) between two
             subsequent scheduler invocations. The default invokes a new run of
             the scheduler just after the previous one has completed.
         _flags (`absl.flags`): The flags used to initialize the app, if any.
@@ -183,27 +183,41 @@ class Simulator(object):
         worker_pools: Sequence[WorkerPool],
         scheduler: Type[BaseScheduler],
         job_graph: JobGraph,
-        loop_timeout: int = sys.maxsize,
-        scheduler_frequency: int = -1,
+        loop_timeout: EventTime = EventTime(time=sys.maxsize, unit=EventTime.Unit.US),
+        scheduler_frequency: EventTime = EventTime(time=-1, unit=EventTime.Unit.US),
         _flags: Optional["absl.flags"] = None,
     ):
         if not isinstance(scheduler, BaseScheduler):
             raise ValueError("Scheduler must implement the BaseScheduler interface.")
+
+        if type(loop_timeout) != EventTime:
+            raise ValueError(f"Unexpected type of loop_timeout: {type(loop_timeout)}")
+
+        if type(scheduler_frequency) != EventTime:
+            raise ValueError(f"Unexpected type of loop_timeout: {type(loop_timeout)}")
+
         # Set up the logger.
         if _flags:
-            self._logger = utils.setup_logging(
+            self._logger = setup_logging(
                 name=self.__class__.__name__,
                 log_file=_flags.log_file_name,
                 log_level=_flags.log_level,
             )
-            self._csv_logger = utils.setup_csv_logging(
+            self._csv_logger = setup_csv_logging(
                 name=self.__class__.__name__, log_file=_flags.csv_file_name
             )
         else:
-            self._logger = utils.setup_logging(name=self.__class__.__name__)
-            self._csv_logger = utils.setup_csv_logging(
+            self._logger = setup_logging(name=self.__class__.__name__)
+            self._csv_logger = setup_csv_logging(
                 name=self.__class__.__name__, log_file=None
             )
+
+        # Simulator variables.
+        self._scheduler = scheduler
+        self._job_graph = job_graph
+        self._simulator_time = EventTime(time=0, unit=EventTime.Unit.US)
+        self._scheduler_frequency = scheduler_frequency
+        self._loop_timeout = loop_timeout
 
         self._worker_pools = {
             worker_pool.id: worker_pool for worker_pool in worker_pools
@@ -222,21 +236,17 @@ class Simulator(object):
             )
             for worker in worker_pool.workers:
                 self._logger.info(f"\t{worker}")
-        self.__log_utilization(0)
-
-        self._scheduler = scheduler
-        self._job_graph = job_graph
-        self._simulator_time = 0
-        self._scheduler_frequency = scheduler_frequency
-        self._loop_timeout = loop_timeout
+        self.__log_utilization(self._simulator_time)
 
         # Internal data.
-        self._last_scheduler_start_time = 0
+        self._last_scheduler_start_time = self._simulator_time
         self._next_scheduler_event = None
         self._last_task_placement = []
         self._finished_tasks = 0
         self._missed_deadlines = 0
-        self._scheduler_delay = _flags.scheduler_delay if _flags else 1
+        self._scheduler_delay = EventTime(
+            _flags.scheduler_delay if _flags else 1, EventTime.Unit.US
+        )
         self._runtime_variance = _flags.runtime_variance if _flags else 0
 
         # Initialize the event queue, and add a SIMULATOR_START task to
@@ -244,17 +254,20 @@ class Simulator(object):
         # SCHEDULER_START event to invoke the scheduling loop.
         self._event_queue = EventQueue()
 
-        sim_start_event = Event(event_type=EventType.SIMULATOR_START, time=0)
+        sim_start_event = Event(
+            event_type=EventType.SIMULATOR_START, time=self._simulator_time
+        )
         self._event_queue.add_event(sim_start_event)
         self._logger.info(
-            f"[{self._simulator_time}] Added {sim_start_event} " f"to the event queue."
+            f"[{self._simulator_time}] Added {sim_start_event} to the event queue."
         )
 
-        sched_start_event = Event(event_type=EventType.SCHEDULER_START, time=0)
+        sched_start_event = Event(
+            event_type=EventType.SCHEDULER_START, time=self._simulator_time
+        )
         self._event_queue.add_event(sched_start_event)
         self._logger.info(
-            f"[{self._simulator_time}] Added {sched_start_event}"
-            f" to the event queue."
+            f"[{self._simulator_time}] Added {sched_start_event} to the event queue."
         )
 
     def simulate(self, task_graph: TaskGraph):
@@ -318,12 +331,10 @@ class Simulator(object):
         for worker_pool in self._worker_pools.values():
             currently_placed_tasks.extend(worker_pool.get_placed_tasks())
         schedulable_tasks = task_graph.get_schedulable_tasks(
-            event.time,
-            self._scheduler.lookahead,
-            self._scheduler.preemptive,
+            event.time, self._scheduler.lookahead, self._scheduler.preemptive
         )
         self._csv_logger.debug(
-            f"{event.time},SCHEDULER_START,{len(schedulable_tasks)},"
+            f"{event.time.time},SCHEDULER_START,{len(schedulable_tasks)},"
             f"{len(currently_placed_tasks)}"
         )
 
@@ -357,7 +368,7 @@ class Simulator(object):
         )
         num_unplaced = len(self._last_task_placement) - num_placed
         self._csv_logger.debug(
-            f"{event.time},SCHEDULER_FINISHED,"
+            f"{event.time.time},SCHEDULER_FINISHED,"
             f"{event.time - self._last_scheduler_start_time},"
             f"{num_placed},{num_unplaced}"
         )
@@ -443,11 +454,10 @@ class Simulator(object):
     def __handle_task_release(self, event: Event):
         # Release a task for the scheduler.
         self._logger.info(
-            f"[{self._simulator_time}] Added the task from "
-            f"{event} to the released tasks."
+            f"[{event.time}] Added the task from {event} to the released tasks."
         )
         self._csv_logger.debug(
-            f"{event.time},TASK_RELEASE,{event.task.name},"
+            f"{event.time.time},TASK_RELEASE,{event.task.name},"
             f"{event.task.timestamp},{event.task.intended_release_time},"
             f"{event.task.release_time},{event.task.runtime},"
             f"{event.task.deadline},{event.task.id}"
@@ -461,10 +471,9 @@ class Simulator(object):
             )
             if self._next_scheduler_event._time != new_scheduler_event_time:
                 self._logger.info(
-                    f"[{self._simulator_time}] While adding the task from"
-                    f"{event}, the scheduler event from "
-                    f"{self._next_scheduler_event._time} was pulled back to "
-                    f"{new_scheduler_event_time}"
+                    f"[{event.time}] While adding the task from{event}, the scheduler "
+                    f"event from {self._next_scheduler_event._time} was pulled back "
+                    f"to {new_scheduler_event_time}."
                 )
                 self._next_scheduler_event._time = new_scheduler_event_time
                 self._event_queue.reheapify()
@@ -472,7 +481,7 @@ class Simulator(object):
     def __handle_task_finished(self, event: Event, task_graph: TaskGraph):
         self._finished_tasks += 1
         self._csv_logger.debug(
-            f"{event.time},TASK_FINISHED,{event.task.name},{event.task.timestamp},"
+            f"{event.time.time},TASK_FINISHED,{event.task.name},{event.task.timestamp},"
             f"{event.task.completion_time},{event.task.deadline},{event.task.id}"
         )
 
@@ -480,7 +489,7 @@ class Simulator(object):
         if event.time > event.task.deadline:
             self._missed_deadlines += 1
             self._csv_logger.debug(
-                f"{event.time},MISSED_DEADLINE,{event.task.name},"
+                f"{event.time.time},MISSED_DEADLINE,{event.task.name},"
                 f"{event.task.timestamp},{event.task.deadline},{event.task.id}"
             )
 
@@ -505,7 +514,7 @@ class Simulator(object):
     def __handle_task_preempt(self, event: Event, task_graph: TaskGraph):
         task = event.task
         self._csv_logger.debug(
-            f"{event.time},TASK_PREEMPT,{task.name},{task.timestamp},{task.id}"
+            f"{event.time.time},TASK_PREEMPT,{task.name},{task.timestamp},{task.id}"
         )
         worker_pool = self._worker_pools[task.worker_pool_id]
         worker_pool.remove_task(task)
@@ -517,7 +526,7 @@ class Simulator(object):
             # TODO: We might want to cache this placement and apply it when the
             # task is released.
             self._csv_logger.debug(
-                f"{event.time},TASK_NOT_READY,{task.name},{task.timestamp},"
+                f"{event.time.time},TASK_NOT_READY,{task.name},{task.timestamp},"
                 f"{task.id},{event.placement}"
             )
             return
@@ -539,7 +548,7 @@ class Simulator(object):
             )
 
             self._csv_logger.debug(
-                f"{event.time},TASK_PLACEMENT,{task.name},{task.timestamp},"
+                f"{event.time.time},TASK_PLACEMENT,{task.name},{task.timestamp},"
                 f"{task.id},{event.placement},{resource_allocation_str}"
             )
             self._logger.info(f"[{event.time}] Placed {task} on {worker_pool}")
@@ -580,8 +589,8 @@ class Simulator(object):
                 ]
             )
             self._csv_logger.debug(
-                f"{event.time},TASK_MIGRATED,{task.name},{task.timestamp},{task.id},"
-                f"{last_preemption.old_worker_pool},{event.placement},"
+                f"{event.time.time},TASK_MIGRATED,{task.name},{task.timestamp},"
+                f"{task.id},{last_preemption.old_worker_pool},{event.placement},"
                 f"{resource_allocation_str}"
             )
         else:
@@ -604,9 +613,7 @@ class Simulator(object):
             `True` if the event is a SIMULATOR_END and the simulator loop
             should be stopped, `False` otherwise.
         """
-        self._logger.info(
-            f"[{self._simulator_time}] Received {event} from the event queue."
-        )
+        self._logger.info(f"[{event.time}] Received {event} from the event queue.")
         assert (
             event.time >= self._simulator_time
         ), f"Simulator cannot move time from {self._simulator_time} to {event.time}"
@@ -616,17 +623,18 @@ class Simulator(object):
         if event.event_type == EventType.SIMULATOR_START:
             # Start of the simulator loop.
             self._csv_logger.debug(
-                f"{self._simulator_time},SIMULATOR_START,{len(task_graph)}"
+                f"{event.time.time},SIMULATOR_START,{len(task_graph)}"
             )
             self._logger.info(f"Starting the simulator loop at time {event.time}")
         elif event.event_type == EventType.SIMULATOR_END:
             # End of the simulator loop.
             self._csv_logger.debug(
-                f"{self._simulator_time},SIMULATOR_END,"
-                f"{self._finished_tasks},"
+                f"{event.time.time},SIMULATOR_END,{self._finished_tasks},"
                 f"{self._missed_deadlines}"
             )
-            self._logger.info(f"Ending the simulator loop at time {event.time}")
+            self._logger.info(
+                f"[{event.time}] Ending the simulator loop at time {event.time}"
+            )
             return True
         elif event.event_type == EventType.TASK_RELEASE:
             self.__handle_task_release(event)
@@ -648,17 +656,17 @@ class Simulator(object):
             raise ValueError(f"[{event.time}] Retrieved event of unknown type: {event}")
         return False
 
-    def __step(self, step_size: int = 1):
+    def __step(self, step_size: EventTime = EventTime(1, EventTime.Unit.US)):
         """Advances the clock by the given `step_size`.
 
         Args:
-            step_size (`int`) [default=1]: The amount by which to advance
+            step_size (`EventTime`) [default=1]: The amount by which to advance
                 the clock (in us).
         """
         self._logger.info(
             f"[{self._simulator_time}] Stepping for {step_size} timesteps."
         )
-        if step_size < 0:
+        if step_size < EventTime(0, EventTime.Unit.US):
             raise ValueError(f"Simulator cannot step backwards {step_size}")
         completed_tasks = []
         for worker_pool in self._worker_pools.values():
@@ -680,9 +688,9 @@ class Simulator(object):
         self,
         event: Event,
         task_graph: TaskGraph,
-        scheduler_frequency: int,
-        last_scheduler_start_time: int,
-        loop_timeout: int = sys.maxsize,
+        scheduler_frequency: EventTime,
+        last_scheduler_start_time: EventTime,
+        loop_timeout: EventTime = EventTime(sys.maxsize, EventTime.Unit.US),
     ) -> Event:
         """Computes the next event when the scheduler should run.
 
@@ -693,10 +701,12 @@ class Simulator(object):
         Args:
             event (`Event`): The event at which the last scheduler invocation
                 finished.
-            scheduler_frequency (`int`): The frequency at which the simulator
+            scheduler_frequency (`EventTime`): The frequency at which the simulator
                 needs to be invoked (in us).
-            last_scheduler_start_time (`int`): The time at which the last
+            last_scheduler_start_time (`EventTime`): The time at which the last
                 invocation of scheduler occurred.
+            loop_timeout (`EventTime`): The time at which the simulator loop is
+                required to end.
 
         Returns:
             An event signifying when the next scheduler invocation should be.
@@ -709,9 +719,9 @@ class Simulator(object):
             raise ValueError(f"Incorrect event type {event.event_type} passed.")
 
         scheduler_start_time = None
-        if scheduler_frequency < 0:
+        if scheduler_frequency < EventTime(0, EventTime.Unit.US):
             # Insert a new scheduler event for the next step.
-            scheduler_start_time = event.time + 1
+            scheduler_start_time = event.time + EventTime(1, EventTime.Unit.US)
         else:
             # Calculate when the next scheduler event was going to
             # occur according to its periodicity.
@@ -725,7 +735,7 @@ class Simulator(object):
                     f"Supposed to start at {next_scheduler_time}, "
                     f"currently {event.time}"
                 )
-                scheduler_start_time = event.time + 1
+                scheduler_start_time = event.time + EventTime(1, EventTime.Unit.US)
             else:
                 scheduler_start_time = next_scheduler_time
         self._logger.debug(
@@ -764,7 +774,10 @@ class Simulator(object):
                 f"no running tasks, and no events available in "
                 f"the event queue. Ending the loop."
             )
-            return Event(event_type=EventType.SIMULATOR_END, time=event.time + 1)
+            return Event(
+                event_type=EventType.SIMULATOR_END,
+                time=event.time + EventTime(1, EventTime.Unit.US),
+            )
         elif len(schedulable_tasks) == 0 or all(
             task.state == TaskState.RUNNING for task in schedulable_tasks
         ):
@@ -774,12 +787,17 @@ class Simulator(object):
             # the next event, or the minimum completion time of a running task.
             minimum_running_task_completion_time = (
                 self._simulator_time
-                + min(map(attrgetter("remaining_time"), running_tasks), default=0)
+                + min(
+                    map(attrgetter("remaining_time"), running_tasks),
+                    default=EventTime(0, EventTime.Unit.US),
+                )
                 + self._scheduler_delay
             )
 
             next_event_invocation_time = (
-                next_event.time + self._scheduler_delay if next_event is not None else 0
+                next_event.time + self._scheduler_delay
+                if next_event is not None
+                else EventTime(0, EventTime.Unit.US)
             )
 
             adjusted_scheduler_start_time = max(
@@ -822,21 +840,25 @@ class Simulator(object):
         """
         if not (event.event_type == EventType.SCHEDULER_START):
             raise ValueError("Incorrect event type passed.")
-        scheduler_runtime_us, task_placement = self._scheduler.schedule(
+        scheduler_runtime, task_placement = self._scheduler.schedule(
             event.time, task_graph, WorkerPools(self._worker_pools.values())
         )
-        placement_time = event.time + scheduler_runtime_us
+        placement_time = event.time + scheduler_runtime
         self._last_task_placement = task_placement
 
         return Event(event_type=EventType.SCHEDULER_FINISHED, time=placement_time)
 
-    def __log_utilization(self, sim_time: int):
+    def __log_utilization(self, sim_time: EventTime):
         """Logs the utilization of the resources of a particular WorkerPool.
 
         Args:
-            sim_time (`int`): The simulation time at which the utilization
+            sim_time (`EventTime`): The simulation time at which the utilization
                 is logged (in us).
         """
+        assert (
+            sim_time.unit == EventTime.Unit.US
+        ), "The simulator time was not in microseconds."
+
         # Cumulate the resources from all the WorkerPools
         for worker_pool in self._worker_pools.values():
             worker_pool_resources = worker_pool.resources
@@ -845,7 +867,7 @@ class Simulator(object):
             ):
                 resource = Resource(name=resource_name, _id="any")
                 self._csv_logger.debug(
-                    f"{sim_time},WORKER_POOL_UTILIZATION,{worker_pool.id},"
+                    f"{sim_time.time},WORKER_POOL_UTILIZATION,{worker_pool.id},"
                     f"{resource_name},"
                     f"{worker_pool_resources.get_allocated_quantity(resource)},"
                     f"{worker_pool_resources.get_available_quantity(resource)}"

@@ -3,7 +3,6 @@ import sys
 
 from absl import app, flags
 
-import utils
 from data import (
     TaskLoaderBenchmark,
     TaskLoaderJSON,
@@ -13,6 +12,7 @@ from data import (
 )
 from schedulers import EDFScheduler, GurobiScheduler2, LSFScheduler, Z3Scheduler
 from simulator import Simulator
+from utils import EventTime, setup_logging
 
 FLAGS = flags.FLAGS
 
@@ -158,7 +158,7 @@ def main(args):
     runs the Simulator on the data with the given scheduler.
     """
     random.seed(42)
-    logger = utils.setup_logging(
+    logger = setup_logging(
         name=__name__, log_file=FLAGS.log_file_name, log_level=FLAGS.log_level
     )
     logger.info("Starting the execution of the simulator loop.")
@@ -190,7 +190,9 @@ def main(args):
 
     # Dilate the time if needed.
     if FLAGS.timestamp_difference != -1:
-        task_loader.get_task_graph().dilate(FLAGS.timestamp_difference)
+        task_loader.get_task_graph().dilate(
+            EventTime(FLAGS.timestamp_difference, EventTime.Unit.US)
+        )
 
     if FLAGS.stats:
         # Log the statistics, and do not execute the Simulator.
@@ -201,29 +203,33 @@ def main(args):
     scheduler = None
     if FLAGS.scheduler == "EDF":
         scheduler = EDFScheduler(
-            preemptive=FLAGS.preemption, runtime=FLAGS.scheduler_runtime, _flags=FLAGS
+            preemptive=FLAGS.preemption,
+            runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
+            _flags=FLAGS,
         )
     elif FLAGS.scheduler == "LSF":
         scheduler = LSFScheduler(
-            preemptive=FLAGS.preemption, runtime=FLAGS.scheduler_runtime, _flags=FLAGS
+            preemptive=FLAGS.preemption,
+            runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
+            _flags=FLAGS,
         )
     elif FLAGS.scheduler == "Gurobi":
         scheduler = GurobiScheduler2(
             preemptive=FLAGS.preemption,
-            runtime=FLAGS.scheduler_runtime,
+            runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
             goal=FLAGS.ilp_goal,
             enforce_deadlines=FLAGS.enforce_deadlines,
-            lookahead=FLAGS.scheduler_lookahead,
+            lookahead=EventTime(FLAGS.scheduler_lookahead, EventTime.Unit.US),
             _flags=FLAGS,
-            _time_unit="ms",
+            _time_unit=EventTime.Unit.MS,
         )
     elif FLAGS.scheduler == "Z3":
         scheduler = Z3Scheduler(
             preemptive=FLAGS.preemption,
-            runtime=FLAGS.scheduler_runtime,
+            runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
             goal=FLAGS.ilp_goal,
             enforce_deadlines=FLAGS.enforce_deadlines,
-            lookahead=FLAGS.scheduler_lookahead,
+            lookahead=EventTime(FLAGS.scheduler_lookahead, EventTime.Unit.US),
             _flags=FLAGS,
         )
     else:

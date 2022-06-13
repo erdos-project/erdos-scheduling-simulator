@@ -2,6 +2,7 @@ import random
 import uuid
 from typing import Mapping, Optional, Sequence
 
+from utils import EventTime
 from workload.graph import Graph
 
 
@@ -21,7 +22,9 @@ class Job(object):
             in parallel.
     """
 
-    def __init__(self, name: str, runtime: int, pipelined: bool = False):
+    def __init__(self, name: str, runtime: EventTime, pipelined: bool = False):
+        if type(runtime) != EventTime:
+            raise ValueError(f"Invalid type received for runtime: {type(runtime)}")
         self._name = name
         self._id = uuid.UUID(int=random.getrandbits(128), version=4)
         self._runtime = runtime
@@ -74,13 +77,16 @@ class JobGraph(Graph[Job]):
     def __init__(
         self,
         jobs: Optional[Mapping[Job, Sequence[Job]]] = {},
-        completion_time: Optional[int] = None,
+        completion_time: Optional[EventTime] = None,
     ):
         super().__init__(jobs)
         self._completion_time = (
             completion_time
             if completion_time or len(self) == 0
-            else sum(job.runtime for job in self.get_longest_path())
+            else sum(
+                (job.runtime for job in self.get_longest_path()),
+                start=EventTime(0, EventTime.Unit.US),
+            )
         )
 
     def add_job(self, job: Job, children: Optional[Sequence[Job]] = []):
@@ -100,5 +106,8 @@ class JobGraph(Graph[Job]):
     @property
     def completion_time(self):
         if not self._completion_time and len(self) != 0:
-            self._completion_time = sum(job.runtime for job in self.get_longest_path())
+            self._completion_time = sum(
+                (job.runtime for job in self.get_longest_path()),
+                start=EventTime(0, EventTime.Unit.US),
+            )
         return self._completion_time
