@@ -17,7 +17,7 @@ class MockScheduler(BaseScheduler):
         self._runtime = runtime
         self._task_placement = placement
         self._preemptive = False
-        self._lookahead = 0
+        self._lookahead = EventTime(0, EventTime.Unit.US)
 
     def schedule(
         self, sim_time=None, released_tasks=None, task_graph=None, worker_pools=None
