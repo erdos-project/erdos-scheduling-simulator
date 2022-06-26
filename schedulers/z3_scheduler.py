@@ -6,6 +6,7 @@ import absl  # noqa: F401
 import z3
 
 from schedulers import BaseScheduler
+from utils import EventTime
 from workers import Worker, WorkerPool, WorkerPools
 from workload import Resource, Task, TaskGraph
 
@@ -81,7 +82,7 @@ class TaskOptimizerVariables:
     def _initialize_timing_constraints(self, optimizer, enforce_deadlines: bool = True):
         # Add a constraint to bound the start time be atleast the intended release
         # time of the task.
-        optimizer.add(self.start_time >= self.task.release_time)
+        optimizer.add(self.start_time >= self.task.release_time.time)
 
         # If requested, add a constraint to ensure that deadlines are met.
         if enforce_deadlines:
@@ -89,15 +90,16 @@ class TaskOptimizerVariables:
             optimizer.add(
                 z3.Implies(
                     self.is_placed,
-                    self.start_time + self.task.get_remaining_time()
-                    <= self.task.deadline,
+                    self.start_time + self.task.remaining_time.time
+                    <= self.task.deadline.time,
                 )
             )
         else:
             # Add a soft constraint to ensure the achievement of the deadline.
             # Also, tell Z3 to prefer placing tasks.
             optimizer.add_soft(
-                self.start_time + self.task.get_remaining_time() <= self.task.deadline,
+                self.start_time + self.task.remaining_time.time
+                <= self.task.deadline.time,
                 weight=DEADLINE_ACHIEVEMENT_WEIGHT,
             )
             optimizer.add_soft(
@@ -204,9 +206,9 @@ class Z3Scheduler(BaseScheduler):
     def __init__(
         self,
         preemptive: bool = False,
-        runtime: int = -1,
+        runtime: EventTime = EventTime(-1, EventTime.Unit.US),
         goal: str = "max_slack",
-        lookahead: int = 0,
+        lookahead: int = EventTime(0, EventTime.Unit.US),
         enforce_deadlines: bool = False,
         _flags: Optional["absl.flags"] = None,
     ):
@@ -216,8 +218,8 @@ class Z3Scheduler(BaseScheduler):
         self._goal = goal
 
     def schedule(
-        self, sim_time: int, task_graph: TaskGraph, worker_pools: WorkerPools
-    ) -> (int, Sequence[Tuple[Task, str, int]]):
+        self, sim_time: EventTime, task_graph: TaskGraph, worker_pools: WorkerPools
+    ) -> (EventTime, Sequence[Tuple[Task, str, EventTime]]):
         # Retrieve the schedulable tasks from the TaskGraph.
         tasks_to_be_scheduled = task_graph.get_schedulable_tasks(
             sim_time, self.lookahead, self.preemptive, worker_pools
@@ -268,16 +270,28 @@ class Z3Scheduler(BaseScheduler):
                     worker = workers[model[variables.placed_on_worker].as_long()]
                     worker_pool_id = worker_to_worker_pool[worker.id]
                     start_time = model[variables.start_time].as_long()
-                    placements.append((variables.task, worker_pool_id, start_time))
+                    placements.append(
+                        (
+                            variables.task,
+                            worker_pool_id,
+                            EventTime(start_time, EventTime.Unit.US),
+                        )
+                    )
                 else:
                     placements.append((variables.task, None, None))
         else:
             for task_name, variables in tasks_to_variables.items():
                 placements.append((variables.task, None, None))
         scheduler_end_time = time.time()
-        scheduler_runtime = int((scheduler_end_time - scheduler_start_time) * 1e6)
+        scheduler_runtime = EventTime(
+            int((scheduler_end_time - scheduler_start_time) * 1e6), EventTime.Unit.US
+        )
         self._logger.debug(f"The runtime of the scheduler was: {scheduler_runtime} us.")
-        runtime = scheduler_runtime if self.runtime == -1 else self.runtime
+        runtime = (
+            scheduler_runtime
+            if self.runtime == EventTime(-1, EventTime.Unit.US)
+            else self.runtime
+        )
         return runtime, placements
 
     def _add_variables(
@@ -319,7 +333,7 @@ class Z3Scheduler(BaseScheduler):
                     z3.And(
                         [
                             variables.start_time
-                            >= parent.start_time + parent.task.get_remaining_time()
+                            >= parent.start_time + parent.task.remaining_time.time
                             for parent in parent_variables
                         ]
                     ),
@@ -368,7 +382,7 @@ class Z3Scheduler(BaseScheduler):
                     optimizer.add(
                         first_ends_before_second_starts
                         == (
-                            (variable_task_1.start_time + task_1.get_remaining_time())
+                            (variable_task_1.start_time + task_1.remaining_time.time)
                             < variable_task_2.start_time
                         )
                     )
@@ -379,7 +393,7 @@ class Z3Scheduler(BaseScheduler):
                     optimizer.add(
                         second_ends_before_first_starts
                         == (
-                            (variable_task_2.start_time + task_2.get_remaining_time())
+                            (variable_task_2.start_time + task_2.remaining_time.time)
                             < variable_task_1.start_time
                         )
                     )
@@ -454,8 +468,8 @@ class Z3Scheduler(BaseScheduler):
                     [
                         z3.If(
                             variable.is_placed,
-                            variable.task.deadline
-                            - variable.task.get_remaining_time()
+                            variable.task.deadline.time
+                            - variable.task.remaining_time.time
                             - variable.start_time,
                             TASK_SKIP_PENALTY,
                         )

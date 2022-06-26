@@ -3,6 +3,7 @@ from copy import copy, deepcopy
 import pytest
 
 from tests.utils import create_default_task
+from utils import EventTime
 from workers import Worker, WorkerPool
 from workload import Resource, Resources
 
@@ -198,9 +199,9 @@ def test_worker_remove_task_success():
     ), "Incorrect number of GPU resources available."
 
     # Run the task.
-    task.release(1)
-    task.start(2)
-    task.preempt(3)
+    task.release(EventTime(1, EventTime.Unit.US))
+    task.start(EventTime(2, EventTime.Unit.US))
+    task.preempt(EventTime(3, EventTime.Unit.US))
 
     # Remove the task and ensure correct resources.
     worker.remove_task(task)
@@ -237,15 +238,15 @@ def test_worker_step_tasks():
     worker.place_task(task_two)
 
     # Release and start the tasks.
-    task_one.release(2)
-    task_one.start(3)
-    task_two.release(2)
-    task_two.start(3)
+    task_one.release(EventTime(2, EventTime.Unit.US))
+    task_one.start(EventTime(3, EventTime.Unit.US))
+    task_two.release(EventTime(2, EventTime.Unit.US))
+    task_two.start(EventTime(3, EventTime.Unit.US))
 
     # Step through the Worker's tasks.
-    worker.step(3)
-    worker.step(4)
-    worker.step(5)
+    worker.step(EventTime(3, EventTime.Unit.US))
+    worker.step(EventTime(4, EventTime.Unit.US))
+    worker.step(EventTime(5, EventTime.Unit.US))
 
     # Ensure that the tasks are finished.
     assert task_one.is_complete(), "Task should have been completed."
@@ -389,23 +390,23 @@ def test_worker_pool_step():
     assert len(worker_pool.get_placed_tasks()) == 2, "Incorrect number of placed tasks."
 
     # Release and start the two tasks.
-    task_one.release(2)
-    task_two.release(2)
-    task_one.start(3)
-    task_two.start(3)
+    task_one.release(EventTime(2, EventTime.Unit.US))
+    task_two.release(EventTime(2, EventTime.Unit.US))
+    task_one.start(EventTime(3, EventTime.Unit.US))
+    task_two.start(EventTime(3, EventTime.Unit.US))
 
     # Step through the WorkerPool and ensure that the correct completed tasks
     # are returned at the correct simulation time.
-    completed_tasks = worker_pool.step(3)
+    completed_tasks = worker_pool.step(EventTime(3, EventTime.Unit.US))
     assert len(completed_tasks) == 0, "Incorrect number of completed tasks."
-    completed_tasks = worker_pool.step(4)
+    completed_tasks = worker_pool.step(EventTime(4, EventTime.Unit.US))
     assert len(completed_tasks) == 0, "Incorrect number of completed tasks."
-    completed_tasks = worker_pool.step(5)
+    completed_tasks = worker_pool.step(EventTime(5, EventTime.Unit.US))
     assert len(completed_tasks) == 1, "Incorrect number of completed tasks."
     assert completed_tasks[0] == task_one, "Incorrect completed task."
-    completed_tasks = worker_pool.step(6)
+    completed_tasks = worker_pool.step(EventTime(6, EventTime.Unit.US))
     assert len(completed_tasks) == 0, "Incorrect number of completed tasks."
-    completed_tasks = worker_pool.step(7)
+    completed_tasks = worker_pool.step(EventTime(7, EventTime.Unit.US))
     assert len(completed_tasks) == 1, "Incorrect number of completed tasks."
     assert completed_tasks[0] == task_two, "Incorrect completed task."
 

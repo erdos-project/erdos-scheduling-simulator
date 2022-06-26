@@ -1,5 +1,6 @@
 from schedulers import Z3Scheduler
 from tests.utils import create_default_task
+from utils import EventTime
 from workers import Worker, WorkerPool, WorkerPools
 from workload import Job, Resource, Resources, TaskGraph
 
@@ -8,10 +9,12 @@ def test_z3_scheduling_success_basic():
     """Test that a single task can be successfully scheduled with enough resources."""
     # Create the tasks and the graph.
     camera_task_1 = create_default_task(
-        name="Camera_1", job=Job(name="Camera_1", runtime=1000), timestamp=0
+        name="Camera_1",
+        job=Job(name="Camera_1", runtime=EventTime(1000, EventTime.Unit.US)),
+        timestamp=0,
     )
     task_graph = TaskGraph(tasks={camera_task_1: []})
-    camera_task_1.release(0)
+    camera_task_1.release(EventTime(0, EventTime.Unit.US))
 
     # Create the workers.
     worker_1 = Worker(
@@ -23,14 +26,21 @@ def test_z3_scheduling_success_basic():
 
     # Create the scheduler.
     scheduler = Z3Scheduler(
-        preemptive=False, runtime=0, lookahead=0, enforce_deadlines=True
+        preemptive=False,
+        runtime=EventTime(0, EventTime.Unit.US),
+        lookahead=EventTime(0, EventTime.Unit.US),
+        enforce_deadlines=True,
     )
-    runtime, placements = scheduler.schedule(0, task_graph, worker_pools)
+    runtime, placements = scheduler.schedule(
+        EventTime(0, EventTime.Unit.US), task_graph, worker_pools
+    )
 
     assert len(placements) == 1, "Incorrect length of placements retrieved."
     assert placements[0][0] == camera_task_1, "Incorrect task retrieved for placement."
     assert placements[0][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[0][2] == 0, "Incorrect start time retrieved."
+    assert placements[0][2] == EventTime(
+        0, EventTime.Unit.US
+    ), "Incorrect start time retrieved."
 
 
 def test_z3_scheduling_deadline_enforcement():
@@ -38,13 +48,13 @@ def test_z3_scheduling_deadline_enforcement():
     # Create the tasks and the graph.
     camera_task_1 = create_default_task(
         name="Camera_1",
-        job=Job(name="Camera_1", runtime=1000),
+        job=Job(name="Camera_1", runtime=EventTime(1000, EventTime.Unit.US)),
         timestamp=0,
         runtime=5,
         deadline=2,
     )
     task_graph = TaskGraph(tasks={camera_task_1: []})
-    camera_task_1.release(0)
+    camera_task_1.release(EventTime(0, EventTime.Unit.US))
 
     # Create the workers.
     worker_1 = Worker(
@@ -56,9 +66,14 @@ def test_z3_scheduling_deadline_enforcement():
 
     # Create the enforce deadlines scheduler.
     scheduler = Z3Scheduler(
-        preemptive=False, runtime=0, lookahead=0, enforce_deadlines=True
+        preemptive=False,
+        runtime=EventTime(0, EventTime.Unit.US),
+        lookahead=EventTime(0, EventTime.Unit.US),
+        enforce_deadlines=True,
     )
-    runtime, placements = scheduler.schedule(0, task_graph, worker_pools)
+    runtime, placements = scheduler.schedule(
+        EventTime(0, EventTime.Unit.US), task_graph, worker_pools
+    )
 
     assert len(placements) == 1, "Incorrect length of placements retrieved."
     assert placements[0][0] == camera_task_1, "Incorrect task retrieved for placement."
@@ -67,14 +82,21 @@ def test_z3_scheduling_deadline_enforcement():
 
     # Create the softly enforce deadlines scheduler.
     scheduler = Z3Scheduler(
-        preemptive=False, runtime=0, lookahead=0, enforce_deadlines=False
+        preemptive=False,
+        runtime=EventTime(0, EventTime.Unit.US),
+        lookahead=EventTime(0, EventTime.Unit.US),
+        enforce_deadlines=False,
     )
-    runtime, placements = scheduler.schedule(0, task_graph, worker_pools)
+    runtime, placements = scheduler.schedule(
+        EventTime(0, EventTime.Unit.US), task_graph, worker_pools
+    )
 
     assert len(placements) == 1, "Incorrect length of placements retrieved."
     assert placements[0][0] == camera_task_1, "Incorrect task retrieved for placement."
     assert placements[0][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[0][2] == 0, "Incorrect start time retrieved."
+    assert placements[0][2] == EventTime(
+        0, EventTime.Unit.US
+    ), "Incorrect start time retrieved."
 
 
 def test_z3_scheduling_dependency():
@@ -94,8 +116,8 @@ def test_z3_scheduling_dependency():
         deadline=20,
     )
     task_graph = TaskGraph(tasks={camera_task_1: [perception_task_1]})
-    camera_task_1.release(0)
-    perception_task_1.release(0)
+    camera_task_1.release(EventTime(0, EventTime.Unit.US))
+    perception_task_1.release(EventTime(0, EventTime.Unit.US))
 
     # Create the workers.
     worker_1 = Worker(
@@ -107,19 +129,28 @@ def test_z3_scheduling_dependency():
 
     # Create the scheduler.
     scheduler = Z3Scheduler(
-        preemptive=False, runtime=0, lookahead=0, enforce_deadlines=True
+        preemptive=False,
+        runtime=EventTime(0, EventTime.Unit.US),
+        lookahead=EventTime(0, EventTime.Unit.US),
+        enforce_deadlines=True,
     )
-    runtime, placements = scheduler.schedule(0, task_graph, worker_pools)
+    runtime, placements = scheduler.schedule(
+        EventTime(0, EventTime.Unit.US), task_graph, worker_pools
+    )
 
     assert len(placements) == 2, "Incorrect length of placements retrieved."
     assert placements[0][0] == camera_task_1, "Incorrect task retrieved for placement."
     assert placements[0][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[0][2] == 0, "Incorrect start time retrieved."
+    assert placements[0][2] == EventTime(
+        0, EventTime.Unit.US
+    ), "Incorrect start time retrieved."
     assert (
         placements[1][0] == perception_task_1
     ), "Incorrect task retrieved for placement."
     assert placements[1][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[1][2] == 5, "Incorrect start time retrieved."
+    assert placements[1][2] == EventTime(
+        5, EventTime.Unit.US
+    ), "Incorrect start time retrieved."
 
 
 def test_z3_skip_tasks_under_enforce_deadlines():
@@ -140,8 +171,8 @@ def test_z3_skip_tasks_under_enforce_deadlines():
         deadline=10,
     )
     task_graph = TaskGraph(tasks={camera_task_1: [perception_task_1]})
-    camera_task_1.release(0)
-    perception_task_1.release(0)
+    camera_task_1.release(EventTime(0, EventTime.Unit.US))
+    perception_task_1.release(EventTime(0, EventTime.Unit.US))
 
     # Create the workers.
     worker_1 = Worker(
@@ -154,15 +185,19 @@ def test_z3_skip_tasks_under_enforce_deadlines():
     # Create the scheduler.
     scheduler = Z3Scheduler(
         preemptive=False,
-        runtime=-1,
-        lookahead=0,
+        runtime=EventTime(-1, EventTime.Unit.US),
+        lookahead=EventTime(0, EventTime.Unit.US),
         enforce_deadlines=True,
     )
-    runtime, placements = scheduler.schedule(0, task_graph, worker_pools)
+    runtime, placements = scheduler.schedule(
+        EventTime(0, EventTime.Unit.US), task_graph, worker_pools
+    )
     assert len(placements) == 2, "Incorrect length of placements retrieved."
     assert placements[0][0] == camera_task_1, "Incorrect task retrieved for placement."
     assert placements[0][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[0][2] == 0, "Incorrect start time retrieved."
+    assert placements[0][2] == EventTime(
+        0, EventTime.Unit.US
+    ), "Incorrect start time retrieved."
 
 
 def test_z3_delays_scheduling_under_constrained_resources():
@@ -176,8 +211,8 @@ def test_z3_delays_scheduling_under_constrained_resources():
         name="Camera_2", timestamp=0, runtime=5, deadline=20
     )
     task_graph = TaskGraph(tasks={camera_task_1: [], camera_task_2: []})
-    camera_task_1.release(0)
-    camera_task_2.release(0)
+    camera_task_1.release(EventTime(0, EventTime.Unit.US))
+    camera_task_2.release(EventTime(0, EventTime.Unit.US))
 
     # Create the workers.
     worker_1 = Worker(name="Worker_1", resources=Resources({Resource(name="CPU"): 1}))
@@ -187,18 +222,24 @@ def test_z3_delays_scheduling_under_constrained_resources():
     # Create the scheduler.
     scheduler = Z3Scheduler(
         preemptive=False,
-        runtime=-1,
-        lookahead=0,
+        runtime=EventTime(-1, EventTime.Unit.US),
+        lookahead=EventTime(0, EventTime.Unit.US),
         enforce_deadlines=True,
     )
-    runtime, placements = scheduler.schedule(0, task_graph, worker_pools)
+    runtime, placements = scheduler.schedule(
+        EventTime(0, EventTime.Unit.US), task_graph, worker_pools
+    )
     assert len(placements) == 2, "Incorrect length of placements retrieved."
     assert placements[0][0] == camera_task_1, "Incorrect task retrieved for placement."
     assert placements[0][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[0][2] == 0, "Incorrect start time retrieved."
+    assert placements[0][2] == EventTime(
+        0, EventTime.Unit.US
+    ), "Incorrect start time retrieved."
     assert placements[1][0] == camera_task_2, "Incorrect task retrieved for placement."
     assert placements[1][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[1][2] == 6, "Incorrect start time retrieved."
+    assert placements[1][2] == EventTime(
+        6, EventTime.Unit.US
+    ), "Incorrect start time retrieved."
 
 
 def test_z3_respects_dependencies_under_delayed_scheduling():
@@ -225,9 +266,9 @@ def test_z3_respects_dependencies_under_delayed_scheduling():
     task_graph = TaskGraph(
         tasks={camera_task_1: [], camera_task_2: [perception_task_2]}
     )
-    camera_task_1.release(0)
-    camera_task_2.release(0)
-    perception_task_2.release(0)
+    camera_task_1.release(EventTime(0, EventTime.Unit.US))
+    camera_task_2.release(EventTime(0, EventTime.Unit.US))
+    perception_task_2.release(EventTime(0, EventTime.Unit.US))
 
     # Create the workers.
     worker_1 = Worker(
@@ -240,23 +281,31 @@ def test_z3_respects_dependencies_under_delayed_scheduling():
     # Create the scheduler.
     scheduler = Z3Scheduler(
         preemptive=False,
-        runtime=-1,
-        lookahead=0,
+        runtime=EventTime(-1, EventTime.Unit.US),
+        lookahead=EventTime(0, EventTime.Unit.US),
         enforce_deadlines=True,
     )
-    runtime, placements = scheduler.schedule(0, task_graph, worker_pools)
+    runtime, placements = scheduler.schedule(
+        EventTime(0, EventTime.Unit.US), task_graph, worker_pools
+    )
     assert len(placements) == 3, "Incorrect length of placements retrieved."
     assert placements[0][0] == camera_task_1, "Incorrect task retrieved for placement."
     assert placements[0][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[0][2] == 0, "Incorrect start time retrieved."
+    assert placements[0][2] == EventTime(
+        0, EventTime.Unit.US
+    ), "Incorrect start time retrieved."
     assert placements[1][0] == camera_task_2, "Incorrect task retrieved for placement."
     assert placements[1][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[1][2] == 6, "Incorrect start time retrieved."
+    assert placements[1][2] == EventTime(
+        6, EventTime.Unit.US
+    ), "Incorrect start time retrieved."
     assert (
         placements[2][0] == perception_task_2
     ), "Incorrect task retrieved for placement."
     assert placements[2][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[2][2] == 11, "Incorrect start time retrieved."
+    assert placements[2][2] == EventTime(
+        11, EventTime.Unit.US
+    ), "Incorrect start time retrieved."
 
 
 def test_z3_respects_dependencies_under_constrained_resources():
@@ -291,9 +340,9 @@ def test_z3_respects_dependencies_under_constrained_resources():
     task_graph = TaskGraph(
         tasks={camera_task_1: [], camera_task_2: [perception_task_2]}
     )
-    camera_task_1.release(0)
-    camera_task_2.release(0)
-    perception_task_2.release(0)
+    camera_task_1.release(EventTime(0, EventTime.Unit.US))
+    camera_task_2.release(EventTime(0, EventTime.Unit.US))
+    perception_task_2.release(EventTime(0, EventTime.Unit.US))
 
     # Create the workers.
     worker_1 = Worker(
@@ -306,15 +355,19 @@ def test_z3_respects_dependencies_under_constrained_resources():
     # Create the scheduler.
     scheduler = Z3Scheduler(
         preemptive=False,
-        runtime=-1,
-        lookahead=0,
+        runtime=EventTime(-1, EventTime.Unit.US),
+        lookahead=EventTime(0, EventTime.Unit.US),
         enforce_deadlines=True,
     )
-    runtime, placements = scheduler.schedule(0, task_graph, worker_pools)
+    runtime, placements = scheduler.schedule(
+        EventTime(0, EventTime.Unit.US), task_graph, worker_pools
+    )
     assert len(placements) == 3, "Incorrect length of placements retrieved."
     assert placements[0][0] == camera_task_1, "Incorrect task retrieved for placement."
     assert placements[0][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[0][2] == 0, "Incorrect start time retrieved."
+    assert placements[0][2] == EventTime(
+        0, EventTime.Unit.US
+    ), "Incorrect start time retrieved."
     assert placements[1][0] == camera_task_2, "Incorrect task retrieved for placement."
     assert placements[1][1] is None, "Incorrect WorkerPoolID retrieved."
     assert (
@@ -343,8 +396,8 @@ def test_z3_respects_worker_resource_constraints():
     )
 
     task_graph = TaskGraph(tasks={camera_task_1: [], camera_task_2: []})
-    camera_task_1.release(0)
-    camera_task_2.release(0)
+    camera_task_1.release(EventTime(0, EventTime.Unit.US))
+    camera_task_2.release(EventTime(0, EventTime.Unit.US))
 
     # Create the workers.
     worker_1 = Worker(
@@ -357,11 +410,13 @@ def test_z3_respects_worker_resource_constraints():
     # Create the scheduler.
     scheduler = Z3Scheduler(
         preemptive=False,
-        runtime=-1,
-        lookahead=0,
+        runtime=EventTime(-1, EventTime.Unit.US),
+        lookahead=EventTime(0, EventTime.Unit.US),
         enforce_deadlines=True,
     )
-    runtime, placements = scheduler.schedule(0, task_graph, worker_pools)
+    runtime, placements = scheduler.schedule(
+        EventTime(0, EventTime.Unit.US), task_graph, worker_pools
+    )
     assert len(placements) == 2, "Incorrect length of placements retrieved."
     assert (
         placements[0][1] is None or placements[1][1] is None
@@ -388,8 +443,8 @@ def test_z3_does_not_schedule_across_workers():
     )
 
     task_graph = TaskGraph(tasks={camera_task_1: [], camera_task_2: []})
-    camera_task_1.release(0)
-    camera_task_2.release(0)
+    camera_task_1.release(EventTime(0, EventTime.Unit.US))
+    camera_task_2.release(EventTime(0, EventTime.Unit.US))
 
     # Create the workers.
     worker_1 = Worker(
@@ -406,15 +461,19 @@ def test_z3_does_not_schedule_across_workers():
     # Create the scheduler.
     scheduler = Z3Scheduler(
         preemptive=False,
-        runtime=-1,
-        lookahead=0,
+        runtime=EventTime(-1, EventTime.Unit.US),
+        lookahead=EventTime(0, EventTime.Unit.US),
         enforce_deadlines=True,
     )
-    runtime, placements = scheduler.schedule(0, task_graph, worker_pools)
+    runtime, placements = scheduler.schedule(
+        EventTime(0, EventTime.Unit.US), task_graph, worker_pools
+    )
     assert len(placements) == 2, "Incorrect length of placements retrieved."
     assert placements[0][0] == camera_task_1, "Incorrect task retrieved for placement."
     assert placements[0][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[0][2] == 0, "Incorrect start time retrieved."
+    assert placements[0][2] == EventTime(
+        0, EventTime.Unit.US
+    ), "Incorrect start time retrieved."
     assert placements[1][0] == camera_task_2, "Incorrect task retrieved for placement."
     assert placements[1][1] is None, "Incorrect WorkerPoolID retrieved."
 
@@ -448,8 +507,8 @@ def test_z3_not_work_conserving():
     task_graph = TaskGraph(
         tasks={camera_task_1: [perception_task_1], camera_task_2: []}
     )
-    camera_task_1.release(0)
-    camera_task_2.release(0)
+    camera_task_1.release(EventTime(0, EventTime.Unit.US))
+    camera_task_2.release(EventTime(0, EventTime.Unit.US))
 
     # Create the workers.
     worker_1 = Worker(
@@ -462,23 +521,31 @@ def test_z3_not_work_conserving():
     # Create the scheduler.
     scheduler = Z3Scheduler(
         preemptive=False,
-        runtime=-1,
-        lookahead=50,
+        runtime=EventTime(-1, EventTime.Unit.US),
+        lookahead=EventTime(50, EventTime.Unit.US),
         enforce_deadlines=True,
     )
-    runtime, placements = scheduler.schedule(0, task_graph, worker_pools)
+    runtime, placements = scheduler.schedule(
+        EventTime(0, EventTime.Unit.US), task_graph, worker_pools
+    )
     assert len(placements) == 3, "Incorrect length of placements retrieved."
     assert placements[0][0] == camera_task_1, "Incorrect task retrieved for placement."
     assert placements[0][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[0][2] == 0, "Incorrect start time retrieved."
+    assert placements[0][2] == EventTime(
+        0, EventTime.Unit.US
+    ), "Incorrect start time retrieved."
     assert placements[1][0] == camera_task_2, "Incorrect task retrieved for placement."
     assert placements[1][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[1][2] == 20, "Incorrect start time retrieved."
+    assert placements[1][2] == EventTime(
+        20, EventTime.Unit.US
+    ), "Incorrect start time retrieved."
     assert (
         placements[2][0] == perception_task_1
     ), "Incorrect task retrieved for placement."
     assert placements[2][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[2][2] == 11, "Incorrect start time retrieved."
+    assert placements[2][2] == EventTime(
+        11, EventTime.Unit.US
+    ), "Incorrect start time retrieved."
 
 
 def test_z3_minimize_deadline_misses():
@@ -509,9 +576,9 @@ def test_z3_minimize_deadline_misses():
     task_graph = TaskGraph(
         tasks={camera_task_1: [perception_task_1], camera_task_2: []}
     )
-    camera_task_1.release(0)
-    camera_task_2.release(0)
-    perception_task_1.release(0)
+    camera_task_1.release(EventTime(0, EventTime.Unit.US))
+    camera_task_2.release(EventTime(0, EventTime.Unit.US))
+    perception_task_1.release(EventTime(0, EventTime.Unit.US))
 
     # Create the workers.
     worker_1 = Worker(
@@ -524,20 +591,28 @@ def test_z3_minimize_deadline_misses():
     # Create the scheduler.
     scheduler = Z3Scheduler(
         preemptive=False,
-        runtime=-1,
-        lookahead=50,
+        runtime=EventTime(-1, EventTime.Unit.US),
+        lookahead=EventTime(50, EventTime.Unit.US),
         enforce_deadlines=False,
     )
-    runtime, placements = scheduler.schedule(0, task_graph, worker_pools)
+    runtime, placements = scheduler.schedule(
+        EventTime(0, EventTime.Unit.US), task_graph, worker_pools
+    )
     assert len(placements) == 3, "Incorrect length of placements retrieved."
     assert placements[0][0] == camera_task_1, "Incorrect task retrieved for placement."
     assert placements[0][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[0][2] == 0, "Incorrect start time retrieved."
+    assert placements[0][2] == EventTime(
+        0, EventTime.Unit.US
+    ), "Incorrect start time retrieved."
     assert (
         placements[1][0] == perception_task_1
     ), "Incorrect task retrieved for placement."
     assert placements[1][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[1][2] == 10, "Incorrect start time retrieved."
+    assert placements[1][2] == EventTime(
+        10, EventTime.Unit.US
+    ), "Incorrect start time retrieved."
     assert placements[2][0] == camera_task_2, "Incorrect task retrieved for placement."
     assert placements[2][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[2][2] == 12, "Incorrect start time retrieved."
+    assert placements[2][2] == EventTime(
+        12, EventTime.Unit.US
+    ), "Incorrect start time retrieved."

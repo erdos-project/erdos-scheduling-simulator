@@ -6,8 +6,8 @@ from typing import Optional, Sequence, Tuple
 
 import absl  # noqa: F401
 
-import utils
 from schedulers import BaseScheduler
+from utils import EventTime
 from workers import WorkerPools
 from workload import Task, TaskGraph
 
@@ -18,14 +18,14 @@ class EDFScheduler(BaseScheduler):
     Args:
         preemptive (`bool`): If `True`, the EDF scheduler can preempt the tasks
             that are currently running.
-        runtime (`int`): The runtime to return to the simulator (in us). If -1,
+        runtime (`EventTime`): The runtime to return to the simulator (in us). If -1,
             the scheduler returns the actual runtime.
     """
 
     def __init__(
         self,
         preemptive: bool = False,
-        runtime: int = -1,
+        runtime: EventTime = EventTime(time=-1, unit=EventTime.Unit.US),
         _flags: Optional["absl.flags"] = None,
     ):
         super(EDFScheduler, self).__init__(
@@ -33,15 +33,18 @@ class EDFScheduler(BaseScheduler):
         )
 
     def schedule(
-        self, sim_time: int, task_graph: TaskGraph, worker_pools: WorkerPools
-    ) -> (int, Sequence[Tuple[Task, str, int]]):
+        self, sim_time: EventTime, task_graph: TaskGraph, worker_pools: WorkerPools
+    ) -> (EventTime, Sequence[Tuple[Task, str, EventTime]]):
         """Implements the BaseScheduler's schedule() method using the EDF
         algorithm for scheduling the released tasks across the worker_pools.
         """
         # Create the tasks to be scheduled, along with the state of the
         # WorkerPool to schedule them on based on preemptive or non-preemptive
         tasks_to_be_scheduled = task_graph.get_schedulable_tasks(
-            sim_time, 0, self.preemptive, worker_pools
+            sim_time,
+            EventTime(time=0, unit=EventTime.Unit.US),
+            self.preemptive,
+            worker_pools,
         )
         if self.preemptive:
             # Restart the state of the WorkerPool.
@@ -99,7 +102,10 @@ class EDFScheduler(BaseScheduler):
                 placements.append((task, None, None))
 
         end_time = time.time()
-        if self.runtime == -1:
-            return int((end_time - start_time) * 1000000), placements
+        if self.runtime == EventTime(time=-1, unit=EventTime.Unit.US):
+            return (
+                EventTime(int((end_time - start_time) * 1e6), EventTime.Unit.US),
+                placements,
+            )
         else:
             return self.runtime, placements

@@ -10,8 +10,8 @@ import absl  # noqa: F401
 import numpy as np
 import pydot
 
-import utils
 from data import TaskLoader
+from utils import EventTime, fuzz_time, log_statistics, setup_logging
 from workload import Job, JobGraph, Resource, Resources, Task, TaskGraph
 
 
@@ -35,13 +35,13 @@ class TaskLoaderJSON(TaskLoader):
     ):
         # Set up the logger.
         if _flags:
-            self._logger = utils.setup_logging(
+            self._logger = setup_logging(
                 name=self.__class__.__name__,
                 log_file=_flags.log_file_name,
                 log_level=_flags.log_level,
             )
         else:
-            self._logger = utils.setup_logging(name=self.__class__.__name__)
+            self._logger = setup_logging(name=self.__class__.__name__)
 
         # Read the data from the profile path.
         with open(profile_path, "r") as f:
@@ -93,7 +93,7 @@ class TaskLoaderJSON(TaskLoader):
         )
 
         # Create the Resource requirements from the resource_path.
-        resource_logger = utils.setup_logging(
+        resource_logger = setup_logging(
             name="Resources", log_file=_flags.log_file_name, log_level=_flags.log_level
         )
         with open(resource_path, "r") as f:
@@ -104,7 +104,7 @@ class TaskLoaderJSON(TaskLoader):
             )
 
         # Create the Tasks and the TaskGraph from the Jobs.
-        task_logger = utils.setup_logging(
+        task_logger = setup_logging(
             name="Task", log_file=_flags.log_file_name, log_level=_flags.log_level
         )
         max_timestamp = (
@@ -148,7 +148,9 @@ class TaskLoaderJSON(TaskLoader):
         jobs = {}
         for job_name, durations in job_to_duration_mapping.items():
             jobs[job_name] = Job(
-                name=job_name, runtime=np.mean(durations), pipelined=False
+                name=job_name,
+                runtime=EventTime(int(np.mean(durations)), EventTime.Unit.US),
+                pipelined=False,
             )
 
         return jobs
@@ -242,27 +244,29 @@ class TaskLoaderJSON(TaskLoader):
             `json_entries`.
         """
         tasks = []
-        first_task = defaultdict(int)
+        first_task = defaultdict(lambda: EventTime(0, EventTime.Unit.US))
         for entry in json_entries:
             timestamp = entry["args"]["timestamp"]
             if timestamp > max_timestamp:
                 continue
             if timestamp == 0 and synchronize_sensors:
-                first_task[entry["name"]] = entry["ts"]
+                first_task[entry["name"]] = EventTime(entry["ts"], EventTime.Unit.US)
             offset = first_task[entry["name"]]
 
             # All times are in microseconds.
-            runtime_deadline = utils.fuzz_time(entry["dur"], deadline_variance)
-            deadline = entry["ts"] + runtime_deadline
+            runtime_deadline = fuzz_time(
+                EventTime(entry["dur"], EventTime.Unit.US), deadline_variance
+            )
+            deadline = EventTime(entry["ts"], EventTime.Unit.US) + runtime_deadline
             tasks.append(
                 Task(
                     name=entry["name"],
                     job=jobs[entry["pid"]],
                     resource_requirements=random.choice(resources[entry["name"]]),
-                    runtime=entry["dur"],
-                    deadline=deadline - offset,
+                    runtime=EventTime(entry["dur"], EventTime.Unit.US),
+                    deadline=(deadline - offset),
                     timestamp=entry["args"]["timestamp"],
-                    release_time=entry["ts"] - offset,
+                    release_time=EventTime(entry["ts"], EventTime.Unit.US) - offset,
                     _logger=logger,
                 )
             )
@@ -318,4 +322,4 @@ class TaskLoaderJSON(TaskLoader):
 
                 # Log stats about the runtime of the tasks.
                 runtimes = list(map(attrgetter("runtime"), _tasks))
-                utils.log_statistics(runtimes, self._logger)
+                log_statistics(runtimes, self._logger)

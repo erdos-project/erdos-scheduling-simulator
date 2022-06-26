@@ -5,7 +5,7 @@ from copy import copy, deepcopy
 from operator import attrgetter
 from typing import List, Optional, Sequence, Tuple, Type
 
-import utils
+from utils import EventTime, setup_logging
 from workload import Resource, Resources, Task, TaskGraph, TaskState
 
 
@@ -30,7 +30,7 @@ class Worker(object):
         if _logger:
             self._logger = _logger
         else:
-            self._logger = utils.setup_logging(name=self.__class__.__name__)
+            self._logger = setup_logging(name=self.__class__.__name__)
 
         self._name = name
         self._id = uuid.UUID(int=random.getrandbits(128), version=4)
@@ -99,7 +99,11 @@ class Worker(object):
         """
         return self._resources.get_allocated_resources(task)
 
-    def step(self, current_time: int, step_size: int = 1) -> Sequence[Task]:
+    def step(
+        self,
+        current_time: EventTime,
+        step_size: EventTime = EventTime(1, EventTime.Unit.US),
+    ) -> Sequence[Task]:
         """Steps all the tasks of this `Worker` by the given `step_size`.
 
         Args:
@@ -227,7 +231,7 @@ class WorkerPool(object):
         if _logger:
             self._logger = _logger
         else:
-            self._logger = utils.setup_logging(name=self.__class__.__name__)
+            self._logger = setup_logging(name=self.__class__.__name__)
 
         self._name = name
         self._workers = {worker.id: worker for worker in workers}
@@ -313,7 +317,11 @@ class WorkerPool(object):
         """
         return list(self._placed_tasks.keys())
 
-    def step(self, current_time: int, step_size: int = 1) -> Sequence[Task]:
+    def step(
+        self,
+        current_time: EventTime,
+        step_size: EventTime = EventTime(1, EventTime.Unit.US),
+    ) -> Sequence[Task]:
         """Steps all the tasks of this `WorkerPool` by the given `step_size`.
 
         Args:

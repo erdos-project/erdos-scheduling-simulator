@@ -2,6 +2,7 @@ from logging import raiseExceptions
 
 from schedulers import EDFScheduler, GurobiScheduler, LSFScheduler, Z3Scheduler
 from tests.utils import create_default_task
+from utils import EventTime
 from workers import Worker, WorkerPool, WorkerPools
 from workload import Resource, Resources, TaskGraph
 
@@ -22,7 +23,7 @@ def test_gurobi_scheduler_success():
         ),
         deadline=200,
     )
-    task_cpu.release(1)
+    task_cpu.release(EventTime(1, EventTime.Unit.US))
     task_cpu_gpu = create_default_task(
         name="gpu_task",
         resource_requirements=Resources(
@@ -33,7 +34,7 @@ def test_gurobi_scheduler_success():
         ),
         deadline=50,
     )
-    task_cpu_gpu.release(1)
+    task_cpu_gpu.release(EventTime(1, EventTime.Unit.US))
     task_graph = TaskGraph(tasks={task_cpu: [], task_cpu_gpu: []})
 
     # Create the WorkerPool.
@@ -51,7 +52,7 @@ def test_gurobi_scheduler_success():
 
     # Schedule the tasks.
     _, placements = scheduler.schedule(
-        1,
+        EventTime(1, EventTime.Unit.US),
         task_graph=task_graph,
         worker_pools=WorkerPools([worker_pool_one, worker_pool_two]),
     )
@@ -87,11 +88,11 @@ def test_gurobi_scheduler_limited_resources():
 
     # Create the tasks and the TaskGraph.
     task_lower_priority = create_default_task(name="task_low_priority", deadline=200)
-    task_lower_priority.release(50)
-    task_lower_priority.update_remaining_time(100)
+    task_lower_priority.release(EventTime(50, EventTime.Unit.US))
+    task_lower_priority.update_remaining_time(EventTime(100, EventTime.Unit.US))
     task_higher_priority = create_default_task(name="task_high_priority", deadline=220)
-    task_higher_priority.release(50)
-    task_higher_priority.update_remaining_time(150)
+    task_higher_priority.release(EventTime(50, EventTime.Unit.US))
+    task_higher_priority.update_remaining_time(EventTime(150, EventTime.Unit.US))
     task_graph = TaskGraph(tasks={task_lower_priority: [], task_higher_priority: []})
 
     # Create the WorkerPool.
@@ -103,7 +104,9 @@ def test_gurobi_scheduler_limited_resources():
 
     # Schedule the tasks.
     _, placements = scheduler.schedule(
-        50, task_graph=task_graph, worker_pools=WorkerPools([worker_pool])
+        EventTime(50, EventTime.Unit.US),
+        task_graph=task_graph,
+        worker_pools=WorkerPools([worker_pool]),
     )
 
     assert len(placements) == 2, "Didn't try to schedule both tasks."
@@ -131,7 +134,7 @@ def test_edf_scheduler_success():
         ),
         deadline=200,
     )
-    task_cpu.release(1)
+    task_cpu.release(EventTime(1, EventTime.Unit.US))
     task_gpu = create_default_task(
         name="gpu_task",
         resource_requirements=Resources(
@@ -139,7 +142,7 @@ def test_edf_scheduler_success():
         ),
         deadline=50,
     )
-    task_gpu.release(1)
+    task_gpu.release(EventTime(1, EventTime.Unit.US))
     task_graph = TaskGraph(tasks={task_cpu: [], task_gpu: []})
 
     # Create the WorkerPool.
@@ -156,7 +159,7 @@ def test_edf_scheduler_success():
 
     # Schedule the tasks.
     _, placements = edf_scheduler.schedule(
-        1,
+        EventTime(1, EventTime.Unit.US),
         task_graph=task_graph,
         worker_pools=WorkerPools([worker_pool_one, worker_pool_two]),
     )
@@ -181,9 +184,9 @@ def test_edf_scheduler_limited_resources():
 
     # Create the tasks and the TaskGraph.
     task_lower_priority = create_default_task(name="task_low_priority", deadline=200)
-    task_lower_priority.release(1)
+    task_lower_priority.release(EventTime(1, EventTime.Unit.US))
     task_higher_priority = create_default_task(name="task_high_priority", deadline=50)
-    task_higher_priority.release(1)
+    task_higher_priority.release(EventTime(1, EventTime.Unit.US))
     task_graph = TaskGraph(tasks={task_lower_priority: [], task_higher_priority: []})
 
     # Create the WorkerPool.
@@ -195,7 +198,7 @@ def test_edf_scheduler_limited_resources():
 
     # Schedule the tasks.
     _, placements = edf_scheduler.schedule(
-        1,
+        EventTime(1, EventTime.Unit.US),
         task_graph=task_graph,
         worker_pools=WorkerPools([worker_pool]),
     )
@@ -224,7 +227,7 @@ def test_edf_scheduler_non_preemptive_higher_priority():
 
     # Create the tasks and the TaskGraph.
     task_lower_priority = create_default_task(name="task_low_priority", deadline=200)
-    task_lower_priority.release(1)
+    task_lower_priority.release(EventTime(1, EventTime.Unit.US))
     task_higher_priority = create_default_task(name="task_high_priority", deadline=50)
     task_graph = TaskGraph(tasks={task_lower_priority: [], task_higher_priority: []})
 
@@ -237,7 +240,9 @@ def test_edf_scheduler_non_preemptive_higher_priority():
 
     # Schedule the lower priority task.
     _, placements = edf_scheduler.schedule(
-        1, task_graph=task_graph, worker_pools=WorkerPools([worker_pool])
+        EventTime(1, EventTime.Unit.US),
+        task_graph=task_graph,
+        worker_pools=WorkerPools([worker_pool]),
     )
     for (task, placement, _) in placements:
         if task == task_higher_priority:
@@ -248,10 +253,12 @@ def test_edf_scheduler_non_preemptive_higher_priority():
             ), "Incorrect placement of the low priority task."
     worker_pool.place_task(task_lower_priority)
 
-    task_higher_priority.release(2)
+    task_higher_priority.release(EventTime(2, EventTime.Unit.US))
     # Schedule the higher priority task.
     _, placements = edf_scheduler.schedule(
-        2, task_graph=task_graph, worker_pools=WorkerPools([worker_pool])
+        EventTime(2, EventTime.Unit.US),
+        task_graph=task_graph,
+        worker_pools=WorkerPools([worker_pool]),
     )
     for (task, placement, _) in placements:
         if task == task_higher_priority:
@@ -268,7 +275,7 @@ def test_edf_scheduler_preemptive_higher_priority():
 
     # Create the tasks and the TaskGraph.
     task_lower_priority = create_default_task(name="task_low_priority", deadline=200)
-    task_lower_priority.release(1)
+    task_lower_priority.release(EventTime(1, EventTime.Unit.US))
     task_higher_priority = create_default_task(name="task_high_priority", deadline=50)
     task_graph = TaskGraph(tasks={task_lower_priority: [], task_higher_priority: []})
 
@@ -281,7 +288,9 @@ def test_edf_scheduler_preemptive_higher_priority():
 
     # Schedule the lower priority task.
     _, placements = edf_scheduler.schedule(
-        1, task_graph=task_graph, worker_pools=WorkerPools([worker_pool])
+        EventTime(1, EventTime.Unit.US),
+        task_graph=task_graph,
+        worker_pools=WorkerPools([worker_pool]),
     )
     for (task, placement, _) in placements:
         if task == task_higher_priority:
@@ -291,10 +300,12 @@ def test_edf_scheduler_preemptive_higher_priority():
                 placement == worker_pool.id
             ), "Incorrect placement of the low priority task."
     worker_pool.place_task(task_lower_priority)
-    task_higher_priority.release(2)
+    task_higher_priority.release(EventTime(2, EventTime.Unit.US))
     # # Schedule the higher priority task.
     _, placements = edf_scheduler.schedule(
-        2, task_graph=task_graph, worker_pools=WorkerPools([worker_pool])
+        EventTime(2, EventTime.Unit.US),
+        task_graph=task_graph,
+        worker_pools=WorkerPools([worker_pool]),
     )
     for (task, placement, _) in placements:
         if task == task_lower_priority:
@@ -321,7 +332,7 @@ def test_lsf_scheduler_success():
         ),
         deadline=200,
     )
-    task_cpu.release(1)
+    task_cpu.release(EventTime(1, EventTime.Unit.US))
     task_gpu = create_default_task(
         name="gpu_task",
         resource_requirements=Resources(
@@ -329,7 +340,7 @@ def test_lsf_scheduler_success():
         ),
         deadline=50,
     )
-    task_gpu.release(1)
+    task_gpu.release(EventTime(1, EventTime.Unit.US))
     task_graph = TaskGraph(tasks={task_cpu: [], task_gpu: []})
 
     # Create the WorkerPool.
@@ -346,7 +357,7 @@ def test_lsf_scheduler_success():
 
     # Schedule the tasks.
     _, placements = lsf_scheduler.schedule(
-        1,
+        EventTime(1, EventTime.Unit.US),
         task_graph=task_graph,
         worker_pools=WorkerPools([worker_pool_one, worker_pool_two]),
     )
@@ -371,11 +382,11 @@ def test_lsf_scheduler_limited_resources():
 
     # Create the tasks and the TaskGraph.
     task_lower_priority = create_default_task(name="task_low_priority", deadline=200)
-    task_lower_priority.release(50)
-    task_lower_priority.update_remaining_time(100)
+    task_lower_priority.release(EventTime(50, EventTime.Unit.US))
+    task_lower_priority.update_remaining_time(EventTime(100, EventTime.Unit.US))
     task_higher_priority = create_default_task(name="task_high_priority", deadline=220)
-    task_higher_priority.release(50)
-    task_higher_priority.update_remaining_time(150)
+    task_higher_priority.release(EventTime(50, EventTime.Unit.US))
+    task_higher_priority.update_remaining_time(EventTime(150, EventTime.Unit.US))
     task_graph = TaskGraph(tasks={task_lower_priority: [], task_higher_priority: []})
 
     # Create the WorkerPool.
@@ -387,7 +398,9 @@ def test_lsf_scheduler_limited_resources():
 
     # Schedule the tasks.
     _, placements = lsf_scheduler.schedule(
-        50, task_graph=task_graph, worker_pools=WorkerPools([worker_pool])
+        EventTime(50, EventTime.Unit.US),
+        task_graph=task_graph,
+        worker_pools=WorkerPools([worker_pool]),
     )
     assert len(placements) == 2, "Incorrect length of task placements."
     assert (

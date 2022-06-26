@@ -10,8 +10,8 @@ from typing import Optional
 import absl  # noqa: F401
 import gurobipy as gp
 
-import utils
 from schedulers import BaseScheduler
+from utils import EventTime
 from workers import WorkerPools
 from workload import Resource, Resources, TaskGraph, TaskState
 
@@ -20,28 +20,29 @@ class GurobiBaseScheduler(BaseScheduler):
     def __init__(
         self,
         preemptive: bool = False,
-        runtime: int = -1,
+        runtime: EventTime = EventTime(-1, EventTime.Unit.US),
         goal: str = "max_slack",
         enforce_deadlines: bool = True,
-        lookahead: int = 0,
+        lookahead: EventTime = EventTime(0, EventTime.Unit.US),
         _flags: Optional["absl.flags"] = None,
-        _time_unit: str = "us",
+        _time_unit: EventTime.Unit = EventTime.Unit.US,
     ):
         """Constructs a Gurobi scheduler.
 
         Args:
             preemptive (`bool`): If `True`, the Gurobi scheduler can preempt
                 the tasks that are currently running.
-            runtime (`int`): The runtime to return to the simulator (in us).
+            runtime (`EventTime`): The runtime to return to the simulator (in us).
                 If -1, the scheduler returns the actual runtime.
             goal (`str`): Goal of the scheduler run.
             enforce_deadlines (`bool`): Deadlines must be met or else the
                 schedule will return None.
-            lookahead (`int`): The scheduler will try to place tasks that are within
-                the scheduling lookahead (in us) using estimated task release times.
-            time_unit (`str`): Controls what time units the scheduler uses. If it uses
-                ms then the scheduler is faster, but only places tasks at the
-                granularity.
+            lookahead (`EventTime`): The scheduler will try to place tasks that are
+                within the scheduling lookahead (in us) using estimated task
+                release times.
+            time_unit (`EventTime.Unit`): Controls what time units the scheduler uses.
+                If it uses ms then the scheduler is faster, but only places tasks at
+                the granularity.
         """
         super(GurobiBaseScheduler, self).__init__(
             preemptive, runtime, lookahead, enforce_deadlines, _flags
@@ -51,9 +52,9 @@ class GurobiBaseScheduler(BaseScheduler):
         self._time_unit = _time_unit
         # Minimum task gain constant, which is used to set the benefit of leaving a task
         # unscheduled. It is equivalent to missing a task deadline by 3 seconds.
-        if _time_unit == "us":
+        if _time_unit == EventTime.Unit.US:
             self._min_task_gain = -3 * 10**6
-        elif _time_unit == "ms":
+        elif _time_unit == EventTime.Unit.MS:
             self._min_task_gain = -3 * 10**3
         else:
             raise ValueError(f"Unit {self._time_unit} not supported")
@@ -155,8 +156,8 @@ class GurobiBaseScheduler(BaseScheduler):
         scheduler_end_time = time.time()
         runtime = int((scheduler_end_time - scheduler_start_time) * 10**6)
         self._logger.info(f"Scheduler wall-clock runtime: {runtime}")
-        if self.runtime != -1:
-            runtime = self.runtime
+        if self.runtime != EventTime(-1, EventTime.Unit.US):
+            runtime = self.runtime.time
 
         if self._model.status == gp.GRB.OPTIMAL:
             self._logger.debug(f"Found optimal value: {self._model.objVal}")
@@ -166,7 +167,7 @@ class GurobiBaseScheduler(BaseScheduler):
                 start_time = round(self._task_ids_to_start_time[task.id].X)
                 placement = self._get_task_placement(task)
                 transformed_runtime = runtime
-                if self._time_unit == "ms":
+                if self._time_unit == EventTime.Unit.MS:
                     # Transform start time back to us before it is returned.
                     transformed_runtime = math.ceil(runtime / 1000)
                 if (
@@ -178,10 +179,12 @@ class GurobiBaseScheduler(BaseScheduler):
                     # Therefore, a task can progress before the next scheduler
                     # finishes. However, the next scheduler will assume that
                     # the task is not running while considering for placement.
-                    if self._time_unit == "ms":
+                    if self._time_unit == EventTime.Unit.MS:
                         # Transform start time back to us before it is returned.
                         start_time *= 1000
-                    self._placements.append((task, placement, start_time))
+                    self._placements.append(
+                        (task, placement, EventTime(start_time, EventTime.Unit.US))
+                    )
                 else:
                     self._placements.append((task, None, None))
             self.log()
@@ -199,7 +202,7 @@ class GurobiBaseScheduler(BaseScheduler):
                 self.log_solver_internal()
             self.log()
             raise ValueError("Model should never be infeasible")
-        return runtime, self._placements
+        return EventTime(runtime, EventTime.Unit.US), self._placements
 
     def log_solver_internal(self):
         self._logger.debug(f"Solver stats: {self._model.printStats()}")
@@ -226,10 +229,10 @@ class GurobiBaseScheduler(BaseScheduler):
             self._model.write(self._flags.scheduler_log_base_name + ".sol")
             self._model.write(self._flags.scheduler_log_base_name + ".lp")
 
-    def get_time(self, unit="us"):
-        if unit == "us":
+    def get_time(self, unit=EventTime.Unit.US):
+        if unit == EventTime.Unit.US:
             return self._time
-        elif unit == "ms":
+        elif unit == EventTime.Unit.MS:
             return self._time // 1000
         else:
             raise ValueError(f"Unit {unit} not supported")
@@ -239,12 +242,12 @@ class GurobiScheduler(GurobiBaseScheduler):
     def __init__(
         self,
         preemptive: bool = False,
-        runtime: int = -1,
+        runtime: EventTime = EventTime(-1, EventTime.Unit.US),
         goal: str = "max_slack",
         enforce_deadlines: bool = True,
-        lookahead: int = 0,
+        lookahead: EventTime = EventTime(0, EventTime.Unit.US),
         _flags: Optional["absl.flags"] = None,
-        _time_unit: str = "us",
+        _time_unit: EventTime.Unit = EventTime.Unit.US,
     ):
         super(GurobiScheduler, self).__init__(
             preemptive, runtime, goal, enforce_deadlines, lookahead, _flags, _time_unit
@@ -258,12 +261,12 @@ class GurobiScheduler(GurobiBaseScheduler):
         self._task_ids_to_scheduled_flag = {}
 
     def _initialize_state(
-        self, sim_time: int, task_graph: TaskGraph, worker_pools: WorkerPools
+        self, sim_time: EventTime, task_graph: TaskGraph, worker_pools: WorkerPools
     ):
         tasks = task_graph.get_schedulable_tasks(
             sim_time, self.lookahead, self.preemptive, worker_pools
         )
-        self._time = sim_time
+        self._time = sim_time.time
         # Rest the state.
         self._task_ids_to_task = {}
         for task in tasks:
@@ -537,12 +540,12 @@ class GurobiScheduler2(GurobiBaseScheduler):
     def __init__(
         self,
         preemptive: bool = False,
-        runtime: int = -1,
+        runtime: EventTime = EventTime(-1, EventTime.Unit.US),
         goal: str = "max_slack",
         enforce_deadlines: bool = True,
-        lookahead: int = 0,
+        lookahead: EventTime = EventTime(0, EventTime.Unit.US),
         _flags: Optional["absl.flags"] = None,
-        _time_unit: str = "us",
+        _time_unit: EventTime.Unit = EventTime.Unit.US,
     ):
         super(GurobiScheduler2, self).__init__(
             preemptive, runtime, goal, enforce_deadlines, lookahead, _flags, _time_unit
@@ -554,12 +557,12 @@ class GurobiScheduler2(GurobiBaseScheduler):
         self._wp_index_to_vars = defaultdict(list)
 
     def _initialize_state(
-        self, sim_time: int, task_graph: TaskGraph, worker_pools: WorkerPools
+        self, sim_time: EventTime, task_graph: TaskGraph, worker_pools: WorkerPools
     ):
         tasks = task_graph.get_schedulable_tasks(
             sim_time, self.lookahead, self.preemptive, worker_pools
         )
-        self._time = sim_time
+        self._time = sim_time.time
         # Reset the state.
         self._task_ids_to_task = {}
         for task in tasks:
