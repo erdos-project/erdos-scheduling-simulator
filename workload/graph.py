@@ -292,6 +292,16 @@ class Graph(Generic[T]):
         else:
             return check_dependency(node_1, node_2)
 
+    def to_dot(self, filename: str) -> None:
+        with open(filename, "w") as output_file:
+            output_file.write(f"digraph {self.__class__.__name__} {{\n")
+            for node, _ in self._graph.items():
+                output_file.write(f'  "{node.id}" [label="{node.name}"];\n')
+            for node, children in self._graph.items():
+                for child in children:
+                    output_file.write(f'  "{node.id}" -> "{child.id}";\n')
+            output_file.write(f"}}")
+
     def __iter__(self):
         for item in self.breadth_first():
             yield item

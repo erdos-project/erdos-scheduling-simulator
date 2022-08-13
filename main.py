@@ -36,6 +36,11 @@ flags.DEFINE_string(
     short_name="csv",
 )
 flags.DEFINE_string(
+    "graph_file_name",
+    None,
+    "Name of the Graph file to log the JobGraph to."
+)
+flags.DEFINE_string(
     "scheduler_log_base_name",
     None,
     "Base name to use to log info about scheduler runs.",
@@ -197,6 +202,11 @@ def main(args):
     if FLAGS.stats:
         # Log the statistics, and do not execute the Simulator.
         task_loader.log_statistics()
+        return
+    if FLAGS.graph_file_name:
+        # Log the graph to the given file and do not execute the Simulator.
+        job_graph = task_loader.get_job_graph()
+        job_graph.to_dot(FLAGS.graph_file_name)
         return
 
     # Instantiate the scheduler based on the given flag.
