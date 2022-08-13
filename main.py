@@ -36,9 +36,7 @@ flags.DEFINE_string(
     short_name="csv",
 )
 flags.DEFINE_string(
-    "graph_file_name",
-    None,
-    "Name of the Graph file to log the JobGraph to."
+    "graph_file_name", None, "Name of the Graph file to log the JobGraph to."
 )
 flags.DEFINE_string(
     "scheduler_log_base_name",
