@@ -478,6 +478,10 @@ class Task(object):
     def release_time(self):
         return self._release_time
 
+    @property
+    def conditional(self):
+        return self._creating_job.conditional
+
     def get_release_time(self, unit=EventTime.Unit.US):
         if unit == EventTime.Unit.US:
             return self._release_time.time
@@ -598,24 +602,52 @@ class TaskGraph(Graph[Task]):
             raise ValueError(f"Cannot notify TaskGraph of an incomplete task: {task}")
 
         # Release any tasks that can be unlocked by the completion.
+        # If the task was conditional, only release one of the children randomly.
         released_tasks = []
-        for child in self.get_children(task):
-            if child.state != TaskState.VIRTUAL:
-                # Task was already released when another of its parent tasks completed
-                # simulatenously with the argument parent task given to this method.
-                continue
-            if all(map(lambda task: task.is_complete(), self.get_parents(child))):
-                if child.release_time == EventTime(-1, EventTime.Unit.US):
-                    # If the child does not have a release time, then set it to now,
-                    # which is the time of the completion of the last parent task.
-                    child.release(finish_time)
-                else:
-                    earliest_release = child.release_time
-                    # Update the task's release time if parent tasks delayed it.
-                    for parent in self.get_parents(child):
-                        earliest_release = max(earliest_release, parent.completion_time)
-                    child.release(earliest_release)
-                released_tasks.append(child)
+
+        if task.conditional:
+            # Choose a child randomly from the set of children.
+            # TODO (Sukrit): Allow users to define a weight on the conditional branches.
+            child_to_release = random.choice(self.get_children(task))
+            if child_to_release.state != TaskState.VIRTUAL:
+                raise RuntimeError(
+                    f"Child task {child_to_release} was released \
+                        without completion of parent {task}."
+                )
+            if child_to_release.release_time == EventTime(-1, EventTime.Unit.US):
+                # If the child does not have a release time, then set it to now,
+                # which is the time of the completion of the last parent task.
+                child_to_release.release(finish_time)
+            else:
+                earliest_release = child_to_release.release_time
+                # Update the task's release time if parent tasks delayed it.
+                for parent in self.get_parents(child_to_release):
+                    earliest_release = max(earliest_release, parent.completion_time)
+                child_to_release.release(earliest_release)
+            released_tasks.append(child_to_release)
+        else:
+            for child in self.get_children(task):
+                if child.state != TaskState.VIRTUAL:
+                    # Task should not have been released without the completion
+                    # of its last parent.
+                    raise RuntimeError(
+                        f"Child task {child} was released \
+                            without completion of parent {task}."
+                    )
+                if all(map(lambda task: task.is_complete(), self.get_parents(child))):
+                    if child.release_time == EventTime(-1, EventTime.Unit.US):
+                        # If the child does not have a release time, then set it to now,
+                        # which is the time of the completion of the last parent task.
+                        child.release(finish_time)
+                    else:
+                        earliest_release = child.release_time
+                        # Update the task's release time if parent tasks delayed it.
+                        for parent in self.get_parents(child):
+                            earliest_release = max(
+                                earliest_release, parent.completion_time
+                            )
+                        child.release(earliest_release)
+                    released_tasks.append(child)
         return released_tasks
 
     def find(self, task_name: str) -> Sequence[Task]:

@@ -20,15 +20,24 @@ class Job(object):
         runtime: The expected runtime of the tasks created from this Job.
         pipelined (`bool`): True if job's tasks from different timestamps can run
             in parallel.
+        conditional (`bool`): True if only some of the job's childrens are invoked
+            upon the job's completion instead of all of them.
     """
 
-    def __init__(self, name: str, runtime: EventTime, pipelined: bool = False):
+    def __init__(
+        self,
+        name: str,
+        runtime: EventTime,
+        pipelined: bool = False,
+        conditional: bool = False,
+    ) -> None:
         if type(runtime) != EventTime:
             raise ValueError(f"Invalid type received for runtime: {type(runtime)}")
         self._name = name
         self._id = uuid.UUID(int=random.getrandbits(128), version=4)
         self._runtime = runtime
         self._pipelined = pipelined
+        self._conditional = conditional
 
     @property
     def name(self):
@@ -46,11 +55,18 @@ class Job(object):
     def pipelined(self):
         return self._pipelined
 
+    @property
+    def conditional(self):
+        return self._conditional
+
     def __eq__(self, other):
         return self._id == other._id
 
     def __str__(self):
-        return f"Job(name={self.name}, id={self.id}, pipelined={self.pipelined})"
+        return (
+            f"Job(name={self.name}, id={self.id}, "
+            f"pipelined={self.pipelined}, conditional={self.conditional})"
+        )
 
     def __repr__(self):
         return str(self)
