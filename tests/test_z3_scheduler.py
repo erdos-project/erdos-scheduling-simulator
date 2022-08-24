@@ -96,7 +96,7 @@ def test_z3_scheduling_deadline_enforcement():
     assert placements[0][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
     assert placements[0][2] == EventTime(
         0, EventTime.Unit.US
-    ), "Incorrect start time retrieved."
+    ), f"Incorrect start time retrieved: {placements[0][2]}."
 
 
 def test_z3_scheduling_dependency():
