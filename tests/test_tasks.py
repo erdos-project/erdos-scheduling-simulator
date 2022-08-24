@@ -385,7 +385,7 @@ def test_task_completion_notification():
 
 
 def test_conditional_task_completion_notification():
-    """Test that the completion of a conditional task only ensures release of a single child."""
+    """Test that the completion of a conditional task ensures release of one child."""
     perception_task = create_default_task(
         job=Job(
             name="Perception",
