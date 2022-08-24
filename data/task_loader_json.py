@@ -15,7 +15,7 @@ from utils import EventTime, fuzz_time, log_statistics, setup_logging
 from workload import Job, JobGraph, Resource, Resources, Task, TaskGraph
 
 
-class TaskLoaderJSON(TaskLoader):
+class TaskLoaderPylot(TaskLoader):
     """Loads the Task data from Pylot traces.
 
     Args:
@@ -66,7 +66,7 @@ class TaskLoaderJSON(TaskLoader):
             entry["ts"] = entry["ts"] - start_real_time
 
         # Create the Jobs from the profile path.
-        self._jobs = TaskLoaderJSON._TaskLoaderJSON__create_jobs(profile_data)
+        self._jobs = TaskLoaderPylot._TaskLoaderPylot__create_jobs(profile_data)
         self._logger.debug(f"Loaded {len(self._jobs)} Jobs from {profile_path}")
 
         # Read the DOT file and ensure that we have jobs for all the nodes.
@@ -84,7 +84,7 @@ class TaskLoaderJSON(TaskLoader):
                 raise ValueError(f"{node_label} found in DOT file, but not in JSON.")
 
         # Create the JobGraph from the jobs and the DOT representation.
-        self._job_graph = TaskLoaderJSON._TaskLoaderJSON__create_job_graph(
+        self._job_graph = TaskLoaderPylot._TaskLoaderPylot__create_job_graph(
             self._jobs,
             map(
                 lambda edge: (edge.get_source(), edge.get_destination()),
@@ -98,7 +98,7 @@ class TaskLoaderJSON(TaskLoader):
         )
         with open(resource_path, "r") as f:
             self._resource_requirements = (
-                TaskLoaderJSON._TaskLoaderJSON__create_resources(
+                TaskLoaderPylot._TaskLoaderPylot__create_resources(
                     json.load(f), resource_logger
                 )
             )
@@ -110,7 +110,7 @@ class TaskLoaderJSON(TaskLoader):
         max_timestamp = (
             _flags.max_timestamp if _flags.max_timestamp is not None else sys.max_size
         )
-        self._tasks = TaskLoaderJSON._TaskLoaderJSON__create_tasks(
+        self._tasks = TaskLoaderPylot._TaskLoaderPylot__create_tasks(
             profile_data,
             self._jobs,
             self._resource_requirements,
@@ -273,39 +273,39 @@ class TaskLoaderJSON(TaskLoader):
         return tasks
 
     def get_jobs(self) -> Sequence[Job]:
-        """Retrieve the set of `Job`s loaded by the TaskLoaderJSON.
+        """Retrieve the set of `Job`s loaded by the TaskLoaderPylot.
 
         Returns:
-            The set of `Job`s loaded by the TaskLoaderJSON.
+            The set of `Job`s loaded by the TaskLoaderPylot.
         """
         return self._jobs
 
     def get_job_graph(self) -> JobGraph:
-        """Retrieve the `JobGraph` constructed by the TaskLoaderJSON.
+        """Retrieve the `JobGraph` constructed by the TaskLoaderPylot.
 
         Returns:
-            The `JobGraph` constructed by the TaskLoaderJSON.
+            The `JobGraph` constructed by the TaskLoaderPylot.
         """
         return self._job_graph
 
     def get_tasks(self) -> Sequence[Task]:
-        """Retrieve the set of `Task`s loaded by the TaskLoaderJSON.
+        """Retrieve the set of `Task`s loaded by the TaskLoaderPylot.
 
         Returns:
-            The set of `Task`s loaded by the TaskLoaderJSON.
+            The set of `Task`s loaded by the TaskLoaderPylot.
         """
         return self._tasks
 
     def get_task_graph(self) -> TaskGraph:
-        """Retrieve the `TaskGraph` constructed by the TaskLoaderJSON.
+        """Retrieve the `TaskGraph` constructed by the TaskLoaderPylot.
 
         Returns:
-            The `TaskGraph` constructed by the TaskLoaderJSON.
+            The `TaskGraph` constructed by the TaskLoaderPylot.
         """
         return self._task_graph
 
     def log_statistics(self):
-        """Logs the statistics from the Tasks loaded by the TaskLoaderJSON."""
+        """Logs the statistics from the Tasks loaded by the TaskLoaderPylot."""
         for job, tasks in self._grouped_tasks.items():
             # Log the Job name.
             self._logger.debug(f"Job: {job}")

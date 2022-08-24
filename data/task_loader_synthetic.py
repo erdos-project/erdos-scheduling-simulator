@@ -4,7 +4,7 @@ from typing import Mapping, Optional, Sequence, Tuple
 
 import absl  # noqa: F401
 
-from data import TaskLoader, TaskLoaderJSON
+from data import TaskLoader, TaskLoaderPylot
 from utils import EventTime, fuzz_time, setup_logging
 from workload import Job, JobGraph, Resource, Resources, Task, TaskGraph
 

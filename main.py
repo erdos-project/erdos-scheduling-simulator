@@ -5,7 +5,7 @@ from absl import app, flags
 
 from data import (
     TaskLoaderBenchmark,
-    TaskLoaderJSON,
+    TaskLoaderPylot,
     TaskLoaderSynthetic,
     WorkerLoaderBenchmark,
     WorkerLoaderJSON,
@@ -171,7 +171,7 @@ def main(args):
 
     # Load the data.
     if FLAGS.execution_mode == "replay":
-        task_loader = TaskLoaderJSON(
+        task_loader = TaskLoaderPylot(
             graph_path=FLAGS.graph_path,
             profile_path=FLAGS.profile_path,
             resource_path=FLAGS.resource_path,
