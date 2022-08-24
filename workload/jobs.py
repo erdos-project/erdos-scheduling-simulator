@@ -1,6 +1,6 @@
 import random
 import uuid
-from typing import Mapping, Optional, Sequence
+from typing import Mapping, Optional, Sequence, Tuple
 
 from utils import EventTime
 from workload.graph import Graph
@@ -20,15 +20,28 @@ class Job(object):
         runtime: The expected runtime of the tasks created from this Job.
         pipelined (`bool`): True if job's tasks from different timestamps can run
             in parallel.
+        conditional (`bool`): True if only some of the job's childrens are invoked
+            upon the job's completion instead of all of them.
+        terminal (`bool`): True if the job is a terminal job of the conditional
+            node (can also be constructed using `create_conditional_pair` method).
     """
 
-    def __init__(self, name: str, runtime: EventTime, pipelined: bool = False):
+    def __init__(
+        self,
+        name: str,
+        runtime: EventTime,
+        pipelined: bool = False,
+        conditional: bool = False,
+        terminal: bool = False,
+    ) -> None:
         if type(runtime) != EventTime:
             raise ValueError(f"Invalid type received for runtime: {type(runtime)}")
         self._name = name
         self._id = uuid.UUID(int=random.getrandbits(128), version=4)
         self._runtime = runtime
         self._pipelined = pipelined
+        self._conditional = conditional
+        self._terminal = terminal
 
     @property
     def name(self):
@@ -46,11 +59,40 @@ class Job(object):
     def pipelined(self):
         return self._pipelined
 
+    @property
+    def conditional(self):
+        return self._conditional
+
+    @property
+    def terminal(self):
+        return self._terminal
+
+    @staticmethod
+    def create_conditional_pair(name: str) -> Tuple["Job", "Job"]:
+        """Create a conditional pair with zero runtime on both ends.
+
+        This method can be used to construct a pair of if-else constructs
+        in the `JobGraph`.
+
+        Args:
+            name: A name to give to the Conditional statement.
+        """
+        conditional_begin = Job(
+            f"{name}_conditional", runtime=EventTime.zero(), conditional=True
+        )
+        conditional_end = Job(
+            f"{name}_terminal", runtime=EventTime.zero(), terminal=True
+        )
+        return conditional_begin, conditional_end
+
     def __eq__(self, other):
         return self._id == other._id
 
     def __str__(self):
-        return f"Job(name={self.name}, id={self.id}, pipelined={self.pipelined})"
+        return (
+            f"Job(name={self.name}, id={self.id}, "
+            f"pipelined={self.pipelined}, conditional={self.conditional})"
+        )
 
     def __repr__(self):
         return str(self)

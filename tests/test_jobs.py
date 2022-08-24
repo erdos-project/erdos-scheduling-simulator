@@ -16,6 +16,15 @@ def test_job_construction():
         assert False, "Job has an incorrect ID."
 
 
+def test_conditional_job_construction():
+    """Test that a conditional Job is correctly constructed."""
+    job = Job(
+        name="Perception", runtime=EventTime(1000, EventTime.Unit.US), conditional=True
+    )
+    assert job.name == "Perception", "Job has the wrong name."
+    assert job.conditional, "Job is not conditional."
+
+
 def test_job_equivalence():
     """Test that two Jobs with the same ID are equivalent."""
     job_1 = Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US))

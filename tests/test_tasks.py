@@ -1,3 +1,5 @@
+from venv import create
+
 import pytest
 
 from tests.utils import create_default_task
@@ -10,6 +12,19 @@ def test_successful_task_creation():
     default_task = create_default_task()
     assert default_task.name == "Perception_Task", "Incorrect name for Task."
     assert default_task.state == TaskState.VIRTUAL, "Incorrect state for Task."
+
+
+def test_successful_conditional_task_creation():
+    """Test that a conditional Task is created successfully."""
+    default_task = create_default_task(
+        job=Job(
+            name="Perception",
+            runtime=EventTime(1000, EventTime.Unit.US),
+            conditional=True,
+        )
+    )
+    assert default_task.name == "Perception_Task", "Incorrect name for Task."
+    assert default_task.conditional, "Incorrect conditionality for Task."
 
 
 def test_successful_task_release():
@@ -369,6 +384,46 @@ def test_task_completion_notification():
     assert released_tasks[0] == planning_task, "Incorrect task released."
 
 
+def test_conditional_task_completion_notification():
+    """Test that the completion of a conditional task ensures release of one child."""
+    perception_task = create_default_task(
+        job=Job(
+            name="Perception",
+            runtime=EventTime(1000, EventTime.Unit.US),
+            conditional=True,
+        )
+    )
+    prediction_task = create_default_task(
+        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US))
+    )
+    planning_task = create_default_task(
+        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US))
+    )
+    task_graph = TaskGraph()
+    task_graph.add_task(perception_task, [planning_task, prediction_task])
+
+    released_tasks = task_graph.get_schedulable_tasks(EventTime(0, EventTime.Unit.US))
+    assert len(released_tasks) == 0, "Incorrect length of released tasks returned."
+
+    perception_task.release(EventTime(2, EventTime.Unit.US))
+    released_tasks = task_graph.get_schedulable_tasks(EventTime(2, EventTime.Unit.US))
+    assert len(released_tasks) == 1, "Incorrect length of released tasks returned."
+
+    # Run and finish the execution of Perception.
+    perception_task.start(EventTime(3, EventTime.Unit.US))
+    perception_task.update_remaining_time(EventTime(0, EventTime.Unit.US))
+    perception_task.finish(EventTime(4, EventTime.Unit.US))
+    task_graph.notify_task_completion(perception_task, EventTime(4, EventTime.Unit.US))
+    released_tasks = task_graph.get_schedulable_tasks(EventTime(4, EventTime.Unit.US))
+    assert perception_task.is_complete(), "Task was not completed."
+    assert (
+        len(released_tasks) == 1
+    ), "Incorrect number of tasks were released upon completion."
+    assert (
+        released_tasks[0] == prediction_task or released_tasks[0] == planning_task
+    ), "Incorrect task released."
+
+
 def test_task_graph_index_success():
     """Test that indexing a TaskGraph works correctly."""
     # Create the individual tasks.
@@ -583,8 +638,65 @@ def test_is_source_task():
     ), "Planning Task is not a source task."
 
 
-def test_get_source_tasks():
+def test_is_sink_task():
     """Test that the is_source_task method works correctly."""
+    # Create the individual tasks.
+    perception_task_0 = create_default_task(
+        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
+        timestamp=0,
+    )
+    perception_task_1 = create_default_task(
+        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
+        timestamp=1,
+    )
+    prediction_task_0 = create_default_task(
+        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US)),
+        timestamp=0,
+    )
+    prediction_task_1 = create_default_task(
+        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US)),
+        timestamp=1,
+    )
+    planning_task_0 = create_default_task(
+        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)),
+        timestamp=0,
+    )
+    planning_task_1 = create_default_task(
+        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)),
+        timestamp=1,
+    )
+
+    # Create the TaskGraph.
+    task_graph = TaskGraph(
+        tasks={
+            perception_task_0: [prediction_task_0, perception_task_1],
+            prediction_task_0: [planning_task_0, prediction_task_1],
+            planning_task_0: [planning_task_1],
+            perception_task_1: [prediction_task_1],
+            prediction_task_1: [planning_task_1],
+            planning_task_1: [],
+        }
+    )
+
+    # Check that the is_sink_task works correctly.
+    assert not task_graph.is_sink_task(
+        perception_task_0
+    ), "Perception Task is not a sink task."
+    assert not task_graph.is_sink_task(
+        perception_task_1
+    ), "Perception Task is not a sink task."
+    assert not task_graph.is_sink_task(
+        prediction_task_0
+    ), "Prediction Task is not a sink task."
+    assert not task_graph.is_sink_task(
+        prediction_task_1
+    ), "Prediction Task is not a sink task."
+    assert task_graph.is_sink_task(planning_task_0), "Planning Task is not a sink task."
+    assert task_graph.is_sink_task(planning_task_1), "Planning Task is not a sink task."
+
+
+def test_get_source_tasks():
+    """Test that the get_source_tasks method works correctly."""
     # Create the individual tasks.
     perception_task_0 = create_default_task(
         job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
@@ -630,6 +742,179 @@ def test_get_source_tasks():
         perception_task_0,
         perception_task_1,
     }, "Incorrect tasks retrieved by get_source_tasks()"
+
+
+def test_get_sink_tasks():
+    """Test that the get_sink_tasks method works correctly."""
+    # Create the individual tasks.
+    perception_task_0 = create_default_task(
+        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
+        timestamp=0,
+    )
+    perception_task_1 = create_default_task(
+        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
+        timestamp=1,
+    )
+    prediction_task_0 = create_default_task(
+        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US)),
+        timestamp=0,
+    )
+    prediction_task_1 = create_default_task(
+        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US)),
+        timestamp=1,
+    )
+    planning_task_0 = create_default_task(
+        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)),
+        timestamp=0,
+    )
+    planning_task_1 = create_default_task(
+        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)),
+        timestamp=1,
+    )
+
+    # Create the TaskGraph.
+    task_graph = TaskGraph(
+        tasks={
+            perception_task_0: [prediction_task_0, perception_task_1],
+            prediction_task_0: [planning_task_0, prediction_task_1],
+            planning_task_0: [planning_task_1],
+            perception_task_1: [prediction_task_1],
+            prediction_task_1: [planning_task_1],
+            planning_task_1: [],
+        }
+    )
+
+    # Check that the get_source_tasks works correctly.
+    sink_tasks = task_graph.get_sink_tasks()
+    assert len(sink_tasks) == 2, "Incorrect length of retrieved sink tasks."
+    assert set(sink_tasks) == {
+        planning_task_0,
+        planning_task_1,
+    }, "Incorrect tasks retrieved by get_sink_tasks()"
+
+
+def test_task_graph_complete():
+    """Test that the is_complete method works correctly."""
+    # Create the individual tasks.
+    perception_task_0 = create_default_task(
+        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
+        timestamp=0,
+    )
+    prediction_task_0 = create_default_task(
+        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US)),
+        timestamp=0,
+    )
+    planning_task_0 = create_default_task(
+        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)),
+        timestamp=0,
+    )
+
+    # Create the TaskGraph.
+    task_graph = TaskGraph(
+        tasks={
+            perception_task_0: [prediction_task_0],
+            prediction_task_0: [planning_task_0],
+            planning_task_0: [],
+        }
+    )
+
+    # Ensure that the TaskGraph is not complete in the beginning.
+    assert not task_graph.is_complete(), "Task Graph should not be complete initially."
+
+    # Mark all tasks as complete.
+    perception_task_0.release(EventTime(0, EventTime.Unit.US))
+    perception_task_0.start(EventTime(0, EventTime.Unit.US))
+    perception_task_0.update_remaining_time(EventTime(0, EventTime.Unit.US))
+    perception_task_0.finish(EventTime(1, EventTime.Unit.US))
+    assert not task_graph.is_complete(), "Task Graph should not be complete."
+
+    released_tasks = task_graph.notify_task_completion(
+        perception_task_0, EventTime(1, EventTime.Unit.US)
+    )
+    assert len(released_tasks) == 1, "Incorrect number of tasks released."
+    assert released_tasks[0] == prediction_task_0, "Incorrect task released."
+    released_tasks[0].start(EventTime(1, EventTime.Unit.US))
+    released_tasks[0].update_remaining_time(EventTime(0, EventTime.Unit.US))
+    released_tasks[0].finish(EventTime(2, EventTime.Unit.US))
+    assert not task_graph.is_complete(), "Task Graph should not be complete."
+
+    released_tasks = task_graph.notify_task_completion(
+        prediction_task_0, EventTime(2, EventTime.Unit.US)
+    )
+    assert len(released_tasks) == 1, "Incorrect number of tasks released."
+    assert released_tasks[0] == planning_task_0, "Incorrect task released."
+    released_tasks[0].start(EventTime(2, EventTime.Unit.US))
+    released_tasks[0].update_remaining_time(EventTime(0, EventTime.Unit.US))
+    released_tasks[0].finish(EventTime(3, EventTime.Unit.US))
+    assert task_graph.is_complete(), "Task Graph should be complete."
+
+
+def test_conditional_task_graph_complete():
+    """Test that the is_complete method works correctly with conditionals."""
+    # Create the individual tasks.
+    perception_task_0 = create_default_task(
+        job=Job(
+            name="Perception",
+            runtime=EventTime(1000, EventTime.Unit.US),
+            conditional=True,
+        ),
+        timestamp=0,
+    )
+    prediction_task_0 = create_default_task(
+        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US)),
+        timestamp=0,
+    )
+    planning_task_0 = create_default_task(
+        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)),
+        timestamp=0,
+    )
+    final_task_0 = create_default_task(
+        job=Job(
+            "Perception_End", runtime=EventTime(0, EventTime.Unit.US), terminal=True
+        ),
+        timestamp=0,
+    )
+
+    # Create the TaskGraph.
+    task_graph = TaskGraph(
+        tasks={
+            perception_task_0: [prediction_task_0, planning_task_0],
+            prediction_task_0: [final_task_0],
+            planning_task_0: [final_task_0],
+        }
+    )
+
+    # Ensure that the TaskGraph is not complete in the beginning.
+    assert not task_graph.is_complete(), "Task Graph should not be complete initially."
+
+    # Mark all tasks as complete.
+    perception_task_0.release(EventTime(0, EventTime.Unit.US))
+    perception_task_0.start(EventTime(0, EventTime.Unit.US))
+    perception_task_0.update_remaining_time(EventTime(0, EventTime.Unit.US))
+    perception_task_0.finish(EventTime(1, EventTime.Unit.US))
+    assert not task_graph.is_complete(), "Task Graph should not be complete."
+
+    released_tasks = task_graph.notify_task_completion(
+        perception_task_0, EventTime(1, EventTime.Unit.US)
+    )
+    assert len(released_tasks) == 1, "Incorrect number of tasks released."
+    assert (
+        released_tasks[0] == prediction_task_0 or released_tasks[0] == planning_task_0
+    ), "Incorrect task released."
+    released_tasks[0].start(EventTime(1, EventTime.Unit.US))
+    released_tasks[0].update_remaining_time(EventTime(0, EventTime.Unit.US))
+    released_tasks[0].finish(EventTime(2, EventTime.Unit.US))
+    assert not task_graph.is_complete(), "Task Graph should not be complete."
+
+    released_tasks = task_graph.notify_task_completion(
+        released_tasks[0], EventTime(2, EventTime.Unit.US)
+    )
+    assert len(released_tasks) == 1, "Incorrect number of tasks released."
+    assert released_tasks[0] == final_task_0, "Incorrect task released."
+    released_tasks[0].start(EventTime(2, EventTime.Unit.US))
+    released_tasks[0].update_remaining_time(EventTime(0, EventTime.Unit.US))
+    released_tasks[0].finish(EventTime(3, EventTime.Unit.US))
+    assert task_graph.is_complete(), "Task Graph should be complete."
 
 
 def test_task_find():

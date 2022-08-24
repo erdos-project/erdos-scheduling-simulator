@@ -478,6 +478,14 @@ class Task(object):
     def release_time(self):
         return self._release_time
 
+    @property
+    def conditional(self):
+        return self._creating_job.conditional
+
+    @property
+    def terminal(self):
+        return self._creating_job.terminal
+
     def get_release_time(self, unit=EventTime.Unit.US):
         if unit == EventTime.Unit.US:
             return self._release_time.time
@@ -598,24 +606,57 @@ class TaskGraph(Graph[Task]):
             raise ValueError(f"Cannot notify TaskGraph of an incomplete task: {task}")
 
         # Release any tasks that can be unlocked by the completion.
+        # If the task was conditional, only release one of the children randomly.
         released_tasks = []
-        for child in self.get_children(task):
-            if child.state != TaskState.VIRTUAL:
-                # Task was already released when another of its parent tasks completed
-                # simulatenously with the argument parent task given to this method.
-                continue
-            if all(map(lambda task: task.is_complete(), self.get_parents(child))):
-                if child.release_time == EventTime(-1, EventTime.Unit.US):
-                    # If the child does not have a release time, then set it to now,
-                    # which is the time of the completion of the last parent task.
-                    child.release(finish_time)
-                else:
-                    earliest_release = child.release_time
-                    # Update the task's release time if parent tasks delayed it.
-                    for parent in self.get_parents(child):
-                        earliest_release = max(earliest_release, parent.completion_time)
-                    child.release(earliest_release)
-                released_tasks.append(child)
+
+        if task.conditional:
+            # Choose a child randomly from the set of children.
+            # TODO (Sukrit): Allow users to define a weight on the conditional branches.
+            child_to_release = random.choice(self.get_children(task))
+            if child_to_release.state != TaskState.VIRTUAL:
+                raise RuntimeError(
+                    f"Child task {child_to_release} was released \
+                        without completion of parent {task}."
+                )
+            if child_to_release.release_time == EventTime(-1, EventTime.Unit.US):
+                # If the child does not have a release time, then set it to now,
+                # which is the time of the completion of the last parent task.
+                child_to_release.release(finish_time)
+            else:
+                earliest_release = child_to_release.release_time
+                # Update the task's release time if parent tasks delayed it.
+                for parent in self.get_parents(child_to_release):
+                    earliest_release = max(earliest_release, parent.completion_time)
+                child_to_release.release(earliest_release)
+            released_tasks.append(child_to_release)
+        else:
+            for child in self.get_children(task):
+                if child.state != TaskState.VIRTUAL:
+                    # Task should not have been released without the completion
+                    # of its last parent.
+                    raise RuntimeError(
+                        f"Child task {child} was released \
+                            without completion of parent {task}."
+                    )
+                if child.terminal or all(
+                    map(lambda task: task.is_complete(), self.get_parents(child))
+                ):
+                    # If the child was a terminal of a conditional, then only one
+                    # of the parents being released should release the task.
+                    # We release the task now since one parent has completed.
+                    if child.release_time == EventTime(-1, EventTime.Unit.US):
+                        # If the child does not have a release time, then set it to now,
+                        # which is the time of the completion of the last parent task.
+                        child.release(finish_time)
+                    else:
+                        earliest_release = child.release_time
+                        # Update the task's release time if parent tasks delayed it.
+                        for parent in self.get_parents(child):
+                            earliest_release = max(
+                                earliest_release, parent.completion_time
+                            )
+                        child.release(earliest_release)
+                    released_tasks.append(child)
         return released_tasks
 
     def find(self, task_name: str) -> Sequence[Task]:
@@ -827,6 +868,23 @@ class TaskGraph(Graph[Task]):
             and parents[0].timestamp == task.timestamp - 1
         )
 
+    def is_sink_task(self, task: Task) -> bool:
+        """Check if the given `task` is a sink Task or not.
+
+        Args:
+            task (`Task`): The task to check.
+
+        Returns:
+            `True` if the task is a sink task i.e. only has a dependency on the same
+            task of the next timestamp, and `False` otherwise.
+        """
+        children = self.get_children(task)
+        return len(children) == 0 or (
+            len(children) == 1
+            and children[0].name == task.name
+            and children[0].timestamp == task.timestamp + 1
+        )
+
     def get_source_tasks(self) -> Sequence[Task]:
         """Retrieve the source tasks from this instance of a TaskGraph.
 
@@ -838,6 +896,18 @@ class TaskGraph(Graph[Task]):
             tasks with the same timestamps.
         """
         return self.filter(self.is_source_task)
+
+    def get_sink_tasks(self) -> Sequence[Task]:
+        """Retrieve the sink tasks from the instance of the TaskGraph.
+
+        This method returns multiple instances of Tasks with different
+        timestamps.
+
+        Returns:
+            A `Sequence[Task]` of tasks that have no dependencies on any
+            tasks with the same timestamps.
+        """
+        return self.filter(self.is_sink_task)
 
     def dilate(self, difference: EventTime):
         """Dilate the time between occurrence of events of successive
@@ -901,6 +971,10 @@ class TaskGraph(Graph[Task]):
             The merged TaskGraph from the sequence ordered by timestamp.
         """
         raise NotImplementedError("Merging of Taskgraphs has not been implemented yet.")
+
+    def is_complete(self):
+        """Check if the task graph has finished execution."""
+        return all(task.is_complete() for task in self.get_sink_tasks())
 
     def __str__(self):
         constructed_string = ""

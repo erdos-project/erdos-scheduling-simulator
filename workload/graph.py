@@ -300,7 +300,7 @@ class Graph(Generic[T]):
             for node, children in self._graph.items():
                 for child in children:
                     output_file.write(f'  "{node.id}" -> "{child.id}";\n')
-            output_file.write(f"}}")
+            output_file.write("}}")
 
     def __iter__(self):
         for item in self.breadth_first():
