@@ -482,6 +482,10 @@ class Task(object):
     def conditional(self):
         return self._creating_job.conditional
 
+    @property
+    def terminal(self):
+        return self._creating_job.terminal
+
     def get_release_time(self, unit=EventTime.Unit.US):
         if unit == EventTime.Unit.US:
             return self._release_time.time
@@ -634,7 +638,12 @@ class TaskGraph(Graph[Task]):
                         f"Child task {child} was released \
                             without completion of parent {task}."
                     )
-                if all(map(lambda task: task.is_complete(), self.get_parents(child))):
+                if child.terminal or all(
+                    map(lambda task: task.is_complete(), self.get_parents(child))
+                ):
+                    # If the child was a terminal of a conditional, then only one
+                    # of the parents being released should release the task.
+                    # We release the task now since one parent has completed.
                     if child.release_time == EventTime(-1, EventTime.Unit.US):
                         # If the child does not have a release time, then set it to now,
                         # which is the time of the completion of the last parent task.
@@ -859,6 +868,23 @@ class TaskGraph(Graph[Task]):
             and parents[0].timestamp == task.timestamp - 1
         )
 
+    def is_sink_task(self, task: Task) -> bool:
+        """Check if the given `task` is a sink Task or not.
+
+        Args:
+            task (`Task`): The task to check.
+
+        Returns:
+            `True` if the task is a sink task i.e. only has a dependency on the same
+            task of the next timestamp, and `False` otherwise.
+        """
+        children = self.get_children(task)
+        return len(children) == 0 or (
+            len(children) == 1
+            and children[0].name == task.name
+            and children[0].timestamp == task.timestamp + 1
+        )
+
     def get_source_tasks(self) -> Sequence[Task]:
         """Retrieve the source tasks from this instance of a TaskGraph.
 
@@ -870,6 +896,18 @@ class TaskGraph(Graph[Task]):
             tasks with the same timestamps.
         """
         return self.filter(self.is_source_task)
+
+    def get_sink_tasks(self) -> Sequence[Task]:
+        """Retrieve the sink tasks from the instance of the TaskGraph.
+
+        This method returns multiple instances of Tasks with different
+        timestamps.
+
+        Returns:
+            A `Sequence[Task]` of tasks that have no dependencies on any
+            tasks with the same timestamps.
+        """
+        return self.filter(self.is_sink_task)
 
     def dilate(self, difference: EventTime):
         """Dilate the time between occurrence of events of successive
@@ -933,6 +971,10 @@ class TaskGraph(Graph[Task]):
             The merged TaskGraph from the sequence ordered by timestamp.
         """
         raise NotImplementedError("Merging of Taskgraphs has not been implemented yet.")
+
+    def is_complete(self):
+        """Check if the task graph has finished execution."""
+        return all(task.is_complete() for task in self.get_sink_tasks())
 
     def __str__(self):
         constructed_string = ""
