@@ -53,7 +53,7 @@ class EventTime:
         def to(self, other):
             return self.value / other.value
 
-    def __init__(self, time: Union[int], unit: Unit) -> None:
+    def __init__(self, time: int, unit: Unit) -> None:
         if type(unit) != EventTime.Unit:
             raise ValueError(f"The unit: {unit} is not supported.")
         if type(time) != int:
@@ -70,7 +70,7 @@ class EventTime:
             )
         return EventTime(time=int(self.time * self.unit.to(unit)), unit=unit)
 
-    def to_unchecked(self, unit: Unit) -> (float, Unit):
+    def to_unchecked(self, unit: Unit) -> Tuple[float, Unit]:
         return self.time * self.unit.to(unit), unit
 
     def __str__(self) -> str:
@@ -100,6 +100,10 @@ class EventTime:
     @property
     def unit(self) -> Unit:
         return self._unit
+
+    @staticmethod
+    def zero() -> "EventTime":
+        return EventTime(0, EventTime.Unit.US)
 
 
 def setup_logging(
