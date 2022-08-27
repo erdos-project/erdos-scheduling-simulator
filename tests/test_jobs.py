@@ -4,12 +4,17 @@ import pytest
 
 from utils import EventTime
 from workload import Job, JobGraph
+from workload.resources import Resources
 
 
 def test_job_construction():
     """Test that a Job is correctly constructed."""
     job = Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US))
     assert job.name == "Perception", "Job has the wrong name."
+    assert len(job.resource_requirements) == 1, "Job has wrong resource requirements."
+    assert (
+        job.resource_requirements[0] == Resources()
+    ), "Job has wrong resource requirements."
     try:
         uuid.UUID(job.id)
     except ValueError:

@@ -3,7 +3,9 @@ import uuid
 from typing import Mapping, Optional, Sequence, Tuple
 
 from utils import EventTime
-from workload.graph import Graph
+
+from .graph import Graph
+from .resources import Resources
 
 
 class Job(object):
@@ -18,6 +20,7 @@ class Job(object):
     Args:
         name: The name of the ERDOS operator that corresponds to this Job.
         runtime: The expected runtime of the tasks created from this Job.
+        resource_requirements: A list of Resources that each Task may choose from.
         pipelined (`bool`): True if job's tasks from different timestamps can run
             in parallel.
         conditional (`bool`): True if only some of the job's childrens are invoked
@@ -30,6 +33,7 @@ class Job(object):
         self,
         name: str,
         runtime: EventTime,
+        resource_requirements: Optional[Sequence[Resources]] = None,
         pipelined: bool = False,
         conditional: bool = False,
         terminal: bool = False,
@@ -38,6 +42,9 @@ class Job(object):
             raise ValueError(f"Invalid type received for runtime: {type(runtime)}")
         self._name = name
         self._id = uuid.UUID(int=random.getrandbits(128), version=4)
+        if resource_requirements is None:
+            resource_requirements = [Resources()]
+        self._resource_requirements = resource_requirements
         self._runtime = runtime
         self._pipelined = pipelined
         self._conditional = conditional
@@ -54,6 +61,10 @@ class Job(object):
     @property
     def runtime(self):
         return self._runtime
+
+    @property
+    def resource_requirements(self):
+        return self._resource_requirements
 
     @property
     def pipelined(self):

@@ -5,7 +5,8 @@ from functools import total_ordering
 from typing import Generator, List, Mapping, Optional, Tuple
 
 import utils
-from workload import Resource
+
+from .resource import Resource
 
 
 @total_ordering
@@ -304,8 +305,7 @@ class Resources(object):
         return str(self)
 
     def __gt__(self, other: "Resources") -> bool:
-        """Checks if the given `Resources` are a subset of the current
-        `Resources`.
+        """Checks if the given `Resources` are a subset of the current `Resources`.
 
         This method can be used to ascertain if the other set of resources
         can be allocated from the current set of resources.
@@ -319,6 +319,23 @@ class Resources(object):
         """
         for resource, quantity in other._resource_vector.items():
             if self.get_available_quantity(resource) >= quantity:
+                pass
+            else:
+                return False
+        return True
+
+    def __eq__(self, other: "Resources") -> bool:
+        """Checks if the given `Resources` are equal to the current `Resources`.
+
+        Args:
+            other (`Resources`): The set of resources to check if they are a
+                equal to the current set.
+
+        Returns:
+            `True` if other is equal to self, `False` otherwise.
+        """
+        for resource, quantity in other._resource_vector.items():
+            if self.get_available_quantity(resource) == quantity:
                 pass
             else:
                 return False
