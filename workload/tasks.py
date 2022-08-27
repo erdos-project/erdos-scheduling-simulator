@@ -68,9 +68,9 @@ class Task(object):
         self,
         name: str,
         job: Job,
-        resource_requirements: Resources,
         runtime: EventTime,
         deadline: EventTime,
+        resource_requirements: Optional[Resources] = None,
         timestamp: int = None,
         release_time: Optional[EventTime] = EventTime(-1, EventTime.Unit.US),
         start_time: Optional[EventTime] = EventTime(-1, EventTime.Unit.US),
@@ -103,6 +103,8 @@ class Task(object):
 
         self._name = name
         self._creating_job = job
+        if resource_requirements is None:
+            resource_requirements = random.choice(job.resource_requirements)
         self._resource_reqs = resource_requirements
         self._expected_runtime = runtime
         self._deadline = deadline
