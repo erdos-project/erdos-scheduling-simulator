@@ -101,8 +101,8 @@ class Job(object):
 
     def __str__(self):
         return (
-            f"Job(name={self.name}, id={self.id}, "
-            f"pipelined={self.pipelined}, conditional={self.conditional})"
+            f"Job(name={self.name}, id={self.id}, pipelined={self.pipelined}, "
+            f"conditional={self.conditional}, terminal={self.terminal})"
         )
 
     def __repr__(self):
