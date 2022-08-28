@@ -60,10 +60,10 @@ class WorkloadLoader(object):
         # were made correctly.
         for node in json_repr:
             conditional_job = False
-            if "conditional" in node and node["conditional"] == True:
+            if "conditional" in node and node["conditional"]:
                 conditional_job = True
             terminal_job = False
-            if "terminal" in node and node["terminal"] == True:
+            if "terminal" in node and node["terminal"]:
                 terminal_job = True
             job = Job(
                 name=node["name"],
