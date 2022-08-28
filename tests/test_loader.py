@@ -1,4 +1,4 @@
-from data import TaskLoader, TaskLoaderPylot, WorkerLoaderJSON
+from data import TaskLoader, TaskLoaderPylot, WorkerLoaderJSON, WorkloadLoader
 from tests.test_tasks import create_default_task
 from utils import EventTime
 from workload import Job, Resource, Resources
@@ -20,26 +20,30 @@ def test_create_jobs():
 
 
 def test_create_resources():
-    """Tests the __create_resources method of the TaskLoaderPylot."""
-    resources = TaskLoaderPylot._TaskLoaderPylot__create_resources(
-        [
-            {
-                "name": "perception_operator",
-                "resource_requirements": [{"CPU:any": 1}],
-            },
-            {
-                "name": "prediction_operator",
-                "resource_requirements": [{"CPU:any": 1, "GPU:any": 1}],
-            },
-            {
-                "name": "planning_operator",
-                "resource_requirements": [
-                    {"CPU:any": 2},
-                    {"CPU:any": 1, "GPU:any": 1},
-                ],
-            },
-        ]
-    )
+    """Tests the __create_resources method of the WorkloadLoader."""
+
+    resources_json = [
+        {
+            "name": "perception_operator",
+            "resource_requirements": [{"CPU:any": 1}],
+        },
+        {
+            "name": "prediction_operator",
+            "resource_requirements": [{"CPU:any": 1, "GPU:any": 1}],
+        },
+        {
+            "name": "planning_operator",
+            "resource_requirements": [
+                {"CPU:any": 2},
+                {"CPU:any": 1, "GPU:any": 1},
+            ],
+        },
+    ]
+    resources = {}
+    for operator in resources_json:
+        resources[operator["name"]] = WorkloadLoader._WorkloadLoader__create_resources(
+            operator["resource_requirements"]
+        )
 
     assert len(resources) == 3, "Incorrect number of Resources returned."
     assert (
@@ -68,16 +72,16 @@ def test_create_tasks():
     ]
     jobs = {
         "perception_operator": Job(
-            name="Perception", runtime=EventTime(1000, EventTime.Unit.US)
+            name="Perception",
+            runtime=EventTime(1000, EventTime.Unit.US),
+            resource_requirements=[
+                Resources(resource_vector={Resource(name="CPU", _id="any"): 1})
+            ],
         ),
     }
-    resources = {
-        "perception_operator.on_watermark": [
-            Resources(resource_vector={Resource(name="CPU", _id="any"): 1}),
-        ]
-    }
     tasks = TaskLoaderPylot._TaskLoaderPylot__create_tasks(
-        json_entries, jobs, resources
+        json_entries,
+        jobs,
     )
 
     assert len(tasks) == 1, "Incorrect number of Tasks returned."

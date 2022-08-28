@@ -15,7 +15,6 @@ setup(
         "gurobipy",
         "numpy",
         "pyparsing<=3.0.1",
-        "pydot",
         "z3",
         "z3-solver",
     ],
