@@ -3,3 +3,13 @@
 
 # Configuration files
 .pre-commit-config.yaml
+.DS_store
+.vscode
+
+# Benchmarking simulator configuration files.
+/*.conf
+/*.csv
+/*.json
+/*.log
+/*.dot
+/*.png
