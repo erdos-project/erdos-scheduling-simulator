@@ -3,3 +3,4 @@ from .jobs import Job, JobGraph
 from .resource import Resource
 from .resources import Resources
 from .tasks import Task, TaskGraph, TaskState
+from .workload import Workload
