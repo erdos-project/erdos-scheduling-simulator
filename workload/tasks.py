@@ -70,7 +70,7 @@ class Task(object):
         self,
         name: str,
         task_graph: str,
-        job: "Job",
+        job: "Job",  # noqa: F821
         runtime: EventTime,
         deadline: EventTime,
         resource_requirements: Optional[Resources] = None,

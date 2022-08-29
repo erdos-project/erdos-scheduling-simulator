@@ -4,6 +4,8 @@ import uuid
 from enum import Enum
 from typing import Mapping, Optional, Sequence, Tuple
 
+import absl
+
 from utils import EventTime, fuzz_time, setup_logging
 
 from .graph import Graph
