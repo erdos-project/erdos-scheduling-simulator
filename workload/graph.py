@@ -7,6 +7,7 @@ from typing import (
     Mapping,
     Optional,
     Sequence,
+    Tuple,
     TypeVar,
 )
 
@@ -105,6 +106,18 @@ class Graph(Generic[T]):
             The nodes stored in the graph.
         """
         return self._graph.keys()
+
+    def get_edges(self) -> Sequence[Tuple[T, T]]:
+        """Retrieves the edges stored in the given graph.
+
+        Returns:
+            The edges stored in the graph.
+        """
+        edges = []
+        for node in self.get_nodes():
+            for child in self.get_children(node):
+                edges.append((node, child))
+        return edges
 
     def get_node_depth(self, node: T, func=max) -> int:
         """Retrieves the depth of the node from the directed acyclic graph.

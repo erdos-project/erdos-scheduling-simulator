@@ -1,36 +1,31 @@
 import json
 import logging
-import random
 import sys
 from collections import defaultdict
-from operator import attrgetter
 from typing import Mapping, Optional, Sequence, Tuple
 
 import absl  # noqa: F401
 import numpy as np
-import pydot
 
 from data import TaskLoader
 from utils import EventTime, fuzz_time, log_statistics, setup_logging
 from workload import Job, JobGraph, Resource, Resources, Task, TaskGraph
 
 
-class TaskLoaderJSON(TaskLoader):
+class TaskLoaderPylot(TaskLoader):
     """Loads the Task data from Pylot traces.
 
     Args:
-        graph_path (`str`): The path to the DOT file representing the JobGraph.
+        job_graph (`JobGraph`): The JobGraph for the Pylot workload.
         profile_path (`str`): The path to the JSON profile path from Pylot.
-        resource_path (`str`): The path to the JSON file of task resource
-            requirements.
         _flags (`absl.flags`): The flags used to initialize the app, if any.
     """
 
     def __init__(
         self,
-        graph_path: str,
+        job_graph: JobGraph,
         profile_path: str,
-        resource_path: str,
+        task_graph_name: str = "pylot_dataflow",
         _flags: Optional["absl.flags"] = None,
     ):
         # Set up the logger.
@@ -66,42 +61,33 @@ class TaskLoaderJSON(TaskLoader):
             entry["ts"] = entry["ts"] - start_real_time
 
         # Create the Jobs from the profile path.
-        self._jobs = TaskLoaderJSON._TaskLoaderJSON__create_jobs(profile_data)
+        self._jobs = TaskLoaderPylot._TaskLoaderPylot__create_jobs(profile_data)
         self._logger.debug(f"Loaded {len(self._jobs)} Jobs from {profile_path}")
 
-        # Read the DOT file and ensure that we have jobs for all the nodes.
-        job_dot_graph = pydot.graph_from_dot_file(graph_path)[0]
-        self._logger.debug(f"The DOT graph has {len(job_dot_graph.get_nodes())} Jobs")
-        if len(self._jobs) != len(job_dot_graph.get_nodes()):
+        # Read the JSON file and ensure that we have jobs for all the nodes.
+        self._logger.debug(f"The JobGraph has {len(job_graph)} jobs.")
+        if len(self._jobs) != len(job_graph):
             raise ValueError(
                 f"Mismatch between the Jobs from the DOT graph and the JSON "
                 f"profile. JSON profile had {len(self._jobs)} jobs and DOT "
-                f"graph had {len(job_dot_graph.get_nodes())} jobs."
+                f"graph had {len(job_graph)} jobs."
             )
-        for node in job_dot_graph.get_nodes():
-            node_label = node.get_label()
-            if node_label not in self._jobs:
-                raise ValueError(f"{node_label} found in DOT file, but not in JSON.")
 
-        # Create the JobGraph from the jobs and the DOT representation.
-        self._job_graph = TaskLoaderJSON._TaskLoaderJSON__create_job_graph(
+        # Update the Resource requirements from the JobGraph.
+        for node in job_graph.get_nodes():
+            if node.name not in self._jobs:
+                raise ValueError(f"{node.name} found in JobGraph, but not in JSON.")
+            job = self._jobs[node.name]
+            job._resource_requirements = node.resource_requirements
+
+        # Create the JobGraph from the jobs and the given JobGraph representation.
+        self._job_graph = TaskLoaderPylot._TaskLoaderPylot__create_job_graph(
             self._jobs,
             map(
-                lambda edge: (edge.get_source(), edge.get_destination()),
-                job_dot_graph.get_edges(),
+                lambda edge: (edge[0].name, edge[1].name),
+                job_graph.get_edges(),
             ),
         )
-
-        # Create the Resource requirements from the resource_path.
-        resource_logger = setup_logging(
-            name="Resources", log_file=_flags.log_file_name, log_level=_flags.log_level
-        )
-        with open(resource_path, "r") as f:
-            self._resource_requirements = (
-                TaskLoaderJSON._TaskLoaderJSON__create_resources(
-                    json.load(f), resource_logger
-                )
-            )
 
         # Create the Tasks and the TaskGraph from the Jobs.
         task_logger = setup_logging(
@@ -110,10 +96,10 @@ class TaskLoaderJSON(TaskLoader):
         max_timestamp = (
             _flags.max_timestamp if _flags.max_timestamp is not None else sys.max_size
         )
-        self._tasks = TaskLoaderJSON._TaskLoaderJSON__create_tasks(
+        self._tasks = TaskLoaderPylot._TaskLoaderPylot__create_tasks(
             profile_data,
+            task_graph_name,
             self._jobs,
-            self._resource_requirements,
             max_timestamp,
             task_logger,
             (_flags.min_deadline_variance, _flags.max_deadline_variance),
@@ -179,43 +165,10 @@ class TaskLoaderJSON(TaskLoader):
         return job_graph
 
     @staticmethod
-    def __create_resources(
-        resource_requirements: Sequence[Mapping[str, str]],
-        logger: Optional[logging.Logger] = None,
-    ) -> Mapping[str, Sequence[Resources]]:
-        """Retrieve the Resource requirements from the given JSON entries.
-
-        Args:
-            resource_requirements (`Sequence[Mapping[str, str]]`): The JSON
-                entries for the resource requirements of each task.
-            logger (`Optional[logging.Logger]`): The logger to use to log the
-                results of the execution.
-
-        Returns:
-            A Mapping of task name (`str`) to a sequence of Resources
-            requirements depicting the potential requirements of each task.
-        """
-        _requirements = {}
-        for entry in resource_requirements:
-            potential_requirements = []
-            for requirements in entry["resource_requirements"]:
-                resource_vector = {}
-                for resource, quantity in requirements.items():
-                    resource_name, resource_id = resource.split(":")
-                    resource_vector[
-                        Resource(name=resource_name, _id=resource_id)
-                    ] = quantity
-                potential_requirements.append(
-                    Resources(resource_vector=resource_vector, _logger=logger)
-                )
-            _requirements[entry["name"]] = potential_requirements
-        return _requirements
-
-    @staticmethod
     def __create_tasks(
         json_entries: Sequence[Mapping[str, str]],
+        task_graph_name: str,
         jobs: Mapping[str, Job],
-        resources: Mapping[str, Sequence[Resources]],
         max_timestamp: int = sys.maxsize,
         logger: Optional[logging.Logger] = None,
         deadline_variance: Optional[Tuple[int, int]] = (0, 0),
@@ -226,10 +179,9 @@ class TaskLoaderJSON(TaskLoader):
         Args:
             json_entries (`Sequence[Mapping[str, str]]`): The JSON entries
                 retrieved from the profile file.
+            task_graph_name (`str`): The name of the TaskGraph.
             jobs (`Mapping[str, Job]`): A mapping from the name of the jobs
                 to a `Job` instance.
-            resources (`Mapping[str, Sequence[Resources]]`): The set of
-                potential resources required by each task invocation.
             max_timestamp (`int`): The maximum timestamp of tasks to load from
                 the JSON file.
             logger (`Optional[logging.Logger]`): The logger to pass to each
@@ -261,8 +213,8 @@ class TaskLoaderJSON(TaskLoader):
             tasks.append(
                 Task(
                     name=entry["name"],
+                    task_graph=task_graph_name,
                     job=jobs[entry["pid"]],
-                    resource_requirements=random.choice(resources[entry["name"]]),
                     runtime=EventTime(entry["dur"], EventTime.Unit.US),
                     deadline=(deadline - offset),
                     timestamp=entry["args"]["timestamp"],
@@ -273,39 +225,39 @@ class TaskLoaderJSON(TaskLoader):
         return tasks
 
     def get_jobs(self) -> Sequence[Job]:
-        """Retrieve the set of `Job`s loaded by the TaskLoaderJSON.
+        """Retrieve the set of `Job`s loaded by the TaskLoaderPylot.
 
         Returns:
-            The set of `Job`s loaded by the TaskLoaderJSON.
+            The set of `Job`s loaded by the TaskLoaderPylot.
         """
         return self._jobs
 
     def get_job_graph(self) -> JobGraph:
-        """Retrieve the `JobGraph` constructed by the TaskLoaderJSON.
+        """Retrieve the `JobGraph` constructed by the TaskLoaderPylot.
 
         Returns:
-            The `JobGraph` constructed by the TaskLoaderJSON.
+            The `JobGraph` constructed by the TaskLoaderPylot.
         """
         return self._job_graph
 
     def get_tasks(self) -> Sequence[Task]:
-        """Retrieve the set of `Task`s loaded by the TaskLoaderJSON.
+        """Retrieve the set of `Task`s loaded by the TaskLoaderPylot.
 
         Returns:
-            The set of `Task`s loaded by the TaskLoaderJSON.
+            The set of `Task`s loaded by the TaskLoaderPylot.
         """
         return self._tasks
 
     def get_task_graph(self) -> TaskGraph:
-        """Retrieve the `TaskGraph` constructed by the TaskLoaderJSON.
+        """Retrieve the `TaskGraph` constructed by the TaskLoaderPylot.
 
         Returns:
-            The `TaskGraph` constructed by the TaskLoaderJSON.
+            The `TaskGraph` constructed by the TaskLoaderPylot.
         """
         return self._task_graph
 
     def log_statistics(self):
-        """Logs the statistics from the Tasks loaded by the TaskLoaderJSON."""
+        """Logs the statistics from the Tasks loaded by the TaskLoaderPylot."""
         for job, tasks in self._grouped_tasks.items():
             # Log the Job name.
             self._logger.debug(f"Job: {job}")
@@ -321,5 +273,5 @@ class TaskLoaderJSON(TaskLoader):
                 self._logger.debug(f"  Task: {task_name}")
 
                 # Log stats about the runtime of the tasks.
-                runtimes = list(map(attrgetter("runtime"), _tasks))
+                runtimes = list(map(lambda task: task.runtime.time, _tasks))
                 log_statistics(runtimes, self._logger)

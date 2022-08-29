@@ -37,6 +37,7 @@ class Task(object):
     Args:
         name (`str`): The name of the computation (typically the callback of
             the ERDOS operator.
+        task_graph_name (`str`): The name of the TaskGraph that this Task belongs to.
         job (`Job`): The job that created this particular task.
         resource_requirements (`Resources`): The set of resources required by
             this task.
@@ -67,10 +68,11 @@ class Task(object):
     def __init__(
         self,
         name: str,
+        task_graph: str,
         job: Job,
-        resource_requirements: Resources,
         runtime: EventTime,
         deadline: EventTime,
+        resource_requirements: Optional[Resources] = None,
         timestamp: int = None,
         release_time: Optional[EventTime] = EventTime(-1, EventTime.Unit.US),
         start_time: Optional[EventTime] = EventTime(-1, EventTime.Unit.US),
@@ -102,7 +104,10 @@ class Task(object):
             self._logger = setup_logging(name=f"{name}_{timestamp}")
 
         self._name = name
+        self._task_graph = task_graph
         self._creating_job = job
+        if resource_requirements is None:
+            resource_requirements = random.choice(job.resource_requirements)
         self._resource_reqs = resource_requirements
         self._expected_runtime = runtime
         self._deadline = deadline
@@ -457,6 +462,10 @@ class Task(object):
     @property
     def name(self):
         return self._name
+
+    @property
+    def task_graph(self):
+        return self._task_graph
 
     @property
     def unique_name(self):

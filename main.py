@@ -1,3 +1,4 @@
+import json
 import random
 import sys
 
@@ -5,14 +6,16 @@ from absl import app, flags
 
 from data import (
     TaskLoaderBenchmark,
-    TaskLoaderJSON,
+    TaskLoaderPylot,
     TaskLoaderSynthetic,
     WorkerLoaderBenchmark,
     WorkerLoaderJSON,
+    WorkloadLoader,
 )
 from schedulers import EDFScheduler, GurobiScheduler2, LSFScheduler, Z3Scheduler
 from simulator import Simulator
 from utils import EventTime, setup_logging
+from workload.workload import Workload
 
 FLAGS = flags.FLAGS
 
@@ -20,11 +23,12 @@ FLAGS = flags.FLAGS
 flags.DEFINE_enum(
     "execution_mode",
     "replay",
-    ["replay", "synthetic", "benchmark"],
+    ["replay", "synthetic", "benchmark", "json"],
     "Sets the execution mode of the simulator. In the replay mode the simulator "
     "replays a Pylot log, in the synthetic mode the simulator generates a synthetic "
     "Pylot-like task workload, and in the benchmark mode the simulator generates a "
-    "synthetic task workload.",
+    "synthetic task workload. 'json' reads an abstract workload definition from a "
+    "JSON file and simulates its execution.",
 )
 flags.DEFINE_string(
     "log_file_name", None, "Name of the file to log the results to.", short_name="log"
@@ -45,24 +49,19 @@ flags.DEFINE_string(
 )
 flags.DEFINE_string("log_level", "debug", "Level of logging.")
 flags.DEFINE_string(
-    "graph_path",
-    "./profiles/workload/pylot-complete-graph.dot",
-    "Path of the DOT file that contains the execution graph.",
-)
-flags.DEFINE_string(
-    "profile_path",
-    "./profiles/workload/pylot_profile.json",
-    "Path of the JSON profile for the Pylot execution.",
-)
-flags.DEFINE_string(
-    "resource_path",
-    "./profiles/workload/pylot_resource_profile.json",
-    "Path of the Resource requirements for each Task.",
+    "workload_profile_path",
+    "./profiles/workload/pylot-workload-profile.json",
+    "Path of the description of the Workload to schedule.",
 )
 flags.DEFINE_string(
     "worker_profile_path",
     "./profiles/workers/worker_profile.json",
     "Path of the topology of Workers to schedule on.",
+)
+flags.DEFINE_string(
+    "profile_path",
+    "./profiles/workload/pylot_profile.json",
+    "Path of the JSON profile for the Pylot execution.",
 )
 flags.DEFINE_bool("stats", False, "Print the statistics from the tasks loaded.")
 
@@ -165,17 +164,24 @@ def main(args):
         name=__name__, log_file=FLAGS.log_file_name, log_level=FLAGS.log_level
     )
     logger.info("Starting the execution of the simulator loop.")
-    logger.info("Graph File: %s", FLAGS.graph_path)
+    logger.info("Workload File: %s", FLAGS.workload_profile_path)
+    logger.info("Workers File: %s", FLAGS.worker_profile_path)
     logger.info("Profile File: %s", FLAGS.profile_path)
-    logger.info("Resource File: %s", FLAGS.resource_path)
 
     # Load the data.
     if FLAGS.execution_mode == "replay":
-        task_loader = TaskLoaderJSON(
-            graph_path=FLAGS.graph_path,
+        workload_loader = WorkloadLoader(
+            json_path=FLAGS.workload_profile_path, _flags=FLAGS
+        )
+        job_graph = workload_loader.workload.get_job_graph("pylot_dataflow")
+        task_loader = TaskLoaderPylot(
+            job_graph=job_graph,
+            task_graph_name="pylot_dataflow",
             profile_path=FLAGS.profile_path,
-            resource_path=FLAGS.resource_path,
             _flags=FLAGS,
+        )
+        workload = Workload.from_task_graphs(
+            {"pylot_dataflow": task_loader.get_task_graph()}
         )
     elif FLAGS.execution_mode == "synthetic":
         task_loader = TaskLoaderSynthetic(
@@ -183,6 +189,7 @@ def main(args):
             num_traffic_light_cameras=1,
             _flags=FLAGS,
         )
+        raise NotImplementedError("Workload has not been specified yet.")
     elif FLAGS.execution_mode == "benchmark":
         task_loader = TaskLoaderBenchmark(
             num_jobs=5,
@@ -190,6 +197,12 @@ def main(args):
             task_deadline=FLAGS.benchmark_task_deadline,
             _flags=FLAGS,
         )
+        raise NotImplementedError("Workload has not been specified yet.")
+    elif FLAGS.execution_mode == "json":
+        workload_loader = WorkloadLoader(
+            json_path=FLAGS.workload_profile_path, _flags=FLAGS
+        )
+        workload = workload_loader.workload
 
     # Dilate the time if needed.
     if FLAGS.timestamp_difference != -1:
@@ -198,8 +211,14 @@ def main(args):
         )
 
     if FLAGS.stats:
-        # Log the statistics, and do not execute the Simulator.
-        task_loader.log_statistics()
+        if FLAGS.execution_mode != "json":
+            # Only JSON execution mode generates workloads according to the given Job
+            # workload, and does not have a pre-determined JobGraph.
+            task_loader.log_statistics()
+        else:
+            # TODO (Sukrit): We should be implementing a statistics method for the
+            # Workload too.
+            pass
         return
     if FLAGS.graph_file_name:
         # Log the graph to the given file and do not execute the Simulator.
@@ -259,10 +278,10 @@ def main(args):
     simulator = Simulator(
         worker_pools=worker_loader.get_worker_pools(),
         scheduler=scheduler,
-        job_graph=task_loader.get_job_graph(),
+        workload=workload,
         _flags=FLAGS,
     )
-    simulator.simulate(task_graph=task_loader.get_task_graph())
+    simulator.simulate()
 
 
 if __name__ == "__main__":

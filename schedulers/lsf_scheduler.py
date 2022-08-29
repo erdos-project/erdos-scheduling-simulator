@@ -9,6 +9,7 @@ from schedulers import BaseScheduler
 from utils import EventTime
 from workers import WorkerPools
 from workload import Task, TaskGraph
+from workload.workload import Workload
 
 
 class LSFScheduler(BaseScheduler):
@@ -33,16 +34,17 @@ class LSFScheduler(BaseScheduler):
         )
 
     def schedule(
-        self, sim_time: EventTime, task_graph: TaskGraph, worker_pools: WorkerPools
-    ) -> (EventTime, Sequence[Tuple[Task, str, EventTime]]):
+        self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools
+    ) -> Tuple[EventTime, Sequence[Tuple[Task, str, EventTime]]]:
         """Implements the BaseScheduler's schedule() method using the LSF
         algorithm for scheduling the released tasks across the worker_pools.
         """
         # Create the tasks to be scheduled, along with the state of the
         # WorkerPool to schedule them on based on preemptive or non-preemptive
-        tasks_to_be_scheduled = task_graph.get_schedulable_tasks(
+        tasks_to_be_scheduled = workload.get_schedulable_tasks(
             sim_time, EventTime(0, EventTime.Unit.US), self.preemptive, worker_pools
         )
+
         if self.preemptive:
             # Restart the state of the WorkerPool.
             schedulable_worker_pools = deepcopy(worker_pools)

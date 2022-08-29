@@ -1,12 +1,12 @@
-from data import TaskLoader, TaskLoaderJSON, WorkerLoaderJSON
+from data import TaskLoader, TaskLoaderPylot, WorkerLoaderJSON, WorkloadLoader
 from tests.test_tasks import create_default_task
 from utils import EventTime
 from workload import Job, Resource, Resources
 
 
 def test_create_jobs():
-    """Tests the __create_jobs method of the TaskLoaderJSON."""
-    jobs = TaskLoaderJSON._TaskLoaderJSON__create_jobs(
+    """Tests the __create_jobs method of the TaskLoaderPylot."""
+    jobs = TaskLoaderPylot._TaskLoaderPylot__create_jobs(
         [
             {"pid": "perception_operator", "dur": 1000},
             {"pid": "prediction_operator", "dur": 1000},
@@ -20,26 +20,30 @@ def test_create_jobs():
 
 
 def test_create_resources():
-    """Tests the __create_resources method of the TaskLoaderJSON."""
-    resources = TaskLoaderJSON._TaskLoaderJSON__create_resources(
-        [
-            {
-                "name": "perception_operator",
-                "resource_requirements": [{"CPU:any": 1}],
-            },
-            {
-                "name": "prediction_operator",
-                "resource_requirements": [{"CPU:any": 1, "GPU:any": 1}],
-            },
-            {
-                "name": "planning_operator",
-                "resource_requirements": [
-                    {"CPU:any": 2},
-                    {"CPU:any": 1, "GPU:any": 1},
-                ],
-            },
-        ]
-    )
+    """Tests the __create_resources method of the WorkloadLoader."""
+
+    resources_json = [
+        {
+            "name": "perception_operator",
+            "resource_requirements": [{"CPU:any": 1}],
+        },
+        {
+            "name": "prediction_operator",
+            "resource_requirements": [{"CPU:any": 1, "GPU:any": 1}],
+        },
+        {
+            "name": "planning_operator",
+            "resource_requirements": [
+                {"CPU:any": 2},
+                {"CPU:any": 1, "GPU:any": 1},
+            ],
+        },
+    ]
+    resources = {}
+    for operator in resources_json:
+        resources[operator["name"]] = WorkloadLoader._WorkloadLoader__create_resources(
+            operator["resource_requirements"]
+        )
 
     assert len(resources) == 3, "Incorrect number of Resources returned."
     assert (
@@ -54,7 +58,7 @@ def test_create_resources():
 
 
 def test_create_tasks():
-    """Tests the __create_tasks method of the TaskLoaderJSON."""
+    """Tests the __create_tasks method of the TaskLoaderPylot."""
     json_entries = [
         {
             "name": "perception_operator.on_watermark",
@@ -68,15 +72,18 @@ def test_create_tasks():
     ]
     jobs = {
         "perception_operator": Job(
-            name="Perception", runtime=EventTime(1000, EventTime.Unit.US)
+            name="Perception",
+            runtime=EventTime(1000, EventTime.Unit.US),
+            resource_requirements=[
+                Resources(resource_vector={Resource(name="CPU", _id="any"): 1})
+            ],
         ),
     }
-    resources = {
-        "perception_operator.on_watermark": [
-            Resources(resource_vector={Resource(name="CPU", _id="any"): 1}),
-        ]
-    }
-    tasks = TaskLoaderJSON._TaskLoaderJSON__create_tasks(json_entries, jobs, resources)
+    tasks = TaskLoaderPylot._TaskLoaderPylot__create_tasks(
+        json_entries,
+        "test_task_graph",
+        jobs,
+    )
 
     assert len(tasks) == 1, "Incorrect number of Tasks returned."
     assert (
@@ -92,7 +99,7 @@ def test_create_tasks():
 
 
 def test_create_jobgraph():
-    """Tests the construction of a JobGraph by the TaskLoaderJSON."""
+    """Tests the construction of a JobGraph by the TaskLoaderPylot."""
     jobs = {
         "perception_operator": Job(
             name="Perception", runtime=EventTime(1000, EventTime.Unit.US)
@@ -109,7 +116,7 @@ def test_create_jobgraph():
         ("perception_operator", "planning_operator"),
         ("prediction_operator", "planning_operator"),
     ]
-    job_graph = TaskLoaderJSON._TaskLoaderJSON__create_job_graph(jobs, edges)
+    job_graph = TaskLoaderPylot._TaskLoaderPylot__create_job_graph(jobs, edges)
 
     assert len(job_graph) == 3, "Incorrect length for JobGraph."
     assert (
@@ -124,7 +131,7 @@ def test_create_jobgraph():
 
 
 def test_create_taskgraph():
-    """Tests the construction of a TaskGraph by the TaskLoaderJSON."""
+    """Tests the construction of a TaskGraph by the TaskLoaderPylot."""
     # Create the JobGraph first.
     jobs = {
         "perception_operator": Job(
@@ -144,7 +151,7 @@ def test_create_taskgraph():
         ("perception_operator", "planning_operator"),
         ("prediction_operator", "planning_operator"),
     ]
-    job_graph = TaskLoaderJSON._TaskLoaderJSON__create_job_graph(jobs, edges)
+    job_graph = TaskLoaderPylot._TaskLoaderPylot__create_job_graph(jobs, edges)
 
     # Create a list of Tasks to be put into a graph.
     tasks = [
