@@ -11,6 +11,7 @@ from schedulers import BaseScheduler
 from utils import EventTime, setup_csv_logging, setup_logging
 from workers import WorkerPool, WorkerPools
 from workload import JobGraph, Resource, Resources, Task, TaskGraph, TaskState
+from workload.workload import Workload
 
 
 @total_ordering
@@ -167,8 +168,6 @@ class Simulator(object):
         scheduler (`Type[BaseScheduler]`): A scheduler that implements the
             `BaseScheduler` interface, and is used by the simulator to schedule
             the set of available tasks at a regular interval.
-        job_graph (`JobGraph`): A static directed graph that represents the
-            known structure of the computation.
         loop_timeout (`EventTime`) [default=sys.maxsize]: The simulator time (in us)
             upto which to run the loop. The default runs until we have exhausted all
             the events in the system.
@@ -182,7 +181,7 @@ class Simulator(object):
         self,
         worker_pools: Sequence[WorkerPool],
         scheduler: Type[BaseScheduler],
-        job_graph: JobGraph,
+        workload: Workload,
         loop_timeout: EventTime = EventTime(time=sys.maxsize, unit=EventTime.Unit.US),
         scheduler_frequency: EventTime = EventTime(time=-1, unit=EventTime.Unit.US),
         _flags: Optional["absl.flags"] = None,
@@ -214,7 +213,7 @@ class Simulator(object):
 
         # Simulator variables.
         self._scheduler = scheduler
-        self._job_graph = job_graph
+        self._workload = workload
         self._simulator_time = EventTime(time=0, unit=EventTime.Unit.US)
         self._scheduler_frequency = scheduler_frequency
         self._loop_timeout = loop_timeout

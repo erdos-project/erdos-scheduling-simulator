@@ -146,7 +146,7 @@ def test_simulator_construction():
     simulator = Simulator(
         worker_pools=[worker_pool],
         scheduler=MockScheduler(runtime=EventTime(1, EventTime.Unit.US), placement=[]),
-        job_graph=None,
+        workload=None,
     )
     assert len(simulator._worker_pools) == 1, "Incorrect number of WorkerPool"
     assert (
@@ -160,7 +160,7 @@ def test_failed_construction_of_scheduler_start_event():
     simulator = Simulator(
         worker_pools=[worker_pool],
         scheduler=MockScheduler(runtime=EventTime(1, EventTime.Unit.US), placement=[]),
-        job_graph=None,
+        workload=None,
     )
     with pytest.raises(ValueError):
         simulator._Simulator__get_next_scheduler_event(
@@ -180,7 +180,7 @@ def test_construction_of_scheduler_start_event():
     simulator = Simulator(
         worker_pools=[worker_pool],
         scheduler=MockScheduler(runtime=EventTime(1, EventTime.Unit.US), placement=[]),
-        job_graph=None,
+        workload=None,
     )
 
     simulator_start_event = simulator._Simulator__get_next_scheduler_event(
@@ -229,7 +229,7 @@ def test_simulator_loop_finish_event():
     simulator = Simulator(
         worker_pools=[worker_pool],
         scheduler=MockScheduler(runtime=EventTime(1, EventTime.Unit.US), placement=[]),
-        job_graph=None,
+        workload=None,
     )
     assert (
         simulator._event_queue.next().event_type == EventType.SIMULATOR_START
@@ -259,7 +259,7 @@ def test_scheduler_invocation_by_simulator():
     simulator = Simulator(
         worker_pools=[worker_pool],
         scheduler=MockScheduler(runtime=EventTime(5, EventTime.Unit.US), placement=[]),
-        job_graph=None,
+        workload=None,
     )
     scheduler_finished_event = simulator._Simulator__run_scheduler(
         event=Event(
@@ -278,7 +278,7 @@ def test_simulator_step():
     simulator = Simulator(
         worker_pools=[worker_pool],
         scheduler=MockScheduler(runtime=EventTime(5, EventTime.Unit.US), placement=[]),
-        job_graph=None,
+        workload=None,
     )
 
     # Create, release and place a Task.
@@ -334,7 +334,7 @@ def test_simulator_handle_event():
     simulator = Simulator(
         worker_pools=[worker_pool],
         scheduler=MockScheduler(runtime=EventTime(5, EventTime.Unit.US), placement=[]),
-        job_graph=None,
+        workload=None,
     )
 
     # Test the SIMULATOR_START event.
