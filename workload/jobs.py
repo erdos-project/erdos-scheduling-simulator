@@ -1,5 +1,6 @@
 import random
 import uuid
+from enum import Enum
 from typing import Mapping, Optional, Sequence, Tuple
 
 from utils import EventTime
@@ -127,12 +128,36 @@ class JobGraph(Graph[Job]):
             longest path in the graph.
     """
 
+    class ReleasePolicyType(Enum):
+        """Represents the different release policies supported by a JobGraph."""
+
+        PERIODIC = 1
+
+    class ReleasePolicy(object):
+        def __init__(
+            self,
+            policy_type: "ReleasePolicyType",  # noqa: F821
+            period: EventTime = EventTime(100, EventTime.Unit.US),
+        ) -> None:
+            self._policy_type = policy_type
+            self._period = period
+
+        @property
+        def policy_type(self) -> "ReleasePolicyType":  # noqa: F821
+            return self._policy_type
+
+        @property
+        def period(self) -> EventTime:
+            return self._period
+
     def __init__(
         self,
         jobs: Optional[Mapping[Job, Sequence[Job]]] = {},
+        release_policy: Optional["ReleasePolicy"] = None,
         completion_time: Optional[EventTime] = None,
     ):
         super().__init__(jobs)
+        self._release_policy = release_policy
         self._completion_time = (
             completion_time
             if completion_time or len(self) == 0
@@ -164,3 +189,7 @@ class JobGraph(Graph[Job]):
                 start=EventTime(0, EventTime.Unit.US),
             )
         return self._completion_time
+
+    @property
+    def release_policy(self) -> Optional["ReleasePolicy"]:
+        return self._release_policy
