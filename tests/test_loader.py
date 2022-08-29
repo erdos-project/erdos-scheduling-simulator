@@ -81,6 +81,7 @@ def test_create_tasks():
     }
     tasks = TaskLoaderPylot._TaskLoaderPylot__create_tasks(
         json_entries,
+        "test_task_graph",
         jobs,
     )
 

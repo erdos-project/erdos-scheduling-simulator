@@ -219,7 +219,7 @@ class Z3Scheduler(BaseScheduler):
 
     def schedule(
         self, sim_time: EventTime, task_graph: TaskGraph, worker_pools: WorkerPools
-    ) -> (EventTime, Sequence[Tuple[Task, str, EventTime]]):
+    ) -> Tuple[EventTime, Sequence[Tuple[Task, str, EventTime]]]:
         # Retrieve the schedulable tasks from the TaskGraph.
         tasks_to_be_scheduled = task_graph.get_schedulable_tasks(
             sim_time, self.lookahead, self.preemptive, worker_pools

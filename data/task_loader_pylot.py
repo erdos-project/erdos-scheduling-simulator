@@ -25,6 +25,7 @@ class TaskLoaderPylot(TaskLoader):
         self,
         job_graph: JobGraph,
         profile_path: str,
+        task_graph_name: str = "pylot_dataflow",
         _flags: Optional["absl.flags"] = None,
     ):
         # Set up the logger.
@@ -97,6 +98,7 @@ class TaskLoaderPylot(TaskLoader):
         )
         self._tasks = TaskLoaderPylot._TaskLoaderPylot__create_tasks(
             profile_data,
+            task_graph_name,
             self._jobs,
             max_timestamp,
             task_logger,
@@ -165,6 +167,7 @@ class TaskLoaderPylot(TaskLoader):
     @staticmethod
     def __create_tasks(
         json_entries: Sequence[Mapping[str, str]],
+        task_graph_name: str,
         jobs: Mapping[str, Job],
         max_timestamp: int = sys.maxsize,
         logger: Optional[logging.Logger] = None,
@@ -176,6 +179,7 @@ class TaskLoaderPylot(TaskLoader):
         Args:
             json_entries (`Sequence[Mapping[str, str]]`): The JSON entries
                 retrieved from the profile file.
+            task_graph_name (`str`): The name of the TaskGraph.
             jobs (`Mapping[str, Job]`): A mapping from the name of the jobs
                 to a `Job` instance.
             max_timestamp (`int`): The maximum timestamp of tasks to load from
@@ -209,6 +213,7 @@ class TaskLoaderPylot(TaskLoader):
             tasks.append(
                 Task(
                     name=entry["name"],
+                    task_graph=task_graph_name,
                     job=jobs[entry["pid"]],
                     runtime=EventTime(entry["dur"], EventTime.Unit.US),
                     deadline=(deadline - offset),

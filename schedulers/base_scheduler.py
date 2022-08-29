@@ -7,6 +7,7 @@ import absl  # noqa: F401
 from utils import EventTime, setup_logging
 from workers import WorkerPools
 from workload import Task, TaskGraph
+from workload.workload import Workload
 
 
 class BaseScheduler(object):
@@ -56,16 +57,15 @@ class BaseScheduler(object):
     def schedule(
         self,
         sim_time: EventTime,
-        task_graph: TaskGraph,
+        workload: Workload,
         worker_pools: "WorkerPools",  # noqa: F821
-    ) -> (EventTime, Sequence[Tuple[Task, str, EventTime]]):
+    ) -> Tuple[EventTime, Sequence[Tuple[Task, str, EventTime]]]:
         """Abstract method to be implemented by derived classes to allow the
         scheduling of tasks.
 
         Args:
             sim_time (`EventTime`): The time in us at which the scheduler is invoked.
-            task_graph (`TaskGraph`): The state of the TaskGraph at this
-                invocation including the future set of VIRTUAL tasks.
+            workload (`Workload`): The `Workload` at this invocation of the scheduler.
             worker_pools (`WorkerPools`): The set of worker pools to
                 do the placement across.
 

@@ -8,6 +8,7 @@ from tests.utils import create_default_task
 from utils import EventTime
 from workers import Worker, WorkerPool
 from workload import Job, Resource, Resources, TaskGraph, TaskState
+from workload.workload import Workload
 
 
 class MockScheduler(BaseScheduler):
@@ -146,7 +147,7 @@ def test_simulator_construction():
     simulator = Simulator(
         worker_pools=[worker_pool],
         scheduler=MockScheduler(runtime=EventTime(1, EventTime.Unit.US), placement=[]),
-        workload=None,
+        workload=Workload.empty(),
     )
     assert len(simulator._worker_pools) == 1, "Incorrect number of WorkerPool"
     assert (
@@ -160,7 +161,7 @@ def test_failed_construction_of_scheduler_start_event():
     simulator = Simulator(
         worker_pools=[worker_pool],
         scheduler=MockScheduler(runtime=EventTime(1, EventTime.Unit.US), placement=[]),
-        workload=None,
+        workload=Workload.empty(),
     )
     with pytest.raises(ValueError):
         simulator._Simulator__get_next_scheduler_event(
@@ -168,7 +169,6 @@ def test_failed_construction_of_scheduler_start_event():
                 event_type=EventType.SCHEDULER_START,
                 time=EventTime(3, EventTime.Unit.US),
             ),
-            task_graph=TaskGraph(),
             scheduler_frequency=EventTime(-1, EventTime.Unit.US),
             last_scheduler_start_time=EventTime(2, EventTime.Unit.US),
         )
@@ -180,7 +180,7 @@ def test_construction_of_scheduler_start_event():
     simulator = Simulator(
         worker_pools=[worker_pool],
         scheduler=MockScheduler(runtime=EventTime(1, EventTime.Unit.US), placement=[]),
-        workload=None,
+        workload=Workload.empty(),
     )
 
     simulator_start_event = simulator._Simulator__get_next_scheduler_event(
@@ -188,7 +188,6 @@ def test_construction_of_scheduler_start_event():
             event_type=EventType.SCHEDULER_FINISHED,
             time=EventTime(3, EventTime.Unit.US),
         ),
-        task_graph=TaskGraph(),
         scheduler_frequency=EventTime(-1, EventTime.Unit.US),
         last_scheduler_start_time=EventTime(1, EventTime.Unit.US),
     )
@@ -201,7 +200,6 @@ def test_construction_of_scheduler_start_event():
             event_type=EventType.SCHEDULER_FINISHED,
             time=EventTime(3, EventTime.Unit.US),
         ),
-        task_graph=TaskGraph(),
         scheduler_frequency=EventTime(5, EventTime.Unit.US),
         last_scheduler_start_time=EventTime(1, EventTime.Unit.US),
     )
@@ -214,7 +212,6 @@ def test_construction_of_scheduler_start_event():
             event_type=EventType.SCHEDULER_FINISHED,
             time=EventTime(7, EventTime.Unit.US),
         ),
-        task_graph=TaskGraph(),
         scheduler_frequency=EventTime(5, EventTime.Unit.US),
         last_scheduler_start_time=EventTime(1, EventTime.Unit.US),
     )
@@ -229,7 +226,7 @@ def test_simulator_loop_finish_event():
     simulator = Simulator(
         worker_pools=[worker_pool],
         scheduler=MockScheduler(runtime=EventTime(1, EventTime.Unit.US), placement=[]),
-        workload=None,
+        workload=Workload.empty(),
     )
     assert (
         simulator._event_queue.next().event_type == EventType.SIMULATOR_START
@@ -244,7 +241,6 @@ def test_simulator_loop_finish_event():
             event_type=EventType.SCHEDULER_FINISHED,
             time=EventTime(3, EventTime.Unit.US),
         ),
-        task_graph=TaskGraph(),
         scheduler_frequency=EventTime(-1, EventTime.Unit.US),
         last_scheduler_start_time=EventTime(1, EventTime.Unit.US),
     )
@@ -259,13 +255,12 @@ def test_scheduler_invocation_by_simulator():
     simulator = Simulator(
         worker_pools=[worker_pool],
         scheduler=MockScheduler(runtime=EventTime(5, EventTime.Unit.US), placement=[]),
-        workload=None,
+        workload=Workload.empty(),
     )
     scheduler_finished_event = simulator._Simulator__run_scheduler(
         event=Event(
             event_type=EventType.SCHEDULER_START, time=EventTime(1, EventTime.Unit.US)
         ),
-        task_graph=TaskGraph(),
     )
     assert scheduler_finished_event.time == EventTime(
         6, EventTime.Unit.US
@@ -278,7 +273,7 @@ def test_simulator_step():
     simulator = Simulator(
         worker_pools=[worker_pool],
         scheduler=MockScheduler(runtime=EventTime(5, EventTime.Unit.US), placement=[]),
-        workload=None,
+        workload=Workload.empty(),
     )
 
     # Create, release and place a Task.
@@ -331,31 +326,6 @@ def test_simulator_step():
 def test_simulator_handle_event():
     """Test the Simulator's handle_event method with different events."""
     worker_pool = __create_default_worker_pool()
-    simulator = Simulator(
-        worker_pools=[worker_pool],
-        scheduler=MockScheduler(runtime=EventTime(5, EventTime.Unit.US), placement=[]),
-        workload=None,
-    )
-
-    # Test the SIMULATOR_START event.
-    return_value = simulator._Simulator__handle_event(
-        event=Event(
-            event_type=EventType.SIMULATOR_START, time=EventTime(1, EventTime.Unit.US)
-        ),
-        task_graph=TaskGraph(),
-    )
-    assert not return_value, "Incorrect return value for event type."
-
-    # Test the SIMULATOR_END event.
-    return_value = simulator._Simulator__handle_event(
-        event=Event(
-            event_type=EventType.SIMULATOR_END, time=EventTime(1, EventTime.Unit.US)
-        ),
-        task_graph=TaskGraph(),
-    )
-    assert return_value, "Incorrect return value for event type."
-
-    # Test the TASK_FINISHED event.
     perception_task = create_default_task(
         job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US))
     )
@@ -364,6 +334,29 @@ def test_simulator_handle_event():
     )
     task_graph = TaskGraph()
     task_graph.add_task(perception_task, [planning_task])
+    simulator = Simulator(
+        worker_pools=[worker_pool],
+        scheduler=MockScheduler(runtime=EventTime(5, EventTime.Unit.US), placement=[]),
+        workload=Workload.from_task_graphs({perception_task.task_graph: task_graph}),
+    )
+
+    # Test the SIMULATOR_START event.
+    return_value = simulator._Simulator__handle_event(
+        event=Event(
+            event_type=EventType.SIMULATOR_START, time=EventTime(1, EventTime.Unit.US)
+        ),
+    )
+    assert not return_value, "Incorrect return value for event type."
+
+    # Test the SIMULATOR_END event.
+    return_value = simulator._Simulator__handle_event(
+        event=Event(
+            event_type=EventType.SIMULATOR_END, time=EventTime(1, EventTime.Unit.US)
+        ),
+    )
+    assert return_value, "Incorrect return value for event type."
+
+    # Test the TASK_FINISHED event.
     perception_task.release(EventTime(2, EventTime.Unit.US))
     perception_task.start(EventTime(3, EventTime.Unit.US))
     perception_task.update_remaining_time(EventTime(0, EventTime.Unit.US))
@@ -376,7 +369,6 @@ def test_simulator_handle_event():
             time=EventTime(4, EventTime.Unit.US),
             task=perception_task,
         ),
-        task_graph=task_graph,
     )
     assert not return_value, "Incorrect return value for event type."
     assert len(simulator._event_queue) == 3, "Incorrect length of EventQueue."
@@ -387,7 +379,6 @@ def test_simulator_handle_event():
             event_type=EventType.SCHEDULER_START,
             time=EventTime(5, EventTime.Unit.US),
         ),
-        task_graph=TaskGraph(),
     )
     assert not return_value, "Incorrect return value for event type."
     assert len(simulator._event_queue) == 4, "Incorrect length of EventQueue."
@@ -401,6 +392,5 @@ def test_simulator_handle_event():
             event_type=EventType.SCHEDULER_FINISHED,
             time=EventTime(6, EventTime.Unit.US),
         ),
-        task_graph=TaskGraph(),
     )
     assert len(simulator._event_queue) == 7, "Incorrect length of EventQueue."

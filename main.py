@@ -15,6 +15,7 @@ from data import (
 from schedulers import EDFScheduler, GurobiScheduler2, LSFScheduler, Z3Scheduler
 from simulator import Simulator
 from utils import EventTime, setup_logging
+from workload.workload import Workload
 
 FLAGS = flags.FLAGS
 
@@ -175,8 +176,12 @@ def main(args):
         job_graph = workload_loader.workload.get_job_graph("pylot_dataflow")
         task_loader = TaskLoaderPylot(
             job_graph=job_graph,
+            task_graph_name="pylot_dataflow",
             profile_path=FLAGS.profile_path,
             _flags=FLAGS,
+        )
+        workload = Workload.from_task_graphs(
+            {"pylot_dataflow": task_loader.get_task_graph()}
         )
     elif FLAGS.execution_mode == "synthetic":
         task_loader = TaskLoaderSynthetic(
@@ -184,6 +189,7 @@ def main(args):
             num_traffic_light_cameras=1,
             _flags=FLAGS,
         )
+        raise NotImplementedError("Workload has not been specified yet.")
     elif FLAGS.execution_mode == "benchmark":
         task_loader = TaskLoaderBenchmark(
             num_jobs=5,
@@ -191,10 +197,12 @@ def main(args):
             task_deadline=FLAGS.benchmark_task_deadline,
             _flags=FLAGS,
         )
+        raise NotImplementedError("Workload has not been specified yet.")
     elif FLAGS.execution_mode == "json":
         workload_loader = WorkloadLoader(
             json_path=FLAGS.workload_profile_path, _flags=FLAGS
         )
+        workload = workload_loader.workload
 
     # Dilate the time if needed.
     if FLAGS.timestamp_difference != -1:
@@ -270,10 +278,10 @@ def main(args):
     simulator = Simulator(
         worker_pools=worker_loader.get_worker_pools(),
         scheduler=scheduler,
-        job_graph=task_loader.get_job_graph(),
+        workload=workload,
         _flags=FLAGS,
     )
-    simulator.simulate(task_graph=task_loader.get_task_graph())
+    simulator.simulate()
 
 
 if __name__ == "__main__":
