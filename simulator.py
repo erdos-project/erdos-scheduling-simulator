@@ -510,7 +510,7 @@ class Simulator(object):
                 f"Added {event} for {task} to the event queue."
             )
 
-    def __handle_task_preempt(self, event: Event, task_graph: TaskGraph):
+    def __handle_task_preempt(self, event: Event):
         task = event.task
         self._csv_logger.debug(
             f"{event.time.time},TASK_PREEMPT,{task.name},{task.timestamp},{task.id}"
@@ -519,7 +519,7 @@ class Simulator(object):
         worker_pool.remove_task(task)
         task.preempt(event.time)
 
-    def __handle_task_placement(self, event: Event, task_graph: TaskGraph):
+    def __handle_task_placement(self, event: Event):
         task = event.task
         if not task.is_ready_to_run():
             # TODO: We might want to cache this placement and apply it when the
@@ -556,7 +556,7 @@ class Simulator(object):
                 f"[{event.time}] Task {task} cannot be placed on worker {worker_pool}"
             )
 
-    def __handle_task_migration(self, event: Event, task_graph: TaskGraph):
+    def __handle_task_migration(self, event: Event):
         task = event.task
         assert (
             task.state == TaskState.PREEMPTED
@@ -640,11 +640,11 @@ class Simulator(object):
         elif event.event_type == EventType.TASK_FINISHED:
             self.__handle_task_finished(event, task_graph)
         elif event.event_type == EventType.TASK_PREEMPT:
-            self.__handle_task_preempt(event, task_graph)
+            self.__handle_task_preempt(event)
         elif event.event_type == EventType.TASK_PLACEMENT:
-            self.__handle_task_placement(event, task_graph)
+            self.__handle_task_placement(event)
         elif event.event_type == EventType.TASK_MIGRATION:
-            self.__handle_task_migration(event, task_graph)
+            self.__handle_task_migration(event)
         elif event.event_type == EventType.SCHEDULER_START:
             self.__handle_scheduler_start(event, task_graph)
         elif event.event_type == EventType.SCHEDULER_FINISHED:
