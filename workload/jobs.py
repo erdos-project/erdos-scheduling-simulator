@@ -1,11 +1,16 @@
+import logging
 import random
 import uuid
+from enum import Enum
 from typing import Mapping, Optional, Sequence, Tuple
 
-from utils import EventTime
+import absl
+
+from utils import EventTime, fuzz_time, setup_logging
 
 from .graph import Graph
 from .resources import Resources
+from .tasks import Task, TaskGraph
 
 
 class Job(object):
@@ -127,12 +132,38 @@ class JobGraph(Graph[Job]):
             longest path in the graph.
     """
 
+    class ReleasePolicyType(Enum):
+        """Represents the different release policies supported by a JobGraph."""
+
+        PERIODIC = 1
+
+    class ReleasePolicy(object):
+        def __init__(
+            self,
+            policy_type: "ReleasePolicyType",  # noqa: F821
+            period: EventTime = EventTime(100, EventTime.Unit.US),
+        ) -> None:
+            self._policy_type = policy_type
+            self._period = period
+
+        @property
+        def policy_type(self) -> "ReleasePolicyType":  # noqa: F821
+            return self._policy_type
+
+        @property
+        def period(self) -> EventTime:
+            return self._period
+
     def __init__(
         self,
+        name: str,
         jobs: Optional[Mapping[Job, Sequence[Job]]] = {},
+        release_policy: Optional["ReleasePolicy"] = None,
         completion_time: Optional[EventTime] = None,
     ):
         super().__init__(jobs)
+        self._name = name
+        self._release_policy = release_policy
         self._completion_time = (
             completion_time
             if completion_time or len(self) == 0
@@ -156,11 +187,128 @@ class JobGraph(Graph[Job]):
         for job in self.get_sources():
             job._pipelined = True
 
+    def generate_task_graphs(
+        self,
+        completion_time: EventTime,
+        start_time: EventTime = EventTime(0, EventTime.Unit.US),
+        _flags: Optional["absl.flags"] = None,
+    ) -> Mapping[str, TaskGraph]:
+        """Generates the task graphs under the defined `release_policy`
+        and the `completion_time`.
+
+        Args:
+            completion_time: The time at which the simulator has to end.
+            start_time (default: zero): The time at which the simulator starts.
+
+        Returns:
+            A mapping from the name of the `TaskGraph` to the `TaskGraph`.
+        """
+        if self.release_policy.policy_type == self.ReleasePolicyType.PERIODIC:
+            releases = []
+            current_release = start_time
+            while current_release <= completion_time:
+                releases.append(current_release)
+                current_release += self.release_policy.period
+        else:
+            raise NotImplementedError(
+                f"The policy {self.release_policy} has not been implemented yet."
+            )
+
+        if _flags:
+            task_logger = setup_logging(
+                name="Task", log_file=_flags.log_file_name, log_level=_flags.log_level
+            )
+        else:
+            task_logger = setup_logging(name="Task")
+
+        # Generate the task graphs for all the releases.
+        task_graphs = {}
+        for index, release_time in enumerate(releases):
+            task_graph_name = f"{self.name}@{index}"
+            task_graphs[task_graph_name] = self._generate_task_graph(
+                release_time=release_time,
+                task_graph_name=task_graph_name,
+                timestamp=index,
+                task_logger=task_logger,
+                _flags=_flags,
+            )
+        return task_graphs
+
+    def _generate_task_graph(
+        self,
+        release_time: EventTime,
+        task_graph_name: str,
+        timestamp: int,
+        task_logger: logging.Logger,
+        _flags: Optional["absl.flags"] = None,
+    ) -> TaskGraph:
+        """Generates a TaskGraph from the structure of the `JobGraph` whose
+        source operators are released at the provided `release_time`.
+
+        Args:
+            `release_time`: The time at which the source operators for the
+            `TaskGraph` must be released.
+            task_graph_name: The name of the `TaskGraph` being generated.
+            timestamp: The timestamp of the `TaskGraph` being generated.
+
+        Returns:
+            A `TaskGraph` whose source operators are released at the given time.
+        """
+        # Retrieve variances from the command line flags.
+        if _flags:
+            runtime_variance = _flags.runtime_variance
+            deadline_variance = (
+                _flags.min_deadline_variance,
+                _flags.max_deadline_variance,
+            )
+        else:
+            runtime_variance = (0, 0)
+            deadline_variance = (0, 0)
+
+        # Generate all the `Task`s from the `Job`s in the graph.
+        job_to_task_mapping = {}
+        for job in self.breadth_first():
+            task_release_time = (
+                release_time
+                if self.is_source(job)
+                else EventTime(-1, EventTime.Unit.US)
+            )
+            task_runtime = fuzz_time(job.runtime, runtime_variance)
+            task_deadline = fuzz_time(
+                self.__get_completion_time(start=release_time),
+                deadline_variance,
+            )
+            job_to_task_mapping[job.name] = Task(
+                name=job.name,
+                task_graph=task_graph_name,
+                job=job,
+                runtime=task_runtime,
+                deadline=task_deadline,
+                timestamp=timestamp,
+                release_time=task_release_time,
+                _logger=task_logger,
+            )
+
+        # Generate a TaskGraph from the generated Tasks.
+        task_graph_mapping = {}
+        for parent, children in self._graph.items():
+            task_children = [job_to_task_mapping[child.name] for child in children]
+            task_graph_mapping[job_to_task_mapping[parent.name]] = task_children
+        return TaskGraph(tasks=task_graph_mapping)
+
+    def __get_completion_time(self, start=EventTime(0, EventTime.Unit.US)) -> EventTime:
+        return sum((job.runtime for job in self.get_longest_path()), start=start)
+
     @property
     def completion_time(self):
         if not self._completion_time and len(self) != 0:
-            self._completion_time = sum(
-                (job.runtime for job in self.get_longest_path()),
-                start=EventTime(0, EventTime.Unit.US),
-            )
+            self._completion_time = self.__get_completion_time()
         return self._completion_time
+
+    @property
+    def release_policy(self) -> Optional["ReleasePolicy"]:
+        return self._release_policy
+
+    @property
+    def name(self) -> str:
+        return self._name

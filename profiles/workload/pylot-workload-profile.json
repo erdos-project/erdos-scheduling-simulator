@@ -1,6 +1,8 @@
 [
     {
         "name": "pylot_dataflow",
+        "release_policy": "periodic",
+        "period": 100,
         "graph": [
             {
                 "name": "gnss_operator",

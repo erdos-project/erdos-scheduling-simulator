@@ -44,24 +44,38 @@ class WorkloadLoader(object):
         # Create the sequence of JobGraphs for each application.
         job_graph_mapping = {}
         for jobs in workload_data:
+            job_name = jobs["name"]
+            if jobs["release_policy"] == "periodic":
+                release_policy = JobGraph.ReleasePolicy(
+                    policy_type=JobGraph.ReleasePolicyType.PERIODIC,
+                    period=EventTime(jobs["period"], EventTime.Unit.US),
+                )
+            else:
+                raise NotImplementedError(
+                    f"The release policy {jobs['release_policy']} is not implemented."
+                )
+
+            # Create the JobGraph.
             job_graph_mapping[jobs["name"]] = WorkloadLoader.load_job_graph(
-                jobs["graph"], self._resource_logger
+                JobGraph(name=job_name, release_policy=release_policy),
+                jobs["graph"],
+                self._resource_logger,
             )
 
         self._workload = Workload.from_job_graphs(job_graph_mapping)
 
     @staticmethod
-    def load_job_graph(json_repr, resource_logger) -> JobGraph:
+    def load_job_graph(job_graph, json_repr, resource_logger) -> JobGraph:
         """Load a particular JobGraph from its JSON representation.
 
         Args:
+            job_graph: The `JobGraph` to populate from JSON.
             json_repr: The JSON representation of the JobGraph.
             resource_logger: The logger to use for Resources.
 
         Returns:
             A `JobGraph` encoding the serialized JSON representation of the JobGraph.
         """
-        job_graph = JobGraph()
         name_to_job_mapping = {}
 
         # Add all the nodes first to ensure that we can check if the connections

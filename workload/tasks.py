@@ -9,8 +9,9 @@ from functools import total_ordering
 from typing import Mapping, Optional, Sequence, Union
 
 from utils import EventTime, fuzz_time, setup_logging
-from workload import Job, Resources
-from workload.graph import Graph
+
+from .graph import Graph
+from .resources import Resources
 
 
 class TaskState(Enum):
@@ -69,7 +70,7 @@ class Task(object):
         self,
         name: str,
         task_graph: str,
-        job: Job,
+        job: "Job",  # noqa: F821
         runtime: EventTime,
         deadline: EventTime,
         resource_requirements: Optional[Resources] = None,

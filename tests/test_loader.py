@@ -116,7 +116,9 @@ def test_create_jobgraph():
         ("perception_operator", "planning_operator"),
         ("prediction_operator", "planning_operator"),
     ]
-    job_graph = TaskLoaderPylot._TaskLoaderPylot__create_job_graph(jobs, edges)
+    job_graph = TaskLoaderPylot._TaskLoaderPylot__create_job_graph(
+        jobs, "test_job_graph", edges
+    )
 
     assert len(job_graph) == 3, "Incorrect length for JobGraph."
     assert (
@@ -151,7 +153,9 @@ def test_create_taskgraph():
         ("perception_operator", "planning_operator"),
         ("prediction_operator", "planning_operator"),
     ]
-    job_graph = TaskLoaderPylot._TaskLoaderPylot__create_job_graph(jobs, edges)
+    job_graph = TaskLoaderPylot._TaskLoaderPylot__create_job_graph(
+        jobs, "test_job_graph", edges
+    )
 
     # Create a list of Tasks to be put into a graph.
     tasks = [

@@ -25,7 +25,7 @@ class TaskLoaderPylot(TaskLoader):
         self,
         job_graph: JobGraph,
         profile_path: str,
-        task_graph_name: str = "pylot_dataflow",
+        graph_name: str = "pylot_dataflow",
         _flags: Optional["absl.flags"] = None,
     ):
         # Set up the logger.
@@ -83,6 +83,7 @@ class TaskLoaderPylot(TaskLoader):
         # Create the JobGraph from the jobs and the given JobGraph representation.
         self._job_graph = TaskLoaderPylot._TaskLoaderPylot__create_job_graph(
             self._jobs,
+            graph_name,
             map(
                 lambda edge: (edge[0].name, edge[1].name),
                 job_graph.get_edges(),
@@ -98,7 +99,7 @@ class TaskLoaderPylot(TaskLoader):
         )
         self._tasks = TaskLoaderPylot._TaskLoaderPylot__create_tasks(
             profile_data,
-            task_graph_name,
+            graph_name,
             self._jobs,
             max_timestamp,
             task_logger,
@@ -143,7 +144,7 @@ class TaskLoaderPylot(TaskLoader):
 
     @staticmethod
     def __create_job_graph(
-        jobs: Mapping[str, Job], edges: Sequence[Tuple[str, str]]
+        jobs: Mapping[str, Job], job_graph_name: str, edges: Sequence[Tuple[str, str]]
     ) -> JobGraph:
         """Creates the JobGraph from the given set of Jobs and the relations
         between them as defined by the edges retrieved from the DOT file.
@@ -151,6 +152,7 @@ class TaskLoaderPylot(TaskLoader):
         Args:
             jobs (`Mapping[str, Job]`): The mapping from the Job name to the
                 instance of the Job generated for it.
+            job_graph_name (`str`): The name of the JobGraph.
             edges (`Sequence[Tuple[str, str]]`): The relationship between the
                 Jobs as defined by the edges of the DOT file.
 
@@ -158,7 +160,7 @@ class TaskLoaderPylot(TaskLoader):
             A `JobGraph` instance depicting the relation between the different
             `Job`s.
         """
-        job_graph = JobGraph()
+        job_graph = JobGraph(name=job_graph_name)
         for source, destination in edges:
             job_graph.add_job(jobs[source], [jobs[destination]])
         job_graph.pipeline_source_operators()

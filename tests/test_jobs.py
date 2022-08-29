@@ -41,13 +41,13 @@ def test_job_equivalence():
 
 def test_empty_jobgraph_construction():
     """Test that an empty JobGraph is correctly constructed."""
-    job_graph = JobGraph()
+    job_graph = JobGraph(name="test_job_graph")
     assert len(job_graph) == 0, "Default JobGraph should have 0 length."
 
 
 def test_job_addition_with_no_children():
     """Test that the addition of a Job to the graph works."""
-    job_graph = JobGraph()
+    job_graph = JobGraph(name="test_job_graph")
     assert len(job_graph) == 0, "JobGraph has incorrect length."
     job_graph.add_job(Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)))
     assert len(job_graph) == 1, "JobGraph has incorrect length."
@@ -55,7 +55,7 @@ def test_job_addition_with_no_children():
 
 def test_job_addition_with_children():
     """Test that the addition of a Job with children to the graph works."""
-    job_graph = JobGraph()
+    job_graph = JobGraph(name="test_job_graph")
     assert len(job_graph) == 0, "JobGraph has incorrect length."
     job_1 = Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US))
     job_2 = Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US))
@@ -65,7 +65,7 @@ def test_job_addition_with_children():
 
 def test_successful_retrieval_of_children():
     """Test that the correct children are returned by the JobGraph."""
-    job_graph = JobGraph()
+    job_graph = JobGraph(name="test_job_graph")
     job_1 = Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US))
     job_2 = Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US))
     job_graph.add_job(job_1, [job_2])
@@ -76,7 +76,7 @@ def test_successful_retrieval_of_children():
 
 def test_successful_retrieval_of_parents():
     """Test that the correct parents are returned by the JobGraph."""
-    job_graph = JobGraph()
+    job_graph = JobGraph(name="test_job_graph")
     job_1 = Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US))
     job_2 = Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US))
     job_graph.add_job(job_1, [job_2])
@@ -87,7 +87,7 @@ def test_successful_retrieval_of_parents():
 
 def test_failed_retrieval_of_children():
     """Test that retrieving children of a non-existent job fails."""
-    job_graph = JobGraph()
+    job_graph = JobGraph(name="test_job_graph")
     job = Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US))
     with pytest.raises(ValueError):
         job_graph.get_children(job)
@@ -95,7 +95,7 @@ def test_failed_retrieval_of_children():
 
 def test_addition_of_child_to_job():
     """Test the successful addition of a child to a job."""
-    job_graph = JobGraph()
+    job_graph = JobGraph(name="test_job_graph")
     job_1 = Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US))
     job_2 = Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US))
     job_graph.add_job(job_1, [])
@@ -109,7 +109,7 @@ def test_addition_of_child_to_job():
 
 def test_failed_addition_of_child_to_job():
     """Test that addition of a child to a non-existent job fails."""
-    job_graph = JobGraph()
+    job_graph = JobGraph(name="test_job_graph")
     job_1 = Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US))
     job_2 = Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US))
     with pytest.raises(ValueError):
@@ -118,7 +118,7 @@ def test_failed_addition_of_child_to_job():
 
 def test_iteration_jobgraph():
     """Test that the iteration of the JobGraph is in a BFS manner."""
-    job_graph = JobGraph()
+    job_graph = JobGraph(name="test_job_graph")
     camera_job = Job(name="Camera", runtime=EventTime(1000, EventTime.Unit.US))
     lidar_job = Job(name="Lidar", runtime=EventTime(1000, EventTime.Unit.US))
     lidar_coordinate_mapping_job = Job(
@@ -143,7 +143,7 @@ def test_iteration_jobgraph():
 
 def test_depth_first_jobgraph():
     """Test the DFS traversal over the JobGraph."""
-    job_graph = JobGraph()
+    job_graph = JobGraph(name="test_job_graph")
     camera_job = Job(name="Camera", runtime=EventTime(1000, EventTime.Unit.US))
     lidar_job = Job(name="Lidar", runtime=EventTime(1000, EventTime.Unit.US))
     lidar_coordinate_mapping_job = Job(
@@ -173,7 +173,7 @@ def test_depth_first_jobgraph():
 
 def test_job_depth():
     """Test that the depth of each Job is correct."""
-    job_graph = JobGraph()
+    job_graph = JobGraph(name="test_job_graph")
     camera_job = Job(name="Camera", runtime=EventTime(1000, EventTime.Unit.US))
     lidar_job = Job(name="Lidar", runtime=EventTime(1000, EventTime.Unit.US))
     lidar_coordinate_mapping_job = Job(
@@ -194,7 +194,7 @@ def test_job_depth():
 
 def test_topological_sort_success():
     """Test that the correct topological sort order of the graph is returned."""
-    job_graph = JobGraph()
+    job_graph = JobGraph(name="test_job_graph")
     job_0 = Job(name="Job 0", runtime=EventTime(1000, EventTime.Unit.US))
     job_1 = Job(name="Job 1", runtime=EventTime(1000, EventTime.Unit.US))
     job_2 = Job(name="Job 2", runtime=EventTime(1000, EventTime.Unit.US))
@@ -218,7 +218,7 @@ def test_topological_sort_success():
 
 def test_topological_sort_fail():
     """Test that the topological sort method raises an error if the graph is not DAG."""
-    job_graph = JobGraph()
+    job_graph = JobGraph(name="test_job_graph")
     job_0 = Job(name="Job 0", runtime=EventTime(1000, EventTime.Unit.US))
     job_1 = Job(name="Job 1", runtime=EventTime(1000, EventTime.Unit.US))
     job_2 = Job(name="Job 2", runtime=EventTime(1000, EventTime.Unit.US))
@@ -236,7 +236,7 @@ def test_topological_sort_fail():
 
 def test_longest_path():
     """Test that the correct longest path in the graph is returned."""
-    job_graph = JobGraph()
+    job_graph = JobGraph(name="test_job_graph")
     camera_job = Job(name="Camera", runtime=EventTime(1000, EventTime.Unit.US))
     lidar_job = Job(name="Lidar", runtime=EventTime(1000, EventTime.Unit.US))
     lidar_coordinate_mapping_job = Job(
@@ -267,11 +267,12 @@ def test_completion_time():
     )
     perception_job = Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US))
     job_graph = JobGraph(
+        name="test_job_graph",
         jobs={
             camera_job: [perception_job],
             lidar_job: [lidar_coordinate_mapping_job],
             lidar_coordinate_mapping_job: [perception_job],
-        }
+        },
     )
 
     assert job_graph.completion_time == EventTime(
@@ -291,11 +292,12 @@ def test_task_independency_same_level():
     )
     perception_job = Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US))
     job_graph = JobGraph(
+        name="test_job_graph",
         jobs={
             camera_job: [perception_job],
             lidar_job: [lidar_coordinate_mapping_job],
             lidar_coordinate_mapping_job: [perception_job, lidar_coordinate_logger_job],
-        }
+        },
     )
 
     assert (
@@ -319,12 +321,13 @@ def test_task_independency_different_level():
     perception_job = Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US))
     prediction_job = Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US))
     job_graph = JobGraph(
+        name="test_job_graph",
         jobs={
             camera_job: [perception_job],
             lidar_job: [lidar_coordinate_mapping_job],
             lidar_coordinate_mapping_job: [perception_job, lidar_coordinate_logger_job],
             perception_job: [prediction_job],
-        }
+        },
     )
 
     assert (
@@ -348,12 +351,13 @@ def test_task_dependency():
     perception_job = Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US))
     prediction_job = Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US))
     job_graph = JobGraph(
+        name="test_job_graph",
         jobs={
             camera_job: [perception_job],
             lidar_job: [lidar_coordinate_mapping_job],
             lidar_coordinate_mapping_job: [perception_job, lidar_coordinate_logger_job],
             perception_job: [prediction_job],
-        }
+        },
     )
 
     assert job_graph.are_dependent(
@@ -362,3 +366,73 @@ def test_task_dependency():
     assert job_graph.are_dependent(
         prediction_job, lidar_job
     ), "The two jobs are not dependent on each other."
+
+
+def test_job_graph_to_task_graph_conversion():
+    """Tests that a JobGraph is correctly converted to a TaskGraph."""
+    perception_job = Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US))
+    prediction_job = Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US))
+    planning_job = Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US))
+    job_graph = JobGraph(
+        name="test_job_graph",
+        jobs={
+            perception_job: [prediction_job],
+            prediction_job: [planning_job],
+            planning_job: [],
+        },
+    )
+    assert len(job_graph) == 3, "Incorrect number of jobs in the `JobGraph`."
+
+    # Create a single instance of TaskGraph from this `JobGraph`.
+    task_graph = job_graph._generate_task_graph(
+        release_time=EventTime(100, EventTime.Unit.US),
+        task_graph_name="test_task_graph",
+        timestamp=1,
+        task_logger=None,
+    )
+    assert len(task_graph) == 3, "Incorrect number of tasks in `TaskGraph`."
+
+    sources = task_graph.get_source_tasks()
+    assert len(sources) == 1, "Incorrect number of sources in `TaskGraph`."
+    assert sources[0].job == perception_job, "Incorrect job for the source."
+    assert sources[0].release_time == EventTime(
+        100, EventTime.Unit.US
+    ), "Incorrect release time for task."
+    assert (
+        len(task_graph.get_children(sources[0])) == 1
+    ), "Incorrect number of children."
+    assert (
+        len(task_graph.get_children(task_graph.get_children(sources[0])[0])) == 1
+    ), "Incorrect number of children."
+
+
+def test_periodic_release_policy():
+    """Tests that a JobGraph correctly releases TaskGraphs according
+    to the periodic release policy."""
+    perception_job = Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US))
+    prediction_job = Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US))
+    planning_job = Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US))
+    job_graph = JobGraph(
+        name="test_graph",
+        jobs={
+            perception_job: [prediction_job],
+            prediction_job: [planning_job],
+            planning_job: [],
+        },
+        release_policy=JobGraph.ReleasePolicy(
+            policy_type=JobGraph.ReleasePolicyType.PERIODIC,
+            period=EventTime(100, EventTime.Unit.US),
+        ),
+    )
+    assert len(job_graph) == 3, "Incorrect number of jobs in the `JobGraph`."
+
+    # Create instances of TaskGraphs according to the Periodic release policy.
+    task_graphs = job_graph.generate_task_graphs(
+        completion_time=EventTime(500, EventTime.Unit.US)
+    )
+    assert len(task_graphs) == 6, "Incorrect number of task graphs returned."
+    perception_task_1 = task_graphs["test_graph@0"].get_sources()[0]
+    perception_task_2 = task_graphs["test_graph@1"].get_sources()[0]
+    assert (
+        perception_task_2.release_time - perception_task_1.release_time
+    ).time == 100, "Incorrect time between periodic releases."

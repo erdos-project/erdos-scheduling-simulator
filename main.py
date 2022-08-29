@@ -176,7 +176,7 @@ def main(args):
         job_graph = workload_loader.workload.get_job_graph("pylot_dataflow")
         task_loader = TaskLoaderPylot(
             job_graph=job_graph,
-            task_graph_name="pylot_dataflow",
+            graph_name="pylot_dataflow",
             profile_path=FLAGS.profile_path,
             _flags=FLAGS,
         )
