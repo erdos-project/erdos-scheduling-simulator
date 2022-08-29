@@ -45,23 +45,24 @@ class WorkloadLoader(object):
         job_graph_mapping = {}
         for jobs in workload_data:
             job_graph_mapping[jobs["name"]] = WorkloadLoader.load_job_graph(
-                jobs["graph"], self._resource_logger
+                jobs["name"], jobs["graph"], self._resource_logger
             )
 
         self._workload = Workload.from_job_graphs(job_graph_mapping)
 
     @staticmethod
-    def load_job_graph(json_repr, resource_logger) -> JobGraph:
+    def load_job_graph(name, json_repr, resource_logger) -> JobGraph:
         """Load a particular JobGraph from its JSON representation.
 
         Args:
+            name: The name of the `JobGraph`.
             json_repr: The JSON representation of the JobGraph.
             resource_logger: The logger to use for Resources.
 
         Returns:
             A `JobGraph` encoding the serialized JSON representation of the JobGraph.
         """
-        job_graph = JobGraph()
+        job_graph = JobGraph(name=name)
         name_to_job_mapping = {}
 
         # Add all the nodes first to ensure that we can check if the connections
