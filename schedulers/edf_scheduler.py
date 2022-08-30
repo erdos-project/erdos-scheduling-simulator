@@ -43,7 +43,7 @@ class EDFScheduler(BaseScheduler):
         # WorkerPool to schedule them on based on preemptive or non-preemptive
         tasks_to_be_scheduled = workload.get_schedulable_tasks(
             sim_time,
-            EventTime(time=0, unit=EventTime.Unit.US),
+            EventTime.zero(),
             self.preemptive,
             worker_pools,
         )
