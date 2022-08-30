@@ -998,6 +998,36 @@ class TaskGraph(Graph[Task]):
         """Check if the task graph has finished execution."""
         return all(task.is_complete() for task in self.get_sink_tasks())
 
+    @property
+    def remaining_time(self) -> EventTime:
+        """Retrieve the time remaining in the completion of the TaskGraph.
+
+        Note that in the conditional task graph setting, the method returns the
+        worst-case remaining time (i.e., the maximum of remaining time across
+        all branches).
+
+        Returns:
+            An `EventTime` denoting the maximum time remaining across all branches.
+        """
+        remaining_time = defaultdict(lambda: EventTime.zero())
+        # Add the remaining time for the sources.
+        for source_task in self.get_source_tasks():
+            remaining_time[source_task] = source_task.remaining_time
+
+        # Iterate over the other nodes and choose the maximum remaining time.
+        for task in self.topological_sort():
+            for child_task in self.get_children(task):
+                if (
+                    remaining_time[child_task]
+                    <= remaining_time[task] + child_task.remaining_time
+                ):
+                    remaining_time[child_task] = (
+                        remaining_time[task] + child_task.remaining_time
+                    )
+
+        # Find the maximum remaining time across all the sink nodes.
+        return max([remaining_time[sink] for sink in self.get_sink_tasks()])
+
     def __str__(self):
         constructed_string = ""
         for task in iter(self):
