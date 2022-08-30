@@ -1,5 +1,8 @@
+import os
 import random
+import time
 from collections import defaultdict
+from copy import copy, deepcopy
 from enum import Enum
 from typing import Optional, Sequence, Tuple
 
@@ -44,7 +47,83 @@ class BranchPredictionScheduler(BaseScheduler):
     def schedule(
         self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools
     ) -> Tuple[EventTime, Sequence[Tuple[Task, str, EventTime]]]:
-        pass
+        # Create the tasks to be scheduled, along with the state of the
+        # WorkerPool to schedule them on based on preemptive or non-preemptive
+        tasks_to_be_scheduled = workload.get_schedulable_tasks(
+            sim_time,
+            EventTime.zero(),
+            self.preemptive,
+            worker_pools,
+        )
+        tasks_to_be_scheduled = [
+            (
+                task,
+                self.compute_slack(sim_time, workload.get_task_graph(task.task_graph)),
+            )
+            for task in tasks_to_be_scheduled
+        ]
+
+        if self.preemptive:
+            # Restart the state of the WorkerPool.
+            schedulable_worker_pools = deepcopy(worker_pools)
+        else:
+            # Create a virtual WorkerPool set to try scheduling decisions on.
+            schedulable_worker_pools = copy(worker_pools)
+
+        for worker_pool in schedulable_worker_pools.worker_pools:
+            self._logger.debug(
+                f"[{sim_time}] The state of {worker_pool} is:{os.linesep}"
+                f"{os.linesep.join(worker_pool.get_utilization())}"
+            )
+
+        # Sort the tasks according to their slack, and place them on the
+        # worker pools.
+        start_time = time.time()
+        ordered_tasks = list(sorted(tasks_to_be_scheduled, key=lambda item: item[1]))
+
+        # Run the scheduling loop.
+        placements = []
+        for task, _ in ordered_tasks:
+            self._logger.debug(
+                f"[{sim_time}] {self.__class__.__name__} trying to schedule {task} "
+                f"with the resource requirements {task.resource_requirements}."
+            )
+            is_task_placed = False
+            for worker_pool in schedulable_worker_pools.worker_pools:
+                if worker_pool.can_accomodate_task(task):
+                    worker_pool.place_task(task)
+                    is_task_placed = True
+                    placements.append((task, worker_pool.id, sim_time))
+                    self._logger.debug(
+                        f"[{sim_time}] Placed {task} on Worker Pool ({worker_pool.id})"
+                        f" to be started at {sim_time}."
+                    )
+                    break
+
+            if is_task_placed:
+                for worker_pool in schedulable_worker_pools.worker_pools:
+                    self._logger.debug(
+                        f"[{sim_time}] The state of {worker_pool} is:{os.linesep}"
+                        f"{os.linesep.join(worker_pool.get_utilization())}"
+                    )
+            else:
+                self._logger.debug(
+                    f"[{sim_time}] Failed to place {task} because no worker pool "
+                    f"could accomodate the resource requirements."
+                )
+                placements.append((task, None, None))
+
+        end_time = time.time()
+        if self.runtime == EventTime(time=-1, unit=EventTime.Unit.US):
+            return (
+                EventTime(int((end_time - start_time) * 1e6), EventTime.Unit.US),
+                placements,
+            )
+        else:
+            return self.runtime, placements
+
+    def compute_slack(self, sim_time: EventTime, task_graph: TaskGraph) -> EventTime:
+        return task_graph.deadline - sim_time - self.compute_remaining_time(task_graph)
 
     def compute_remaining_time(self, task_graph: TaskGraph) -> EventTime:
         """Computes the slack of the given `TaskGraph` at the `sim_time` using
