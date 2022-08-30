@@ -1,4 +1,3 @@
-import json
 import random
 import sys
 
@@ -12,7 +11,13 @@ from data import (
     WorkerLoaderJSON,
     WorkloadLoader,
 )
-from schedulers import EDFScheduler, GurobiScheduler2, LSFScheduler, Z3Scheduler
+from schedulers import (
+    BranchPredictionScheduler,
+    EDFScheduler,
+    GurobiScheduler2,
+    LSFScheduler,
+    Z3Scheduler,
+)
 from simulator import Simulator
 from utils import EventTime, setup_logging
 from workload.workload import Workload
@@ -64,6 +69,11 @@ flags.DEFINE_string(
     "Path of the JSON profile for the Pylot execution.",
 )
 flags.DEFINE_bool("stats", False, "Print the statistics from the tasks loaded.")
+
+# Simulator related flags.
+flags.DEFINE_integer(
+    "loop_timeout", sys.maxsize, "Timeout for the Simulator loop (in us)."
+)
 
 # Benchmark related flags.
 flags.DEFINE_integer(
@@ -119,7 +129,7 @@ flags.DEFINE_bool(
 flags.DEFINE_enum(
     "scheduler",
     "EDF",
-    ["EDF", "LSF", "Gurobi", "Z3"],
+    ["EDF", "LSF", "Gurobi", "Z3", "BranchPrediction"],
     "The scheduler to use for this execution.",
 )
 flags.DEFINE_bool(
@@ -259,13 +269,20 @@ def main(args):
             lookahead=EventTime(FLAGS.scheduler_lookahead, EventTime.Unit.US),
             _flags=FLAGS,
         )
+    elif FLAGS.scheduler == "BranchPrediction":
+        scheduler = BranchPredictionScheduler(
+            policy=BranchPredictionScheduler.Policy.BEST_CASE,
+            preemptive=FLAGS.preemption,
+            runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
+            _flags=FLAGS,
+        )
     else:
         raise ValueError(
             "Unsupported scheduler implementation: {}".format(FLAGS.scheduler)
         )
 
     # Load the worker topology.
-    if FLAGS.execution_mode in ["replay", "synthetic"]:
+    if FLAGS.execution_mode in ["replay", "synthetic", "json"]:
         worker_loader = WorkerLoaderJSON(
             worker_profile_path=FLAGS.worker_profile_path, _flags=FLAGS
         )
@@ -273,12 +290,18 @@ def main(args):
         worker_loader = WorkerLoaderBenchmark(
             scheduler, FLAGS.benchmark_num_cpus, FLAGS.benchmark_num_gpus, _flags=FLAGS
         )
+    else:
+        raise NotImplementedError(
+            f"WorkerLoader for execution mode {FLAGS.execution_mode} "
+            "was not implemented."
+        )
 
     # Create and run the Simulator based on the scheduler.
     simulator = Simulator(
         worker_pools=worker_loader.get_worker_pools(),
         scheduler=scheduler,
         workload=workload,
+        loop_timeout=EventTime(FLAGS.loop_timeout, EventTime.Unit.US),
         _flags=FLAGS,
     )
     simulator.simulate()
