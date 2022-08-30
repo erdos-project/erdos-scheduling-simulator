@@ -1028,6 +1028,17 @@ class TaskGraph(Graph[Task]):
         # Find the maximum remaining time across all the sink nodes.
         return max([remaining_time[sink] for sink in self.get_sink_tasks()])
 
+    @property
+    def deadline(self) -> EventTime:
+        """Retrieve the deadline to which the TaskGraph is being subjected to.
+
+        This is simply the maximum of all the deadlines of the Tasks.
+
+        Returns:
+            An `EventTime` denoting the maximum deadline of all the Tasks.
+        """
+        return max(task.deadline for task in self.get_nodes())
+
     def __str__(self):
         constructed_string = ""
         for task in iter(self):
