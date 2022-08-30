@@ -493,6 +493,10 @@ class Task(object):
         return self._creating_job.conditional
 
     @property
+    def probability(self):
+        return self._creating_job.probability
+
+    @property
     def terminal(self):
         return self._creating_job.terminal
 
@@ -621,8 +625,16 @@ class TaskGraph(Graph[Task]):
 
         if task.conditional:
             # Choose a child randomly from the set of children.
-            # TODO (Sukrit): Allow users to define a weight on the conditional branches.
-            child_to_release = random.choice(self.get_children(task))
+            # Ensure that the probability of the children is adding up to 1.
+            task_children = self.get_children(task)
+            task_children_probabilities = [child.probability for child in task_children]
+            if abs(sum(task_children_probabilities) - 1.0) > sys.float_info.epsilon:
+                raise ValueError("The sum of the probability of children exceeds 1.0")
+
+            # Choose a child to release using the probability distribution.
+            child_to_release = random.choices(
+                population=task_children, weights=task_children_probabilities, k=1
+            )[0]
             if child_to_release.state != TaskState.VIRTUAL:
                 raise RuntimeError(
                     f"Child task {child_to_release} was released \
@@ -985,6 +997,47 @@ class TaskGraph(Graph[Task]):
     def is_complete(self):
         """Check if the task graph has finished execution."""
         return all(task.is_complete() for task in self.get_sink_tasks())
+
+    @property
+    def remaining_time(self) -> EventTime:
+        """Retrieve the time remaining in the completion of the TaskGraph.
+
+        Note that in the conditional task graph setting, the method returns the
+        worst-case remaining time (i.e., the maximum of remaining time across
+        all branches).
+
+        Returns:
+            An `EventTime` denoting the maximum time remaining across all branches.
+        """
+        remaining_time = defaultdict(lambda: EventTime.zero())
+        # Add the remaining time for the sources.
+        for source_task in self.get_source_tasks():
+            remaining_time[source_task] = source_task.remaining_time
+
+        # Iterate over the other nodes and choose the maximum remaining time.
+        for task in self.topological_sort():
+            for child_task in self.get_children(task):
+                if (
+                    remaining_time[child_task]
+                    <= remaining_time[task] + child_task.remaining_time
+                ):
+                    remaining_time[child_task] = (
+                        remaining_time[task] + child_task.remaining_time
+                    )
+
+        # Find the maximum remaining time across all the sink nodes.
+        return max([remaining_time[sink] for sink in self.get_sink_tasks()])
+
+    @property
+    def deadline(self) -> EventTime:
+        """Retrieve the deadline to which the TaskGraph is being subjected to.
+
+        This is simply the maximum of all the deadlines of the Tasks.
+
+        Returns:
+            An `EventTime` denoting the maximum deadline of all the Tasks.
+        """
+        return max(task.deadline for task in self.get_nodes())
 
     def __str__(self):
         constructed_string = ""

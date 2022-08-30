@@ -84,7 +84,7 @@ class Workload(object):
                     "An infinite loop cannot be utilized to initialize TaskGraphs."
                 )
             # TODO (Sukrit): Generate the set of TaskGraphs according to the policy.
-            for job_graph in self._job_graphs:
+            for job_graph in self._job_graphs.values():
                 self._task_graphs |= job_graph.generate_task_graphs(completion_time)
             self._initialized = True
 

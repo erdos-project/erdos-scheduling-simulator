@@ -1,3 +1,5 @@
+from asyncio import create_task
+from cProfile import run
 from venv import create
 
 import pytest
@@ -394,10 +396,16 @@ def test_conditional_task_completion_notification():
         )
     )
     prediction_task = create_default_task(
-        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US))
+        job=Job(
+            name="Prediction",
+            runtime=EventTime(1000, EventTime.Unit.US),
+            probability=0.5,
+        )
     )
     planning_task = create_default_task(
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US))
+        job=Job(
+            name="Planning", runtime=EventTime(1000, EventTime.Unit.US), probability=0.5
+        )
     )
     task_graph = TaskGraph()
     task_graph.add_task(perception_task, [planning_task, prediction_task])
@@ -422,6 +430,51 @@ def test_conditional_task_completion_notification():
     assert (
         released_tasks[0] == prediction_task or released_tasks[0] == planning_task
     ), "Incorrect task released."
+
+
+def test_conditional_weighted_task_completion_notification():
+    """Test that the completion of a conditional task under a probability distribution
+    ensures the release of the correct child."""
+    perception_task = create_default_task(
+        job=Job(
+            name="Perception",
+            runtime=EventTime(1000, EventTime.Unit.US),
+            conditional=True,
+        )
+    )
+    prediction_task = create_default_task(
+        job=Job(
+            name="Prediction",
+            runtime=EventTime(1000, EventTime.Unit.US),
+            probability=1.0,
+        )
+    )
+    planning_task = create_default_task(
+        job=Job(
+            name="Planning", runtime=EventTime(1000, EventTime.Unit.US), probability=0.0
+        )
+    )
+    task_graph = TaskGraph()
+    task_graph.add_task(perception_task, [planning_task, prediction_task])
+
+    released_tasks = task_graph.get_schedulable_tasks(EventTime(0, EventTime.Unit.US))
+    assert len(released_tasks) == 0, "Incorrect length of released tasks returned."
+
+    perception_task.release(EventTime(2, EventTime.Unit.US))
+    released_tasks = task_graph.get_schedulable_tasks(EventTime(2, EventTime.Unit.US))
+    assert len(released_tasks) == 1, "Incorrect length of released tasks returned."
+
+    # Run and finish the execution of Perception.
+    perception_task.start(EventTime(3, EventTime.Unit.US))
+    perception_task.update_remaining_time(EventTime(0, EventTime.Unit.US))
+    perception_task.finish(EventTime(4, EventTime.Unit.US))
+    task_graph.notify_task_completion(perception_task, EventTime(4, EventTime.Unit.US))
+    released_tasks = task_graph.get_schedulable_tasks(EventTime(4, EventTime.Unit.US))
+    assert perception_task.is_complete(), "Task was not completed."
+    assert (
+        len(released_tasks) == 1
+    ), "Incorrect number of tasks were released upon completion."
+    assert released_tasks[0] == prediction_task, "Incorrect task released."
 
 
 def test_task_graph_index_success():
@@ -861,11 +914,17 @@ def test_conditional_task_graph_complete():
         timestamp=0,
     )
     prediction_task_0 = create_default_task(
-        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US)),
+        job=Job(
+            name="Prediction",
+            runtime=EventTime(1000, EventTime.Unit.US),
+            probability=0.5,
+        ),
         timestamp=0,
     )
     planning_task_0 = create_default_task(
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)),
+        job=Job(
+            name="Planning", runtime=EventTime(1000, EventTime.Unit.US), probability=0.5
+        ),
         timestamp=0,
     )
     final_task_0 = create_default_task(
@@ -1076,3 +1135,115 @@ def test_task_time_dilation():
     assert planning_task_1.release_time == EventTime(
         133, EventTime.Unit.US
     ), "Incorrect release time for Planning task [timestamp=1]"
+
+
+def test_task_graph_remaining_time_simple():
+    """Checks that the method correctly computes the remaining time
+    across a simple TaskGraph."""
+    perception_task = create_default_task(
+        name="Perception@0",
+        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
+        runtime=1000,
+    )
+    prediction_task = create_default_task(
+        name="Prediction@0",
+        job=Job(name="Prediction", runtime=EventTime(2000, EventTime.Unit.US)),
+        runtime=2000,
+    )
+    planning_task = create_default_task(
+        name="Planning@0",
+        job=Job(name="Planning", runtime=EventTime(3000, EventTime.Unit.US)),
+        runtime=3000,
+    )
+    task_graph = TaskGraph(
+        tasks={
+            perception_task: [prediction_task],
+            prediction_task: [planning_task],
+            planning_task: [],
+        }
+    )
+    assert task_graph.remaining_time == EventTime(
+        6, EventTime.Unit.MS
+    ), "Incorrect remaining time returned by Graph."
+
+    # Finish the first task and ensure that the remaining time is correctly computed.
+    perception_task.release(EventTime.zero())
+    perception_task.start(EventTime.zero())
+    perception_task.update_remaining_time(time=EventTime.zero())
+    perception_task.finish(EventTime(1, EventTime.Unit.MS))
+    assert task_graph.remaining_time == EventTime(
+        5, EventTime.Unit.MS
+    ), "Incorrect remaining time returned by the Graph."
+
+    # Finish the second task and ensure that the remaining time is correctly computed.
+    prediction_task.release(EventTime(1, EventTime.Unit.MS))
+    prediction_task.start(EventTime(1, EventTime.Unit.MS))
+    prediction_task.update_remaining_time(time=EventTime.zero())
+    prediction_task.finish(EventTime(3, EventTime.Unit.MS))
+    assert task_graph.remaining_time == EventTime(
+        3, EventTime.Unit.MS
+    ), "Incorrect remaining time returned by the Graph."
+
+    # Finish the third task and ensure that the remaining time is correctly computed.
+    planning_task.release(EventTime(3, EventTime.Unit.MS))
+    planning_task.start(EventTime(3, EventTime.Unit.MS))
+    planning_task.update_remaining_time(time=EventTime.zero())
+    planning_task.finish(EventTime(6, EventTime.Unit.MS))
+    assert (
+        task_graph.remaining_time == EventTime.zero()
+    ), "Incorrect remaining time returned by the Graph."
+    assert task_graph.is_complete(), "Incorrect completion status returned."
+
+
+def test_task_graph_remaining_time_complex():
+    """Checks that the method correctly computes the remaining time across
+    a complex TaskGraph."""
+    imu_task = create_default_task(
+        name="IMU@0",
+        job=Job(name="IMU", runtime=EventTime(1000, EventTime.Unit.US)),
+        runtime=1000,
+    )
+    gnss_task = create_default_task(
+        name="GNSS@0",
+        job=Job(name="GNSS", runtime=EventTime(1000, EventTime.Unit.US)),
+        runtime=1000,
+    )
+    localization_task = create_default_task(
+        name="Localization@0",
+        job=Job(name="Localization", runtime=EventTime(1000, EventTime.Unit.US)),
+        runtime=1000,
+    )
+    camera_task = create_default_task(
+        name="Camera@0",
+        job=Job(name="Camera", runtime=EventTime(5000, EventTime.Unit.US)),
+        runtime=5000,
+    )
+    perception_task = create_default_task(
+        name="Perception@0",
+        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
+        runtime=1000,
+    )
+    prediction_task = create_default_task(
+        name="Prediction@0",
+        job=Job(name="Prediction", runtime=EventTime(2000, EventTime.Unit.US)),
+        runtime=2000,
+    )
+    planning_task = create_default_task(
+        name="Planning@0",
+        job=Job(name="Planning", runtime=EventTime(3000, EventTime.Unit.US)),
+        runtime=3000,
+    )
+    task_graph = TaskGraph(
+        tasks={
+            gnss_task: [localization_task],
+            imu_task: [localization_task],
+            localization_task: [prediction_task],
+            camera_task: [perception_task],
+            perception_task: [prediction_task, planning_task],
+            prediction_task: [planning_task],
+            planning_task: [],
+        }
+    )
+    assert task_graph.remaining_time == EventTime(
+        11, EventTime.Unit.MS
+    ), "Incorrect remaining time returned by Graph."

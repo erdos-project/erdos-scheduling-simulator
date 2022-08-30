@@ -47,6 +47,14 @@ class EventTime:
             elif self == EventTime.Unit.S:
                 return "s"
 
+        def __repr__(self):
+            if self == EventTime.Unit.US:
+                return "EventTime.Unit.US"
+            elif self == EventTime.Unit.MS:
+                return "EventTime.Unit.MS"
+            elif self == EventTime.Unit.S:
+                return "EventTime.Unit.S"
+
         def __lt__(self, other):
             return self.value < other.value
 
@@ -75,6 +83,9 @@ class EventTime:
 
     def __str__(self) -> str:
         return f"{self.time}{self.unit}"
+
+    def __repr__(self) -> str:
+        return f"EventTime(time={self.time}, unit={repr(self.unit)})"
 
     def __add__(self, other) -> "EventTime":
         if self.unit == other.unit:

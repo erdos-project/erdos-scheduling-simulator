@@ -2,6 +2,7 @@
 from .base_scheduler import BaseScheduler
 
 # Scheduler implementations
+from .branch_prediction_scheduler import BranchPredictionScheduler
 from .edf_scheduler import EDFScheduler
 from .gurobi_scheduler import GurobiScheduler, GurobiScheduler2
 from .lsf_scheduler import LSFScheduler
