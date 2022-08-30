@@ -394,10 +394,16 @@ def test_conditional_task_completion_notification():
         )
     )
     prediction_task = create_default_task(
-        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US))
+        job=Job(
+            name="Prediction",
+            runtime=EventTime(1000, EventTime.Unit.US),
+            probability=0.5,
+        )
     )
     planning_task = create_default_task(
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US))
+        job=Job(
+            name="Planning", runtime=EventTime(1000, EventTime.Unit.US), probability=0.5
+        )
     )
     task_graph = TaskGraph()
     task_graph.add_task(perception_task, [planning_task, prediction_task])
@@ -422,6 +428,51 @@ def test_conditional_task_completion_notification():
     assert (
         released_tasks[0] == prediction_task or released_tasks[0] == planning_task
     ), "Incorrect task released."
+
+
+def test_conditional_weighted_task_completion_notification():
+    """Test that the completion of a conditional task under a probability distribution
+    ensures the release of the correct child."""
+    perception_task = create_default_task(
+        job=Job(
+            name="Perception",
+            runtime=EventTime(1000, EventTime.Unit.US),
+            conditional=True,
+        )
+    )
+    prediction_task = create_default_task(
+        job=Job(
+            name="Prediction",
+            runtime=EventTime(1000, EventTime.Unit.US),
+            probability=1.0,
+        )
+    )
+    planning_task = create_default_task(
+        job=Job(
+            name="Planning", runtime=EventTime(1000, EventTime.Unit.US), probability=0.0
+        )
+    )
+    task_graph = TaskGraph()
+    task_graph.add_task(perception_task, [planning_task, prediction_task])
+
+    released_tasks = task_graph.get_schedulable_tasks(EventTime(0, EventTime.Unit.US))
+    assert len(released_tasks) == 0, "Incorrect length of released tasks returned."
+
+    perception_task.release(EventTime(2, EventTime.Unit.US))
+    released_tasks = task_graph.get_schedulable_tasks(EventTime(2, EventTime.Unit.US))
+    assert len(released_tasks) == 1, "Incorrect length of released tasks returned."
+
+    # Run and finish the execution of Perception.
+    perception_task.start(EventTime(3, EventTime.Unit.US))
+    perception_task.update_remaining_time(EventTime(0, EventTime.Unit.US))
+    perception_task.finish(EventTime(4, EventTime.Unit.US))
+    task_graph.notify_task_completion(perception_task, EventTime(4, EventTime.Unit.US))
+    released_tasks = task_graph.get_schedulable_tasks(EventTime(4, EventTime.Unit.US))
+    assert perception_task.is_complete(), "Task was not completed."
+    assert (
+        len(released_tasks) == 1
+    ), "Incorrect number of tasks were released upon completion."
+    assert released_tasks[0] == prediction_task, "Incorrect task released."
 
 
 def test_task_graph_index_success():
@@ -861,11 +912,17 @@ def test_conditional_task_graph_complete():
         timestamp=0,
     )
     prediction_task_0 = create_default_task(
-        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US)),
+        job=Job(
+            name="Prediction",
+            runtime=EventTime(1000, EventTime.Unit.US),
+            probability=0.5,
+        ),
         timestamp=0,
     )
     planning_task_0 = create_default_task(
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)),
+        job=Job(
+            name="Planning", runtime=EventTime(1000, EventTime.Unit.US), probability=0.5
+        ),
         timestamp=0,
     )
     final_task_0 = create_default_task(

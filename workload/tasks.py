@@ -625,8 +625,16 @@ class TaskGraph(Graph[Task]):
 
         if task.conditional:
             # Choose a child randomly from the set of children.
-            # TODO (Sukrit): Allow users to define a weight on the conditional branches.
-            child_to_release = random.choice(self.get_children(task))
+            # Ensure that the probability of the children is adding up to 1.
+            task_children = self.get_children(task)
+            task_children_probabilities = [child.probability for child in task_children]
+            if abs(sum(task_children_probabilities) - 1.0) > sys.float_info.epsilon:
+                raise ValueError("The sum of the probability of children exceeds 1.0")
+
+            # Choose a child to release using the probability distribution.
+            child_to_release = random.choices(
+                population=task_children, weights=task_children_probabilities, k=1
+            )[0]
             if child_to_release.state != TaskState.VIRTUAL:
                 raise RuntimeError(
                     f"Child task {child_to_release} was released \
