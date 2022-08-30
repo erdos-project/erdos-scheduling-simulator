@@ -493,6 +493,10 @@ class Task(object):
         return self._creating_job.conditional
 
     @property
+    def probability(self):
+        return self._creating_job.probability
+
+    @property
     def terminal(self):
         return self._creating_job.terminal
 

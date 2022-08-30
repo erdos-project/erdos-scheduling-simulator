@@ -85,6 +85,9 @@ class WorkloadLoader(object):
             conditional_job = False
             if "conditional" in node and node["conditional"]:
                 conditional_job = True
+            probability = 1.0
+            if "probability" in node:
+                probability = node["probability"]
             terminal_job = False
             if "terminal" in node and node["terminal"]:
                 terminal_job = True
@@ -104,6 +107,7 @@ class WorkloadLoader(object):
                 runtime=runtime,
                 resource_requirements=resource_requirements,
                 conditional=conditional_job,
+                probability=probability,
                 terminal=terminal_job,
             )
             name_to_job_mapping[node["name"]] = job

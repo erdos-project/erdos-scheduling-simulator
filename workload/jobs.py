@@ -41,6 +41,7 @@ class Job(object):
         resource_requirements: Optional[Sequence[Resources]] = None,
         pipelined: bool = False,
         conditional: bool = False,
+        probability: float = 1.0,
         terminal: bool = False,
     ) -> None:
         if type(runtime) != EventTime:
@@ -53,6 +54,7 @@ class Job(object):
         self._runtime = runtime
         self._pipelined = pipelined
         self._conditional = conditional
+        self._probability = probability
         self._terminal = terminal
 
     @property
@@ -78,6 +80,10 @@ class Job(object):
     @property
     def conditional(self):
         return self._conditional
+
+    @property
+    def probability(self):
+        return self._probability
 
     @property
     def terminal(self):
