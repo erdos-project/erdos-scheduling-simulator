@@ -74,6 +74,9 @@ flags.DEFINE_bool("stats", False, "Print the statistics from the tasks loaded.")
 flags.DEFINE_integer(
     "loop_timeout", sys.maxsize, "Timeout for the Simulator loop (in us)."
 )
+flags.DEFINE_integer(
+    "random_seed", 42, "The seed to be used for random number generation."
+)
 
 # Benchmark related flags.
 flags.DEFINE_integer(
@@ -169,7 +172,7 @@ def main(args):
     """Main loop that loads the data from the given profile paths, and
     runs the Simulator on the data with the given scheduler.
     """
-    random.seed(42)
+    random.seed(FLAGS.random_seed)
     logger = setup_logging(
         name=__name__, log_file=FLAGS.log_file_name, log_level=FLAGS.log_level
     )
@@ -272,7 +275,7 @@ def main(args):
         )
     elif FLAGS.scheduler == "BranchPrediction":
         scheduler = BranchPredictionScheduler(
-            policy=BranchPredictionScheduler.Policy.BEST_CASE,
+            policy=BranchPredictionScheduler.Policy.WORST_CASE,
             preemptive=FLAGS.preemption,
             runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
             _flags=FLAGS,

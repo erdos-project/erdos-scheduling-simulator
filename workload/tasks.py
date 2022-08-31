@@ -3,7 +3,7 @@ import math
 import random
 import sys
 import uuid
-from collections import defaultdict, deque, namedtuple
+from collections import defaultdict, deque
 from enum import Enum
 from functools import total_ordering
 from typing import Mapping, Optional, Sequence, Union
@@ -55,6 +55,8 @@ class Task(object):
         completion_time (`EventTime`): The time (in us) at which the task completed
             / was preempted (only available if state is either
             EVICTED / COMPLETED, -1 otherwise)
+        probability (`float`): The probability with which this Task will be executed.
+            If `None`, the probability is retrieved from the creating Job.
         _logger(`Optional[logging.Logger]`): The logger to use to log the
             results of the execution.
     """
@@ -78,6 +80,7 @@ class Task(object):
         release_time: Optional[EventTime] = EventTime(-1, EventTime.Unit.US),
         start_time: Optional[EventTime] = EventTime(-1, EventTime.Unit.US),
         completion_time: Optional[EventTime] = EventTime(-1, EventTime.Unit.US),
+        probability: float = None,
         _logger: Optional[logging.Logger] = None,
     ):
         # Check the types of the arguments.
@@ -107,6 +110,9 @@ class Task(object):
         self._name = name
         self._task_graph = task_graph
         self._creating_job = job
+        self._probability = (
+            self._creating_job.probability if probability is None else probability
+        )
         if resource_requirements is None:
             resource_requirements = random.choice(job.resource_requirements)
         self._resource_reqs = resource_requirements
@@ -379,6 +385,14 @@ class Task(object):
             raise ValueError("Trying to set a negative value for the deadline.")
         self._deadline = new_deadline
 
+    def update_probability(self, new_probability: float):
+        """Updates the probability with which the Task is executed.
+
+        Args:
+            new_probability (`float`): The new probability to assign to the Task.
+        """
+        self._probability = new_probability
+
     def is_complete(self) -> bool:
         """Check if the task has finished its execution.
 
@@ -494,7 +508,7 @@ class Task(object):
 
     @property
     def probability(self):
-        return self._creating_job.probability
+        return self._probability
 
     @property
     def terminal(self):
@@ -640,6 +654,14 @@ class TaskGraph(Graph[Task]):
                     f"Child task {child_to_release} was released \
                         without completion of parent {task}."
                 )
+
+            # Set the child's probability to 1.0 now that a decision has been made.
+            for child in task_children:
+                if child == child_to_release:
+                    child.update_probability(1.0)
+                else:
+                    child.update_probability(0.0)
+
             if child_to_release.release_time == EventTime(-1, EventTime.Unit.US):
                 # If the child does not have a release time, then set it to now,
                 # which is the time of the completion of the last parent task.
@@ -752,8 +774,13 @@ class TaskGraph(Graph[Task]):
             task = task_queue.popleft()
             completion_time = estimated_completion_time[task]
             for child_task in self.get_children(task):
-                if child_task.state != TaskState.VIRTUAL:
+                if (
+                    child_task.state != TaskState.VIRTUAL
+                    or child_task.probability < sys.float_info.epsilon
+                ):
                     # Skip the task because we've already set its completion time.
+                    # Skip the task if it's probability ensures that it will never
+                    # be executed.
                     continue
                 child_completion_time = completion_time + child_task.remaining_time
                 if child_task.release_time:

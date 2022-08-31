@@ -216,6 +216,12 @@ class JobGraph(Graph[Job]):
         Returns:
             A mapping from the name of the `TaskGraph` to the `TaskGraph`.
         """
+        # Set the seed of the random number generator if provided.
+        if _flags:
+            random_number_generator = random.Random(_flags.random_seed)
+        else:
+            random_number_generator = None
+
         releases = []
         if self.release_policy.policy_type == self.ReleasePolicyType.PERIODIC:
             current_release = start_time
@@ -248,6 +254,7 @@ class JobGraph(Graph[Job]):
                 task_graph_name=task_graph_name,
                 timestamp=index,
                 task_logger=task_logger,
+                random_number_generator=random_number_generator,
                 _flags=_flags,
             )
         return task_graphs
@@ -258,16 +265,20 @@ class JobGraph(Graph[Job]):
         task_graph_name: str,
         timestamp: int,
         task_logger: logging.Logger,
+        random_number_generator=None,
         _flags: Optional["absl.flags"] = None,
     ) -> TaskGraph:
         """Generates a TaskGraph from the structure of the `JobGraph` whose
         source operators are released at the provided `release_time`.
 
         Args:
-            `release_time`: The time at which the source operators for the
-            `TaskGraph` must be released.
+            release_time: The time at which the source operators for the
+                `TaskGraph` must be released.
             task_graph_name: The name of the `TaskGraph` being generated.
             timestamp: The timestamp of the `TaskGraph` being generated.
+            random_number_generator: The RNG to use for resolving the
+                probabilities of execution at Job submission time.
+                If `None`, the initial probabilities are forwarded.
 
         Returns:
             A `TaskGraph` whose source operators are released at the given time.
@@ -310,8 +321,22 @@ class JobGraph(Graph[Job]):
         # Generate a TaskGraph from the generated Tasks.
         task_graph_mapping = {}
         for parent, children in self._graph.items():
+            parent_task = job_to_task_mapping[parent.name]
             task_children = [job_to_task_mapping[child.name] for child in children]
-            task_graph_mapping[job_to_task_mapping[parent.name]] = task_children
+            if parent_task.conditional and random_number_generator is not None:
+                # Resolve the conditionals at Job submission time according to
+                # the probabilities.
+                child_to_release = random_number_generator.choices(
+                    population=task_children,
+                    weights=[child.probability for child in task_children],
+                    k=1,
+                )[0]
+                for child in task_children:
+                    if child == child_to_release:
+                        child.update_probability(1.0)
+                    else:
+                        child.update_probability(0.0)
+            task_graph_mapping[parent_task] = task_children
         return TaskGraph(tasks=task_graph_mapping)
 
     def __get_completion_time(self, start=EventTime(0, EventTime.Unit.US)) -> EventTime:
