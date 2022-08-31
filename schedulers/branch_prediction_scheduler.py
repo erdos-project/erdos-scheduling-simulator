@@ -58,7 +58,9 @@ class BranchPredictionScheduler(BaseScheduler):
         tasks_to_be_scheduled = [
             (
                 task,
-                self.compute_slack(sim_time, workload.get_task_graph(task.task_graph)),
+                self.compute_slack(
+                    sim_time, workload.get_task_graph(task.task_graph), task.task_graph
+                ),
             )
             for task in tasks_to_be_scheduled
         ]
@@ -80,6 +82,13 @@ class BranchPredictionScheduler(BaseScheduler):
         # worker pools.
         start_time = time.time()
         ordered_tasks = list(sorted(tasks_to_be_scheduled, key=lambda item: item[1]))
+
+        ordered_task_names = [
+            f"{task.unique_name}({slack})" for task, slack in ordered_tasks
+        ]
+        self._logger.info(
+            f"[{sim_time}] The order of the tasks is {ordered_task_names}."
+        )
 
         # Run the scheduling loop.
         placements = []
@@ -122,8 +131,17 @@ class BranchPredictionScheduler(BaseScheduler):
         else:
             return self.runtime, placements
 
-    def compute_slack(self, sim_time: EventTime, task_graph: TaskGraph) -> EventTime:
-        return task_graph.deadline - sim_time - self.compute_remaining_time(task_graph)
+    def compute_slack(
+        self, sim_time: EventTime, task_graph: TaskGraph, task_graph_name: str
+    ) -> EventTime:
+        remaining_time = self.compute_remaining_time(task_graph)
+        expected_completion_time = sim_time + remaining_time
+        self._logger.info(
+            f"[{sim_time}] The deadline of the TaskGraph {task_graph_name} is "
+            f"{task_graph.deadline}, and the remaining time is {remaining_time}. "
+            f"The graph is expected to complete by {expected_completion_time}."
+        )
+        return task_graph.deadline - expected_completion_time
 
     def compute_remaining_time(self, task_graph: TaskGraph) -> EventTime:
         """Computes the slack of the given `TaskGraph` at the `sim_time` using

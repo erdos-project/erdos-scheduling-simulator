@@ -467,7 +467,7 @@ class Simulator(object):
             )
             if self._next_scheduler_event._time != new_scheduler_event_time:
                 self._logger.info(
-                    f"[{event.time}] While adding the task from{event}, the scheduler "
+                    f"[{event.time}] While adding the task from {event}, the scheduler "
                     f"event from {self._next_scheduler_event._time} was pulled back "
                     f"to {new_scheduler_event_time}."
                 )
@@ -608,7 +608,9 @@ class Simulator(object):
             `True` if the event is a SIMULATOR_END and the simulator loop
             should be stopped, `False` otherwise.
         """
-        self._logger.info(f"[{event.time}] Received {event} from the event queue.")
+        self._logger.info(
+            f"[{self._simulator_time}] Received {event} from the event queue."
+        )
         assert (
             event.time >= self._simulator_time
         ), f"Simulator cannot move time from {self._simulator_time} to {event.time}"

@@ -246,7 +246,7 @@ class Graph(Generic[T]):
 
         return topological_sort[::-1]
 
-    def get_longest_path(self) -> List[T]:
+    def get_longest_path(self, weights=None) -> List[T]:
         """Retrieves the longest path in the graph that goes from a source node to a
         sink node.
 
@@ -254,20 +254,33 @@ class Graph(Generic[T]):
             A `List[T]` that contains an ordered list of nodes that form the longest
             path from a source node to a sink node.
         """
-        longest_path_length = defaultdict(int)
+        if weights == None:
+            # If a function for the weights was not specified, use the
+            # notion that if the longest path was just a source, it would be 1.
+            # and then the addition of every node costs a +1 in length.
+            weights = lambda node: 1 if self.is_source(node) else 2
+        longest_path_length = {node: weights(node) for node in self.get_nodes()}
         predecessor = {}
 
         for node in self.topological_sort():
             for child in self.get_children(node):
-                if longest_path_length[child] <= longest_path_length[node] + 1:
-                    longest_path_length[child] = longest_path_length[node] + 1
+                if longest_path_length[child] <= longest_path_length[node] + weights(
+                    child
+                ):
+                    longest_path_length[child] = longest_path_length[node] + weights(
+                        child
+                    )
                     predecessor[child] = node
 
-        start_node, length = max(longest_path_length.items(), key=lambda val: val[1])
+        start_node, cumulative_sum_length = max(
+            longest_path_length.items(), key=lambda val: val[1]
+        )
         longest_path = [start_node]
-        for _ in range(length):
+        cumulative_sum_length -= weights(start_node)
+        while cumulative_sum_length > 0:
             start_node = predecessor[start_node]
             longest_path.append(start_node)
+            cumulative_sum_length -= weights(start_node)
         return longest_path[::-1]
 
     def are_dependent(self, node_1: T, node_2: T) -> bool:
