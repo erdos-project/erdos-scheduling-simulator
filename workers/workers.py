@@ -133,6 +133,14 @@ class Worker(object):
             self.remove_task(task)
         return completed_tasks
 
+    def is_full(self) -> bool:
+        """Check if the Worker is full.
+
+        Returns:
+            `True` if all the Resources in the Worker are full, `False` otherwise.
+        """
+        return self._resources.empty()
+
     def __copy__(self):
         """A copy of the Worker uses the same ID, and copies the resource
         allocations of self.
@@ -402,6 +410,14 @@ class WorkerPool(object):
             quantity allocated) pair.
         """
         return self._workers[self._placed_tasks[task]].get_allocated_resources(task)
+
+    def is_full(self) -> bool:
+        """Check if the WorkerPool is full.
+
+        Returns:
+            `True` if all the Resources in the WorkerPool are full, `False` otherwise.
+        """
+        return all(worker.is_full() for worker in self._workers.values())
 
     @property
     def name(self):

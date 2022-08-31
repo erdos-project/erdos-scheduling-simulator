@@ -258,6 +258,14 @@ class Resources(object):
 
         del self._current_allocations[task]
 
+    def empty(self) -> bool:
+        """Check if the Resources instance has no available resources.
+
+        Returns:
+            `True` if there are no resources available, `False` otherwise.
+        """
+        return all(quantity == 0 for quantity in self._resource_vector.values())
+
     @property
     def resources(self) -> List[Tuple[Resource, int]]:
         """Returns the total resources in this WorkerPool."""

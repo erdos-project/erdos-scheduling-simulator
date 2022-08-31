@@ -772,13 +772,16 @@ class Simulator(object):
                 event_type=EventType.SIMULATOR_END,
                 time=event.time + EventTime(1, EventTime.Unit.US),
             )
-        elif len(schedulable_tasks) == 0 or all(
-            task.state == TaskState.RUNNING for task in schedulable_tasks
+        elif (
+            len(schedulable_tasks) == 0
+            or all(task.state == TaskState.RUNNING for task in schedulable_tasks)
+            or all(worker_pool.is_full() for worker_pool in self._worker_pools.values())
         ):
             # If there are no schedulable tasks currently, or all schedulable tasks are
-            # already running (in a preemptive scheduling scenario), djust the
-            # scheduler invocation time according to either the time of invocation of
-            # the next event, or the minimum completion time of a running task.
+            # already running (in a preemptive scheduling scenario), or the WorkerPool
+            # is full, adjust the # scheduler invocation time according to either the
+            # time of invocation of # the next event, or the minimum completion time
+            # of a running task.
             minimum_running_task_completion_time = (
                 self._simulator_time
                 + min(
@@ -801,7 +804,7 @@ class Simulator(object):
             )
 
             if scheduler_start_time != adjusted_scheduler_start_time:
-                self._logger.debug(
+                self._logger.warn(
                     f"[{event.time}] The scheduler start time was pushed from "
                     f"{scheduler_start_time} to {adjusted_scheduler_start_time} since "
                     f"either the next running task finishes at "
