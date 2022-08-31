@@ -315,7 +315,13 @@ class JobGraph(Graph[Job]):
         return TaskGraph(tasks=task_graph_mapping)
 
     def __get_completion_time(self, start=EventTime(0, EventTime.Unit.US)) -> EventTime:
-        return sum((job.runtime for job in self.get_longest_path()), start=start)
+        return sum(
+            (
+                job.runtime
+                for job in self.get_longest_path(weights=lambda job: job.runtime.time)
+            ),
+            start=start,
+        )
 
     @property
     def completion_time(self):

@@ -2,7 +2,7 @@ from typing import Mapping, Optional, Sequence
 
 import absl
 
-from utils import EventTime
+from utils import EventTime, setup_logging
 
 from .jobs import JobGraph
 from .tasks import Task, TaskGraph
@@ -29,7 +29,16 @@ class Workload(object):
             raise ValueError(
                 "Either the JobGraph(s) or TaskGraph(s) should be provided."
             )
+
+        # Setup the logger and save the flags.
         self._flags = _flags
+        if self._flags:
+            self._logger = setup_logging(
+                "Workload", log_file=_flags.log_file_name, log_level=_flags.log_level
+            )
+        else:
+            self._logger = setup_logging("Workload")
+
         # Prioritize the creation of the Workload from a TaskGraph
         # for backward compatibility with older versions of logs.
         if task_graphs is None:
@@ -137,6 +146,10 @@ class Workload(object):
         if len(new_tasks) == 0 and task_graph.is_complete():
             # The TaskGraph has finished execution, it is safe to remove
             # it from the Workload at this moment.
+            self._logger.info(
+                f"[{finish_time}] Finished the execution of TaskGraph "
+                f"{task.task_graph} with the deadline {task_graph.deadline}."
+            )
             del self._task_graphs[task.task_graph]
         return new_tasks
 

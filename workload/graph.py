@@ -254,11 +254,11 @@ class Graph(Generic[T]):
             A `List[T]` that contains an ordered list of nodes that form the longest
             path from a source node to a sink node.
         """
-        if weights == None:
+        if weights is None:
             # If a function for the weights was not specified, use the
             # notion that if the longest path was just a source, it would be 1.
             # and then the addition of every node costs a +1 in length.
-            weights = lambda node: 1 if self.is_source(node) else 2
+            weights = lambda node: 1 if self.is_source(node) else 2  # noqa: E731
         longest_path_length = {node: weights(node) for node in self.get_nodes()}
         predecessor = {}
 
