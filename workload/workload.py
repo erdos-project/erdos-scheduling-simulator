@@ -1,5 +1,6 @@
-import sys
 from typing import Mapping, Optional, Sequence
+
+import absl
 
 from utils import EventTime
 
@@ -22,11 +23,13 @@ class Workload(object):
         self,
         job_graphs: Optional[Mapping[str, JobGraph]] = None,
         task_graphs: Optional[Mapping[str, TaskGraph]] = None,
+        _flags: Optional["absl.flags"] = None,
     ) -> None:
         if job_graphs is None and task_graphs is None:
             raise ValueError(
                 "Either the JobGraph(s) or TaskGraph(s) should be provided."
             )
+        self._flags = _flags
         # Prioritize the creation of the Workload from a TaskGraph
         # for backward compatibility with older versions of logs.
         if task_graphs is None:
@@ -39,23 +42,27 @@ class Workload(object):
             self._initialized = True
 
     @staticmethod
-    def from_job_graphs(job_graphs: Mapping[str, JobGraph]) -> "Workload":
+    def from_job_graphs(
+        job_graphs: Mapping[str, JobGraph], _flags: Optional["absl.flags"] = None
+    ) -> "Workload":
         """Creates a Workload from the given JobGraphs.
 
         Args:
             job_graphs: A mapping from the name of the application to its JobGraph.
 
         """
-        return Workload(job_graphs=job_graphs)
+        return Workload(job_graphs=job_graphs, _flags=_flags)
 
     @staticmethod
-    def from_task_graphs(task_graphs: Mapping[str, TaskGraph]) -> "Workload":
+    def from_task_graphs(
+        task_graphs: Mapping[str, TaskGraph], _flags: Optional["absl.flags"] = None
+    ) -> "Workload":
         """Creates a Workload from the given TaskGraphs.
 
         Args:
             task_graphs: A mapping from the name of the application to its TaskGraph.
         """
-        return Workload(task_graphs=task_graphs)
+        return Workload(task_graphs=task_graphs, _flags=_flags)
 
     @staticmethod
     def empty() -> "Workload":
@@ -79,13 +86,10 @@ class Workload(object):
             and the `Workload` was not instantiated from the `TaskGraph`s.
         """
         if not self._initialized:
-            if completion_time.time == sys.maxsize:
-                raise ValueError(
-                    "An infinite loop cannot be utilized to initialize TaskGraphs."
-                )
-            # TODO (Sukrit): Generate the set of TaskGraphs according to the policy.
             for job_graph in self._job_graphs.values():
-                self._task_graphs |= job_graph.generate_task_graphs(completion_time)
+                self._task_graphs |= job_graph.generate_task_graphs(
+                    completion_time, _flags=self._flags
+                )
             self._initialized = True
 
     def get_job_graph(self, name: str) -> Optional[JobGraph]:

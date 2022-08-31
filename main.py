@@ -191,7 +191,8 @@ def main(args):
             _flags=FLAGS,
         )
         workload = Workload.from_task_graphs(
-            {"pylot_dataflow": task_loader.get_task_graph()}
+            {"pylot_dataflow": task_loader.get_task_graph()},
+            _flags=FLAGS,
         )
     elif FLAGS.execution_mode == "synthetic":
         task_loader = TaskLoaderSynthetic(

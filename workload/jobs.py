@@ -141,16 +141,19 @@ class JobGraph(Graph[Job]):
     class ReleasePolicyType(Enum):
         """Represents the different release policies supported by a JobGraph."""
 
-        PERIODIC = 1
+        PERIODIC = 1  # Releases a TaskGraph after the period time has elapsed.
+        FIXED = 2  # Releases a fixed number of TaskGraphs seperated by the period.
 
     class ReleasePolicy(object):
         def __init__(
             self,
             policy_type: "ReleasePolicyType",  # noqa: F821
             period: EventTime = EventTime(100, EventTime.Unit.US),
+            fixed_invocation_nums: int = 0,
         ) -> None:
             self._policy_type = policy_type
             self._period = period
+            self._fixed_invocation_nums = fixed_invocation_nums
 
         @property
         def policy_type(self) -> "ReleasePolicyType":  # noqa: F821
@@ -159,6 +162,10 @@ class JobGraph(Graph[Job]):
         @property
         def period(self) -> EventTime:
             return self._period
+
+        @property
+        def fixed_invocation_nums(self) -> EventTime:
+            return self._fixed_invocation_nums
 
     def __init__(
         self,
@@ -209,10 +216,15 @@ class JobGraph(Graph[Job]):
         Returns:
             A mapping from the name of the `TaskGraph` to the `TaskGraph`.
         """
+        releases = []
         if self.release_policy.policy_type == self.ReleasePolicyType.PERIODIC:
-            releases = []
             current_release = start_time
             while current_release <= completion_time:
+                releases.append(current_release)
+                current_release += self.release_policy.period
+        elif self.release_policy.policy_type == self.ReleasePolicyType.FIXED:
+            current_release = start_time
+            for _ in range(self.release_policy.fixed_invocation_nums):
                 releases.append(current_release)
                 current_release += self.release_policy.period
         else:
@@ -262,7 +274,7 @@ class JobGraph(Graph[Job]):
         """
         # Retrieve variances from the command line flags.
         if _flags:
-            runtime_variance = _flags.runtime_variance
+            runtime_variance = (0, _flags.runtime_variance)
             deadline_variance = (
                 _flags.min_deadline_variance,
                 _flags.max_deadline_variance,

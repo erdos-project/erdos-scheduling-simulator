@@ -50,6 +50,12 @@ class WorkloadLoader(object):
                     policy_type=JobGraph.ReleasePolicyType.PERIODIC,
                     period=EventTime(jobs["period"], EventTime.Unit.US),
                 )
+            elif jobs["release_policy"] == "fixed":
+                release_policy = JobGraph.ReleasePolicy(
+                    policy_type=JobGraph.ReleasePolicyType.FIXED,
+                    period=EventTime(jobs["period"], EventTime.Unit.US),
+                    fixed_invocation_nums=jobs["invocations"],
+                )
             else:
                 raise NotImplementedError(
                     f"The release policy {jobs['release_policy']} is not implemented."
@@ -62,7 +68,7 @@ class WorkloadLoader(object):
                 self._resource_logger,
             )
 
-        self._workload = Workload.from_job_graphs(job_graph_mapping)
+        self._workload = Workload.from_job_graphs(job_graph_mapping, _flags=_flags)
 
     @staticmethod
     def load_job_graph(job_graph, json_repr, resource_logger) -> JobGraph:
