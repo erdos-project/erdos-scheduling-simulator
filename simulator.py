@@ -801,11 +801,17 @@ class Simulator(object):
                 else EventTime(0, EventTime.Unit.US)
             )
 
-            adjusted_scheduler_start_time = max(
-                scheduler_start_time,
-                minimum_running_task_completion_time,
-                next_event_invocation_time,
-            )
+            next_event_time = None
+            if len(running_tasks) == 0:
+                next_event_time = next_event_invocation_time
+            elif next_event is None:
+                next_event_time = minimum_running_task_completion_time
+            else:
+                next_event_time = min(
+                    minimum_running_task_completion_time, next_event_invocation_time
+                )
+
+            adjusted_scheduler_start_time = max(scheduler_start_time, next_event_time)
 
             if scheduler_start_time != adjusted_scheduler_start_time:
                 self._logger.warn(
