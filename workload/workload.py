@@ -124,7 +124,10 @@ class Workload(object):
         return self._task_graphs.get(name)
 
     def notify_task_completion(
-        self, task: Task, finish_time: EventTime
+        self,
+        task: Task,
+        finish_time: EventTime,
+        csv_logger=None,
     ) -> Sequence[Task]:
         """Notifies the Workload of the completion of a task.
 
@@ -146,10 +149,21 @@ class Workload(object):
         if len(new_tasks) == 0 and task_graph.is_complete():
             # The TaskGraph has finished execution, it is safe to remove
             # it from the Workload at this moment.
+            tardiness = (
+                EventTime(0, EventTime.Unit.US)
+                if task_graph.deadline > finish_time
+                else finish_time - task_graph.deadline
+            )
             self._logger.info(
                 f"[{finish_time}] Finished the execution of TaskGraph "
-                f"{task.task_graph} with the deadline {task_graph.deadline}."
+                f"{task.task_graph} with the deadline {task_graph.deadline}. "
+                f"The tardiness was {tardiness}."
             )
+            if csv_logger:
+                csv_logger.info(
+                    f"{finish_time.time},TASK_GRAPH_FINISH,{task.task_graph},"
+                    f"{task_graph.deadline.time},{tardiness.to(EventTime.Unit.US).time}"
+                )
             del self._task_graphs[task.task_graph]
         return new_tasks
 
