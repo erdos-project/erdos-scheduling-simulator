@@ -166,10 +166,10 @@ class BranchPredictionScheduler(BaseScheduler):
             if task not in remaining_time:
                 continue
 
-            if task.conditional:
+            if task.conditional and not task.is_complete():
                 children_tasks = task_graph.get_children(task)
-                # If the task is conditional, propagate the remaining time
-                # to the children according to the policy in the scheduler.
+                # If the task is an unresolved conditional, propagate the remaining
+                # time # to the children according to the policy in the scheduler.
                 if self.policy == self.Policy.WORST_CASE:
                     # Choose the branch that has the lowest probability.
                     child_to_release = children_tasks[0]
@@ -195,8 +195,8 @@ class BranchPredictionScheduler(BaseScheduler):
                     remaining_time[task] + child_to_release.remaining_time
                 )
             else:
-                # If the task is not conditional, propogate the remaining time
-                # to all the children.
+                # If the task is not conditional, or has been resolved,
+                # propogate the remaining time to all the children.
                 for child_task in task_graph.get_children(task):
                     if (
                         remaining_time[child_task]

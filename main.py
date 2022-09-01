@@ -155,6 +155,12 @@ flags.DEFINE_integer(
     "The scheduler places tasks that are estimated to be released "
     "within the scheduling lookahead (in us).",
 )
+flags.DEFINE_enum(
+    "scheduler_policy",
+    "worst",
+    ["best", "worst", "random"],
+    "The policy to be used for the BranchPredictionScheduler.",
+)
 flags.DEFINE_bool(
     "enforce_deadlines",
     False,
@@ -274,8 +280,20 @@ def main(args):
             _flags=FLAGS,
         )
     elif FLAGS.scheduler == "BranchPrediction":
+        if FLAGS.scheduler_policy == "best":
+            policy = BranchPredictionScheduler.Policy.BEST_CASE
+        elif FLAGS.scheduler_policy == "worst":
+            policy = BranchPredictionScheduler.Policy.WORST_CASE
+        elif FLAGS.scheduler_policy == "random":
+            policy = BranchPredictionScheduler.Policy.RANDOM
+        else:
+            raise NotImplementedError(
+                f"The policy {FLAGS.scheduler_policy} is not supported."
+            )
+        print(policy)
+
         scheduler = BranchPredictionScheduler(
-            policy=BranchPredictionScheduler.Policy.WORST_CASE,
+            policy=policy,
             preemptive=FLAGS.preemption,
             runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
             _flags=FLAGS,
