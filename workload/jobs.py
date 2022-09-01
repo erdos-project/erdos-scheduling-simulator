@@ -1,5 +1,6 @@
 import logging
 import random
+import sys
 import uuid
 from enum import Enum
 from typing import Mapping, Optional, Sequence, Tuple
@@ -303,8 +304,8 @@ class JobGraph(Graph[Job]):
                 else EventTime(-1, EventTime.Unit.US)
             )
             task_runtime = fuzz_time(job.runtime, runtime_variance)
-            task_deadline = fuzz_time(
-                self.__get_completion_time(start=release_time),
+            task_deadline = release_time + fuzz_time(
+                self.__get_completion_time(),
                 deadline_variance,
             )
             job_to_task_mapping[job.name] = Task(
@@ -336,14 +337,43 @@ class JobGraph(Graph[Job]):
                         child.update_probability(1.0)
                     else:
                         child.update_probability(0.0)
+                        for grand_child_job in self.breadth_first(child.job):
+                            if grand_child_job.terminal:
+                                break
+                            grand_child_task = job_to_task_mapping[grand_child_job.name]
+                            grand_child_task.update_probability(0.0)
             task_graph_mapping[parent_task] = task_children
-        return TaskGraph(tasks=task_graph_mapping)
+
+        # Now that the task probabilities have been set, update the deadlines.
+        task_graph = TaskGraph(tasks=task_graph_mapping)
+        weighted_task_graph_length = sum(
+            (
+                task.job.runtime
+                for task in task_graph.get_longest_path(
+                    weights=lambda task: task.job.runtime.time
+                    if task.probability > sys.float_info.epsilon
+                    else 0
+                )
+            ),
+            start=EventTime.zero(),
+        )
+        task_graph_deadline = release_time + fuzz_time(
+            weighted_task_graph_length, deadline_variance
+        )
+        for task in task_graph.get_nodes():
+            task.update_deadline(task_graph_deadline)
+
+        return task_graph
 
     def __get_completion_time(self, start=EventTime(0, EventTime.Unit.US)) -> EventTime:
         return sum(
             (
                 job.runtime
-                for job in self.get_longest_path(weights=lambda job: job.runtime.time)
+                for job in self.get_longest_path(
+                    weights=lambda job: job.runtime.time
+                    if job.probability > sys.float_info.epsilon
+                    else 0
+                )
             ),
             start=start,
         )
