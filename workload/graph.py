@@ -186,10 +186,14 @@ class Graph(Generic[T]):
             self._parent_graph[child].remove(node)
         del self._graph[node]
 
-    def breadth_first(self) -> Generator[T, None, None]:
-        """Iterates over the graph in a breadth-first manner."""
+    def breadth_first(self, node: T = None) -> Generator[T, None, None]:
+        """Iterates over the graph in a breadth-first manner.
+
+        Args:
+            node: The node to start the breadth-first search from.
+        """
         visited_nodes = set()
-        frontier = deque(self.get_sources())
+        frontier = deque(self.get_sources() if node is None else [node])
         while len(frontier) > 0:
             node = frontier.popleft()
             visited_nodes.add(node)

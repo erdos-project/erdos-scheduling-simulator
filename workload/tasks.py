@@ -656,11 +656,18 @@ class TaskGraph(Graph[Task]):
                 )
 
             # Set the child's probability to 1.0 now that a decision has been made.
+            # Do a breadth first search until the first terminal node from the children
+            # whose branch is not taken and update their remaining time to 0.
             for child in task_children:
                 if child == child_to_release:
                     child.update_probability(1.0)
                 else:
                     child.update_probability(0.0)
+                    for grand_child in self.breadth_first(child):
+                        if grand_child.terminal:
+                            break
+                        grand_child.update_probability(0.0)
+                        grand_child.update_remaining_time(EventTime.zero())
 
             if child_to_release.release_time == EventTime(-1, EventTime.Unit.US):
                 # If the child does not have a release time, then set it to now,

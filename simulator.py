@@ -490,7 +490,9 @@ class Simulator(object):
             )
 
         # The given task has finished execution, unlock dependencies from the `Workload`
-        new_tasks = self._workload.notify_task_completion(event.task, event.time)
+        new_tasks = self._workload.notify_task_completion(
+            event.task, event.time, self._csv_logger
+        )
         self._logger.info(
             f"[{event.time}] Notified the Workload of the completion of {event.task} "
             f"from {event.task.task_graph}, and received {len(new_tasks)} new tasks."
