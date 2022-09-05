@@ -104,6 +104,12 @@ flags.DEFINE_bool(
     False,
     "If True, then the end-to-end deadline for a JobGraph is assigned to tasks.",
 )
+flags.DEFINE_bool(
+    "use_branch_predicated_deadlines",
+    False,
+    "If True, then the end-to-end deadline is assigned based on the branches expected "
+    "to execute.",
+)
 flags.DEFINE_integer(
     "min_deadline_variance",
     0,

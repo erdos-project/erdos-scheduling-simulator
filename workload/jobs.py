@@ -291,9 +291,11 @@ class JobGraph(Graph[Job]):
                 _flags.min_deadline_variance,
                 _flags.max_deadline_variance,
             )
+            use_branch_predicated_deadlines = _flags.use_branch_predicated_deadlines
         else:
             runtime_variance = (0, 0)
             deadline_variance = (0, 0)
+            use_branch_predicated_deadlines = False
 
         # Generate all the `Task`s from the `Job`s in the graph.
         job_to_task_mapping = {}
@@ -346,17 +348,23 @@ class JobGraph(Graph[Job]):
 
         # Now that the task probabilities have been set, update the deadlines.
         task_graph = TaskGraph(tasks=task_graph_mapping)
-        weighted_task_graph_length = sum(
-            (
-                task.job.runtime
-                for task in task_graph.get_longest_path(
-                    weights=lambda task: task.job.runtime.time
-                    if task.probability > sys.float_info.epsilon
-                    else 0
-                )
-            ),
-            start=EventTime.zero(),
-        )
+
+        # Compute the deadline based on if the knowledge of branches is assumed or not.
+        if use_branch_predicated_deadlines:
+            weighted_task_graph_length = sum(
+                (
+                    task.job.runtime
+                    for task in task_graph.get_longest_path(
+                        weights=lambda task: task.job.runtime.time
+                        if task.probability > sys.float_info.epsilon
+                        else 0
+                    )
+                ),
+                start=EventTime.zero(),
+            )
+        else:
+            weighted_task_graph_length = self.__get_completion_time()
+
         task_graph_deadline = release_time + fuzz_time(
             weighted_task_graph_length, deadline_variance
         )
