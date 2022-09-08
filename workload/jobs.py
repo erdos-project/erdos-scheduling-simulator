@@ -14,6 +14,39 @@ from .resources import Resources
 from .tasks import Task, TaskGraph
 
 
+class FakeRandomNumberGenerator:
+    """Alternatively chooses the next condition to execute from the branch.
+
+    Note that the state maintained is per-instance, and if the same instance is passed
+    to different branches of the same JobGraph, then the conditions chosen may not be
+    as expected.
+    """
+
+    def __init__(self):
+        self._counter = 0
+
+    def choices(self, population, weights, k):
+        """Chooses the next `k` instances in the population, ignoring the prescribed
+        weights.
+
+        Args:
+            population: The list to make choices from.
+            weights: (ignored) The weights to assign to each element in the list.
+            k: The number of samples to return.
+
+        Returns:
+            A List of `k` samples chosen from the population in order.
+        """
+        choice_samples = []
+        for _ in range(k):
+            if self._counter >= len(population):
+                self._counter = self._counter % len(population)
+
+            choice_samples.append(population[self._counter])
+            self._counter += 1
+        return choice_samples
+
+
 class Job(object):
     """A `Job` represents a particular Operator in an ERDOS AV pipeline.
 
@@ -219,7 +252,8 @@ class JobGraph(Graph[Job]):
         """
         # Set the seed of the random number generator if provided.
         if _flags:
-            random_number_generator = random.Random(_flags.random_seed)
+            # random_number_generator = random.Random(_flags.random_seed)
+            random_number_generator = FakeRandomNumberGenerator()
         else:
             random_number_generator = None
 
