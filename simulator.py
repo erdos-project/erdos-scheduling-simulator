@@ -364,9 +364,10 @@ class Simulator(object):
             list(filter(lambda p: p[1] is not None, self._last_task_placement))
         )
         num_unplaced = len(self._last_task_placement) - num_placed
+        scheduler_runtime = event.time - self._last_scheduler_start_time
         self._csv_logger.debug(
             f"{event.time.time},SCHEDULER_FINISHED,"
-            f"{event.time - self._last_scheduler_start_time},"
+            f"{scheduler_runtime.to(EventTime.Unit.US).time},"
             f"{num_placed},{num_unplaced}"
         )
 
@@ -388,7 +389,8 @@ class Simulator(object):
                 else:
                     # Task was not placed.
                     self._csv_logger.debug(
-                        f"{event.time},TASK_SKIP,{task.name},{task.timestamp},{task.id}"
+                        f"{event.time.time},TASK_SKIP,{task.name},"
+                        f"{task.timestamp},{task.id}"
                     )
                     self._logger.warning(f"[{event.time}] Failed to place {task}")
             elif task.worker_pool_id == placement:
@@ -454,9 +456,11 @@ class Simulator(object):
         )
         self._csv_logger.debug(
             f"{event.time.time},TASK_RELEASE,{event.task.name},"
-            f"{event.task.timestamp},{event.task.intended_release_time},"
-            f"{event.task.release_time},{event.task.runtime},"
-            f"{event.task.deadline},{event.task.id}"
+            f"{event.task.timestamp},"
+            f"{event.task.intended_release_time.to(EventTime.Unit.US).time},"
+            f"{event.task.release_time.to(EventTime.Unit.US).time},"
+            f"{event.task.runtime.to(EventTime.Unit.US).time},"
+            f"{event.task.deadline.to(EventTime.Unit.US).time},{event.task.id}"
         )
         # If we are not in the midst of a scheduler invocation and next
         # scheduled invocation is too late, then bring the invocation sooner
@@ -478,7 +482,8 @@ class Simulator(object):
         self._finished_tasks += 1
         self._csv_logger.debug(
             f"{event.time.time},TASK_FINISHED,{event.task.name},{event.task.timestamp},"
-            f"{event.task.completion_time},{event.task.deadline},{event.task.id}"
+            f"{event.task.completion_time.to(EventTime.Unit.US).time},"
+            f"{event.task.deadline.to(EventTime.Unit.US).time},{event.task.id}"
         )
 
         # Log if the task missed its deadline or not.
@@ -486,7 +491,8 @@ class Simulator(object):
             self._missed_deadlines += 1
             self._csv_logger.debug(
                 f"{event.time.time},MISSED_DEADLINE,{event.task.name},"
-                f"{event.task.timestamp},{event.task.deadline},{event.task.id}"
+                f"{event.task.timestamp},"
+                f"{event.task.deadline.to(EventTime.Unit.US).time},{event.task.id}"
             )
 
         # The given task has finished execution, unlock dependencies from the `Workload`

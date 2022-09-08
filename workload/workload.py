@@ -162,7 +162,8 @@ class Workload(object):
             if csv_logger:
                 csv_logger.info(
                     f"{finish_time.time},TASK_GRAPH_FINISH,{task.task_graph},"
-                    f"{task_graph.deadline.time},{tardiness.to(EventTime.Unit.US).time}"
+                    f"{task_graph.deadline.to(EventTime.Unit.US).time},"
+                    f"{tardiness.to(EventTime.Unit.US).time}"
                 )
             del self._task_graphs[task.task_graph]
         return new_tasks
