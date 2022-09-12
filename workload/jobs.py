@@ -184,10 +184,12 @@ class JobGraph(Graph[Job]):
             policy_type: "ReleasePolicyType",  # noqa: F821
             period: EventTime = EventTime(100, EventTime.Unit.US),
             fixed_invocation_nums: int = 0,
+            start: EventTime = EventTime(0, EventTime.Unit.US),
         ) -> None:
             self._policy_type = policy_type
             self._period = period
             self._fixed_invocation_nums = fixed_invocation_nums
+            self._start = start
 
         @property
         def policy_type(self) -> "ReleasePolicyType":  # noqa: F821
@@ -198,8 +200,12 @@ class JobGraph(Graph[Job]):
             return self._period
 
         @property
-        def fixed_invocation_nums(self) -> EventTime:
+        def fixed_invocation_nums(self) -> int:
             return self._fixed_invocation_nums
+
+        @property
+        def start_time(self) -> EventTime:
+            return self._start
 
     def __init__(
         self,
@@ -237,7 +243,6 @@ class JobGraph(Graph[Job]):
     def generate_task_graphs(
         self,
         completion_time: EventTime,
-        start_time: EventTime = EventTime(0, EventTime.Unit.US),
         _flags: Optional["absl.flags"] = None,
     ) -> Mapping[str, TaskGraph]:
         """Generates the task graphs under the defined `release_policy`
@@ -245,7 +250,6 @@ class JobGraph(Graph[Job]):
 
         Args:
             completion_time: The time at which the simulator has to end.
-            start_time (default: zero): The time at which the simulator starts.
 
         Returns:
             A mapping from the name of the `TaskGraph` to the `TaskGraph`.
@@ -259,12 +263,12 @@ class JobGraph(Graph[Job]):
 
         releases = []
         if self.release_policy.policy_type == self.ReleasePolicyType.PERIODIC:
-            current_release = start_time
+            current_release = self.release_policy.start_time
             while current_release <= completion_time:
                 releases.append(current_release)
                 current_release += self.release_policy.period
         elif self.release_policy.policy_type == self.ReleasePolicyType.FIXED:
-            current_release = start_time
+            current_release = self.release_policy.start_time
             for _ in range(self.release_policy.fixed_invocation_nums):
                 releases.append(current_release)
                 current_release += self.release_policy.period

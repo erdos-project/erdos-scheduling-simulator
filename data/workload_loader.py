@@ -45,16 +45,26 @@ class WorkloadLoader(object):
         job_graph_mapping = {}
         for jobs in workload_data:
             job_name = jobs["name"]
+
+            # Retrieve the start time from the definition, if provided.
+            if "start" in jobs:
+                start_time = EventTime(jobs["start"], EventTime.Unit.US)
+            else:
+                start_time = EventTime.zero()
+
+            # Construct the ReleasePolicy for the JobGraph.
             if jobs["release_policy"] == "periodic":
                 release_policy = JobGraph.ReleasePolicy(
                     policy_type=JobGraph.ReleasePolicyType.PERIODIC,
                     period=EventTime(jobs["period"], EventTime.Unit.US),
+                    start=start_time,
                 )
             elif jobs["release_policy"] == "fixed":
                 release_policy = JobGraph.ReleasePolicy(
                     policy_type=JobGraph.ReleasePolicyType.FIXED,
                     period=EventTime(jobs["period"], EventTime.Unit.US),
                     fixed_invocation_nums=jobs["invocations"],
+                    start=start_time,
                 )
             else:
                 raise NotImplementedError(
