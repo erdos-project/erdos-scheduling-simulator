@@ -38,6 +38,7 @@ class Task(object):
     def __init__(
         self,
         name: str,
+        task_graph: str,
         timestamp: int,
         task_id: str,
         intended_release_time: int,
@@ -46,6 +47,7 @@ class Task(object):
         deadline: int,
     ):
         self.name = name
+        self.task_graph = task_graph
         self.timestamp = timestamp
         self.id = task_id
         # All times are in microseconds.

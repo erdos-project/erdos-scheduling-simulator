@@ -66,6 +66,7 @@ class CSVReader(object):
                 elif reading[1] == "TASK_RELEASE":
                     tasks[reading[8]] = Task(
                         name=reading[2],
+                        task_graph=reading[9],
                         timestamp=int(reading[3]),
                         task_id=reading[8],
                         intended_release_time=int(reading[4]),
@@ -256,7 +257,8 @@ class CSVReader(object):
             scheduler_label (str): The name of the scheduler that produced the trace.
             between_time (Union[int, Tuple[int, int]]): Visualize only the tasks that
                 had activity either between the given times or at the given time.
-            trace_fmt (str): The format of trace to output (task / resource).
+            trace_fmt (str): The format of trace to output
+                (task / resource / taskgraph / application).
             show_deadlines (str): Choose between ('never', 'missed', 'always') to
                 affect which deadlines are shown in the trace.
         """
@@ -340,12 +342,20 @@ class CSVReader(object):
                 between_time, task.start_time, task.completion_time
             ):
                 continue
-            if trace_fmt == "task":
-                if "." in task.name:
-                    # pid = operator name, tid = callback name
-                    pid, tid = task.name.split(".", 1)
+            if trace_fmt in ["task", "taskgraph", "application"]:
+                if trace_fmt == "task":
+                    if "." in task.name:
+                        # pid = operator name, tid = callback name
+                        pid, tid = task.name.split(".", 1)
+                    else:
+                        pid = tid = task.name
                 else:
-                    pid = tid = task.name
+                    if trace_fmt == "taskgraph":
+                        pid = task.task_graph
+                        tid = task.name
+                    else:
+                        pid = task.task_graph.split("@", 1)[0]
+                        tid = task.task_graph
 
                 # Output the task's placement as individual elements.
                 for placement in task.placements:
@@ -381,6 +391,10 @@ class CSVReader(object):
                 if (
                     show_deadlines == "missed" and task.missed_deadline
                 ) or show_deadlines == "always":
+                    # The scope of the missed deadline events is per thread if we
+                    # are outputting a task focused trace, and process if we are
+                    # outputting an application or a taskgraph focused trace.
+                    scope = "t" if trace_fmt == "task" else "p"
                     trace_event = {
                         "name": f"{task.name}::{task.timestamp}",
                         "cat": "task,missed,deadline,instant",
@@ -388,8 +402,7 @@ class CSVReader(object):
                         "ts": task.deadline,
                         "pid": pid,
                         "tid": tid,
-                        # The scope of the missed deadline events is per thread.
-                        "s": "t",
+                        "s": scope,
                     }
                     trace["traceEvents"].append(trace_event)
             elif trace_fmt == "resource":

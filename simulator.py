@@ -460,7 +460,8 @@ class Simulator(object):
             f"{event.task.intended_release_time.to(EventTime.Unit.US).time},"
             f"{event.task.release_time.to(EventTime.Unit.US).time},"
             f"{event.task.runtime.to(EventTime.Unit.US).time},"
-            f"{event.task.deadline.to(EventTime.Unit.US).time},{event.task.id}"
+            f"{event.task.deadline.to(EventTime.Unit.US).time},{event.task.id},"
+            f"{event.task.task_graph}"
         )
         # If we are not in the midst of a scheduler invocation and next
         # scheduled invocation is too late, then bring the invocation sooner
