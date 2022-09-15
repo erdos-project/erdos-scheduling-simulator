@@ -245,6 +245,7 @@ class CSVReader(object):
         output_path: str,
         between_time: Union[int, Tuple[int, int]] = None,
         trace_fmt: str = "task",
+        show_release_times: str = "never",
         show_deadlines: str = "missed",
         with_placement_issues: bool = False,
     ):
@@ -259,6 +260,8 @@ class CSVReader(object):
                 had activity either between the given times or at the given time.
             trace_fmt (str): The format of trace to output
                 (task / resource / taskgraph / application).
+            show_release_times (str): Choose between ('never', 'intended', 'always')
+                to affect which release times are shown in the trace.
             show_deadlines (str): Choose between ('never', 'missed', 'always') to
                 affect which deadlines are shown in the trace.
         """
@@ -270,6 +273,13 @@ class CSVReader(object):
                 "between_time should either be an integer specifying an exact time, "
                 "or a tuple specifying an interval."
             )
+
+        if show_release_times not in ("never", "intended", "always"):
+            raise ValueError(
+                f"The value of show_release_times ({show_release_times}) must be "
+                f"chosen from (never, missed, always)."
+            )
+
         if show_deadlines not in ("never", "missed", "always"):
             raise ValueError(
                 f"The value of show_deadlines ({show_deadlines}) must be chosen from "
@@ -292,6 +302,7 @@ class CSVReader(object):
                 "csv_path": csv_path,
                 "scheduler": scheduler_label,
                 "between_time": between_time,
+                "show_release_times": show_release_times,
                 "show_deadlines": show_deadlines,
             },
         }
@@ -387,6 +398,31 @@ class CSVReader(object):
                     }
                     trace["traceEvents"].append(trace_event)
 
+                # Output the release times.
+                if (
+                    show_release_times == "intended"
+                    and task.intended_release_time != -1
+                ) or show_release_times == "always":
+                    # The scope of the release time events is per thread if we
+                    # are outputting a task focused trace, and process if we are
+                    # outputting an application or a taskgraph focused trace.
+                    scope = "t" if trace_fmt == "task" else "p"
+                    timestamp = (
+                        task.intended_release_time
+                        if show_release_times == "intended"
+                        else task.release_time
+                    )
+                    trace_event = {
+                        "name": f"{task.name}::{task.timestamp}",
+                        "cat": "task,releasetime,intended,instant",
+                        "ph": "i",
+                        "ts": timestamp,
+                        "pid": pid,
+                        "tid": tid,
+                        "s": scope,
+                    }
+                    trace["traceEvents"].append(trace_event)
+
                 # Output the deadline.
                 if (
                     show_deadlines == "missed" and task.missed_deadline
@@ -405,6 +441,8 @@ class CSVReader(object):
                         "s": scope,
                     }
                     trace["traceEvents"].append(trace_event)
+
+                # Output the release time.
             elif trace_fmt == "resource":
                 # Output the task's placement as individual elements.
                 for placement in task.placements:

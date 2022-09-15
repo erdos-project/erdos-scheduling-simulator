@@ -94,12 +94,13 @@ flags.register_validator(
     message=f"Only {TRACE_FORMATS} Chrome trace formats are allowed.",
 )
 
-# Allow the choice of seeing deadlines and tasks with placement issues in Chrome trace.
+# Allow the choice of seeing release times, deadlines and tasks with placement issues
+# in Chrome trace.
 flags.DEFINE_enum(
     "show_deadlines",
     None,
     ["never", "missed", "always"],
-    "Chooses if the deadline events are shown in the chrome trace. "
+    "Chooses if the deadline events are shown in the Chrome trace. "
     "'never' shows no deadline events, 'missed' shows only deadlines that were missed, "
     "and 'always' shows all deadlines.",
 )
@@ -108,6 +109,22 @@ flags.register_validator(
     lambda value: FLAGS.chrome_trace is not None if value else True,
     message="The show_deadlines flag can only be used for Chrome traces.",
 )
+
+flags.DEFINE_enum(
+    "show_release_times",
+    None,
+    ["never", "intended", "always"],
+    "Chooses if the release time events are shown in the Chrome trace. "
+    "'never' shows no release time events, 'intended' shows only intended release "
+    "times that were set by the Simulator, and 'always' shows the actual release "
+    "times for all the tasks.",
+)
+flags.register_validator(
+    "show_release_times",
+    lambda value: FLAGS.chrome_trace is not None if value else True,
+    message="The show_release_times flag can only be used for Chrome traces.",
+)
+
 flags.DEFINE_boolean(
     "with_placement_issues",
     False,
@@ -1195,6 +1212,9 @@ def main(argv):
                 output_path,
                 between_time=between_time,
                 trace_fmt=FLAGS.chrome_trace,
+                show_release_times=FLAGS.show_release_times
+                if FLAGS.show_release_times
+                else "never",
                 show_deadlines=FLAGS.show_deadlines
                 if FLAGS.show_deadlines
                 else "missed",
