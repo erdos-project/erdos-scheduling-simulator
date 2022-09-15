@@ -52,6 +52,12 @@ class WorkloadLoader(object):
             else:
                 start_time = EventTime.zero()
 
+            # Retrieve the deadline variance from the definition, if provided.
+            if "deadline_variance" in jobs:
+                deadline_variance = tuple(jobs["deadline_variance"])
+            else:
+                deadline_variance = (0, 0)
+
             # Construct the ReleasePolicy for the JobGraph.
             if jobs["release_policy"] == "periodic":
                 release_policy = JobGraph.ReleasePolicy(
@@ -73,7 +79,11 @@ class WorkloadLoader(object):
 
             # Create the JobGraph.
             job_graph_mapping[jobs["name"]] = WorkloadLoader.load_job_graph(
-                JobGraph(name=job_name, release_policy=release_policy),
+                JobGraph(
+                    name=job_name,
+                    release_policy=release_policy,
+                    deadline_variance=deadline_variance,
+                ),
                 jobs["graph"],
                 self._resource_logger,
             )

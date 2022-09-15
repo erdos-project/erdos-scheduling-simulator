@@ -213,6 +213,7 @@ class JobGraph(Graph[Job]):
         jobs: Optional[Mapping[Job, Sequence[Job]]] = {},
         release_policy: Optional["ReleasePolicy"] = None,
         completion_time: Optional[EventTime] = None,
+        deadline_variance: Optional[Tuple[int, int]] = None,
     ):
         super().__init__(jobs)
         self._name = name
@@ -225,6 +226,7 @@ class JobGraph(Graph[Job]):
                 start=EventTime(0, EventTime.Unit.US),
             )
         )
+        self._deadline_variance = deadline_variance
 
     def add_job(self, job: Job, children: Optional[Sequence[Job]] = []):
         """Adds the job to the graph along with the given children.
@@ -325,14 +327,21 @@ class JobGraph(Graph[Job]):
         # Retrieve variances from the command line flags.
         if _flags:
             runtime_variance = (0, _flags.runtime_variance)
-            deadline_variance = (
-                _flags.min_deadline_variance,
-                _flags.max_deadline_variance,
-            )
+            if self._deadline_variance is None:
+                deadline_variance = (
+                    _flags.min_deadline_variance,
+                    _flags.max_deadline_variance,
+                )
+            else:
+                deadline_variance = self._deadline_variance
             use_branch_predicated_deadlines = _flags.use_branch_predicated_deadlines
         else:
             runtime_variance = (0, 0)
-            deadline_variance = (0, 0)
+            deadline_variance = (
+                self._deadline_variance
+                if self._deadline_variance is not None
+                else (0, 0)
+            )
             use_branch_predicated_deadlines = False
 
         # Generate all the `Task`s from the `Job`s in the graph.
