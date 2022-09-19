@@ -12,6 +12,7 @@ from data import (
     WorkloadLoader,
 )
 from schedulers import (
+    BranchPredictionPolicy,
     BranchPredictionScheduler,
     EDFScheduler,
     GurobiScheduler2,
@@ -258,6 +259,19 @@ def main(args):
         job_graph.to_dot(FLAGS.graph_file_name)
         return
 
+    # Retrieve the branch prediction policy from the flags.
+    if FLAGS.scheduler_policy == "best":
+        branch_prediction_policy = BranchPredictionPolicy.BEST_CASE
+    elif FLAGS.scheduler_policy == "worst":
+        branch_prediction_policy = BranchPredictionPolicy.WORST_CASE
+    elif FLAGS.scheduler_policy == "random":
+        branch_prediction_policy = BranchPredictionPolicy.RANDOM
+    else:
+        raise NotImplementedError(
+            f"The policy {FLAGS.scheduler_policy} is not supported."
+        )
+    print(branch_prediction_policy)
+
     # Instantiate the scheduler based on the given flag.
     scheduler = None
     if FLAGS.scheduler == "EDF":
@@ -292,20 +306,8 @@ def main(args):
             _flags=FLAGS,
         )
     elif FLAGS.scheduler == "BranchPrediction":
-        if FLAGS.scheduler_policy == "best":
-            policy = BranchPredictionScheduler.Policy.BEST_CASE
-        elif FLAGS.scheduler_policy == "worst":
-            policy = BranchPredictionScheduler.Policy.WORST_CASE
-        elif FLAGS.scheduler_policy == "random":
-            policy = BranchPredictionScheduler.Policy.RANDOM
-        else:
-            raise NotImplementedError(
-                f"The policy {FLAGS.scheduler_policy} is not supported."
-            )
-        print(policy)
-
         scheduler = BranchPredictionScheduler(
-            policy=policy,
+            policy=branch_prediction_policy,
             preemptive=FLAGS.preemption,
             runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
             _flags=FLAGS,
