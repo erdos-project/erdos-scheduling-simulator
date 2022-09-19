@@ -66,6 +66,13 @@ class EDFScheduler(BaseScheduler):
         start_time = time.time()
         ordered_tasks = list(sorted(tasks_to_be_scheduled, key=attrgetter("deadline")))
 
+        task_descriptions = [
+            f"{task.unique_name} ({task.deadline})" for task in ordered_tasks
+        ]
+        self._logger.debug(
+            f"[{sim_time}] The order of the tasks is {task_descriptions}."
+        )
+
         # Run the scheduling loop.
         # TODO (Sukrit): This loop may require spurious migrations of tasks
         # by preempting them from one pool, and assigning them to another.

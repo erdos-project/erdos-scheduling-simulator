@@ -19,6 +19,7 @@ class BranchPredictionScheduler(BaseScheduler):
     """Implements a branch prediction scheduling algorithm for the Simulator.
 
     Args:
+        policy (`Policy`): The policy to choose the branch that going to be executed.
         preemptive (`bool`): If `True`, the scheduler can preempt the tasks
             that are currently running.
         runtime (`EventTime`): The runtime to return to the simulator (in us). If -1,
