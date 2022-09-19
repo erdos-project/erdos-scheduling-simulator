@@ -782,20 +782,21 @@ class TaskGraph(Graph[Task]):
             task = task_queue.popleft()
             completion_time = estimated_completion_time[task]
             for child_task in self.get_children(task):
-                if (
-                    child_task.state != TaskState.VIRTUAL
-                    or child_task.probability < sys.float_info.epsilon
-                ):
+                if child_task.state != TaskState.VIRTUAL:
                     # Skip the task because we've already set its completion time.
-                    # Skip the task if it's probability ensures that it will never
-                    # be executed.
                     continue
+
+                # Compute the estimated completion time of the child task.
+                # If the child task was provided with a specific release time, and
+                # that time leads to a later completion time, use that completion time.
                 child_completion_time = completion_time + child_task.remaining_time
                 if child_task.release_time:
                     child_completion_time = max(
                         child_completion_time,
                         child_task.release_time + child_task.remaining_time,
                     )
+
+                # Update the completion time of the child.
                 if (
                     child_task not in estimated_completion_time
                     or child_completion_time > estimated_completion_time[child_task]
