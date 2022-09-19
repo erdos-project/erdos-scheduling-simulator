@@ -1,6 +1,7 @@
 from logging import raiseExceptions
 
 from schedulers import (
+    BranchPredictionPolicy,
     BranchPredictionScheduler,
     EDFScheduler,
     GurobiScheduler,
@@ -489,20 +490,18 @@ def test_branch_prediction_scheduler_slack():
 
     # Assert schedulers with different policies and remaining time.
     worst_case_scheduler = BranchPredictionScheduler(
-        policy=BranchPredictionScheduler.Policy.WORST_CASE
+        policy=BranchPredictionPolicy.WORST_CASE
     )
     slack = worst_case_scheduler.compute_remaining_time(task_graph)
     assert slack == EventTime(15, EventTime.Unit.MS), "Incorrect slack returned."
 
     best_case_scheduler = BranchPredictionScheduler(
-        policy=BranchPredictionScheduler.Policy.BEST_CASE
+        policy=BranchPredictionPolicy.BEST_CASE
     )
     slack = best_case_scheduler.compute_remaining_time(task_graph)
     assert slack == EventTime(7, EventTime.Unit.MS), "Incorrect slack returned."
 
-    random_scheduler = BranchPredictionScheduler(
-        policy=BranchPredictionScheduler.Policy.RANDOM
-    )
+    random_scheduler = BranchPredictionScheduler(policy=BranchPredictionPolicy.RANDOM)
     slack = random_scheduler.compute_remaining_time(task_graph)
     assert slack == EventTime(7, EventTime.Unit.MS) or slack == EventTime(
         15, EventTime.Unit.MS
