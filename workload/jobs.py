@@ -260,8 +260,16 @@ class JobGraph(Graph[Job]):
         if _flags:
             # random_number_generator = random.Random(_flags.random_seed)
             random_number_generator = FakeRandomNumberGenerator()
+            resolve_conditionals_at_submission = (
+                _flags.resolve_conditionals_at_submission
+            )
+            task_logger = setup_logging(
+                name="Task", log_file=_flags.log_file_name, log_level=_flags.log_level
+            )
         else:
             random_number_generator = None
+            resolve_conditionals_at_submission = False
+            task_logger = setup_logging(name="Task")
 
         releases = []
         if self.release_policy.policy_type == self.ReleasePolicyType.PERIODIC:
@@ -279,13 +287,6 @@ class JobGraph(Graph[Job]):
                 f"The policy {self.release_policy} has not been implemented yet."
             )
 
-        if _flags:
-            task_logger = setup_logging(
-                name="Task", log_file=_flags.log_file_name, log_level=_flags.log_level
-            )
-        else:
-            task_logger = setup_logging(name="Task")
-
         # Generate the task graphs for all the releases.
         task_graphs = {}
         for index, release_time in enumerate(releases):
@@ -296,6 +297,7 @@ class JobGraph(Graph[Job]):
                 timestamp=index,
                 task_logger=task_logger,
                 random_number_generator=random_number_generator,
+                resolve_conditionals=resolve_conditionals_at_submission,
                 _flags=_flags,
             )
         return task_graphs
@@ -307,6 +309,7 @@ class JobGraph(Graph[Job]):
         timestamp: int,
         task_logger: logging.Logger,
         random_number_generator=None,
+        resolve_conditionals: bool = False,
         _flags: Optional["absl.flags"] = None,
     ) -> TaskGraph:
         """Generates a TaskGraph from the structure of the `JobGraph` whose
@@ -320,6 +323,8 @@ class JobGraph(Graph[Job]):
             random_number_generator: The RNG to use for resolving the
                 probabilities of execution at Job submission time.
                 If `None`, the initial probabilities are forwarded.
+            resolve_conditionals (`bool`): If `True`, resolve the
+                conditionals here instead of at job execution time.
 
         Returns:
             A `TaskGraph` whose source operators are released at the given time.
@@ -373,7 +378,11 @@ class JobGraph(Graph[Job]):
         for parent, children in self._graph.items():
             parent_task = job_to_task_mapping[parent.name]
             task_children = [job_to_task_mapping[child.name] for child in children]
-            if parent_task.conditional and random_number_generator is not None:
+            if (
+                resolve_conditionals
+                and parent_task.conditional
+                and random_number_generator is not None
+            ):
                 # Resolve the conditionals at Job submission time according to
                 # the probabilities.
                 child_to_release = random_number_generator.choices(

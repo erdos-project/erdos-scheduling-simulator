@@ -82,7 +82,10 @@ class Workload(object):
         """
         return Workload.from_task_graphs(task_graphs={})
 
-    def populate_task_graphs(self, completion_time: EventTime) -> None:
+    def populate_task_graphs(
+        self,
+        completion_time: EventTime,
+    ) -> None:
         """Populates the instantiations of the `TaskGraph`s according to the
         given `JobGraph`s and the release policy.
 

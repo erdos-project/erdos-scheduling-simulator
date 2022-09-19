@@ -77,6 +77,12 @@ flags.DEFINE_integer(
 flags.DEFINE_integer(
     "random_seed", 42, "The seed to be used for random number generation."
 )
+flags.DEFINE_bool(
+    "resolve_conditionals_at_submission",
+    False,
+    "True if the conditionals are to be resolved at the Job submission time "
+    "instead of when the previous node finishes execution.",
+)
 
 # Benchmark related flags.
 flags.DEFINE_integer(
