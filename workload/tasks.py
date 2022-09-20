@@ -412,54 +412,57 @@ class Task(object):
         return self.state == TaskState.RELEASED or self.state == TaskState.PREEMPTED
 
     def __str__(self):
-        if self.state == TaskState.VIRTUAL:
-            if self.release_time == EventTime(-1, EventTime.Unit.US):
-                return (
-                    f"Task(name={self.name}, graph={self.task_graph}, id={self.id}, "
-                    f"job={self.job}, timestamp={self.timestamp}, state={self.state})"
-                )
-            else:
-                if self.deadline == EventTime(-1, EventTime.Unit.US):
+        if self._logger.isEnabledFor(logging.DEBUG):
+            if self.state == TaskState.VIRTUAL:
+                if self.release_time == EventTime(-1, EventTime.Unit.US):
                     return (
-                        f"Task(name={self.name}, graph={self.task_graph}, "
-                        f"id={self.id}, job={self.job}, timestamp={self.timestamp}, "
-                        f"state={self.state}, release_time={self.release_time})"
+                        f"Task(name={self.name}, graph={self.task_graph}, id={self.id}, "
+                        f"job={self.job}, timestamp={self.timestamp}, state={self.state})"
                     )
                 else:
-                    return (
-                        f"Task(name={self.name}, graph={self.task_graph}, "
-                        f"id={self.id}, job={self.job}, timestamp={self.timestamp}, "
-                        f"state={self.state}, release_time={self.release_time}, "
-                        f"deadline={self.deadline})"
-                    )
-        elif self.state == TaskState.RELEASED:
-            return (
-                f"Task(name={self.name}, graph={self.task_graph}, id={self.id}, "
-                f"job={self.job}, timestamp={self.timestamp}, state={self.state}, "
-                f"release_time={self.release_time}, deadline={self.deadline})"
-            )
-        elif self.state == TaskState.RUNNING:
-            return (
-                f"Task(name={self.name}, graph={self.task_graph}, id={self.id}, "
-                f"job={self.job}, timestamp={self.timestamp}, state={self.state}, "
-                f"start_time={self.start_time}, deadline={self.deadline}, "
-                f"remaining_time={self.remaining_time}, "
-                f"worker_pool={self.worker_pool_id})"
-            )
-        elif self.state == TaskState.PREEMPTED:
-            return (
-                f"Task(name={self.name}, graph={self.task_graph}, id={self.id}, "
-                f"job={self.job}, timestamp={self.timestamp}, state={self.state}, "
-                f"preemption_time={self.preemption_time}, deadline={self.deadline}, "
-                f"remaining_time={self.remaining_time}, "
-                f"old_worker_pool={self.last_preemption.old_worker_pool})"
-            )
-        elif self.is_complete():
-            return (
-                f"Task(name={self.name}, graph={self.task_graph}, id={self.id}, "
-                f"job={self.job}, timestamp={self.timestamp}, state={self.state}, "
-                f"completion_time={self.completion_time}, deadline={self.deadline})"
-            )
+                    if self.deadline == EventTime(-1, EventTime.Unit.US):
+                        return (
+                            f"Task(name={self.name}, graph={self.task_graph}, "
+                            f"id={self.id}, job={self.job}, timestamp={self.timestamp}, "
+                            f"state={self.state}, release_time={self.release_time})"
+                        )
+                    else:
+                        return (
+                            f"Task(name={self.name}, graph={self.task_graph}, "
+                            f"id={self.id}, job={self.job}, timestamp={self.timestamp}, "
+                            f"state={self.state}, release_time={self.release_time}, "
+                            f"deadline={self.deadline})"
+                        )
+            elif self.state == TaskState.RELEASED:
+                return (
+                    f"Task(name={self.name}, graph={self.task_graph}, id={self.id}, "
+                    f"job={self.job}, timestamp={self.timestamp}, state={self.state}, "
+                    f"release_time={self.release_time}, deadline={self.deadline})"
+                )
+            elif self.state == TaskState.RUNNING:
+                return (
+                    f"Task(name={self.name}, graph={self.task_graph}, id={self.id}, "
+                    f"job={self.job}, timestamp={self.timestamp}, state={self.state}, "
+                    f"start_time={self.start_time}, deadline={self.deadline}, "
+                    f"remaining_time={self.remaining_time}, "
+                    f"worker_pool={self.worker_pool_id})"
+                )
+            elif self.state == TaskState.PREEMPTED:
+                return (
+                    f"Task(name={self.name}, graph={self.task_graph}, id={self.id}, "
+                    f"job={self.job}, timestamp={self.timestamp}, state={self.state}, "
+                    f"preemption_time={self.preemption_time}, deadline={self.deadline}, "
+                    f"remaining_time={self.remaining_time}, "
+                    f"old_worker_pool={self.last_preemption.old_worker_pool})"
+                )
+            elif self.is_complete():
+                return (
+                    f"Task(name={self.name}, graph={self.task_graph}, id={self.id}, "
+                    f"job={self.job}, timestamp={self.timestamp}, state={self.state}, "
+                    f"completion_time={self.completion_time}, deadline={self.deadline})"
+                )
+        else:
+            return self.unique_name
 
     def __repr__(self):
         return str(self)
@@ -485,7 +488,7 @@ class Task(object):
 
     @property
     def unique_name(self):
-        return self._name + "@" + str(self._timestamp)
+        return f"{self._name}@{self._task_graph}@{str(self._timestamp)}"
 
     @property
     def id(self):

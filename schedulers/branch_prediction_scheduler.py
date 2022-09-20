@@ -68,7 +68,7 @@ class BranchPredictionScheduler(BaseScheduler):
 
         for worker_pool in schedulable_worker_pools.worker_pools:
             self._logger.debug(
-                f"[{sim_time}] The state of {worker_pool} is:{os.linesep}"
+                f"[{sim_time.time}] The state of {worker_pool} is:{os.linesep}"
                 f"{os.linesep.join(worker_pool.get_utilization())}"
             )
 
@@ -81,15 +81,15 @@ class BranchPredictionScheduler(BaseScheduler):
             f"{task.unique_name}({slack})" for task, slack in ordered_tasks
         ]
         self._logger.info(
-            f"[{sim_time}] The order of the tasks is {ordered_task_names}."
+            f"[{sim_time.time}] The order of the tasks is {ordered_task_names}."
         )
 
         # Run the scheduling loop.
         placements = []
         for task, _ in ordered_tasks:
             self._logger.debug(
-                f"[{sim_time}] {self.__class__.__name__} trying to schedule {task} "
-                f"with the resource requirements {task.resource_requirements}."
+                f"[{sim_time.time}] {self.__class__.__name__} trying to schedule "
+                f"{task} with the resource requirements {task.resource_requirements}."
             )
             is_task_placed = False
             for worker_pool in schedulable_worker_pools.worker_pools:
@@ -98,20 +98,20 @@ class BranchPredictionScheduler(BaseScheduler):
                     is_task_placed = True
                     placements.append((task, worker_pool.id, sim_time))
                     self._logger.debug(
-                        f"[{sim_time}] Placed {task} on Worker Pool ({worker_pool.id})"
-                        f" to be started at {sim_time}."
+                        f"[{sim_time.time}] Placed {task} on Worker Pool "
+                        f"({worker_pool.id}) to be started at {sim_time}."
                     )
                     break
 
             if is_task_placed:
                 for worker_pool in schedulable_worker_pools.worker_pools:
                     self._logger.debug(
-                        f"[{sim_time}] The state of {worker_pool} is:{os.linesep}"
+                        f"[{sim_time.time}] The state of {worker_pool} is:{os.linesep}"
                         f"{os.linesep.join(worker_pool.get_utilization())}"
                     )
             else:
                 self._logger.debug(
-                    f"[{sim_time}] Failed to place {task} because no worker pool "
+                    f"[{sim_time.time}] Failed to place {task} because no worker pool "
                     f"could accomodate the resource requirements."
                 )
                 placements.append((task, None, None))
@@ -131,7 +131,7 @@ class BranchPredictionScheduler(BaseScheduler):
         remaining_time = self.compute_remaining_time(task_graph)
         expected_completion_time = sim_time + remaining_time
         self._logger.info(
-            f"[{sim_time}] The deadline of the TaskGraph {task_graph_name} is "
+            f"[{sim_time.time}] The deadline of the TaskGraph {task_graph_name} is "
             f"{task_graph.deadline}, and the remaining time is {remaining_time}. "
             f"The graph is expected to complete by {expected_completion_time}."
         )

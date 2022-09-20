@@ -440,7 +440,10 @@ class WorkerPool(object):
         return final_resources
 
     def __str__(self):
-        return f"WorkerPool(name={self.name}, id={self.id})"
+        if self._logger.isEnabledFor(logging.DEBUG):
+            return f"WorkerPool(name={self.name}, id={self.id})"
+        else:
+            return self.name
 
     def __repr__(self):
         return str(self)

@@ -119,9 +119,9 @@ class EventTime:
 
 def setup_logging(
     name: str,
-    fmt: str = "%(asctime)s.%(msecs)03d %(name)s %(levelname)s: %(message)s",
-    date_fmt: str = "%Y-%m-%d,%H:%M:%S",
-    log_file: str = None,
+    fmt: Optional[str] = None,
+    date_fmt: Optional[str] = None,
+    log_file: Optional[str] = None,
     log_level: str = "debug",
 ) -> logging.Logger:
     """Sets up the logging for the module.
@@ -129,7 +129,7 @@ def setup_logging(
     Args:
         name (`str`): The name of the logger.
         fmt (`str`): The format of the logging.
-        datefmt (`str`): The format of the date to be logged.
+        date_fmt (`str`): The format of the date to be logged.
         log_file (`str`): The path of the log file to log results to.
         log_level (`str`): The level of logging to do. (DEBUG/INFO/WARN)
 
@@ -140,20 +140,30 @@ def setup_logging(
     logger = logging.getLogger(name)
     if logger.handlers:
         return logger
+
+    # Set the logger properties.
+    logger.propagate = False
+    logger.setLevel(getattr(logging, log_level.upper()))
+
     # Set the file to log to.
     if log_file is None:
         handler = logging.StreamHandler(sys.stdout)
     else:
         handler = logging.FileHandler(log_file)
 
-    # Create the logger.
+    # Create the logger based on the level.
+    if log_level == "debug" and fmt is None:
+        fmt = "%(asctime)s.%(msecs)03d %(name)s %(levelname)s: %(message)s"
+        date_fmt = "%Y-%m-%d,%H:%M:%S"
+    elif fmt is None:
+        fmt = "%(name)s %(levelname)s: %(message)s"
+        date_fmt = None
+
+    # Set the formats.
     formatter = logging.Formatter(fmt=fmt, datefmt=date_fmt)
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
-    # Set the logger properties.
-    logger.propagate = False
-    logger.setLevel(getattr(logging, log_level.upper()))
     return logger
 
 

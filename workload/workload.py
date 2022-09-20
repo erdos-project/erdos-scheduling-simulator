@@ -158,7 +158,7 @@ class Workload(object):
                 else finish_time - task_graph.deadline
             )
             self._logger.info(
-                f"[{finish_time}] Finished the execution of TaskGraph "
+                f"[{finish_time.time}] Finished the execution of TaskGraph "
                 f"{task.task_graph} with the deadline {task_graph.deadline}. "
                 f"The tardiness was {tardiness}."
             )
