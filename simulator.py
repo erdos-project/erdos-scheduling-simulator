@@ -429,6 +429,11 @@ class Simulator(object):
                 # Task remained on the same worker pool.
                 pass
             elif task.worker_pool_id is None:
+                task.schedule(
+                    event.time,
+                    expected_start_time=max(start_time, event.time),
+                    worker_pool_id=placement,
+                )
                 placement_events.append(
                     Event(
                         event_type=EventType.TASK_PLACEMENT,

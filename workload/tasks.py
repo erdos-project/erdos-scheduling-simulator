@@ -18,11 +18,12 @@ class TaskState(Enum):
     """Represents the different states that a Task can potentially be in."""
 
     VIRTUAL = 1  # The Task is expected to be generated in the future.
-    RELEASED = 2  # The Task has been released, and is waiting to be run.
-    RUNNING = 3  # The Task has begun execution, and is currently running.
-    PREEMPTED = 4  # The Task had begun execution but is currently paused.
-    EVICTED = 5  # The Task has been evicted before completing.
-    COMPLETED = 6  # The Task has successfully completed.
+    RELEASED = 2  # The Task has been released, and is waiting to be scheduled.
+    SCHEDULED = 3  # The Task has been scheduled, and is waiting for execution.
+    RUNNING = 4  # The Task has begun execution, and is currently running.
+    PREEMPTED = 5  # The Task had begun execution but is currently paused.
+    EVICTED = 6  # The Task has been evicted before completing.
+    COMPLETED = 7  # The Task has successfully completed.
 
 
 @total_ordering
@@ -125,7 +126,10 @@ class Task(object):
         # (VIRTUAL -> RELEASED)
         self._intended_release_time = release_time
         self._release_time = release_time
-        # (RELEASED -> RUNNING)
+        # (RELEASED -> SCHEDULED)
+        self._scheduling_time = None
+        self._expected_start_time = None
+        # (SCHEDULED -> RUNNING)
         self._start_time = start_time
         # (RUNNING -> EVICTED / COMPLETED)
         self._completion_time = completion_time
@@ -167,6 +171,40 @@ class Task(object):
 
         self._state = TaskState.RELEASED
 
+    def schedule(
+        self,
+        time: EventTime,
+        expected_start_time: Optional[EventTime] = None,
+        worker_pool_id: Optional[str] = None,
+    ):
+        """Schedules the execution of the task at the given simulator time.
+
+        Args:
+            time (`EventTime`): The simulation time at which the task was
+                scheduled.
+            expected_start_time (`EventTime`): The time at which the task
+                is expected to start.
+            worker_pool_id: The ID of the WorkerPool that the task will be
+                started on.
+
+        Raises:
+            `ValueError` if Task is not in `VIRTUAL`/`RELEASED`/`PREEMPTED`
+            state yet.
+        """
+        if self.state not in (
+            TaskState.VIRTUAL,
+            TaskState.RELEASED,
+            TaskState.PREEMPTED,
+        ):
+            raise ValueError(
+                f"Only VIRTUAL/RELEASED/PREEMPTED tasks can be scheduled. "
+                f"Task is in state {self.state}."
+            )
+        self._state = TaskState.SCHEDULED
+        self._scheduling_time = time
+        self._worker_pool_id = worker_pool_id
+        self._expected_start_time = expected_start_time
+
     def start(
         self,
         time: Optional[EventTime] = None,
@@ -184,12 +222,11 @@ class Task(object):
                 the runtime of the task.
 
         Raises:
-            `ValueError` if Task is not in `RELEASED`/`PREEMPTED` state yet.
+            `ValueError` if Task is not in `SCHEDULED` state yet.
         """
-        if self.state not in (TaskState.RELEASED, TaskState.PREEMPTED):
+        if self.state != TaskState.SCHEDULED:
             raise ValueError(
-                f"Only RELEASED or PREEMPTED tasks can be started. "
-                f"Task is in state {self.state}"
+                f"Only SCHEDULED tasks can be started. Task is in state {self.state}."
             )
         if type(time) != EventTime:
             raise ValueError(f"Invalid type received for time: {type(time)}")
@@ -442,7 +479,7 @@ class Task(object):
                     f"job={self.job}, timestamp={self.timestamp}, state={self.state}, "
                     f"release_time={self.release_time}, deadline={self.deadline})"
                 )
-            elif self.state == TaskState.RUNNING:
+            elif self.state == TaskState.SCHEDULED or self.state == TaskState.RUNNING:
                 return (
                     f"Task(name={self.name}, graph={self.task_graph}, id={self.id}, "
                     f"job={self.job}, timestamp={self.timestamp}, state={self.state}, "
@@ -554,6 +591,14 @@ class Task(object):
     @property
     def state(self):
         return self._state
+
+    @property
+    def scheduling_time(self):
+        return self._scheduling_time
+
+    @property
+    def expected_start_time(self):
+        return self._expected_start_time
 
     @property
     def start_time(self):
@@ -764,7 +809,12 @@ class TaskGraph(Graph[Task]):
                 tasks.extend(worker_pools.get_placed_tasks())
             else:
                 # No worker pool provided. Getting all RUNNING tasks.
-                tasks.extend(self.filter(lambda task: task.state == TaskState.RUNNING))
+                tasks.extend(
+                    self.filter(
+                        lambda task: task.state
+                        in (TaskState.SCHEDULED, TaskState.RUNNING)
+                    )
+                )
 
         task_queue = deque([])
         estimated_completion_time = {}
@@ -779,6 +829,10 @@ class TaskGraph(Graph[Task]):
                 TaskState.EVICTED,
             ]:
                 estimated_completion_time[task] = time + task.remaining_time
+            elif task.state == TaskState.SCHEDULED:
+                estimated_completion_time[task] = (
+                    task.expected_start_time + task.remaining_time
+                )
             else:
                 continue
             task_queue.append(task)
@@ -788,7 +842,10 @@ class TaskGraph(Graph[Task]):
             task = task_queue.popleft()
             completion_time = estimated_completion_time[task]
             for child_task in self.get_children(task):
-                if child_task.state != TaskState.VIRTUAL:
+                if (
+                    child_task.state != TaskState.VIRTUAL
+                    or child_task.probability < sys.float_info.epsilon
+                ):
                     # Skip the task because we've already set its completion time.
                     continue
 

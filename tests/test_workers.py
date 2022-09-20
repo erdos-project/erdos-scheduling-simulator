@@ -200,6 +200,7 @@ def test_worker_remove_task_success():
 
     # Run the task.
     task.release(EventTime(1, EventTime.Unit.US))
+    task.schedule(EventTime(2, EventTime.Unit.US))
     task.start(EventTime(2, EventTime.Unit.US))
     task.preempt(EventTime(3, EventTime.Unit.US))
 
@@ -239,8 +240,10 @@ def test_worker_step_tasks():
 
     # Release and start the tasks.
     task_one.release(EventTime(2, EventTime.Unit.US))
+    task_one.schedule(EventTime(3, EventTime.Unit.US))
     task_one.start(EventTime(3, EventTime.Unit.US))
     task_two.release(EventTime(2, EventTime.Unit.US))
+    task_two.schedule(EventTime(3, EventTime.Unit.US))
     task_two.start(EventTime(3, EventTime.Unit.US))
 
     # Step through the Worker's tasks.
@@ -392,6 +395,8 @@ def test_worker_pool_step():
     # Release and start the two tasks.
     task_one.release(EventTime(2, EventTime.Unit.US))
     task_two.release(EventTime(2, EventTime.Unit.US))
+    task_one.schedule(EventTime(3, EventTime.Unit.US))
+    task_two.schedule(EventTime(3, EventTime.Unit.US))
     task_one.start(EventTime(3, EventTime.Unit.US))
     task_two.start(EventTime(3, EventTime.Unit.US))
 

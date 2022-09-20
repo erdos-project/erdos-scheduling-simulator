@@ -1,11 +1,11 @@
-from typing import Mapping, Optional, Sequence
+from typing import Callable, Mapping, Optional, Sequence
 
 import absl
 
 from utils import EventTime, setup_logging
 
 from .jobs import JobGraph
-from .tasks import Task, TaskGraph
+from .tasks import Task, TaskGraph, TaskState
 
 
 class Workload(object):
@@ -201,6 +201,21 @@ class Workload(object):
                 )
             )
         return schedulable_tasks
+
+    def filter(self, function: Callable[[Task], bool]) -> Sequence[Task]:
+        """Retrieves the tasks from all the TaskGraphs that return `True`
+        on the given function.
+
+        Args:
+            function: The function to execute for each of the task.
+
+        Returns:
+            A sequence of tasks that return True on the given function.
+        """
+        filtered_tasks = []
+        for task_graph in self._task_graphs.values():
+            filtered_tasks.extend(task_graph.filter(function))
+        return filtered_tasks
 
     def __len__(self) -> int:
         """Returns the total number of Tasks in the Workload."""

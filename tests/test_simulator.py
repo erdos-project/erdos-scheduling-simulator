@@ -279,6 +279,7 @@ def test_simulator_step():
     # Create, release and place a Task.
     task = create_default_task(runtime=3)
     task.release(EventTime(1, EventTime.Unit.US))
+    task.schedule(EventTime(2, EventTime.Unit.US), worker_pool.id)
     worker_pool.place_task(task)
     task.start(EventTime(2, EventTime.Unit.US))
 
@@ -358,6 +359,7 @@ def test_simulator_handle_event():
 
     # Test the TASK_FINISHED event.
     perception_task.release(EventTime(2, EventTime.Unit.US))
+    perception_task.schedule(EventTime(2, EventTime.Unit.US))
     perception_task.start(EventTime(3, EventTime.Unit.US))
     perception_task.update_remaining_time(EventTime(0, EventTime.Unit.US))
     perception_task.finish(EventTime(4, EventTime.Unit.US))
