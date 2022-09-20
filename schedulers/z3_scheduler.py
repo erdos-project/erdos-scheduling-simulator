@@ -22,6 +22,7 @@ class TaskOptimizerVariables:
 
     def __init__(
         self,
+        current_time: EventTime,
         task: Task,
         workers: Mapping[int, Worker],
         optimizer: z3.z3.Optimize,
@@ -56,10 +57,12 @@ class TaskOptimizerVariables:
             }
 
             # Initialize the constraints.
-            self.initialize_constraints(optimizer, workers, enforce_deadlines)
+            self.initialize_constraints(
+                current_time, optimizer, workers, enforce_deadlines
+            )
         else:
             # Force the placement to be False.
-            optimizer.add(self._is_placed == False)
+            optimizer.add(self._is_placed == False)  # noqa: E712
             self._resources = None
 
     @property
@@ -86,11 +89,16 @@ class TaskOptimizerVariables:
     def resources(self):
         return self._resources
 
-    def _initialize_timing_constraints(self, optimizer, enforce_deadlines: bool = True):
+    def _initialize_timing_constraints(
+        self, current_time: EventTime, optimizer, enforce_deadlines: bool = True
+    ):
         # Add a constraint to bound the start time be atleast the intended release
         # time of the task.
         optimizer.add(
-            self.start_time >= self.task.release_time.to(EventTime.Unit.US).time
+            z3.And(
+                self.start_time >= self.task.release_time.to(EventTime.Unit.US).time,
+                self.start_time >= current_time.to(EventTime.Unit.US).time,
+            )
         )
 
         # If requested, add a constraint to ensure that deadlines are met.
@@ -197,11 +205,12 @@ class TaskOptimizerVariables:
 
     def initialize_constraints(
         self,
+        current_time: EventTime,
         optimizer: z3.z3.Optimize,
         workers: Mapping[int, Worker],
         enforce_deadlines: bool = True,
     ):
-        self._initialize_timing_constraints(optimizer, enforce_deadlines)
+        self._initialize_timing_constraints(current_time, optimizer, enforce_deadlines)
         self._initialize_placement_constraints(optimizer, workers)
         self._initialize_resource_constraints(optimizer, workers)
 
@@ -264,7 +273,7 @@ class Z3Scheduler(BaseScheduler):
         scheduler_start_time = time.time()
         optimizer = z3.Optimize()
         tasks_to_variables = self._add_variables(
-            optimizer, tasks_to_be_scheduled, workers
+            sim_time, optimizer, tasks_to_be_scheduled, workers
         )
         self._add_task_dependency_constraints(optimizer, tasks_to_variables, workload)
         self._add_resource_constraints(optimizer, tasks_to_variables, workload, workers)
@@ -321,6 +330,7 @@ class Z3Scheduler(BaseScheduler):
 
     def _add_variables(
         self,
+        sim_time: EventTime,
         optimizer: z3.z3.Optimize,
         tasks_to_be_scheduled: Sequence[Task],
         workers: Mapping[int, Worker],
@@ -328,7 +338,7 @@ class Z3Scheduler(BaseScheduler):
         tasks_to_variables = {}
         for task in tasks_to_be_scheduled:
             tasks_to_variables[task.unique_name] = TaskOptimizerVariables(
-                task, workers, optimizer, self.enforce_deadlines
+                sim_time, task, workers, optimizer, self.enforce_deadlines
             )
         return tasks_to_variables
 
@@ -505,7 +515,7 @@ class Z3Scheduler(BaseScheduler):
         goal = None
         if self._goal == "max_slack":
             # Add the penalty as a z3 constant.
-            task_skip_penalty = z3.Int(f"TASK_SKIP_PENALTY")
+            task_skip_penalty = z3.Int("TASK_SKIP_PENALTY")
             optimizer.add(task_skip_penalty == TASK_SKIP_PENALTY)
 
             # Slack is defined as the deadline - remaining_time - start_time
@@ -524,7 +534,7 @@ class Z3Scheduler(BaseScheduler):
                     z3.If(variable.is_placed, task_slack, task_skip_penalty)
                 )
 
-            goal = z3.Int(f"TASK_SLACK_SUM")
+            goal = z3.Int("TASK_SLACK_SUM")
             optimizer.add(goal == z3.Sum(total_slack))
             optimizer.maximize(goal)
         else:
