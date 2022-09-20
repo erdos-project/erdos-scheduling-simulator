@@ -98,7 +98,7 @@ class BranchPredictionScheduler(BaseScheduler):
                     is_task_placed = True
                     placements.append((task, worker_pool.id, sim_time))
                     self._logger.debug(
-                        f"[{sim_time.time}] Placed {task} on Worker Pool "
+                        f"[{sim_time.time}] Placed {task} on WorkerPool "
                         f"({worker_pool.id}) to be started at {sim_time}."
                     )
                     break

@@ -163,7 +163,9 @@ def test_z3_skip_tasks_under_enforce_deadlines():
     """Test that if some task deadlines cannot be met, the remainder are scheduled
     instead of not placing any task in the system."""
     # Create the tasks and the graph.
-    camera_task_1 = create_default_task(name="Camera_1", timestamp=0, runtime=5)
+    camera_task_1 = create_default_task(
+        name="Camera_1", timestamp=0, runtime=5, deadline=5
+    )
     perception_task_1 = create_default_task(
         name="Perception_1",
         timestamp=0,

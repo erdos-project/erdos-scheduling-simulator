@@ -457,6 +457,11 @@ class Simulator(object):
 
         # Sort the events so that preemptions and migrations happen first.
         for placement_event in sorted(placement_events):
+            self._logger.info(
+                "[%s] Added %s to the event queue.",
+                event.time.time,
+                placement_event,
+            )
             self._event_queue.add_event(placement_event)
 
         # Reset the available tasks and the last task placement.
@@ -853,8 +858,8 @@ class Simulator(object):
         ):
             # If there are no schedulable tasks currently, or all schedulable tasks are
             # already running (in a preemptive scheduling scenario), or the WorkerPool
-            # is full, adjust the # scheduler invocation time according to either the
-            # time of invocation of # the next event, or the minimum completion time
+            # is full, adjust the scheduler invocation time according to either the
+            # time of invocation of the next event, or the minimum completion time
             # of a running task.
             minimum_running_task_completion_time = (
                 self._simulator_time

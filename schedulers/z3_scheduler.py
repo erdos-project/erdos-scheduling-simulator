@@ -36,25 +36,31 @@ class TaskOptimizerVariables:
         self._is_placed = z3.Bool(f"{task.unique_name}_is_placed")
         self._placed_on_worker = z3.BitVec(f"{task.unique_name}_worker", len(workers))
 
-        # Resource characteristics.
-        resource_types = set(
-            resource.name for resource, _ in task.resource_requirements.resources
-        )
-        self._resources = {
-            resource_type: z3.BitVec(
-                f"{task.unique_name}_{resource_type}",
-                max(
-                    worker.resources.get_available_quantity(
-                        Resource(name=resource_type, _id="any")
-                    )
-                    for worker in workers.values()
-                ),
+        # If any worker can accomodate the task, find the optimal ones.
+        if any(worker.can_accomodate_task(task) for worker in workers.values()):
+            resource_types = set(
+                resource.name for resource, _ in task.resource_requirements.resources
             )
-            for resource_type in resource_types
-        }
+            print(resource_types)
+            self._resources = {
+                resource_type: z3.BitVec(
+                    f"{task.unique_name}_{resource_type}",
+                    max(
+                        worker.resources.get_available_quantity(
+                            Resource(name=resource_type, _id="any")
+                        )
+                        for worker in workers.values()
+                    ),
+                )
+                for resource_type in resource_types
+            }
 
-        # Initialize the constraints.
-        self.initialize_constraints(optimizer, workers, enforce_deadlines)
+            # Initialize the constraints.
+            self.initialize_constraints(optimizer, workers, enforce_deadlines)
+        else:
+            # Force the placement to be False.
+            optimizer.add(self._is_placed == False)
+            self._resources = None
 
     @property
     def start_time(self):
@@ -83,7 +89,9 @@ class TaskOptimizerVariables:
     def _initialize_timing_constraints(self, optimizer, enforce_deadlines: bool = True):
         # Add a constraint to bound the start time be atleast the intended release
         # time of the task.
-        optimizer.add(self.start_time >= self.task.release_time.time)
+        optimizer.add(
+            self.start_time >= self.task.release_time.to(EventTime.Unit.US).time
+        )
 
         # If requested, add a constraint to ensure that deadlines are met.
         if enforce_deadlines:
@@ -91,16 +99,17 @@ class TaskOptimizerVariables:
             optimizer.add(
                 z3.Implies(
                     self.is_placed,
-                    self.start_time + self.task.remaining_time.time
-                    <= self.task.deadline.time,
+                    self.start_time
+                    + self.task.remaining_time.to(EventTime.Unit.US).time
+                    <= self.task.deadline.to(EventTime.Unit.US).time,
                 )
             )
         else:
             # Add a soft constraint to ensure the achievement of the deadline.
             # Also, tell Z3 to prefer placing tasks.
             optimizer.add_soft(
-                self.start_time + self.task.remaining_time.time
-                <= self.task.deadline.time,
+                self.start_time + self.task.remaining_time.to(EventTime.Unit.US).time
+                <= self.task.deadline.to(EventTime.Unit.US).time,
                 weight=DEADLINE_ACHIEVEMENT_WEIGHT,
             )
             optimizer.add_soft(
@@ -225,6 +234,7 @@ class Z3Scheduler(BaseScheduler):
         tasks_to_be_scheduled = workload.get_schedulable_tasks(
             sim_time, self.lookahead, self.preemptive, worker_pools
         )
+        print(sim_time)
         self._logger.debug(
             f"[{sim_time.time}] The scheduler received "
             f"{len(tasks_to_be_scheduled)} tasks to be scheduled."
@@ -265,7 +275,7 @@ class Z3Scheduler(BaseScheduler):
         if optimizer.check() == z3.sat:
             model = optimizer.model()
             for task_name, variables in tasks_to_variables.items():
-                if model[variables.is_placed]:
+                if variables.is_placed is not None and model[variables.is_placed]:
                     worker = workers[model[variables.placed_on_worker].as_long()]
                     worker_pool_id = worker_to_worker_pool[worker.id]
                     start_time = model[variables.start_time].as_long()
@@ -276,11 +286,20 @@ class Z3Scheduler(BaseScheduler):
                             EventTime(start_time, EventTime.Unit.US),
                         )
                     )
+                    self._logger.debug(
+                        f"[{sim_time.time}] Placed {variables.task} on "
+                        f"WorkerPool({worker_pool_id}) to be started at {start_time}."
+                    )
                 else:
                     placements.append((variables.task, None, None))
+                    self._logger.debug(
+                        f"[{sim_time.time}] Failed to place {variables.task} because "
+                        f"no worker pool could accomodate the resource requirements."
+                    )
         else:
             for task_name, variables in tasks_to_variables.items():
                 placements.append((variables.task, None, None))
+            self._logger.debug(f"[{sim_time.time}] Failed to place any task.")
         scheduler_end_time = time.time()
         scheduler_runtime = EventTime(
             int((scheduler_end_time - scheduler_start_time) * 1e6), EventTime.Unit.US
@@ -331,7 +350,8 @@ class Z3Scheduler(BaseScheduler):
                     z3.And(
                         [
                             variables.start_time
-                            >= parent.start_time + parent.task.remaining_time.time
+                            >= parent.start_time
+                            + parent.task.remaining_time.to(EventTime.Unit.US).time
                             for parent in parent_variables
                         ]
                     ),
@@ -349,9 +369,12 @@ class Z3Scheduler(BaseScheduler):
                     task_name_1 == task_name_2
                     or task_name_1 in task_resource_dependencies[task_name_2]
                     or variable_1.task.task_graph != variable_2.task.task_graph
+                    or variable_1.resources is None
+                    or variable_2.resources is None
                 ):
                     # Either same task or we've already added this pair's constraints,
-                    # or the tasks are not belonging to the same graph.
+                    # or the tasks are not belonging to the same graph, or one of the
+                    # tasks cannot be placed.
                     continue
 
                 task_graph = workload.get_task_graph(variable_1.task.task_graph)
@@ -383,7 +406,10 @@ class Z3Scheduler(BaseScheduler):
                     optimizer.add(
                         first_ends_before_second_starts
                         == (
-                            (variable_task_1.start_time + task_1.remaining_time.time)
+                            (
+                                variable_task_1.start_time
+                                + task_1.remaining_time.to(EventTime.Unit.US).time
+                            )
                             < variable_task_2.start_time
                         )
                     )
@@ -394,7 +420,10 @@ class Z3Scheduler(BaseScheduler):
                     optimizer.add(
                         second_ends_before_first_starts
                         == (
-                            (variable_task_2.start_time + task_2.remaining_time.time)
+                            (
+                                variable_task_2.start_time
+                                + task_2.remaining_time.to(EventTime.Unit.US).time
+                            )
                             < variable_task_1.start_time
                         )
                     )
@@ -463,20 +492,42 @@ class Z3Scheduler(BaseScheduler):
 
     def _add_objective(self, optimizer, tasks_to_variables):
         if self._goal == "max_slack":
+            # Add the penalty as a z3 constant.
+            task_skip_penalty = z3.Int(f"TASK_SKIP_PENALTY")
+            optimizer.add(task_skip_penalty == TASK_SKIP_PENALTY)
+
             # Slack is defined as the deadline - remaining_time - start_time
-            optimizer.maximize(
-                z3.Sum(
-                    [
-                        z3.If(
-                            variable.is_placed,
-                            variable.task.deadline.time
-                            - variable.task.remaining_time.time
-                            - variable.start_time,
-                            TASK_SKIP_PENALTY,
-                        )
-                        for variable in tasks_to_variables.values()
-                    ]
+            total_slack = []
+            for variable in tasks_to_variables.values():
+                task_slack = z3.Int(f"{variable.task.unique_name}_slack")
+                optimizer.add(
+                    task_slack
+                    == (
+                        variable.task.deadline.to(EventTime.Unit.US).time
+                        - variable.task.remaining_time.to(EventTime.Unit.US).time
+                        - variable.start_time
+                    )
                 )
-            )
+                total_slack.append(
+                    z3.If(variable.is_placed, task_slack, task_skip_penalty)
+                )
+
+            total_slack_z3 = z3.Int(f"TASK_SLACK_SUM")
+            optimizer.add(total_slack_z3 == z3.Sum(total_slack))
+            optimizer.maximize(total_slack_z3)
+            # optimizer.maximize(
+            #     z3.Sum(
+            #         [
+            #             z3.If(
+            #                 variable.is_placed,
+            #                 variable.task.deadline.time
+            #                 - variable.task.remaining_time.time
+            #                 - variable.start_time,
+            #                 TASK_SKIP_PENALTY,
+            #             )
+            #             for variable in tasks_to_variables.values()
+            #         ]
+            #     )
+            # )
         else:
             raise ValueError(f"Goal {self._goal} not supported yet.")
