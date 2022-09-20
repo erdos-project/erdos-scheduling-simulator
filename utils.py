@@ -41,7 +41,7 @@ class EventTime:
 
         def __str__(self):
             if self == EventTime.Unit.US:
-                return "us"
+                return "µs"
             elif self == EventTime.Unit.MS:
                 return "ms"
             elif self == EventTime.Unit.S:
