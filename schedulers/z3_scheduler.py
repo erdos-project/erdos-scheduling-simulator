@@ -237,7 +237,8 @@ class Z3Scheduler(BaseScheduler):
         print(sim_time)
         self._logger.debug(
             f"[{sim_time.time}] The scheduler received "
-            f"{len(tasks_to_be_scheduled)} tasks to be scheduled."
+            f"{[task.unique_name for task in tasks_to_be_scheduled]} "
+            f"tasks for scheduling."
         )
 
         # TODO (Sukrit): Reconstruct a worker pool based on the preemptive nature of
@@ -269,11 +270,17 @@ class Z3Scheduler(BaseScheduler):
         self._add_resource_constraints(optimizer, tasks_to_variables, workload, workers)
 
         # Add the objectives, and return the results.
-        self._add_objective(optimizer, tasks_to_variables)
+        goal = self._add_objective(optimizer, tasks_to_variables)
         placements = []
-        self._logger.debug(f"The scheduler returned: {optimizer.check()}.")
+        self._logger.debug(
+            f"[{sim_time.time}] The scheduler returned: {optimizer.check()}."
+        )
         if optimizer.check() == z3.sat:
             model = optimizer.model()
+            self._logger.info(
+                f"[{sim_time.time}] The optimized goal value was {model[goal]}."
+            )
+            self._logger.debug(f"[{sim_time.time}] The model was \n {model}.")
             for task_name, variables in tasks_to_variables.items():
                 if variables.is_placed is not None and model[variables.is_placed]:
                     worker = workers[model[variables.placed_on_worker].as_long()]
@@ -304,7 +311,7 @@ class Z3Scheduler(BaseScheduler):
         scheduler_runtime = EventTime(
             int((scheduler_end_time - scheduler_start_time) * 1e6), EventTime.Unit.US
         )
-        self._logger.debug(f"The runtime of the scheduler was: {scheduler_runtime} us.")
+        self._logger.debug(f"The runtime of the scheduler was: {scheduler_runtime}.")
         runtime = (
             scheduler_runtime
             if self.runtime == EventTime(-1, EventTime.Unit.US)
@@ -368,19 +375,23 @@ class Z3Scheduler(BaseScheduler):
                 if (
                     task_name_1 == task_name_2
                     or task_name_1 in task_resource_dependencies[task_name_2]
-                    or variable_1.task.task_graph != variable_2.task.task_graph
                     or variable_1.resources is None
                     or variable_2.resources is None
                 ):
                     # Either same task or we've already added this pair's constraints,
-                    # or the tasks are not belonging to the same graph, or one of the
-                    # tasks cannot be placed.
+                    # or one of the tasks cannot be placed.
                     continue
 
-                task_graph = workload.get_task_graph(variable_1.task.task_graph)
-                if not task_graph.are_dependent(variable_1.task, variable_2.task):
-                    # If the two tasks are not dependent, ensure that the resources
-                    # between the two of them are checked.
+                if variable_1.task.task_graph == variable_2.task.task_graph:
+                    # If the tasks are in the same graph, and they are not dependent
+                    # on each other, they can run in parallel, and hence, must be
+                    # checked for overlaps.
+                    task_graph = workload.get_task_graph(variable_1.task.task_graph)
+                    if not task_graph.are_dependent(variable_1.task, variable_2.task):
+                        task_resource_dependencies[task_name_1].add(task_name_2)
+                else:
+                    # If the tasks belong to different graphs, they can always run in
+                    # parallel, and hence, must be checked for overlaps.
                     task_resource_dependencies[task_name_1].add(task_name_2)
 
         for index, worker in workers.items():
@@ -491,6 +502,7 @@ class Z3Scheduler(BaseScheduler):
                     )
 
     def _add_objective(self, optimizer, tasks_to_variables):
+        goal = None
         if self._goal == "max_slack":
             # Add the penalty as a z3 constant.
             task_skip_penalty = z3.Int(f"TASK_SKIP_PENALTY")
@@ -512,22 +524,9 @@ class Z3Scheduler(BaseScheduler):
                     z3.If(variable.is_placed, task_slack, task_skip_penalty)
                 )
 
-            total_slack_z3 = z3.Int(f"TASK_SLACK_SUM")
-            optimizer.add(total_slack_z3 == z3.Sum(total_slack))
-            optimizer.maximize(total_slack_z3)
-            # optimizer.maximize(
-            #     z3.Sum(
-            #         [
-            #             z3.If(
-            #                 variable.is_placed,
-            #                 variable.task.deadline.time
-            #                 - variable.task.remaining_time.time
-            #                 - variable.start_time,
-            #                 TASK_SKIP_PENALTY,
-            #             )
-            #             for variable in tasks_to_variables.values()
-            #         ]
-            #     )
-            # )
+            goal = z3.Int(f"TASK_SLACK_SUM")
+            optimizer.add(goal == z3.Sum(total_slack))
+            optimizer.maximize(goal)
         else:
             raise ValueError(f"Goal {self._goal} not supported yet.")
+        return goal
