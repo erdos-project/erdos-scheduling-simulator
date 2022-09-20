@@ -9,6 +9,7 @@ from schedulers import BaseScheduler
 from utils import EventTime
 from workers import Worker, WorkerPool, WorkerPools
 from workload import Resource, Task, TaskGraph
+from workload.workload import Workload
 
 DEADLINE_ACHIEVEMENT_WEIGHT = 0.5
 TASK_SKIP_PENALTY = -10000000
@@ -218,15 +219,15 @@ class Z3Scheduler(BaseScheduler):
         self._goal = goal
 
     def schedule(
-        self, sim_time: EventTime, task_graph: TaskGraph, worker_pools: WorkerPools
+        self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools
     ) -> Tuple[EventTime, Sequence[Tuple[Task, str, EventTime]]]:
-        # Retrieve the schedulable tasks from the TaskGraph.
-        tasks_to_be_scheduled = task_graph.get_schedulable_tasks(
+        # Retrieve the schedulable tasks from the Workload.
+        tasks_to_be_scheduled = workload.get_schedulable_tasks(
             sim_time, self.lookahead, self.preemptive, worker_pools
         )
         self._logger.debug(
-            f"The scheduler received {len(tasks_to_be_scheduled)} "
-            f"tasks to be scheduled."
+            f"[{sim_time.time}] The scheduler received "
+            f"{len(tasks_to_be_scheduled)} tasks to be scheduled."
         )
 
         # TODO (Sukrit): Reconstruct a worker pool based on the preemptive nature of
@@ -254,10 +255,8 @@ class Z3Scheduler(BaseScheduler):
         tasks_to_variables = self._add_variables(
             optimizer, tasks_to_be_scheduled, workers
         )
-        self._add_task_dependency_constraints(optimizer, tasks_to_variables, task_graph)
-        self._add_resource_constraints(
-            optimizer, tasks_to_variables, task_graph, workers
-        )
+        self._add_task_dependency_constraints(optimizer, tasks_to_variables, workload)
+        self._add_resource_constraints(optimizer, tasks_to_variables, workload, workers)
 
         # Add the objectives, and return the results.
         self._add_objective(optimizer, tasks_to_variables)
@@ -307,11 +306,10 @@ class Z3Scheduler(BaseScheduler):
             )
         return tasks_to_variables
 
-    def _add_task_dependency_constraints(
-        self, optimizer, tasks_to_variables, task_graph
-    ):
+    def _add_task_dependency_constraints(self, optimizer, tasks_to_variables, workload):
         for _, variables in tasks_to_variables.items():
             task = variables.task
+            task_graph = workload.get_task_graph(variables.task.task_graph)
             parent_variables = [
                 tasks_to_variables[parent.unique_name]
                 for parent in task_graph.get_parents(task)
@@ -341,7 +339,7 @@ class Z3Scheduler(BaseScheduler):
             )
 
     def _add_resource_constraints(
-        self, optimizer, tasks_to_variables, task_graph, workers
+        self, optimizer, tasks_to_variables, workload, workers
     ):
         # Find all tasks that might run in parallel with each task.
         task_resource_dependencies = defaultdict(set)
@@ -350,10 +348,13 @@ class Z3Scheduler(BaseScheduler):
                 if (
                     task_name_1 == task_name_2
                     or task_name_1 in task_resource_dependencies[task_name_2]
+                    or variable_1.task.task_graph != variable_2.task.task_graph
                 ):
-                    # Either same task or we've already added this pair's constraints.
+                    # Either same task or we've already added this pair's constraints,
+                    # or the tasks are not belonging to the same graph.
                     continue
 
+                task_graph = workload.get_task_graph(variable_1.task.task_graph)
                 if not task_graph.are_dependent(variable_1.task, variable_2.task):
                     # If the two tasks are not dependent, ensure that the resources
                     # between the two of them are checked.

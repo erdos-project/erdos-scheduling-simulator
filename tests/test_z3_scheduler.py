@@ -4,7 +4,7 @@ from schedulers import Z3Scheduler
 from tests.utils import create_default_task
 from utils import EventTime
 from workers import Worker, WorkerPool, WorkerPools
-from workload import Job, Resource, Resources, TaskGraph
+from workload import Job, Resource, Resources, TaskGraph, Workload
 
 
 def test_z3_scheduling_success_basic():
@@ -16,6 +16,7 @@ def test_z3_scheduling_success_basic():
         timestamp=0,
     )
     task_graph = TaskGraph(tasks={camera_task_1: []})
+    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
     camera_task_1.release(EventTime(0, EventTime.Unit.US))
 
     # Create the workers.
@@ -34,7 +35,7 @@ def test_z3_scheduling_success_basic():
         enforce_deadlines=True,
     )
     runtime, placements = scheduler.schedule(
-        EventTime(0, EventTime.Unit.US), task_graph, worker_pools
+        EventTime(0, EventTime.Unit.US), workload, worker_pools
     )
 
     assert len(placements) == 1, "Incorrect length of placements retrieved."
@@ -57,6 +58,7 @@ def test_z3_scheduling_deadline_enforcement():
         deadline=2,
     )
     task_graph = TaskGraph(tasks={camera_task_1: []})
+    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
     camera_task_1.release(EventTime(0, EventTime.Unit.US))
 
     # Create the workers.
@@ -75,7 +77,7 @@ def test_z3_scheduling_deadline_enforcement():
         enforce_deadlines=True,
     )
     runtime, placements = scheduler.schedule(
-        EventTime(0, EventTime.Unit.US), task_graph, worker_pools
+        EventTime(0, EventTime.Unit.US), workload, worker_pools
     )
 
     assert len(placements) == 1, "Incorrect length of placements retrieved."
@@ -119,6 +121,7 @@ def test_z3_scheduling_dependency():
         deadline=20,
     )
     task_graph = TaskGraph(tasks={camera_task_1: [perception_task_1]})
+    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
     camera_task_1.release(EventTime(0, EventTime.Unit.US))
     perception_task_1.release(EventTime(0, EventTime.Unit.US))
 
@@ -138,7 +141,7 @@ def test_z3_scheduling_dependency():
         enforce_deadlines=True,
     )
     runtime, placements = scheduler.schedule(
-        EventTime(0, EventTime.Unit.US), task_graph, worker_pools
+        EventTime(0, EventTime.Unit.US), workload, worker_pools
     )
 
     assert len(placements) == 2, "Incorrect length of placements retrieved."
@@ -174,6 +177,7 @@ def test_z3_skip_tasks_under_enforce_deadlines():
         deadline=10,
     )
     task_graph = TaskGraph(tasks={camera_task_1: [perception_task_1]})
+    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
     camera_task_1.release(EventTime(0, EventTime.Unit.US))
     perception_task_1.release(EventTime(0, EventTime.Unit.US))
 
@@ -193,7 +197,7 @@ def test_z3_skip_tasks_under_enforce_deadlines():
         enforce_deadlines=True,
     )
     runtime, placements = scheduler.schedule(
-        EventTime(0, EventTime.Unit.US), task_graph, worker_pools
+        EventTime(0, EventTime.Unit.US), workload, worker_pools
     )
     assert len(placements) == 2, "Incorrect length of placements retrieved."
     assert placements[0][0] == camera_task_1, "Incorrect task retrieved for placement."
@@ -214,6 +218,7 @@ def test_z3_delays_scheduling_under_constrained_resources():
         name="Camera_2", timestamp=0, runtime=5, deadline=20
     )
     task_graph = TaskGraph(tasks={camera_task_1: [], camera_task_2: []})
+    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
     camera_task_1.release(EventTime(0, EventTime.Unit.US))
     camera_task_2.release(EventTime(0, EventTime.Unit.US))
 
@@ -230,7 +235,7 @@ def test_z3_delays_scheduling_under_constrained_resources():
         enforce_deadlines=True,
     )
     runtime, placements = scheduler.schedule(
-        EventTime(0, EventTime.Unit.US), task_graph, worker_pools
+        EventTime(0, EventTime.Unit.US), workload, worker_pools
     )
     assert len(placements) == 2, "Incorrect length of placements retrieved."
     assert placements[0][0] == camera_task_1, "Incorrect task retrieved for placement."
@@ -269,6 +274,7 @@ def test_z3_respects_dependencies_under_delayed_scheduling():
     task_graph = TaskGraph(
         tasks={camera_task_1: [], camera_task_2: [perception_task_2]}
     )
+    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
     camera_task_1.release(EventTime(0, EventTime.Unit.US))
     camera_task_2.release(EventTime(0, EventTime.Unit.US))
     perception_task_2.release(EventTime(0, EventTime.Unit.US))
@@ -289,7 +295,7 @@ def test_z3_respects_dependencies_under_delayed_scheduling():
         enforce_deadlines=True,
     )
     runtime, placements = scheduler.schedule(
-        EventTime(0, EventTime.Unit.US), task_graph, worker_pools
+        EventTime(0, EventTime.Unit.US), workload, worker_pools
     )
     assert len(placements) == 3, "Incorrect length of placements retrieved."
     assert placements[0][0] == camera_task_1, "Incorrect task retrieved for placement."
@@ -343,6 +349,7 @@ def test_z3_respects_dependencies_under_constrained_resources():
     task_graph = TaskGraph(
         tasks={camera_task_1: [], camera_task_2: [perception_task_2]}
     )
+    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
     camera_task_1.release(EventTime(0, EventTime.Unit.US))
     camera_task_2.release(EventTime(0, EventTime.Unit.US))
     perception_task_2.release(EventTime(0, EventTime.Unit.US))
@@ -363,7 +370,7 @@ def test_z3_respects_dependencies_under_constrained_resources():
         enforce_deadlines=True,
     )
     runtime, placements = scheduler.schedule(
-        EventTime(0, EventTime.Unit.US), task_graph, worker_pools
+        EventTime(0, EventTime.Unit.US), workload, worker_pools
     )
     assert len(placements) == 3, "Incorrect length of placements retrieved."
     assert placements[0][0] == camera_task_1, "Incorrect task retrieved for placement."
@@ -399,6 +406,7 @@ def test_z3_respects_worker_resource_constraints():
     )
 
     task_graph = TaskGraph(tasks={camera_task_1: [], camera_task_2: []})
+    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
     camera_task_1.release(EventTime(0, EventTime.Unit.US))
     camera_task_2.release(EventTime(0, EventTime.Unit.US))
 
@@ -418,7 +426,7 @@ def test_z3_respects_worker_resource_constraints():
         enforce_deadlines=True,
     )
     runtime, placements = scheduler.schedule(
-        EventTime(0, EventTime.Unit.US), task_graph, worker_pools
+        EventTime(0, EventTime.Unit.US), workload, worker_pools
     )
     assert len(placements) == 2, "Incorrect length of placements retrieved."
     assert (
@@ -446,6 +454,7 @@ def test_z3_does_not_schedule_across_workers():
     )
 
     task_graph = TaskGraph(tasks={camera_task_1: [], camera_task_2: []})
+    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
     camera_task_1.release(EventTime(0, EventTime.Unit.US))
     camera_task_2.release(EventTime(0, EventTime.Unit.US))
 
@@ -469,7 +478,7 @@ def test_z3_does_not_schedule_across_workers():
         enforce_deadlines=True,
     )
     runtime, placements = scheduler.schedule(
-        EventTime(0, EventTime.Unit.US), task_graph, worker_pools
+        EventTime(0, EventTime.Unit.US), workload, worker_pools
     )
     assert len(placements) == 2, "Incorrect length of placements retrieved."
     assert placements[0][0] == camera_task_1, "Incorrect task retrieved for placement."
@@ -510,6 +519,7 @@ def test_z3_not_work_conserving():
     task_graph = TaskGraph(
         tasks={camera_task_1: [perception_task_1], camera_task_2: []}
     )
+    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
     camera_task_1.release(EventTime(0, EventTime.Unit.US))
     camera_task_2.release(EventTime(0, EventTime.Unit.US))
 
@@ -529,7 +539,7 @@ def test_z3_not_work_conserving():
         enforce_deadlines=True,
     )
     runtime, placements = scheduler.schedule(
-        EventTime(0, EventTime.Unit.US), task_graph, worker_pools
+        EventTime(0, EventTime.Unit.US), workload, worker_pools
     )
     assert len(placements) == 3, "Incorrect length of placements retrieved."
     assert placements[0][0] == camera_task_1, "Incorrect task retrieved for placement."
@@ -579,6 +589,7 @@ def test_z3_minimize_deadline_misses():
     task_graph = TaskGraph(
         tasks={camera_task_1: [perception_task_1], camera_task_2: []}
     )
+    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
     camera_task_1.release(EventTime(0, EventTime.Unit.US))
     camera_task_2.release(EventTime(0, EventTime.Unit.US))
     perception_task_1.release(EventTime(0, EventTime.Unit.US))
@@ -599,7 +610,7 @@ def test_z3_minimize_deadline_misses():
         enforce_deadlines=False,
     )
     runtime, placements = scheduler.schedule(
-        EventTime(0, EventTime.Unit.US), task_graph, worker_pools
+        EventTime(0, EventTime.Unit.US), workload, worker_pools
     )
     assert len(placements) == 3, "Incorrect length of placements retrieved."
     assert placements[0][0] == camera_task_1, "Incorrect task retrieved for placement."
