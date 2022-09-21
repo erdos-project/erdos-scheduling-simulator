@@ -1,7 +1,6 @@
 from logging import raiseExceptions
 
 from schedulers import (
-    BranchPredictionPolicy,
     BranchPredictionScheduler,
     EDFScheduler,
     GurobiScheduler,
@@ -10,9 +9,14 @@ from schedulers import (
 from tests.utils import create_default_task
 from utils import EventTime
 from workers import Worker, WorkerPool, WorkerPools
-from workload import Resource, Resources, TaskGraph
-from workload.jobs import Job
-from workload.workload import Workload
+from workload import (
+    BranchPredictionPolicy,
+    Job,
+    Resource,
+    Resources,
+    TaskGraph,
+    Workload,
+)
 
 
 def test_gurobi_scheduler_success():

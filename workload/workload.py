@@ -5,7 +5,7 @@ import absl
 from utils import EventTime, setup_logging
 
 from .jobs import JobGraph
-from .tasks import Task, TaskGraph, TaskState
+from .tasks import Task, TaskGraph
 
 
 class Workload(object):

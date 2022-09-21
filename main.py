@@ -12,7 +12,6 @@ from data import (
     WorkloadLoader,
 )
 from schedulers import (
-    BranchPredictionPolicy,
     BranchPredictionScheduler,
     EDFScheduler,
     GurobiScheduler2,
@@ -21,7 +20,7 @@ from schedulers import (
 )
 from simulator import Simulator
 from utils import EventTime, setup_logging
-from workload.workload import Workload
+from workload import BranchPredictionPolicy, Workload
 
 FLAGS = flags.FLAGS
 

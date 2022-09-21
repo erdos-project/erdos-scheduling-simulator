@@ -3,15 +3,14 @@ import random
 import time
 from collections import defaultdict
 from copy import copy, deepcopy
-from enum import Enum
 from typing import Optional, Sequence, Tuple
 
 import absl  # noqa: F401
 
-from schedulers import BaseScheduler, BranchPredictionPolicy
+from schedulers import BaseScheduler
 from utils import EventTime
 from workers import WorkerPools
-from workload import Task, Workload
+from workload import BranchPredictionPolicy, Task, Workload
 from workload.tasks import TaskGraph
 
 

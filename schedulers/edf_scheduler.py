@@ -9,8 +9,7 @@ import absl  # noqa: F401
 from schedulers import BaseScheduler
 from utils import EventTime
 from workers import WorkerPools
-from workload import Task, TaskGraph
-from workload.workload import Workload
+from workload import Task, Workload
 
 
 class EDFScheduler(BaseScheduler):

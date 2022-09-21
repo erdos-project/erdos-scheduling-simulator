@@ -7,8 +7,8 @@ import z3
 
 from schedulers import BaseScheduler
 from utils import EventTime
-from workers import Worker, WorkerPool, WorkerPools
-from workload import Resource, Task, TaskGraph
+from workers import Worker, WorkerPools
+from workload import Resource, Task
 from workload.workload import Workload
 
 DEADLINE_ACHIEVEMENT_WEIGHT = 10000000
