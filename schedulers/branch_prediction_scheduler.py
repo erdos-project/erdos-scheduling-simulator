@@ -1,7 +1,5 @@
 import os
-import random
 import time
-from collections import defaultdict
 from copy import copy, deepcopy
 from typing import Optional, Sequence, Tuple
 
@@ -127,7 +125,7 @@ class BranchPredictionScheduler(BaseScheduler):
     def compute_slack(
         self, sim_time: EventTime, task_graph: TaskGraph, task_graph_name: str
     ) -> EventTime:
-        remaining_time = self.compute_remaining_time(task_graph)
+        remaining_time = task_graph.get_remaining_time(self.policy)
         expected_completion_time = sim_time + remaining_time
         self._logger.info(
             f"[{sim_time.time}] The deadline of the TaskGraph {task_graph_name} is "
@@ -135,72 +133,6 @@ class BranchPredictionScheduler(BaseScheduler):
             f"The graph is expected to complete by {expected_completion_time}."
         )
         return task_graph.deadline - expected_completion_time
-
-    def compute_remaining_time(self, task_graph: TaskGraph) -> EventTime:
-        """Computes the slack of the given `TaskGraph` at the `sim_time` using
-        the prediction policy specified in the Scheduler.
-
-        Args:
-            sim_time: The time at which to compute the slack.
-            task_graph: The graph for which to compute the slack.
-
-        Returns:
-            The slack as per the specified branch prediction policy.
-        """
-        remaining_time = defaultdict(lambda: EventTime.zero())
-        # Add the remaining time for the sources.
-        for source_task in task_graph.get_source_tasks():
-            remaining_time[source_task] = source_task.remaining_time
-
-        # Iterate over the other nodes and choose the remaining
-        # time according to the policy.
-        for task in task_graph.topological_sort():
-            # The branch associated with this task was not executed, skipping.
-            if task not in remaining_time:
-                continue
-
-            if task.conditional and not task.is_complete():
-                children_tasks = task_graph.get_children(task)
-                # If the task is an unresolved conditional, propagate the remaining
-                # time # to the children according to the policy in the scheduler.
-                if self.policy == BranchPredictionPolicy.WORST_CASE:
-                    # Choose the branch that has the lowest probability.
-                    child_to_release = children_tasks[0]
-                    for child in children_tasks[1:]:
-                        if child.probability < child_to_release.probability:
-                            child_to_release = child
-                elif self.policy == BranchPredictionPolicy.BEST_CASE:
-                    # Choose the branch that has the highest probability.
-                    child_to_release = children_tasks[0]
-                    for child in children_tasks[1:]:
-                        if child.probability > child_to_release.probability:
-                            child_to_release = child
-                elif self.policy == BranchPredictionPolicy.RANDOM:
-                    # Choose a branch randomly.
-                    child_to_release = random.choice(children_tasks)
-                else:
-                    raise NotImplementedError(
-                        f"The policy {self.policy} is not implemented yet."
-                    )
-
-                # Propagate the remaining time to the child.
-                remaining_time[child_to_release] = (
-                    remaining_time[task] + child_to_release.remaining_time
-                )
-            else:
-                # If the task is not conditional, or has been resolved,
-                # propogate the remaining time to all the children.
-                for child_task in task_graph.get_children(task):
-                    if (
-                        remaining_time[child_task]
-                        <= remaining_time[task] + child_task.remaining_time
-                    ):
-                        remaining_time[child_task] = (
-                            remaining_time[task] + child_task.remaining_time
-                        )
-
-        # Find the maximum remaining time across all the sink nodes.
-        return max([remaining_time[sink] for sink in task_graph.get_sink_tasks()])
 
     @property
     def policy(self):

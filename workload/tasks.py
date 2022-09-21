@@ -10,6 +10,7 @@ from typing import Mapping, Optional, Sequence, Union
 
 from utils import EventTime, fuzz_time, setup_logging
 
+from . import BranchPredictionPolicy
 from .graph import Graph
 from .resources import Resources
 
@@ -1093,36 +1094,79 @@ class TaskGraph(Graph[Task]):
         """
         raise NotImplementedError("Merging of Taskgraphs has not been implemented yet.")
 
-    def is_complete(self):
+    def is_complete(self) -> bool:
         """Check if the task graph has finished execution."""
         return all(task.is_complete() for task in self.get_sink_tasks())
 
-    @property
-    def remaining_time(self) -> EventTime:
-        """Retrieve the time remaining in the completion of the TaskGraph.
+    def get_remaining_time(
+        self, policy: BranchPredictionPolicy = BranchPredictionPolicy.ALL
+    ):
+        """Retrieves the time remaining in the completion of the TaskGraph.
 
-        Note that in the conditional task graph setting, the method returns the
-        worst-case remaining time (i.e., the maximum of remaining time across
-        all branches).
+        By default, the method returns the worst-case remaining time (i.e., the
+        maximum of remaining time across all conditional branches).
 
         Returns:
-            An `EventTime` denoting the maximum time remaining across all branches.
+            An `EventTime` denoting the remaining time computed according to the
+            provided `policy`.
         """
         remaining_time = defaultdict(lambda: EventTime.zero())
+
         # Add the remaining time for the sources.
         for source_task in self.get_source_tasks():
             remaining_time[source_task] = source_task.remaining_time
 
-        # Iterate over the other nodes and choose the maximum remaining time.
+        # Iterate over the other nodes and choose the remaining
+        # time according to the policy.
         for task in self.topological_sort():
-            for child_task in self.get_children(task):
-                if (
-                    remaining_time[child_task]
-                    <= remaining_time[task] + child_task.remaining_time
-                ):
-                    remaining_time[child_task] = (
-                        remaining_time[task] + child_task.remaining_time
+            # The branch associated with this task was not executed, skipping.
+            if task not in remaining_time:
+                continue
+
+            if (
+                policy != BranchPredictionPolicy.ALL
+                and task.conditional
+                and not task.is_complete()
+            ):
+                children_tasks = self.get_children(task)
+                # If the task is an unresolved conditional, propagate the remaining
+                # time # to the children according to the policy in the scheduler.
+                if policy == BranchPredictionPolicy.WORST_CASE:
+                    # Choose the branch that has the lowest probability.
+                    child_to_release = children_tasks[0]
+                    for child in children_tasks[1:]:
+                        if child.probability < child_to_release.probability:
+                            child_to_release = child
+                elif policy == BranchPredictionPolicy.BEST_CASE:
+                    # Choose the branch that has the highest probability.
+                    child_to_release = children_tasks[0]
+                    for child in children_tasks[1:]:
+                        if child.probability > child_to_release.probability:
+                            child_to_release = child
+                elif policy == BranchPredictionPolicy.RANDOM:
+                    # Choose a branch randomly.
+                    child_to_release = random.choice(children_tasks)
+                else:
+                    raise NotImplementedError(
+                        f"The policy {self.policy} is not implemented yet."
                     )
+
+                # Propagate the remaining time to the child.
+                remaining_time[child_to_release] = (
+                    remaining_time[task] + child_to_release.remaining_time
+                )
+            else:
+                # If the task is not conditional, has been resolved, or the policy
+                # requested the consideration of all the children, then propogate
+                # the remaining time to all the children.
+                for child_task in self.get_children(task):
+                    if (
+                        remaining_time[child_task]
+                        <= remaining_time[task] + child_task.remaining_time
+                    ):
+                        remaining_time[child_task] = (
+                            remaining_time[task] + child_task.remaining_time
+                        )
 
         # Find the maximum remaining time across all the sink nodes.
         return max([remaining_time[sink] for sink in self.get_sink_tasks()])

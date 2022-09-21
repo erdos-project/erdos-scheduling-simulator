@@ -1183,7 +1183,7 @@ def test_task_graph_remaining_time_simple():
             planning_task: [],
         }
     )
-    assert task_graph.remaining_time == EventTime(
+    assert task_graph.get_remaining_time() == EventTime(
         6, EventTime.Unit.MS
     ), "Incorrect remaining time returned by Graph."
 
@@ -1193,7 +1193,7 @@ def test_task_graph_remaining_time_simple():
     perception_task.start(EventTime.zero())
     perception_task.update_remaining_time(time=EventTime.zero())
     perception_task.finish(EventTime(1, EventTime.Unit.MS))
-    assert task_graph.remaining_time == EventTime(
+    assert task_graph.get_remaining_time() == EventTime(
         5, EventTime.Unit.MS
     ), "Incorrect remaining time returned by the Graph."
 
@@ -1203,7 +1203,7 @@ def test_task_graph_remaining_time_simple():
     prediction_task.start(EventTime(1, EventTime.Unit.MS))
     prediction_task.update_remaining_time(time=EventTime.zero())
     prediction_task.finish(EventTime(3, EventTime.Unit.MS))
-    assert task_graph.remaining_time == EventTime(
+    assert task_graph.get_remaining_time() == EventTime(
         3, EventTime.Unit.MS
     ), "Incorrect remaining time returned by the Graph."
 
@@ -1214,7 +1214,7 @@ def test_task_graph_remaining_time_simple():
     planning_task.update_remaining_time(time=EventTime.zero())
     planning_task.finish(EventTime(6, EventTime.Unit.MS))
     assert (
-        task_graph.remaining_time == EventTime.zero()
+        task_graph.get_remaining_time() == EventTime.zero()
     ), "Incorrect remaining time returned by the Graph."
     assert task_graph.is_complete(), "Incorrect completion status returned."
 
@@ -1268,6 +1268,6 @@ def test_task_graph_remaining_time_complex():
             planning_task: [],
         }
     )
-    assert task_graph.remaining_time == EventTime(
+    assert task_graph.get_remaining_time() == EventTime(
         11, EventTime.Unit.MS
     ), "Incorrect remaining time returned by Graph."

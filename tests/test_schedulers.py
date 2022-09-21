@@ -480,6 +480,7 @@ def test_branch_prediction_scheduler_slack():
         name="Perception_End@0",
         job=Job(name="Perception_End", runtime=EventTime.zero()),
         runtime=0,
+        deadline=15000,
     )
     task_graph = TaskGraph(
         {
@@ -496,17 +497,23 @@ def test_branch_prediction_scheduler_slack():
     worst_case_scheduler = BranchPredictionScheduler(
         policy=BranchPredictionPolicy.WORST_CASE
     )
-    slack = worst_case_scheduler.compute_remaining_time(task_graph)
-    assert slack == EventTime(15, EventTime.Unit.MS), "Incorrect slack returned."
+    slack = worst_case_scheduler.compute_slack(
+        EventTime.zero(), task_graph, "test_task_graph"
+    )
+    assert slack == EventTime.zero(), "Incorrect slack returned."
 
     best_case_scheduler = BranchPredictionScheduler(
         policy=BranchPredictionPolicy.BEST_CASE
     )
-    slack = best_case_scheduler.compute_remaining_time(task_graph)
-    assert slack == EventTime(7, EventTime.Unit.MS), "Incorrect slack returned."
+    slack = best_case_scheduler.compute_slack(
+        EventTime.zero(), task_graph, "test_task_graph"
+    )
+    assert slack == EventTime(8, EventTime.Unit.MS), "Incorrect slack returned."
 
     random_scheduler = BranchPredictionScheduler(policy=BranchPredictionPolicy.RANDOM)
-    slack = random_scheduler.compute_remaining_time(task_graph)
-    assert slack == EventTime(7, EventTime.Unit.MS) or slack == EventTime(
-        15, EventTime.Unit.MS
+    slack = random_scheduler.compute_slack(
+        EventTime.zero(), task_graph, "test_task_graph"
+    )
+    assert (
+        slack == EventTime(8, EventTime.Unit.MS) or slack == EventTime.zero()
     ), "Incorrect slack returned."
