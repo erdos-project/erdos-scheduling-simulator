@@ -8,7 +8,7 @@ import z3
 from schedulers import BaseScheduler
 from utils import EventTime
 from workers import Worker, WorkerPools
-from workload import Resource, Task
+from workload import BranchPredictionPolicy, Resource, Task
 from workload.workload import Workload
 
 DEADLINE_ACHIEVEMENT_WEIGHT = 10000000
@@ -219,6 +219,7 @@ class TaskOptimizerVariables:
 class Z3Scheduler(BaseScheduler):
     def __init__(
         self,
+        policy: BranchPredictionPolicy = BranchPredictionPolicy.RANDOM,
         preemptive: bool = False,
         runtime: EventTime = EventTime(-1, EventTime.Unit.US),
         goal: str = "max_slack",
@@ -230,6 +231,7 @@ class Z3Scheduler(BaseScheduler):
             preemptive, runtime, lookahead, enforce_deadlines, _flags
         )
         self._goal = goal
+        self._policy = policy
 
     def schedule(
         self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools
@@ -273,7 +275,7 @@ class Z3Scheduler(BaseScheduler):
         self._add_resource_constraints(optimizer, tasks_to_variables, workload, workers)
 
         # Add the objectives, and return the results.
-        goal = self._add_objective(optimizer, tasks_to_variables)
+        goal = self._add_objective(optimizer, tasks_to_variables, workload)
         placements = []
         self._logger.debug(
             f"[{sim_time.time}] The scheduler returned: {optimizer.check()}."
@@ -505,7 +507,7 @@ class Z3Scheduler(BaseScheduler):
                         )
                     )
 
-    def _add_objective(self, optimizer, tasks_to_variables):
+    def _add_objective(self, optimizer, tasks_to_variables, workload: Workload):
         goal = None
         if self._goal == "max_slack":
             # Add the penalty as a z3 constant.
@@ -515,12 +517,15 @@ class Z3Scheduler(BaseScheduler):
             # Slack is defined as the deadline - remaining_time - start_time
             total_slack = []
             for variable in tasks_to_variables.values():
+                task_graph = workload.get_task_graph(variable.task.task_graph)
                 task_slack = z3.Int(f"{variable.task.unique_name}_slack")
                 optimizer.add(
                     task_slack
                     == (
-                        variable.task.deadline.to(EventTime.Unit.US).time
-                        - variable.task.remaining_time.to(EventTime.Unit.US).time
+                        task_graph.deadline.to(EventTime.Unit.US).time
+                        - task_graph.get_remaining_time(self._policy)
+                        .to(EventTime.Unit.US)
+                        .time
                         - variable.start_time
                     )
                 )

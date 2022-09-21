@@ -297,6 +297,7 @@ def main(args):
         )
     elif FLAGS.scheduler == "Z3":
         scheduler = Z3Scheduler(
+            policy=branch_prediction_policy,
             preemptive=FLAGS.preemption,
             runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
             goal=FLAGS.ilp_goal,
