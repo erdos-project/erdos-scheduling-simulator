@@ -11,8 +11,8 @@ from workers import Worker, WorkerPool, WorkerPools
 from workload import Resource, Task, TaskGraph
 from workload.workload import Workload
 
-DEADLINE_ACHIEVEMENT_WEIGHT = 0.5
-TASK_SKIP_PENALTY = -10000000
+DEADLINE_ACHIEVEMENT_WEIGHT = 10000000
+TASK_SKIP_PENALTY = -2000000000
 
 
 class TaskOptimizerVariables:
@@ -42,7 +42,6 @@ class TaskOptimizerVariables:
             resource_types = set(
                 resource.name for resource, _ in task.resource_requirements.resources
             )
-            print(resource_types)
             self._resources = {
                 resource_type: z3.BitVec(
                     f"{task.unique_name}_{resource_type}",
@@ -104,13 +103,9 @@ class TaskOptimizerVariables:
         # If requested, add a constraint to ensure that deadlines are met.
         if enforce_deadlines:
             # Ensure that the deadlines are met.
-            optimizer.add(
-                z3.Implies(
-                    self.is_placed,
-                    self.start_time
-                    + self.task.remaining_time.to(EventTime.Unit.US).time
-                    <= self.task.deadline.to(EventTime.Unit.US).time,
-                )
+            optimizer.add_soft(
+                self.start_time + self.task.remaining_time.to(EventTime.Unit.US).time
+                <= self.task.deadline.to(EventTime.Unit.US).time,
             )
         else:
             # Add a soft constraint to ensure the achievement of the deadline.
@@ -243,7 +238,6 @@ class Z3Scheduler(BaseScheduler):
         tasks_to_be_scheduled = workload.get_schedulable_tasks(
             sim_time, self.lookahead, self.preemptive, worker_pools
         )
-        print(sim_time)
         self._logger.debug(
             f"[{sim_time.time}] The scheduler received "
             f"{[task.unique_name for task in tasks_to_be_scheduled]} "
@@ -533,7 +527,6 @@ class Z3Scheduler(BaseScheduler):
                 total_slack.append(
                     z3.If(variable.is_placed, task_slack, task_skip_penalty)
                 )
-
             goal = z3.Int("TASK_SLACK_SUM")
             optimizer.add(goal == z3.Sum(total_slack))
             optimizer.maximize(goal)
