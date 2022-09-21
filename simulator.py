@@ -686,7 +686,7 @@ class Simulator(object):
             should be stopped, `False` otherwise.
         """
         self._logger.info(
-            "[%s] Received %s from the event queue.", event.time.time, event
+            "[%s] Received %s from the event queue.", self._simulator_time.time, event
         )
         assert (
             event.time >= self._simulator_time
@@ -748,6 +748,11 @@ class Simulator(object):
 
         # Add TASK_FINISHED events for all the completed tasks.
         self._simulator_time += step_size
+        self._logger.debug(
+            "[%s] The stepping yieled the following completed tasks: %s.",
+            self._simulator_time.time,
+            [task.unique_name for task in completed_tasks],
+        )
         for task in completed_tasks:
             task_finished_event = Event(
                 event_type=EventType.TASK_FINISHED, time=self._simulator_time, task=task
@@ -831,13 +836,22 @@ class Simulator(object):
             return Event(event_type=EventType.SIMULATOR_END, time=loop_timeout)
 
         # Find sources of existing or ongoing work in the Simulator.
-        running_tasks = []
-        for worker_pool in self._worker_pools.values():
-            running_tasks.extend(worker_pool.get_placed_tasks())
+        running_tasks = self._workload.filter(
+            lambda task: task.state in (TaskState.SCHEDULED, TaskState.RUNNING)
+        )
         schedulable_tasks = self._workload.get_schedulable_tasks(
             event.time, self._scheduler.lookahead, self._scheduler.preemptive
         )
+        self._logger.debug(
+            "[%s] The schedulable tasks are %s, and the running tasks are %s.",
+            event.time.time,
+            [task.unique_name for task in schedulable_tasks],
+            [task.unique_name for task in running_tasks],
+        )
         next_event = self._event_queue.peek()
+        self._logger.debug(
+            "[%s] The next event in the queue is %s.", event.time.time, next_event
+        )
 
         # If there is either existing work in the form of events in the queue or tasks
         # waiting to be scheduled, or currently running tasks that can lead to more

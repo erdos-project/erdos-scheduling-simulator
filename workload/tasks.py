@@ -438,7 +438,7 @@ class Task(object):
         Returns:
             `True` if the task has finished, `False` otherwise.
         """
-        return self.state == TaskState.EVICTED or self.state == TaskState.COMPLETED
+        return self.state in (TaskState.EVICTED, TaskState.COMPLETED)
 
     def is_ready_to_run(self) -> bool:
         """Check if the task can be placed.
@@ -446,7 +446,7 @@ class Task(object):
         Returns:
             `True` if the task is ready to start, `False` otherwise.
         """
-        return self.state == TaskState.RELEASED or self.state == TaskState.PREEMPTED
+        return self.state in (TaskState.SCHEDULED, TaskState.PREEMPTED)
 
     def __str__(self):
         if self._logger.isEnabledFor(logging.DEBUG):
