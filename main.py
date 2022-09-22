@@ -153,19 +153,24 @@ flags.DEFINE_bool(
 flags.DEFINE_integer(
     "scheduler_runtime",
     -1,
-    "The runtime (in us) to assign to each scheduler invocation.",
+    "The runtime (in µs) to assign to each scheduler invocation.",
+)
+flags.DEFINE_integer(
+    "scheduler_frequency",
+    -1,
+    "The minimum time interval (in µs) to elapse between too scheduler invocations.",
 )
 flags.DEFINE_integer(
     "scheduler_delay",
     1,
-    "The delay (in us) associated with invoking a scheduler after the "
+    "The delay (in µs) associated with invoking a scheduler after the "
     "release of a Task in the system.",
 )
 flags.DEFINE_integer(
     "scheduler_lookahead",
     0,
     "The scheduler places tasks that are estimated to be released "
-    "within the scheduling lookahead (in us).",
+    "within the scheduling lookahead (in µs).",
 )
 flags.DEFINE_enum(
     "scheduler_policy",
@@ -338,6 +343,7 @@ def main(args):
         scheduler=scheduler,
         workload=workload,
         loop_timeout=EventTime(FLAGS.loop_timeout, EventTime.Unit.US),
+        scheduler_frequency=EventTime(FLAGS.scheduler_frequency, EventTime.Unit.US),
         _flags=FLAGS,
     )
     simulator.simulate()
