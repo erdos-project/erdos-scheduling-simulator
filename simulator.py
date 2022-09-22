@@ -317,8 +317,10 @@ class Simulator(object):
 
         # Run the simulator loop.
         while True:
-            # If there are any running tasks, step through the execution of
-            # the Simulator until the closest remaining time.
+            time_until_next_event = self._event_queue.peek().time - self._simulator_time
+
+            # If there are any running tasks, step through the execution of the
+            # Simulator until the closest remaining time.
             running_tasks = []
             for worker_pool in self._worker_pools.values():
                 running_tasks.extend(worker_pool.get_placed_tasks())
@@ -329,8 +331,12 @@ class Simulator(object):
                 min_task_remaining_time = min(
                     map(attrgetter("remaining_time"), running_tasks)
                 )
-                time_until_next_event = (
-                    self._event_queue.peek().time - self._simulator_time
+                self._logger.debug(
+                    "[%s] The minimum task remaining time was %s, "
+                    "and the time until next event was %s.",
+                    self._simulator_time,
+                    min_task_remaining_time,
+                    time_until_next_event,
                 )
 
                 # If the minimum remaining time comes before the time until
@@ -339,9 +345,16 @@ class Simulator(object):
                 if min_task_remaining_time < time_until_next_event:
                     self.__step(step_size=min_task_remaining_time)
                 else:
+                    # NOTE: We step here so that all the Tasks that are going
+                    # to finish as a result of this step have their TASK_FINISHED
+                    # events processed first before any future placement occurs
+                    # that is decided prior.
+                    self.__step(step_size=time_until_next_event)
                     if self.__handle_event(self._event_queue.next()):
                         break
             else:
+                # Step until the next event is supposed to be executed.
+                self.__step(step_size=time_until_next_event)
                 if self.__handle_event(self._event_queue.next()):
                     break
 
@@ -580,11 +593,34 @@ class Simulator(object):
         worker_pool.remove_task(task)
         task.preempt(event.time)
 
-    def __handle_task_placement(self, event: Event):
+    def __handle_task_placement(self, event: Event, workload: Workload):
+        self._logger.debug("[%s] Handling TASK_PLACEMENT event: %s.", event.time, event)
         task = event.task
-        if not task.is_ready_to_run():
-            # TODO: We might want to cache this placement and apply it when the
-            # task is released.
+        task_graph = workload.get_task_graph(task.task_graph)
+        if not task.is_ready_to_run(task_graph):
+            # If the Task is not ready to run, find the next possible time
+            # to try executing the task.
+            parent_completion_time = max(
+                parent.remaining_time for parent in task_graph.get_parents(task)
+            )
+            next_placement_time = event.time + max(
+                parent_completion_time, EventTime(1, EventTime.Unit.US)
+            )
+            self._event_queue.add_event(
+                Event(
+                    event_type=event.event_type,
+                    time=next_placement_time,
+                    task=event.task,
+                    placement=event.placement,
+                )
+            )
+            self._logger.info(
+                "[%s] The Task %s was not ready to run, and has been pushed for "
+                "later placement at %s.",
+                event.time,
+                task,
+                next_placement_time,
+            )
             self._csv_logger.debug(
                 f"{event.time.time},TASK_NOT_READY,{task.name},{task.timestamp},"
                 f"{task.id},{event.placement}"
@@ -688,11 +724,6 @@ class Simulator(object):
         self._logger.info(
             "[%s] Received %s from the event queue.", self._simulator_time.time, event
         )
-        assert (
-            event.time >= self._simulator_time
-        ), f"Simulator cannot move time from {self._simulator_time} to {event.time}"
-        # Advance the clock until the occurrence of this event.
-        self.__step(step_size=event.time - self._simulator_time)
 
         if event.event_type == EventType.SIMULATOR_START:
             # Start of the simulator loop.
@@ -715,7 +746,7 @@ class Simulator(object):
         elif event.event_type == EventType.TASK_PREEMPT:
             self.__handle_task_preempt(event)
         elif event.event_type == EventType.TASK_PLACEMENT:
-            self.__handle_task_placement(event)
+            self.__handle_task_placement(event, self._workload)
         elif event.event_type == EventType.TASK_MIGRATION:
             self.__handle_task_migration(event)
         elif event.event_type == EventType.SCHEDULER_START:
