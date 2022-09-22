@@ -518,10 +518,11 @@ class Simulator(object):
             f"{event.task.deadline.to(EventTime.Unit.US).time},{event.task.id},"
             f"{event.task.task_graph}"
         )
-        # If we are not in the midst of a scheduler invocation and next
-        # scheduled invocation is too late, then bring the invocation sooner
-        # (event time + scheduler_delay), and re-heapify the event queue.
-        if self._next_scheduler_event:
+        # If we are not in the midst of a scheduler invocation, and the task hasn't
+        # already been scheduled and next scheduled invocation is too late, then
+        # bring the invocation sooner to (event time + scheduler_delay), and re-heapify
+        # the event queue.
+        if event.task.state < TaskState.SCHEDULED and self._next_scheduler_event:
             new_scheduler_event_time = min(
                 self._next_scheduler_event.time, event.time + self._scheduler_delay
             )
