@@ -375,8 +375,9 @@ def test_task_completion_notification():
     prediction_task.release(EventTime(2, EventTime.Unit.US))
     released_tasks = task_graph.get_schedulable_tasks(EventTime(2, EventTime.Unit.US))
     assert len(released_tasks) == 2, "Incorrect length of released tasks returned."
-    assert released_tasks[0] == perception_task, "Incorrect task released."
-    assert released_tasks[1] == prediction_task, "Incorrect task released."
+    assert (
+        perception_task in released_tasks and prediction_task in released_tasks
+    ), "Incorrect tasks released."
 
     # Run and finish the execution of Perception.
     perception_task.schedule(EventTime(3, EventTime.Unit.US))

@@ -236,20 +236,21 @@ def test_z3_delays_scheduling_under_constrained_resources():
         lookahead=EventTime(0, EventTime.Unit.US),
         enforce_deadlines=True,
     )
-    runtime, placements = scheduler.schedule(
+    _, placements = scheduler.schedule(
         EventTime(0, EventTime.Unit.US), workload, worker_pools
     )
+
     assert len(placements) == 2, "Incorrect length of placements retrieved."
-    assert placements[0][0] == camera_task_1, "Incorrect task retrieved for placement."
-    assert placements[0][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[0][2] == EventTime(
-        0, EventTime.Unit.US
-    ), "Incorrect start time retrieved."
-    assert placements[1][0] == camera_task_2, "Incorrect task retrieved for placement."
-    assert placements[1][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[1][2] == EventTime(
-        6, EventTime.Unit.US
-    ), "Incorrect start time retrieved."
+    assert (
+        camera_task_1,
+        worker_pool_1.id,
+        EventTime.zero(),
+    ) in placements, "Incorrect placement for camera_task_1."
+    assert (
+        camera_task_2,
+        worker_pool_1.id,
+        EventTime(6, EventTime.Unit.US),
+    ) in placements, "Incorrect placement for camera_task_2."
 
 
 def test_z3_respects_dependencies_under_delayed_scheduling():
@@ -296,27 +297,25 @@ def test_z3_respects_dependencies_under_delayed_scheduling():
         lookahead=EventTime(0, EventTime.Unit.US),
         enforce_deadlines=True,
     )
-    runtime, placements = scheduler.schedule(
+    _, placements = scheduler.schedule(
         EventTime(0, EventTime.Unit.US), workload, worker_pools
     )
     assert len(placements) == 3, "Incorrect length of placements retrieved."
-    assert placements[0][0] == camera_task_1, "Incorrect task retrieved for placement."
-    assert placements[0][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[0][2] == EventTime(
-        0, EventTime.Unit.US
-    ), "Incorrect start time retrieved."
-    assert placements[1][0] == camera_task_2, "Incorrect task retrieved for placement."
-    assert placements[1][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[1][2] == EventTime(
-        6, EventTime.Unit.US
-    ), "Incorrect start time retrieved."
     assert (
-        placements[2][0] == perception_task_2
-    ), "Incorrect task retrieved for placement."
-    assert placements[2][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[2][2] == EventTime(
-        11, EventTime.Unit.US
-    ), "Incorrect start time retrieved."
+        camera_task_1,
+        worker_pool_1.id,
+        EventTime.zero(),
+    ) in placements, "Incorrect placement for camera_task_1."
+    assert (
+        camera_task_2,
+        worker_pool_1.id,
+        EventTime(6, EventTime.Unit.US),
+    ) in placements, "Incorrect placement for camera_task_2."
+    assert (
+        perception_task_2,
+        worker_pool_1.id,
+        EventTime(11, EventTime.Unit.US),
+    ) in placements, "Incorrect placement for perception_task_2."
 
 
 def test_z3_respects_dependencies_under_constrained_resources():
@@ -375,17 +374,21 @@ def test_z3_respects_dependencies_under_constrained_resources():
         EventTime(0, EventTime.Unit.US), workload, worker_pools
     )
     assert len(placements) == 3, "Incorrect length of placements retrieved."
-    assert placements[0][0] == camera_task_1, "Incorrect task retrieved for placement."
-    assert placements[0][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[0][2] == EventTime(
-        0, EventTime.Unit.US
-    ), "Incorrect start time retrieved."
-    assert placements[1][0] == camera_task_2, "Incorrect task retrieved for placement."
-    assert placements[1][1] is None, "Incorrect WorkerPoolID retrieved."
     assert (
-        placements[2][0] == perception_task_2
-    ), "Incorrect task retrieved for placement."
-    assert placements[2][1] is None, "Incorrect WorkerPoolID retrieved."
+        camera_task_1,
+        worker_pool_1.id,
+        EventTime.zero(),
+    ) in placements, "Incorrect placement for camera_task_1."
+    assert (
+        camera_task_2,
+        None,
+        None,
+    ) in placements, "Incorrect placement for camera_task_2."
+    assert (
+        perception_task_2,
+        None,
+        None,
+    ) in placements, "Incorrect placement for camera_task_2."
 
 
 def test_z3_respects_worker_resource_constraints():
@@ -483,13 +486,16 @@ def test_z3_does_not_schedule_across_workers():
         EventTime(0, EventTime.Unit.US), workload, worker_pools
     )
     assert len(placements) == 2, "Incorrect length of placements retrieved."
-    assert placements[0][0] == camera_task_1, "Incorrect task retrieved for placement."
-    assert placements[0][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[0][2] == EventTime(
-        0, EventTime.Unit.US
-    ), "Incorrect start time retrieved."
-    assert placements[1][0] == camera_task_2, "Incorrect task retrieved for placement."
-    assert placements[1][1] is None, "Incorrect WorkerPoolID retrieved."
+    assert (
+        camera_task_1,
+        worker_pool_1.id,
+        EventTime.zero(),
+    ) in placements, "Incorrect placement for camera_task_1."
+    assert (
+        camera_task_2,
+        None,
+        None,
+    ) in placements, "Incorrect placement for camera_task_2."
 
 
 def test_z3_not_work_conserving():
@@ -544,23 +550,21 @@ def test_z3_not_work_conserving():
         EventTime(0, EventTime.Unit.US), workload, worker_pools
     )
     assert len(placements) == 3, "Incorrect length of placements retrieved."
-    assert placements[0][0] == camera_task_1, "Incorrect task retrieved for placement."
-    assert placements[0][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[0][2] == EventTime(
-        0, EventTime.Unit.US
-    ), "Incorrect start time retrieved."
-    assert placements[1][0] == camera_task_2, "Incorrect task retrieved for placement."
-    assert placements[1][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[1][2] == EventTime(
-        20, EventTime.Unit.US
-    ), "Incorrect start time retrieved."
     assert (
-        placements[2][0] == perception_task_1
-    ), "Incorrect task retrieved for placement."
-    assert placements[2][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[2][2] == EventTime(
-        11, EventTime.Unit.US
-    ), "Incorrect start time retrieved."
+        camera_task_1,
+        worker_pool_1.id,
+        EventTime.zero(),
+    ) in placements, "Incorrect placement for camera_task_1."
+    assert (
+        camera_task_2,
+        worker_pool_1.id,
+        EventTime(20, EventTime.Unit.US),
+    ) in placements, "Incorrect placement for camera_task_2."
+    assert (
+        perception_task_1,
+        worker_pool_1.id,
+        EventTime(11, EventTime.Unit.US),
+    ) in placements, "Incorrect placement for camera_task_2."
 
 
 def test_z3_minimize_deadline_misses():
@@ -615,20 +619,18 @@ def test_z3_minimize_deadline_misses():
         EventTime(0, EventTime.Unit.US), workload, worker_pools
     )
     assert len(placements) == 3, "Incorrect length of placements retrieved."
-    assert placements[0][0] == camera_task_1, "Incorrect task retrieved for placement."
-    assert placements[0][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[0][2] == EventTime(
-        0, EventTime.Unit.US
-    ), "Incorrect start time retrieved."
     assert (
-        placements[1][0] == perception_task_1
-    ), "Incorrect task retrieved for placement."
-    assert placements[1][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[1][2] == EventTime(
-        10, EventTime.Unit.US
-    ), "Incorrect start time retrieved."
-    assert placements[2][0] == camera_task_2, "Incorrect task retrieved for placement."
-    assert placements[2][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[2][2] == EventTime(
-        12, EventTime.Unit.US
-    ), "Incorrect start time retrieved."
+        camera_task_1,
+        worker_pool_1.id,
+        EventTime.zero(),
+    ) in placements, "Incorrect placement for camera_task_1."
+    assert (
+        perception_task_1,
+        worker_pool_1.id,
+        EventTime(10, EventTime.Unit.US),
+    ) in placements, "Incorrect placement for perception_task_1."
+    assert (
+        camera_task_2,
+        worker_pool_1.id,
+        EventTime(12, EventTime.Unit.US),
+    ) in placements, "Incorrect placement for camera_task_2."
