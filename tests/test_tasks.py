@@ -274,10 +274,12 @@ def test_retrieval_of_children():
 def test_get_schedulable_tasks():
     """Test that the correct set of schedulable tasks are returned."""
     default_task = create_default_task(
-        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US))
+        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
+        runtime=1000,
     )
     child_task = create_default_task(
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US))
+        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)),
+        runtime=1000,
     )
     task_graph = TaskGraph()
     task_graph.add_task(default_task, [child_task])

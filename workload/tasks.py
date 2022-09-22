@@ -15,6 +15,7 @@ from .graph import Graph
 from .resources import Resources
 
 
+@total_ordering
 class TaskState(Enum):
     """Represents the different states that a Task can potentially be in."""
 
@@ -25,6 +26,12 @@ class TaskState(Enum):
     PREEMPTED = 5  # The Task had begun execution but is currently paused.
     EVICTED = 6  # The Task has been evicted before completing.
     COMPLETED = 7  # The Task has successfully completed.
+
+    def __lt__(self, other) -> bool:
+        return self.value < other.value
+
+    def __eq__(self, other) -> bool:
+        return self.value == other.value
 
 
 @total_ordering
@@ -151,7 +158,6 @@ class Task(object):
             time (`Optional[EventTime]`): The simulation time (in us) at which to
                 release the task. If None, should be specified at task construction.
         """
-        self._logger.debug(f"Transitioning {self} to {TaskState.RELEASED}")
         if time and type(time) != EventTime:
             raise ValueError(f"Invalid type received for time: {type(time)}")
         if time is None and self._release_time == EventTime(-1, EventTime.Unit.US):
@@ -159,18 +165,20 @@ class Task(object):
                 "Release time should be specified either while "
                 "creating the Task or when releasing it."
             )
-        if self.state != TaskState.VIRTUAL:
-            raise ValueError(f"Cannot release {self.id} which is in state {self.state}")
         if time is not None:
+            self._logger.debug(
+                f"[{time.to(EventTime.Unit.US).time}] Transitioning {self} "
+                f"to {TaskState.RELEASED}."
+            )
             self._release_time = time
             if self._release_time > self._deadline:
                 self._logger.warning(
-                    f"Task {self} released at {time}, which is after its deadline "
-                    f"{self._deadline}. Intended release time was "
-                    f"{self.intended_release_time}"
+                    f"[{time.to(EventTime.Unit.US).time}] Task {self} was released "
+                    f"after its deadline {self._deadline} and the intended release "
+                    f"time was {self.intended_release_time}."
                 )
-
-        self._state = TaskState.RELEASED
+        if self._state < TaskState.RELEASED:
+            self._state = TaskState.RELEASED
 
     def schedule(
         self,
@@ -201,6 +209,11 @@ class Task(object):
                 f"Only VIRTUAL/RELEASED/PREEMPTED tasks can be scheduled. "
                 f"Task is in state {self.state}."
             )
+        self._logger.debug(
+            f"[{time.to(EventTime.Unit.US).time}] Transitioning {self} to "
+            f"{TaskState.SCHEDULED} to be started at {expected_start_time} "
+            f"on WorkerPool({worker_pool_id})."
+        )
         self._state = TaskState.SCHEDULED
         self._scheduling_time = time
         self._worker_pool_id = worker_pool_id
@@ -239,8 +252,8 @@ class Task(object):
 
         remaining_time = fuzz_time(self._remaining_time, (0, variance))
         self._logger.debug(
-            f"Transitioning {self} to {TaskState.RUNNING} at time {time} "
-            f"with the remaining time {remaining_time}"
+            f"[{time.to(EventTime.Unit.US).time}] Transitioning {self} to "
+            f"{TaskState.RUNNING} with the remaining time {remaining_time}."
         )
         self._start_time = time if time is not None else self._start_time
         assert (
@@ -278,9 +291,9 @@ class Task(object):
         ):
             # We cannot step a Task that's not supposed to be running.
             self._logger.warning(
-                f"Cannot step {self} with start time {self.start_time} at "
-                f"time {current_time} since it's either not RUNNING or isn't "
-                f"supposed to start yet."
+                f"[{current_time.to(EventTime.Unit.US).time}] Cannot step {self} with "
+                f"start time {self.start_time} at time {current_time} since it's "
+                f"either not RUNNING or isn't supposed to start yet."
             )
             return False
 
@@ -288,15 +301,15 @@ class Task(object):
         execution_time = current_time + step_size - self._last_step_time
         if self._remaining_time - execution_time <= EventTime(0, EventTime.Unit.US):
             self._last_step_time = current_time + self._remaining_time
-            self._remaining_time = EventTime(0, EventTime.Unit.US)
+            self._remaining_time = EventTime.zero()
             self.finish(self._last_step_time)
             return True
         else:
             self._last_step_time = current_time + step_size
             self._remaining_time -= execution_time
             self._logger.debug(
-                f"Stepped {self} for {step_size} steps. "
-                f"Remaining execution time: {self._remaining_time}"
+                f"[{current_time.to(EventTime.Unit.US).time}] Stepped {self} for "
+                f"{step_size} steps. Remaining execution time: {self._remaining_time}."
             )
             return False
 
@@ -315,7 +328,8 @@ class Task(object):
         if self.state != TaskState.RUNNING:
             raise ValueError(f"Task {self.id} is not RUNNING right now.")
         self._logger.debug(
-            f"Transitioning {self} to {TaskState.PREEMPTED} at time {time}"
+            f"[{time.to(EventTime.Unit.US).time}] Transitioning {self} to "
+            f"{TaskState.PREEMPTED}."
         )
         self._preemptions.append(
             Task.Preemption(
@@ -349,9 +363,9 @@ class Task(object):
             worker_pool_id if worker_pool_id else self.last_preemption.old_worker_pool
         )
         self._logger.debug(
-            f"Transitioning {self} which was PREEMPTED at "
-            f"{self.preemption_time} to {TaskState.RUNNING} at "
-            f"time {time} on WorkerPool ({new_worker_pool})"
+            f"[{time.to(EventTime.Unit.US).time}] Transitioning {self} which was "
+            f"PREEMPTED at {self.preemption_time} to {TaskState.RUNNING} on "
+            f"WorkerPool ({new_worker_pool})."
         )
         self.last_preemption.restart_time = time
         self.last_preemption.new_worker_pool = new_worker_pool
@@ -379,7 +393,9 @@ class Task(object):
             self._state = TaskState.EVICTED
 
         self._worker_pool_id = None
-        self._logger.debug(f"Finished execution of {self} at time {time}")
+        self._logger.debug(
+            f"[{time.to(EventTime.Unit.US).time}] Finished execution of {self}."
+        )
         # TODO (Sukrit): We should notify the `Job` of the completion of this
         # particular task, so it can release new tasks to the scheduler.
 
@@ -441,13 +457,32 @@ class Task(object):
         """
         return self.state in (TaskState.EVICTED, TaskState.COMPLETED)
 
-    def is_ready_to_run(self) -> bool:
+    def is_ready_to_run(self, task_graph: "TaskGraph") -> bool:
         """Check if the task can be placed.
+
+        Args:
+            task_graph: The TaskGraph that this Task belongs to.
 
         Returns:
             `True` if the task is ready to start, `False` otherwise.
         """
-        return self.state in (TaskState.SCHEDULED, TaskState.PREEMPTED)
+        # If the task is terminal, then any one of the parents should
+        # be complete, otherwise all should be complete.
+        parents_completion_status = [
+            parent_task.is_complete() for parent_task in task_graph.get_parents(self)
+        ]
+        parents_complete = (
+            any(parents_completion_status)
+            if self.terminal
+            else all(parents_completion_status)
+        )
+
+        # If the parents have finished execution, and the task
+        # has been scheduled or preempted, it is ready to run.
+        return parents_complete and self.state in (
+            TaskState.SCHEDULED,
+            TaskState.PREEMPTED,
+        )
 
     def __str__(self):
         if self._logger.isEnabledFor(logging.DEBUG):
@@ -607,7 +642,11 @@ class Task(object):
 
     @property
     def preemption_time(self):
-        return self.last_preemption.preemption_time if self.last_preemption else -1
+        return (
+            self.last_preemption.preemption_time
+            if self.last_preemption
+            else EventTime(-1, EventTime.Unit.US)
+        )
 
     @property
     def last_preemption(self) -> Optional["Task.Preemption"]:
@@ -702,10 +741,12 @@ class TaskGraph(Graph[Task]):
             child_to_release = random.choices(
                 population=task_children, weights=task_children_probabilities, k=1
             )[0]
-            if child_to_release.state != TaskState.VIRTUAL:
+            if child_to_release.state > TaskState.SCHEDULED:
+                # Task should not move past the scheduled state until its
+                # last parent finishes.
                 raise RuntimeError(
-                    f"Child task {child_to_release} was released \
-                        without completion of parent {task}."
+                    f"Child task {child_to_release} moved beyond SCHEDULED state"
+                    f"without completion of the parent {task}."
                 )
 
             # Set the child's probability to 1.0 now that a decision has been made.
@@ -735,12 +776,12 @@ class TaskGraph(Graph[Task]):
             released_tasks.append(child_to_release)
         else:
             for child in self.get_children(task):
-                if child.state != TaskState.VIRTUAL:
-                    # Task should not have been released without the completion
-                    # of its last parent.
+                if child.state > TaskState.SCHEDULED:
+                    # Task should not move past the scheduled state until its
+                    # last parent finishes.
                     raise RuntimeError(
-                        f"Child task {child} was released \
-                            without completion of parent {task}."
+                        f"Child task {child} moved beyond SCHEDULED state"
+                        f"without completion of the parent {task}."
                     )
                 if child.terminal or all(
                     map(lambda task: task.is_complete(), self.get_parents(child))
@@ -780,7 +821,7 @@ class TaskGraph(Graph[Task]):
     def get_schedulable_tasks(
         self,
         time: EventTime,
-        lookahead: EventTime = EventTime(0, EventTime.Unit.US),
+        lookahead: EventTime = EventTime.zero(),
         preemption: bool = False,
         worker_pools: "WorkerPools" = None,  # noqa: F821
     ) -> Sequence[Task]:
@@ -825,11 +866,15 @@ class TaskGraph(Graph[Task]):
                 estimated_completion_time[task] = task.completion_time
             elif task.state in [
                 TaskState.RUNNING,
-                TaskState.RELEASED,
                 TaskState.PREEMPTED,
                 TaskState.EVICTED,
             ]:
+                # Optimistically assume that the task will be resumed right now.
                 estimated_completion_time[task] = time + task.remaining_time
+            elif task.state == TaskState.RELEASED:
+                estimated_completion_time[task] = (
+                    task.release_time + task.remaining_time
+                )
             elif task.state == TaskState.SCHEDULED:
                 estimated_completion_time[task] = (
                     task.expected_start_time + task.remaining_time
