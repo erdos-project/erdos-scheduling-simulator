@@ -3,6 +3,7 @@ from typing import Callable, Mapping, Optional, Sequence
 import absl
 
 from utils import EventTime, setup_logging
+from workload import BranchPredictionPolicy
 
 from .jobs import JobGraph
 from .tasks import Task, TaskGraph
@@ -192,12 +193,13 @@ class Workload(object):
         lookahead: EventTime = EventTime(0, EventTime.Unit.US),
         preemption: bool = False,
         worker_pools: "WorkerPools" = None,  # noqa: F821
+        policy: BranchPredictionPolicy = BranchPredictionPolicy.ALL,
     ) -> Sequence[Task]:
         schedulable_tasks = []
         for task_graph in self._task_graphs.values():
             schedulable_tasks.extend(
                 task_graph.get_schedulable_tasks(
-                    time, lookahead, preemption, worker_pools
+                    time, lookahead, preemption, worker_pools, policy
                 )
             )
         return schedulable_tasks

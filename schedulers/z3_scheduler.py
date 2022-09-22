@@ -238,7 +238,7 @@ class Z3Scheduler(BaseScheduler):
     ) -> Tuple[EventTime, Sequence[Tuple[Task, str, EventTime]]]:
         # Retrieve the schedulable tasks from the Workload.
         tasks_to_be_scheduled = workload.get_schedulable_tasks(
-            sim_time, self.lookahead, self.preemptive, worker_pools
+            sim_time, self.lookahead, self.preemptive, worker_pools, self._policy
         )
         self._logger.debug(
             f"[{sim_time.time}] The scheduler received "
