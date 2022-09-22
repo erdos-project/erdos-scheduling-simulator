@@ -824,6 +824,7 @@ class TaskGraph(Graph[Task]):
         lookahead: EventTime = EventTime.zero(),
         preemption: bool = False,
         worker_pools: "WorkerPools" = None,  # noqa: F821
+        policy: BranchPredictionPolicy = BranchPredictionPolicy.ALL,
     ) -> Sequence[Task]:
         """Retrieves the all the tasks that are in RELEASED, PREEMPTED, or
         EVICTED state, and tasks that are expected to be released by time + lookahead.
@@ -835,32 +836,10 @@ class TaskGraph(Graph[Task]):
             raise ValueError(f"Invalid type received for time: {type(time)}")
         if type(lookahead) != EventTime:
             raise ValueError(f"Invalid type received for time: {type(lookahead)}")
-        tasks = self.filter(
-            lambda task: (
-                task.state == TaskState.RELEASED
-                and task.release_time <= time + lookahead
-            )
-            or task.state == TaskState.PREEMPTED
-            or task.state == TaskState.EVICTED
-        )
 
-        # No need to add already running tasks if preemption is not enabled.
-        if preemption:
-            if worker_pools:
-                # Adding the tasks placed on the given worker pool.
-                tasks.extend(worker_pools.get_placed_tasks())
-            else:
-                # No worker pool provided. Getting all RUNNING tasks.
-                tasks.extend(
-                    self.filter(
-                        lambda task: task.state
-                        in (TaskState.SCHEDULED, TaskState.RUNNING)
-                    )
-                )
-
+        # Estimate the completion time of materialized tasks.
         task_queue = deque([])
         estimated_completion_time = {}
-        # Estimate the completion time of materialized tasks.
         for task in self.get_nodes():
             if task.state == TaskState.COMPLETED:
                 estimated_completion_time[task] = task.completion_time
@@ -880,6 +859,9 @@ class TaskGraph(Graph[Task]):
                     task.expected_start_time + task.remaining_time
                 )
             else:
+                # There's no way to estimate the completion time of a task
+                # in this state from known values, propagate completion times
+                # from the parents here.
                 continue
             task_queue.append(task)
 
@@ -887,11 +869,17 @@ class TaskGraph(Graph[Task]):
         while len(task_queue) > 0:
             task = task_queue.popleft()
             completion_time = estimated_completion_time[task]
-            for child_task in self.get_children(task):
-                if (
-                    child_task.state != TaskState.VIRTUAL
-                    or child_task.probability < sys.float_info.epsilon
-                ):
+
+            # Find the children tasks to propogate the completion time
+            # to according to the policy.
+            children_tasks = []
+            if task.conditional:
+                children_tasks = self.resolve_conditional(task, policy)
+            else:
+                children_tasks = self.get_children(task)
+
+            for child_task in children_tasks:
+                if child_task.state != TaskState.VIRTUAL:
                     # Skip the task because we've already set its completion time.
                     continue
 
@@ -913,14 +901,41 @@ class TaskGraph(Graph[Task]):
                     estimated_completion_time[child_task] = child_completion_time
                     task_queue.append(child_task)
 
-        # Add the tasks that are within the lookahead.
-        tasks.extend(
-            self.filter(
-                lambda task: task.state == TaskState.VIRTUAL
+        # Add the tasks that are within the lookahead,
+        # and conform to the provided policy.
+        tasks = []
+        for task in self.topological_sort():
+            if (
+                task.state == TaskState.RELEASED
+                and task.release_time <= time + lookahead
+            ):
+                # The Task has already been released and its release time is within
+                # the lookahead.
+                tasks.append(task)
+            elif task.state in (TaskState.PREEMPTED, TaskState.EVICTED):
+                # PREEMPTED and EVICTED tasks are always available for scheduling.
+                tasks.append(task)
+            elif (
+                task.state == TaskState.VIRTUAL
                 and task in estimated_completion_time
-                and estimated_completion_time[task] < time + lookahead
-            )
-        )
+                and estimated_completion_time[task] <= time + lookahead
+            ):
+                # A VIRTUAL task that may be available for scheduling.
+                tasks.append(task)
+
+        # No need to add already running tasks if preemption is not enabled.
+        if preemption:
+            if worker_pools:
+                # Adding the tasks placed on the given worker pool.
+                tasks.extend(worker_pools.get_placed_tasks())
+            else:
+                # No worker pool provided. Getting all RUNNING tasks.
+                tasks.extend(
+                    self.filter(
+                        lambda task: task.state
+                        in (TaskState.SCHEDULED, TaskState.RUNNING)
+                    )
+                )
 
         assert all(
             map(
@@ -1143,6 +1158,57 @@ class TaskGraph(Graph[Task]):
         """Check if the task graph has finished execution."""
         return all(task.is_complete() for task in self.get_sink_tasks())
 
+    def resolve_conditional(
+        self, task: Task, policy: BranchPredictionPolicy
+    ) -> Sequence[Task]:
+        """Resolves the conditional of the given `task` according to the
+        specified `policy`.
+
+        Args:
+            task (`Task`): The Task to resolve the conditional for.
+            policy (`BranchPredictionPolicy`): The policy to use for
+                resolving conditionals.
+
+        Returns:
+            A `Sequence[Task]` that specifies the children to be executed
+            according to the specified `policy`.
+        """
+        if not task.conditional:
+            raise ValueError(f"The task {task} was not conditional.")
+
+        resolved_tasks = []
+        children_tasks = self.get_children(task)
+        if task.is_complete():
+            # Choose the branch that was actually executed.
+            released_child = children_tasks[0]
+            for child in children_tasks[1:]:
+                if child.probability > released_child.probability:
+                    released_child = child
+            resolved_tasks.append(released_child)
+        elif policy == BranchPredictionPolicy.WORST_CASE:
+            # Choose the branch that has the lowest probability.
+            child_to_release = children_tasks[0]
+            for child in children_tasks[1:]:
+                if child.probability < child_to_release.probability:
+                    child_to_release = child
+            resolved_tasks.append(child_to_release)
+        elif policy == BranchPredictionPolicy.BEST_CASE:
+            # Choose the branch that has the highest probability.
+            child_to_release = children_tasks[0]
+            for child in children_tasks[1:]:
+                if child.probability > child_to_release.probability:
+                    child_to_release = child
+            resolved_tasks.append(child_to_release)
+        elif policy == BranchPredictionPolicy.RANDOM:
+            # Choose a branch randomly.
+            resolved_tasks.append(random.choice(children_tasks))
+        elif policy == BranchPredictionPolicy.ALL:
+            # Release all children tasks.
+            resolved_tasks.extend(children_tasks)
+        else:
+            raise ValueError(f"The policy {policy} is not supported.")
+        return resolved_tasks
+
     def get_remaining_time(
         self, policy: BranchPredictionPolicy = BranchPredictionPolicy.ALL
     ):
@@ -1168,50 +1234,21 @@ class TaskGraph(Graph[Task]):
             if task not in remaining_time:
                 continue
 
-            if (
-                policy != BranchPredictionPolicy.ALL
-                and task.conditional
-                and not task.is_complete()
-            ):
-                children_tasks = self.get_children(task)
-                # If the task is an unresolved conditional, propagate the remaining
-                # time # to the children according to the policy in the scheduler.
-                if policy == BranchPredictionPolicy.WORST_CASE:
-                    # Choose the branch that has the lowest probability.
-                    child_to_release = children_tasks[0]
-                    for child in children_tasks[1:]:
-                        if child.probability < child_to_release.probability:
-                            child_to_release = child
-                elif policy == BranchPredictionPolicy.BEST_CASE:
-                    # Choose the branch that has the highest probability.
-                    child_to_release = children_tasks[0]
-                    for child in children_tasks[1:]:
-                        if child.probability > child_to_release.probability:
-                            child_to_release = child
-                elif policy == BranchPredictionPolicy.RANDOM:
-                    # Choose a branch randomly.
-                    child_to_release = random.choice(children_tasks)
-                else:
-                    raise NotImplementedError(
-                        f"The policy {self.policy} is not implemented yet."
-                    )
-
-                # Propagate the remaining time to the child.
-                remaining_time[child_to_release] = (
-                    remaining_time[task] + child_to_release.remaining_time
-                )
+            # Propogate the remaining time to the children chosen by either
+            # the policy (in case of conditionals), or all the children otherwise.
+            children_tasks = None
+            if task.conditional:
+                children_tasks = self.resolve_conditional(task, policy)
             else:
-                # If the task is not conditional, has been resolved, or the policy
-                # requested the consideration of all the children, then propogate
-                # the remaining time to all the children.
-                for child_task in self.get_children(task):
-                    if (
-                        remaining_time[child_task]
-                        <= remaining_time[task] + child_task.remaining_time
-                    ):
-                        remaining_time[child_task] = (
-                            remaining_time[task] + child_task.remaining_time
-                        )
+                children_tasks = self.get_children(task)
+            for child_task in children_tasks:
+                if (
+                    remaining_time[child_task]
+                    <= remaining_time[task] + child_task.remaining_time
+                ):
+                    remaining_time[child_task] = (
+                        remaining_time[task] + child_task.remaining_time
+                    )
 
         # Find the maximum remaining time across all the sink nodes.
         return max([remaining_time[sink] for sink in self.get_sink_tasks()])

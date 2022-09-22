@@ -6,7 +6,7 @@ import pytest
 
 from tests.utils import create_default_task
 from utils import EventTime
-from workload import Job, TaskGraph, TaskState
+from workload import BranchPredictionPolicy, Job, TaskGraph, TaskState
 
 
 def test_successful_task_creation():
@@ -424,13 +424,18 @@ def test_conditional_task_completion_notification():
         )
     )
     task_graph = TaskGraph()
+    release_policy = BranchPredictionPolicy.RANDOM
     task_graph.add_task(perception_task, [planning_task, prediction_task])
 
-    released_tasks = task_graph.get_schedulable_tasks(EventTime(0, EventTime.Unit.US))
+    released_tasks = task_graph.get_schedulable_tasks(
+        EventTime(0, EventTime.Unit.US), policy=release_policy
+    )
     assert len(released_tasks) == 0, "Incorrect length of released tasks returned."
 
     perception_task.release(EventTime(2, EventTime.Unit.US))
-    released_tasks = task_graph.get_schedulable_tasks(EventTime(2, EventTime.Unit.US))
+    released_tasks = task_graph.get_schedulable_tasks(
+        EventTime(2, EventTime.Unit.US), policy=release_policy
+    )
     assert len(released_tasks) == 1, "Incorrect length of released tasks returned."
 
     # Run and finish the execution of Perception.
@@ -439,7 +444,10 @@ def test_conditional_task_completion_notification():
     perception_task.update_remaining_time(EventTime(0, EventTime.Unit.US))
     perception_task.finish(EventTime(4, EventTime.Unit.US))
     task_graph.notify_task_completion(perception_task, EventTime(4, EventTime.Unit.US))
-    released_tasks = task_graph.get_schedulable_tasks(EventTime(4, EventTime.Unit.US))
+    released_tasks = task_graph.get_schedulable_tasks(
+        EventTime(4, EventTime.Unit.US), policy=release_policy
+    )
+    print(released_tasks)
     assert perception_task.is_complete(), "Task was not completed."
     assert (
         len(released_tasks) == 1
