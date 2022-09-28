@@ -334,7 +334,7 @@ class Simulator(object):
                 self._logger.debug(
                     "[%s] The minimum task remaining time was %s, "
                     "and the time until next event was %s.",
-                    self._simulator_time,
+                    self._simulator_time.to(EventTime.Unit.US).time,
                     min_task_remaining_time,
                     time_until_next_event,
                 )
@@ -370,6 +370,7 @@ class Simulator(object):
             f"{event.time.time},SCHEDULER_START,{len(schedulable_tasks)},"
             f"{len(currently_placed_tasks)}"
         )
+        self.__log_utilization(event.time)
 
         # Execute the scheduler, and insert an event notifying the
         # end of the scheduler into the loop.
@@ -599,34 +600,43 @@ class Simulator(object):
         task = event.task
         task_graph = workload.get_task_graph(task.task_graph)
         if not task.is_ready_to_run(task_graph):
-            # If the Task is not ready to run, find the next possible time
-            # to try executing the task.
-            parent_completion_time = max(
-                parent.remaining_time for parent in task_graph.get_parents(task)
-            )
-            next_placement_time = event.time + max(
-                parent_completion_time, EventTime(1, EventTime.Unit.US)
-            )
-            self._event_queue.add_event(
-                Event(
-                    event_type=event.event_type,
-                    time=next_placement_time,
-                    task=event.task,
-                    placement=event.placement,
+            if task.state == TaskState.CANCELLED:
+                # The Task was cancelled. Consume the event.
+                self._logger.info(
+                    "[%s] The Task %s was cancelled. Removing the event.",
+                    event.time,
+                    task,
                 )
-            )
-            self._logger.info(
-                "[%s] The Task %s was not ready to run, and has been pushed for "
-                "later placement at %s.",
-                event.time,
-                task,
-                next_placement_time,
-            )
-            self._csv_logger.debug(
-                f"{event.time.time},TASK_NOT_READY,{task.name},{task.timestamp},"
-                f"{task.id},{event.placement}"
-            )
-            return
+                return
+            else:
+                # If the Task is not ready to run and wasn't cancelled,
+                # find the next possible time to try executing the task.
+                parent_completion_time = max(
+                    parent.remaining_time for parent in task_graph.get_parents(task)
+                )
+                next_placement_time = event.time + max(
+                    parent_completion_time, EventTime(1, EventTime.Unit.US)
+                )
+                self._event_queue.add_event(
+                    Event(
+                        event_type=event.event_type,
+                        time=next_placement_time,
+                        task=event.task,
+                        placement=event.placement,
+                    )
+                )
+                self._logger.info(
+                    "[%s] The Task %s was not ready to run, and has been pushed for "
+                    "later placement at %s.",
+                    event.time,
+                    task,
+                    next_placement_time,
+                )
+                self._csv_logger.debug(
+                    f"{event.time.time},TASK_NOT_READY,{task.name},{task.timestamp},"
+                    f"{task.id},{event.placement}"
+                )
+                return
         # Initialize the task at the given placement time, and place it on
         # the WorkerPool.
         worker_pool = self._worker_pools[event.placement]
@@ -652,11 +662,25 @@ class Simulator(object):
                 "[%s] Placed %s on %s.", event.time.time, task, worker_pool
             )
         else:
+            next_placement_time = event.time + EventTime(1, EventTime.Unit.US)
+            self._event_queue.add_event(
+                Event(
+                    event_type=event.event_type,
+                    time=next_placement_time,
+                    task=event.task,
+                    placement=event.placement,
+                )
+            )
             self._logger.warning(
-                "[%s] Task %s cannot be placed on worker %s.",
+                "[%s] Task %s cannot be placed on worker %s, pushing placement to %s.",
                 event.time.time,
                 task,
                 worker_pool,
+                next_placement_time,
+            )
+            self._csv_logger.debug(
+                f"{event.time.time},WORKER_NOT_READY,{task.name},{task.timestamp},"
+                f"{task.id},{event.placement}"
             )
 
     def __handle_task_migration(self, event: Event):

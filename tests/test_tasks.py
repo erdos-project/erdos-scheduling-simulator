@@ -1,7 +1,3 @@
-from asyncio import create_task
-from cProfile import run
-from venv import create
-
 import pytest
 
 from tests.utils import create_default_task
@@ -987,9 +983,16 @@ def test_conditional_task_graph_complete():
         perception_task_0, EventTime(1, EventTime.Unit.US)
     )
     assert len(released_tasks) == 1, "Incorrect number of tasks released."
-    assert (
-        released_tasks[0] == prediction_task_0 or released_tasks[0] == planning_task_0
-    ), "Incorrect task released."
+    if released_tasks[0] == prediction_task_0:
+        assert (
+            planning_task_0.state == TaskState.CANCELLED
+        ), "The branch not taken was not cancelled."
+    elif released_tasks[0] == planning_task_0:
+        assert (
+            prediction_task_0.state == TaskState.CANCELLED
+        ), "The branch not taken was not cancelled."
+    else:
+        assert False, "Incorrect task released."
     released_tasks[0].schedule(EventTime(1, EventTime.Unit.US))
     released_tasks[0].start(EventTime(1, EventTime.Unit.US))
     released_tasks[0].update_remaining_time(EventTime(0, EventTime.Unit.US))
@@ -1282,3 +1285,145 @@ def test_task_graph_remaining_time_complex():
     assert task_graph.get_remaining_time() == EventTime(
         11, EventTime.Unit.MS
     ), "Incorrect remaining time returned by Graph."
+
+
+def test_task_cancellation():
+    """Tests that the Task cancellation process works correctly."""
+    detection_start_task = create_default_task(
+        name="DetectionStart@0",
+        job=Job(
+            name="DetectionStart",
+            runtime=EventTime(1000, EventTime.Unit.US),
+            conditional=True,
+        ),
+        timestamp=0,
+        runtime=1000,
+    )
+    preprocess_face_task = create_default_task(
+        name="PreprocessFace@0",
+        job=Job(
+            name="PreprocessFace",
+            runtime=EventTime(1000, EventTime.Unit.US),
+            probability=0.5,
+        ),
+        timestamp=0,
+        runtime=1000,
+    )
+    face_recognition_task = create_default_task(
+        name="FaceRecognition",
+        job=Job(name="FaceRecognition", runtime=EventTime(1000, EventTime.Unit.US)),
+        timestamp=0,
+        runtime=1000,
+    )
+    preprocess_car_task = create_default_task(
+        name="PreprocessCar@0",
+        job=Job(
+            name="PreprocessCar",
+            runtime=EventTime(1000, EventTime.Unit.US),
+            probability=0.5,
+        ),
+        timestamp=0,
+        runtime=1000,
+    )
+    car_recognition_task = create_default_task(
+        name="CarRecognition@0",
+        job=Job(name="CarRecognition", runtime=EventTime(1000, EventTime.Unit.US)),
+        timestamp=0,
+    )
+    detection_end_task = create_default_task(
+        name="DetectionEnd@0",
+        job=Job(
+            name="DetectionEnd",
+            runtime=EventTime(1000, EventTime.Unit.US),
+            terminal=True,
+        ),
+        timestamp=0,
+        runtime=1000,
+    )
+    task_graph = TaskGraph(
+        tasks={
+            detection_start_task: [preprocess_face_task, preprocess_car_task],
+            preprocess_face_task: [face_recognition_task],
+            preprocess_car_task: [car_recognition_task],
+            face_recognition_task: [detection_end_task],
+            car_recognition_task: [detection_end_task],
+        }
+    )
+
+    # Ensure that the TaskGraph is not complete at the beginning.
+    assert not task_graph.is_complete(), "Task Graph should not be complete initially."
+    assert all(
+        task.state == TaskState.VIRTUAL for task in task_graph.get_nodes()
+    ), "All Tasks should be VIRTUAL initially."
+    assert (
+        len(task_graph.get_schedulable_tasks(EventTime.zero())) == 0
+    ), "Incorrect number of currently schedulable tasks."
+
+    # Release and complete the first task.
+    detection_start_task.release(EventTime.zero())
+    assert (
+        len(
+            task_graph.get_schedulable_tasks(
+                EventTime.zero(), lookahead=EventTime(5000, EventTime.Unit.US)
+            )
+        )
+        == 6
+    ), "Incorrect number of currently schedulable tasks."
+    detection_start_task.schedule(EventTime.zero())
+    detection_start_task.start(EventTime.zero())
+    detection_start_task.update_remaining_time(EventTime.zero())
+    detection_start_task.finish(EventTime(1, EventTime.Unit.US))
+    assert (
+        detection_start_task.state == TaskState.COMPLETED
+    ), "DetectionStart@0 should be finished."
+    released_tasks = task_graph.notify_task_completion(
+        detection_start_task, EventTime(1, EventTime.Unit.US)
+    )
+
+    # Check that the correct tasks are released, and the other tasks are correctly
+    # cancelled, and their probabilities and remaining time are correctly set.
+    assert len(released_tasks) == 1, "Incorrect number of tasks released."
+    if released_tasks[0] == preprocess_face_task:
+        assert preprocess_face_task.probability == 1.0, "Incorrect probability set."
+        assert preprocess_car_task.probability == 0.0, "Incorrect probability set."
+        assert (
+            preprocess_car_task.state == TaskState.CANCELLED
+        ), "Incorrect state for Task."
+        assert car_recognition_task.probability == 0.0, "Incorrect probability set."
+        assert (
+            car_recognition_task.state == TaskState.CANCELLED
+        ), "Incorrect state for Task."
+        assert (
+            detection_end_task.state == TaskState.VIRTUAL
+        ), "Incorrect state for Task."
+        assert detection_end_task.probability == 1.0, "Incorrect state for Task."
+    elif released_tasks[0] == preprocess_car_task:
+        assert preprocess_car_task.probability == 1.0, "Incorrect probability set."
+        assert preprocess_face_task.probability == 0.0, "Incorrect probability set."
+        assert (
+            preprocess_face_task.state == TaskState.CANCELLED
+        ), "Incorrect state for Task."
+        assert face_recognition_task.probability == 0.0, "Incorrect probability set."
+        assert (
+            face_recognition_task.state == TaskState.CANCELLED
+        ), "Incorrect state for Task."
+        assert (
+            detection_end_task.state == TaskState.VIRTUAL
+        ), "Incorrect state for Task."
+        assert detection_end_task.probability == 1.0, "Incorrect state for Task."
+    else:
+        assert False, "Incorrect task released."
+
+    # Check that the set of schedulable tasks is correct.
+    schedulable_tasks_now = task_graph.get_schedulable_tasks(
+        EventTime(1, EventTime.Unit.US)
+    )
+    assert (
+        len(schedulable_tasks_now) == 1
+    ), "Incorrect number of currently schedulable tasks."
+    schedulable_tasks_future = task_graph.get_schedulable_tasks(
+        EventTime(1, EventTime.Unit.US), lookahead=EventTime(4000, EventTime.Unit.US)
+    )
+    assert (
+        len(schedulable_tasks_future) == 3
+    ), "Incorrect number of schedulable tasks in the future."

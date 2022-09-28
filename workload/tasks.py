@@ -26,6 +26,7 @@ class TaskState(Enum):
     PREEMPTED = 5  # The Task had begun execution but is currently paused.
     EVICTED = 6  # The Task has been evicted before completing.
     COMPLETED = 7  # The Task has successfully completed.
+    CANCELLED = 8  # The Task has been cancelled, and will not be scheduled.
 
     def __lt__(self, other) -> bool:
         return self.value < other.value
@@ -139,6 +140,8 @@ class Task(object):
         self._expected_start_time = None
         # (SCHEDULED -> RUNNING)
         self._start_time = start_time
+        # (SCHEDULED -> CANCELLED)
+        self._cancellation_time = None
         # (RUNNING -> EVICTED / COMPLETED)
         self._completion_time = completion_time
         # (RUNNING -> PREEMPTED)
@@ -399,6 +402,33 @@ class Task(object):
         # TODO (Sukrit): We should notify the `Job` of the completion of this
         # particular task, so it can release new tasks to the scheduler.
 
+    def cancel(self, time: EventTime) -> None:
+        """Cancels the pending execution of the Task.
+
+        This method can be used to cancel a VIRTUAL, RELEASED or SCHEDULED task.
+        However, a currently RUNNING or PREEMPTED task must not be cancelled.
+
+        Args:
+            time: The time at which the Task was cancelled.
+        """
+        if type(time) != EventTime:
+            raise ValueError(f"Invalid type received for time: {type(time)}")
+        if self.state not in (
+            TaskState.VIRTUAL,
+            TaskState.RELEASED,
+            TaskState.SCHEDULED,
+        ):
+            raise ValueError(
+                f"Task {self.unique_name} is in a non-cancellable state: {self.state}."
+            )
+        self._cancellation_time = time
+        self.update_probability(0.0)
+        self.update_remaining_time(EventTime.zero())
+        self._state = TaskState.CANCELLED
+        self._logger.debug(
+            f"[{time.to(EventTime.Unit.US).time}] Cancelled execution of {self}."
+        )
+
     def update_remaining_time(self, time: EventTime):
         """Updates the remaining time of the task to simulate any runtime
         variabilities.
@@ -476,6 +506,9 @@ class Task(object):
             if self.terminal
             else all(parents_completion_status)
         )
+        self._logger.debug(
+            f"The parent completion status of Task {self} is {parents_complete}."
+        )
 
         # If the parents have finished execution, and the task
         # has been scheduled or preempted, it is ready to run.
@@ -522,6 +555,12 @@ class Task(object):
                     f"start_time={self.start_time}, deadline={self.deadline}, "
                     f"remaining_time={self.remaining_time}, "
                     f"worker_pool={self.worker_pool_id})"
+                )
+            elif self.state == TaskState.CANCELLED:
+                return (
+                    f"Task(name={self.name}, graph={self.task_graph}, id={self.id}, "
+                    f"job={self.job}, timestamp={self.timestamp}, state={self.state}, "
+                    f"cancellation_time={self.cancellation_time})"
                 )
             elif self.state == TaskState.PREEMPTED:
                 return (
@@ -631,6 +670,10 @@ class Task(object):
     @property
     def scheduling_time(self):
         return self._scheduling_time
+
+    @property
+    def cancellation_time(self):
+        return self._cancellation_time
 
     @property
     def expected_start_time(self):
@@ -751,17 +794,16 @@ class TaskGraph(Graph[Task]):
 
             # Set the child's probability to 1.0 now that a decision has been made.
             # Do a breadth first search until the first terminal node from the children
-            # whose branch is not taken and update their remaining time to 0.
+            # whose branch is not taken, update their remaining time to 0
+            # and cancel the tasks.
             for child in task_children:
                 if child == child_to_release:
                     child.update_probability(1.0)
                 else:
-                    child.update_probability(0.0)
-                    for grand_child in self.breadth_first(child):
-                        if grand_child.terminal:
+                    for child in self.breadth_first(child):
+                        if child.terminal:
                             break
-                        grand_child.update_probability(0.0)
-                        grand_child.update_remaining_time(EventTime.zero())
+                        child.cancel(finish_time)
 
             if child_to_release.release_time == EventTime(-1, EventTime.Unit.US):
                 # If the child does not have a release time, then set it to now,
@@ -858,11 +900,18 @@ class TaskGraph(Graph[Task]):
                 estimated_completion_time[task] = (
                     task.expected_start_time + task.remaining_time
                 )
-            else:
+            elif task.state == TaskState.CANCELLED:
+                # Completion times of cancelled tasks is not estimated.
+                continue
+            elif task.state == TaskState.VIRTUAL:
                 # There's no way to estimate the completion time of a task
                 # in this state from known values, propagate completion times
                 # from the parents here.
                 continue
+            else:
+                raise ValueError(
+                    f"Task {task.unique_name} in unknown state: {task.state}."
+                )
             task_queue.append(task)
 
         # Estimate the completion time of VIRTUAL tasks.
