@@ -258,6 +258,7 @@ class Simulator(object):
         self._last_scheduler_start_time = self._simulator_time
         self._next_scheduler_event = None
         self._last_task_placement = []
+        self._future_placements = {}  # Mapping from TaskID to its future placements.
         self._finished_tasks = 0
         self._missed_deadlines = 0
         self._scheduler_delay = EventTime(
@@ -414,6 +415,7 @@ class Simulator(object):
         )
 
         placement_events = []
+        reheapify = False
         for task, placement, start_time in self._last_task_placement:
             if task.is_complete():
                 # Task completd before the scheduler finished.
@@ -441,21 +443,36 @@ class Simulator(object):
                     )
             elif task.worker_pool_id == placement:
                 # Task remained on the same worker pool.
-                pass
+                # If the start time has changed, apply the new start time.
+                if (
+                    task.id in self._future_placements
+                    and start_time != self._future_placements[task.id].time
+                ):
+                    self._logger.info(
+                        "[%s] Changing the start time of %s from %s to %s.",
+                        event.time.to(EventTime.Unit.US).time,
+                        task,
+                        self._future_placements[task.id].time,
+                        start_time,
+                    )
+                    self._future_placements[task.id]._time = start_time
+                    reheapify = True
             elif task.worker_pool_id is None:
+                # Schedule the task, and cache its placement in case
+                # it needs to be invalidated.
                 task.schedule(
                     event.time,
                     expected_start_time=max(start_time, event.time),
                     worker_pool_id=placement,
                 )
-                placement_events.append(
-                    Event(
-                        event_type=EventType.TASK_PLACEMENT,
-                        time=max(start_time, event.time),
-                        task=task,
-                        placement=placement,
-                    )
+                placement_event = Event(
+                    event_type=EventType.TASK_PLACEMENT,
+                    time=max(start_time, event.time),
+                    task=task,
+                    placement=placement,
                 )
+                self._future_placements[task.id] = placement_event
+                placement_events.append(placement_event)
             else:
                 # Preempt all the tasks first so the resources are cleared.
                 placement_events.append(
@@ -482,6 +499,10 @@ class Simulator(object):
                 placement_event,
             )
             self._event_queue.add_event(placement_event)
+
+        # If we changed the start times of some events, then reheapify.
+        if reheapify:
+            self._event_queue.reheapify()
 
         # Reset the available tasks and the last task placement.
         self._last_task_placement = []
@@ -598,6 +619,7 @@ class Simulator(object):
     def __handle_task_placement(self, event: Event, workload: Workload):
         self._logger.debug("[%s] Handling TASK_PLACEMENT event: %s.", event.time, event)
         task = event.task
+        assert task.id in self._future_placements, "Inconsistency in future placements."
         task_graph = workload.get_task_graph(task.task_graph)
         if not task.is_ready_to_run(task_graph):
             if task.state == TaskState.CANCELLED:
@@ -607,6 +629,7 @@ class Simulator(object):
                     event.time,
                     task,
                 )
+                del self._future_placements[task.id]
                 return
             else:
                 # If the Task is not ready to run and wasn't cancelled,
@@ -617,14 +640,14 @@ class Simulator(object):
                 next_placement_time = event.time + max(
                     parent_completion_time, EventTime(1, EventTime.Unit.US)
                 )
-                self._event_queue.add_event(
-                    Event(
-                        event_type=event.event_type,
-                        time=next_placement_time,
-                        task=event.task,
-                        placement=event.placement,
-                    )
+                next_placement_event = Event(
+                    event_type=event.event_type,
+                    time=next_placement_time,
+                    task=event.task,
+                    placement=event.placement,
                 )
+                self._future_placements[task.id] = next_placement_event
+                self._event_queue.add_event(next_placement_event)
                 self._logger.info(
                     "[%s] The Task %s was not ready to run, and has been pushed for "
                     "later placement at %s.",
@@ -661,16 +684,17 @@ class Simulator(object):
             self._logger.info(
                 "[%s] Placed %s on %s.", event.time.time, task, worker_pool
             )
+            del self._future_placements[task.id]
         else:
             next_placement_time = event.time + EventTime(1, EventTime.Unit.US)
-            self._event_queue.add_event(
-                Event(
-                    event_type=event.event_type,
-                    time=next_placement_time,
-                    task=event.task,
-                    placement=event.placement,
-                )
+            next_placement_event = Event(
+                event_type=event.event_type,
+                time=next_placement_time,
+                task=event.task,
+                placement=event.placement,
             )
+            self._event_queue.add_event(next_placement_event)
+            self._future_placements[task.id] = next_placement_event
             self._logger.warning(
                 "[%s] Task %s cannot be placed on worker %s, pushing placement to %s.",
                 event.time.time,
