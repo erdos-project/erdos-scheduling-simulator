@@ -238,6 +238,7 @@ class Z3Scheduler(BaseScheduler):
     def schedule(
         self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools
     ) -> Tuple[EventTime, Sequence[Tuple[Task, str, EventTime]]]:
+        print(sim_time)
         # Retrieve the schedulable tasks from the Workload.
         tasks_to_be_scheduled = workload.get_schedulable_tasks(
             sim_time,
@@ -292,7 +293,8 @@ class Z3Scheduler(BaseScheduler):
             self._logger.info(
                 f"[{sim_time.time}] The optimized goal value was {model[goal]}."
             )
-            self._logger.debug(f"[{sim_time.time}] The model was \n {model}.")
+            model_str = "\n".join([f"{var}: {model[var]}" for var in list(model)])
+            self._logger.debug(f"[{sim_time.time}] The model was \n {model_str}")
             for task_name, variables in tasks_to_variables.items():
                 if variables.is_placed is not None and model[variables.is_placed]:
                     worker = workers[model[variables.placed_on_worker].as_long()]
@@ -521,23 +523,61 @@ class Z3Scheduler(BaseScheduler):
             task_skip_penalty = z3.Int("TASK_SKIP_PENALTY")
             optimizer.add(task_skip_penalty == TASK_SKIP_PENALTY)
 
+            # Find the TaskGraphs and their corresponding tasks.
+            task_graph_to_tasks = defaultdict(list)
+            for variable in tasks_to_variables.values():
+                task_graph_to_tasks[variable.task.task_graph].append(variable.task)
+
+            # Find the slack for each of the TaskGraph.
+            task_graph_to_reward = {}
+            for task_graph_name, tasks in task_graph_to_tasks.items():
+                # TODO (Sukrit): This check might fail if the last node
+                # is not in the schedulable tasks, and the arbitrary
+                # chosen node on the same level is allocated an earlier
+                # start time than the other ones.
+                task_graph = workload.get_task_graph(task_graph_name)
+                last_task, last_task_depth = tasks[0], task_graph.get_node_depth(
+                    tasks[0]
+                )
+                for task in tasks[1:]:
+                    if task_graph.get_node_depth(task) > last_task_depth:
+                        last_task = task
+                        last_task_depth = task_graph.get_node_depth(task)
+                print(f"Last task for {task_graph_name} is {last_task.unique_name}.")
+
+                last_task_variable = tasks_to_variables[last_task.unique_name]
+                task_graph_slack = z3.Int(f"{task_graph_name}_slack")
+                optimizer.add(
+                    task_graph_slack
+                    == (
+                        task_graph.deadline.to(EventTime.Unit.US).time
+                        - last_task.remaining_time.to(EventTime.Unit.US).time
+                        - last_task_variable.start_time
+                    )
+                )
+                task_graph_to_reward[task_graph_name] = task_graph_slack
+
             # Slack is defined as the deadline - remaining_time - start_time
             total_slack = []
             for variable in tasks_to_variables.values():
-                task_graph = workload.get_task_graph(variable.task.task_graph)
-                task_slack = z3.Int(f"{variable.task.unique_name}_slack")
-                optimizer.add(
-                    task_slack
-                    == (
-                        task_graph.deadline.to(EventTime.Unit.US).time
-                        - task_graph.get_remaining_time(self._policy)
-                        .to(EventTime.Unit.US)
-                        .time
-                        - variable.start_time
-                    )
-                )
+                # task_graph = workload.get_task_graph(variable.task.task_graph)
+                # task_slack = z3.Int(f"{variable.task.unique_name}_slack")
+                # optimizer.add(
+                #     task_slack
+                #     == (
+                #         task_graph.deadline.to(EventTime.Unit.US).time
+                #         - task_graph.get_remaining_time(self._policy)
+                #         .to(EventTime.Unit.US)
+                #         .time
+                #         - variable.start_time
+                #     )
+                # )
                 total_slack.append(
-                    z3.If(variable.is_placed, task_slack, task_skip_penalty)
+                    z3.If(
+                        variable.is_placed,
+                        task_graph_to_reward[variable.task.task_graph],
+                        task_skip_penalty,
+                    )
                 )
             goal = z3.Int("TASK_SLACK_SUM")
             optimizer.add(goal == z3.Sum(total_slack))
