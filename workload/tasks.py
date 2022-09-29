@@ -931,8 +931,11 @@ class TaskGraph(Graph[Task]):
                 children_tasks = self.get_children(task)
 
             for child_task in children_tasks:
-                if child_task.state != TaskState.VIRTUAL or (
-                    retract_schedules and child_task.state != TaskState.SCHEDULED
+                if (
+                    not retract_schedules and child_task.state != TaskState.VIRTUAL
+                ) or (
+                    retract_schedules
+                    and child_task.state not in (TaskState.VIRTUAL, TaskState.SCHEDULED)
                 ):
                     # Skip the task because we've already set its completion time.
                     continue
