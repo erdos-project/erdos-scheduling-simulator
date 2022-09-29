@@ -221,6 +221,7 @@ class Z3Scheduler(BaseScheduler):
         self,
         policy: BranchPredictionPolicy = BranchPredictionPolicy.RANDOM,
         preemptive: bool = False,
+        retract_schedules: bool = False,
         runtime: EventTime = EventTime(-1, EventTime.Unit.US),
         goal: str = "max_slack",
         lookahead: int = EventTime(0, EventTime.Unit.US),
@@ -230,6 +231,7 @@ class Z3Scheduler(BaseScheduler):
         super(Z3Scheduler, self).__init__(
             preemptive, runtime, lookahead, enforce_deadlines, _flags
         )
+        self._retract_schedules = retract_schedules
         self._goal = goal
         self._policy = policy
 
@@ -238,7 +240,12 @@ class Z3Scheduler(BaseScheduler):
     ) -> Tuple[EventTime, Sequence[Tuple[Task, str, EventTime]]]:
         # Retrieve the schedulable tasks from the Workload.
         tasks_to_be_scheduled = workload.get_schedulable_tasks(
-            sim_time, self.lookahead, self.preemptive, worker_pools, self._policy
+            sim_time,
+            self.lookahead,
+            self.preemptive,
+            self._retract_schedules,
+            worker_pools,
+            self._policy,
         )
         self._logger.debug(
             f"[{sim_time.time}] The scheduler received "

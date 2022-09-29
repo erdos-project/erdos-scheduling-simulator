@@ -192,6 +192,7 @@ class Workload(object):
         time: EventTime,
         lookahead: EventTime = EventTime(0, EventTime.Unit.US),
         preemption: bool = False,
+        retract_schedules: bool = False,
         worker_pools: "WorkerPools" = None,  # noqa: F821
         policy: BranchPredictionPolicy = BranchPredictionPolicy.ALL,
     ) -> Sequence[Task]:
@@ -199,7 +200,12 @@ class Workload(object):
         for task_graph in self._task_graphs.values():
             schedulable_tasks.extend(
                 task_graph.get_schedulable_tasks(
-                    time, lookahead, preemption, worker_pools, policy
+                    time,
+                    lookahead,
+                    preemption,
+                    retract_schedules,
+                    worker_pools,
+                    policy,
                 )
             )
         return schedulable_tasks

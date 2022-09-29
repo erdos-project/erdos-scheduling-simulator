@@ -865,6 +865,7 @@ class TaskGraph(Graph[Task]):
         time: EventTime,
         lookahead: EventTime = EventTime.zero(),
         preemption: bool = False,
+        retract_schedules: bool = False,
         worker_pools: "WorkerPools" = None,  # noqa: F821
         policy: BranchPredictionPolicy = BranchPredictionPolicy.ALL,
     ) -> Sequence[Task]:
@@ -897,6 +898,8 @@ class TaskGraph(Graph[Task]):
                     task.release_time + task.remaining_time
                 )
             elif task.state == TaskState.SCHEDULED:
+                if retract_schedules:
+                    continue
                 estimated_completion_time[task] = (
                     task.expected_start_time + task.remaining_time
                 )
@@ -928,7 +931,9 @@ class TaskGraph(Graph[Task]):
                 children_tasks = self.get_children(task)
 
             for child_task in children_tasks:
-                if child_task.state != TaskState.VIRTUAL:
+                if child_task.state != TaskState.VIRTUAL or (
+                    retract_schedules and child_task.state != TaskState.SCHEDULED
+                ):
                     # Skip the task because we've already set its completion time.
                     continue
 
@@ -970,6 +975,14 @@ class TaskGraph(Graph[Task]):
                 and estimated_completion_time[task] <= time + lookahead
             ):
                 # A VIRTUAL task that may be available for scheduling.
+                tasks.append(task)
+            elif (
+                retract_schedules
+                and task.state == TaskState.SCHEDULED
+                and task in estimated_completion_time
+                and estimated_completion_time[task] <= time + lookahead
+            ):
+                # A SCHEDULED task that is being reconsidered for scheduling.
                 tasks.append(task)
 
         # No need to add already running tasks if preemption is not enabled.

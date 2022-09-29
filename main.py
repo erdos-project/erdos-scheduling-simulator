@@ -150,6 +150,9 @@ flags.DEFINE_enum(
 flags.DEFINE_bool(
     "preemption", False, "Enable preemption of running tasks in the scheduler."
 )
+flags.DEFINE_bool(
+    "retract_schedules", False, "Enable the retraction of previously decided schedules."
+)
 flags.DEFINE_integer(
     "scheduler_runtime",
     -1,
@@ -304,6 +307,7 @@ def main(args):
         scheduler = Z3Scheduler(
             policy=branch_prediction_policy,
             preemptive=FLAGS.preemption,
+            retract_schedules=FLAGS.retract_schedules,
             runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
             goal=FLAGS.ilp_goal,
             enforce_deadlines=FLAGS.enforce_deadlines,
