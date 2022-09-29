@@ -419,7 +419,7 @@ class Simulator(object):
                 # Task completd before the scheduler finished.
                 continue
             if placement is None:
-                if task.worker_pool_id:
+                if task.worker_pool_id and task.state == TaskState.RUNNING:
                     self._logger.info(
                         "[%s] Task %s was preempted", event.time.time, task
                     )

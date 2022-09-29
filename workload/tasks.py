@@ -898,11 +898,16 @@ class TaskGraph(Graph[Task]):
                     task.release_time + task.remaining_time
                 )
             elif task.state == TaskState.SCHEDULED:
-                if retract_schedules:
+                if retract_schedules and task not in self.get_source_tasks():
                     continue
-                estimated_completion_time[task] = (
-                    task.expected_start_time + task.remaining_time
-                )
+                elif retract_schedules:
+                    estimated_completion_time[task] = (
+                        task.release_time + task.remaining_time
+                    )
+                else:
+                    estimated_completion_time[task] = (
+                        task.expected_start_time + task.remaining_time
+                    )
             elif task.state == TaskState.CANCELLED:
                 # Completion times of cancelled tasks is not estimated.
                 continue
