@@ -14,6 +14,7 @@ from data import (
 from schedulers import (
     BranchPredictionScheduler,
     EDFScheduler,
+    FIFOScheduler,
     GurobiScheduler2,
     LSFScheduler,
     Z3Scheduler,
@@ -144,7 +145,7 @@ flags.DEFINE_bool(
 flags.DEFINE_enum(
     "scheduler",
     "EDF",
-    ["EDF", "LSF", "Gurobi", "Z3", "BranchPrediction"],
+    ["FIFO", "EDF", "LSF", "Gurobi", "Z3", "BranchPrediction"],
     "The scheduler to use for this execution.",
 )
 flags.DEFINE_bool(
@@ -281,7 +282,13 @@ def main(args):
 
     # Instantiate the scheduler based on the given flag.
     scheduler = None
-    if FLAGS.scheduler == "EDF":
+    if FLAGS.scheduler == "FIFO":
+        scheduler = FIFOScheduler(
+            preemptive=FLAGS.preemption,
+            runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
+            _flags=FLAGS,
+        )
+    elif FLAGS.scheduler == "EDF":
         scheduler = EDFScheduler(
             preemptive=FLAGS.preemption,
             runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
