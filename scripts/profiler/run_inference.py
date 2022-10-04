@@ -1,14 +1,13 @@
-from absl import app, flags
-
-from time import time, sleep
 import os
+from time import sleep, time
 
-import tensorflow as tf
 import numpy as np
-from six import BytesIO
-from object_detection.utils import config_util
+import tensorflow as tf
+from absl import app, flags
 from object_detection.builders import model_builder
+from object_detection.utils import config_util
 from PIL import Image
+from six import BytesIO
 
 FLAGS = flags.FLAGS
 
@@ -78,7 +77,7 @@ def main(args):
 
     # Postprocess the results.
     print(f"[x] Beginning the image postprocessing at {time()}.")
-    detections = detection_model.postprocess(prediction_dict, shapes)
+    detection_model.postprocess(prediction_dict, shapes)
     print(f"[x] Finished the image postprocessing at {time()}.")
 
 
