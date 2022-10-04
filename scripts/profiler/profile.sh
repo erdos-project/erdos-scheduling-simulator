@@ -17,6 +17,10 @@ fi
 for MODEL in $MODEL_DIR/*; do
     MODEL_NAME=${MODEL##*/}
     OUTPUT_PATH=$OUTPUT_DIR/$MODEL_NAME
+    if [[ -d ${OUTPUT_PATH} ]]; then
+        echo "[x] $MODEL_NAME from $MODEL already profiled. Skipping..."
+	continue
+    fi
     echo "[x] Profiling $MODEL_NAME from $MODEL."
     mkdir -p $OUTPUT_PATH
     CUDA_VISIBLE_DEVICES=$GPU_ID python run_inference.py --model_dir=$MODEL --image_path=./image.jpg 2>/dev/null 1>$OUTPUT_PATH/${MODEL_NAME}_RUN & 
@@ -27,7 +31,11 @@ for MODEL in $MODEL_DIR/*; do
     GPU_USAGE_PID=$!
     echo "[x] Waiting for inference job to finish."
     wait $INF_PID
+    INF_STATUS=$?
+    if [[ $INF_STATUS -ne 0 ]]; then
+        echo "[x] FAILED in profiling $MODEL_NAME from $MODEL."
+    fi
     kill $CPU_USAGE_PID
     kill $GPU_USAGE_PID
-    break
+    sleep 10
 done
