@@ -8,8 +8,7 @@ import absl  # noqa: F401
 from schedulers import BaseScheduler
 from utils import EventTime
 from workers import WorkerPools
-from workload import Task, TaskGraph
-from workload.workload import Workload
+from workload import Placement, Placements, Task, TaskGraph, Workload
 
 
 class LSFScheduler(BaseScheduler):
@@ -35,7 +34,7 @@ class LSFScheduler(BaseScheduler):
 
     def schedule(
         self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools
-    ) -> Tuple[EventTime, Sequence[Tuple[Task, str, EventTime]]]:
+    ) -> Placements:
         """Implements the BaseScheduler's schedule() method using the LSF
         algorithm for scheduling the released tasks across the worker_pools.
         """
@@ -67,20 +66,22 @@ class LSFScheduler(BaseScheduler):
                 if worker_pool.can_accomodate_task(task):
                     worker_pool.place_task(task)
                     is_task_placed = True
-                    placements.append((task, worker_pool.id, sim_time))
+                    placements.append(Placement(task, worker_pool.id, sim_time))
                     break
 
             if not is_task_placed:
-                placements.append((task, None, None))
+                placements.append(Placement(task))
 
         end_time = time.time()
         if self.runtime == EventTime(-1, EventTime.Unit.US):
-            return (
-                EventTime(int((end_time - start_time) * 1e6), EventTime.Unit.US),
-                placements,
+            return Placements(
+                runtime=EventTime(
+                    int((end_time - start_time) * 1e6), EventTime.Unit.US
+                ),
+                placements=placements,
             )
         else:
-            return self.runtime, placements
+            return Placements(runtime=self.runtime, placements=placements)
 
     def slack(self, sim_time: int, task: Task) -> int:
         """Defines the Slack used by the scheduler to order the events.

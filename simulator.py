@@ -257,7 +257,7 @@ class Simulator(object):
         # Internal data.
         self._last_scheduler_start_time = self._simulator_time
         self._next_scheduler_event = None
-        self._last_task_placement = []
+        self._last_task_placement = None
         self._future_placements = {}  # Mapping from TaskID to its future placements.
         self._finished_tasks = 0
         self._missed_deadlines = 0
@@ -404,7 +404,7 @@ class Simulator(object):
 
         # Log the required CSV information.
         num_placed = len(
-            list(filter(lambda p: p[1] is not None, self._last_task_placement))
+            list(filter(lambda p: p.is_placed(), self._last_task_placement))
         )
         num_unplaced = len(self._last_task_placement) - num_placed
         scheduler_runtime = event.time - self._last_scheduler_start_time
@@ -416,11 +416,15 @@ class Simulator(object):
 
         placement_events = []
         reheapify = False
-        for task, placement, start_time in self._last_task_placement:
+        for placement in self._last_task_placement:
+            task = placement.task
+            worker_pool_id = placement.worker_pool_id
+            start_time = placement.placement_time
             if task.is_complete():
                 # Task completd before the scheduler finished.
                 continue
-            if placement is None:
+
+            if not placement.is_placed():
                 if task.worker_pool_id and task.state == TaskState.RUNNING:
                     self._logger.info(
                         "[%s] Task %s was preempted", event.time.time, task
@@ -441,7 +445,7 @@ class Simulator(object):
                     self._logger.warning(
                         "[%s] Failed to place %s.", event.time.time, task
                     )
-            elif task.worker_pool_id == placement:
+            elif task.worker_pool_id == worker_pool_id:
                 # Task remained on the same worker pool.
                 # If the start time has changed, apply the new start time.
                 if (
@@ -463,13 +467,13 @@ class Simulator(object):
                 task.schedule(
                     event.time,
                     expected_start_time=max(start_time, event.time),
-                    worker_pool_id=placement,
+                    worker_pool_id=worker_pool_id,
                 )
                 placement_event = Event(
                     event_type=EventType.TASK_PLACEMENT,
                     time=max(start_time, event.time),
                     task=task,
-                    placement=placement,
+                    placement=worker_pool_id,
                 )
                 self._future_placements[task.id] = placement_event
                 placement_events.append(placement_event)
@@ -487,7 +491,7 @@ class Simulator(object):
                         event_type=EventType.TASK_MIGRATION,
                         time=max(start_time, event.time),
                         task=task,
-                        placement=placement,
+                        placement=worker_pool_id,
                     )
                 )
 
@@ -1021,11 +1025,17 @@ class Simulator(object):
         """
         if not (event.event_type == EventType.SCHEDULER_START):
             raise ValueError("Incorrect event type passed.")
-        scheduler_runtime, task_placement = self._scheduler.schedule(
+
+        # Run the scheduler.
+        placements = self._scheduler.schedule(
             event.time, self._workload, WorkerPools(self._worker_pools.values())
         )
-        placement_time = event.time + scheduler_runtime
-        self._last_task_placement = task_placement
+
+        # Calculate the time at which the placements need to be applied.
+        placement_time = event.time + placements.runtime
+
+        # Save the placements until the placement time arrives.
+        self._last_task_placement = placements
 
         return Event(event_type=EventType.SCHEDULER_FINISHED, time=placement_time)
 

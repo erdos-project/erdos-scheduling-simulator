@@ -7,7 +7,16 @@ from simulator import Event, EventQueue, EventType, Simulator
 from tests.utils import create_default_task
 from utils import EventTime
 from workers import Worker, WorkerPool
-from workload import Job, Resource, Resources, TaskGraph, TaskState
+from workload import (
+    Job,
+    Placement,
+    Placements,
+    Resource,
+    Resources,
+    TaskGraph,
+    TaskState,
+    Workload,
+)
 from workload.workload import Workload
 
 
@@ -22,8 +31,8 @@ class MockScheduler(BaseScheduler):
 
     def schedule(
         self, sim_time=None, released_tasks=None, task_graph=None, worker_pools=None
-    ):
-        return (self._runtime, self._task_placement)
+    ) -> Placements:
+        return Placements(self._runtime, self._task_placement)
 
     @property
     def preemptive(self):
@@ -387,7 +396,7 @@ def test_simulator_handle_event():
 
     # Test the SCHEDULER_FINISHED event.
     simulator._last_task_placement = [
-        (planning_task, worker_pool.id, EventTime(6, EventTime.Unit.US))
+        Placement(planning_task, worker_pool.id, EventTime(6, EventTime.Unit.US))
     ]
     return_value = simulator._Simulator__handle_event(
         event=Event(

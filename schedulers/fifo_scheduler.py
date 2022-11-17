@@ -8,7 +8,7 @@ import absl  # noqa: F401
 from schedulers import BaseScheduler
 from utils import EventTime
 from workers import WorkerPools
-from workload import Task, Workload
+from workload import Placement, Placements, Task, Workload
 
 
 class FIFOScheduler(BaseScheduler):
@@ -32,7 +32,7 @@ class FIFOScheduler(BaseScheduler):
 
     def schedule(
         self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools
-    ) -> Tuple[int, Sequence[Tuple[Task, str, EventTime]]]:
+    ) -> Placements:
         tasks = workload.get_schedulable_tasks(
             sim_time, EventTime.zero(), self.preemptive, worker_pools=worker_pools
         )
@@ -51,16 +51,18 @@ class FIFOScheduler(BaseScheduler):
                 if worker_pool.can_accomodate_task(task):
                     worker_pool.place_task(task)
                     task_placed = True
-                    placements.append((task, worker_pool.id, sim_time))
+                    placements.append(Placement(task, worker_pool.id, sim_time))
                     break
             if not task_placed:
-                placements.append((task, None, None))
+                placements.append(Placement(task))
 
         end_time = time.time()
         if self.runtime == EventTime(-1, EventTime.Unit.US):
-            return (
-                EventTime(int((end_time - start_time) * 1e6), EventTime.Unit.US),
-                placements,
+            return Placements(
+                runtime=EventTime(
+                    int((end_time - start_time) * 1e6), EventTime.Unit.US
+                ),
+                placements=placements,
             )
         else:
-            return self.runtime, placements
+            return Placements(runtime=self.runtime, placements=placements)

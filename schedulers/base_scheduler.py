@@ -6,8 +6,7 @@ import absl  # noqa: F401
 
 from utils import EventTime, setup_logging
 from workers import WorkerPools
-from workload import Task, TaskGraph
-from workload.workload import Workload
+from workload import Placements, Task, TaskGraph, Workload
 
 
 class BaseScheduler(object):
@@ -59,7 +58,7 @@ class BaseScheduler(object):
         sim_time: EventTime,
         workload: Workload,
         worker_pools: "WorkerPools",  # noqa: F821
-    ) -> Tuple[EventTime, Sequence[Tuple[Task, str, EventTime]]]:
+    ) -> Placements:
         """Abstract method to be implemented by derived classes to allow the
         scheduling of tasks.
 
@@ -70,11 +69,7 @@ class BaseScheduler(object):
                 do the placement across.
 
         Returns:
-            (scheduler_runtime, task_placement) where `scheduler_runtime` is an
-            `EventTime` depicting the runtime of the scheduler (in us), and
-            `task_placement` is a sequence of tuples depicting the (Task,
-            ID of the Worker Pool where the task should be placed,
-            Start time of the task (in us)).
+            A representation of the Placements computed by the Scheduler.
         """
         raise NotImplementedError(
             "The `schedule()` method has not been " "implemented."

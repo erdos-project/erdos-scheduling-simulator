@@ -9,7 +9,7 @@ import absl  # noqa: F401
 from schedulers import BaseScheduler
 from utils import EventTime
 from workers import WorkerPools
-from workload import Task, Workload
+from workload import Placement, Placements, Task, Workload
 
 
 class EDFScheduler(BaseScheduler):
@@ -34,7 +34,7 @@ class EDFScheduler(BaseScheduler):
 
     def schedule(
         self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools
-    ) -> Tuple[EventTime, Sequence[Tuple[Task, str, EventTime]]]:
+    ) -> Placements:
         """Implements the BaseScheduler's schedule() method using the EDF
         algorithm for scheduling the released tasks across the worker_pools.
         """
@@ -89,7 +89,13 @@ class EDFScheduler(BaseScheduler):
                 if worker_pool.can_accomodate_task(task):
                     worker_pool.place_task(task)
                     is_task_placed = True
-                    placements.append((task, worker_pool.id, sim_time))
+                    placements.append(
+                        Placement(
+                            task=task,
+                            worker_pool_id=worker_pool.id,
+                            placement_time=sim_time,
+                        )
+                    )
                     self._logger.debug(
                         f"[{sim_time}] Placed {task} on Worker Pool ({worker_pool.id})"
                         f" to be started at {sim_time}."
@@ -107,13 +113,15 @@ class EDFScheduler(BaseScheduler):
                     f"[{sim_time}] Failed to place {task} because no worker pool "
                     f"could accomodate the resource requirements."
                 )
-                placements.append((task, None, None))
+                placements.append(Placement(task=task))
 
         end_time = time.time()
         if self.runtime == EventTime(time=-1, unit=EventTime.Unit.US):
-            return (
-                EventTime(int((end_time - start_time) * 1e6), EventTime.Unit.US),
-                placements,
+            return Placements(
+                runtime=EventTime(
+                    int((end_time - start_time) * 1e6), EventTime.Unit.US
+                ),
+                placements=placements,
             )
         else:
-            return self.runtime, placements
+            return Placements(runtime=self.runtime, placements=placements)

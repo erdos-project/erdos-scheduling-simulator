@@ -34,14 +34,17 @@ def test_z3_scheduling_success_basic():
         lookahead=EventTime(0, EventTime.Unit.US),
         enforce_deadlines=True,
     )
-    runtime, placements = scheduler.schedule(
+    placements = scheduler.schedule(
         EventTime(0, EventTime.Unit.US), workload, worker_pools
     )
 
     assert len(placements) == 1, "Incorrect length of placements retrieved."
-    assert placements[0][0] == camera_task_1, "Incorrect task retrieved for placement."
-    assert placements[0][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[0][2] == EventTime(
+    camera_task_placement = placements.get_placement(camera_task_1)
+    assert camera_task_placement is not None, "The task was expected to be placed."
+    assert (
+        camera_task_placement.worker_pool_id == worker_pool_1.id
+    ), "Incorrect WorkerPoolID retrieved."
+    assert camera_task_placement.placement_time == EventTime(
         0, EventTime.Unit.US
     ), "Incorrect start time retrieved."
 
@@ -76,14 +79,14 @@ def test_z3_scheduling_deadline_enforcement():
         lookahead=EventTime(0, EventTime.Unit.US),
         enforce_deadlines=True,
     )
-    runtime, placements = scheduler.schedule(
+    placements = scheduler.schedule(
         EventTime(0, EventTime.Unit.US), workload, worker_pools
     )
 
     assert len(placements) == 1, "Incorrect length of placements retrieved."
-    assert placements[0][0] == camera_task_1, "Incorrect task retrieved for placement."
-    assert placements[0][1] is None, "Incorrect WorkerPoolID retrieved."
-    assert placements[0][2] is None, "Incorrect start time retrieved."
+    camera_task_placement = placements.get_placement(camera_task_1)
+    assert camera_task_placement is not None, "The task was not found in placements."
+    assert not camera_task_placement.is_placed(), "Incorrect WorkerPoolID retrieved."
 
     # Create the softly enforce deadlines scheduler.
     scheduler = Z3Scheduler(
@@ -92,16 +95,19 @@ def test_z3_scheduling_deadline_enforcement():
         lookahead=EventTime(0, EventTime.Unit.US),
         enforce_deadlines=False,
     )
-    runtime, placements = scheduler.schedule(
+    placements = scheduler.schedule(
         EventTime(0, EventTime.Unit.US), task_graph, worker_pools
     )
 
     assert len(placements) == 1, "Incorrect length of placements retrieved."
-    assert placements[0][0] == camera_task_1, "Incorrect task retrieved for placement."
-    assert placements[0][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[0][2] == EventTime(
+    camera_task_placement = placements.get_placement(camera_task_1)
+    assert camera_task_placement is not None, "The task was not found in placements."
+    assert (
+        camera_task_placement.worker_pool_id == worker_pool_1.id
+    ), "Incorrect WorkerPoolID retrieved."
+    assert camera_task_placement.placement_time == EventTime(
         0, EventTime.Unit.US
-    ), f"Incorrect start time retrieved: {placements[0][2]}."
+    ), f"Incorrect start time retrieved."
 
 
 def test_z3_scheduling_dependency():
@@ -140,21 +146,29 @@ def test_z3_scheduling_dependency():
         lookahead=EventTime(0, EventTime.Unit.US),
         enforce_deadlines=True,
     )
-    runtime, placements = scheduler.schedule(
+    placements = scheduler.schedule(
         EventTime(0, EventTime.Unit.US), workload, worker_pools
     )
 
     assert len(placements) == 2, "Incorrect length of placements retrieved."
-    assert placements[0][0] == camera_task_1, "Incorrect task retrieved for placement."
-    assert placements[0][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[0][2] == EventTime(
+
+    camera_task_placement = placements.get_placement(camera_task_1)
+    assert camera_task_placement is not None, "The task was not found in placements."
+    assert (
+        camera_task_placement.worker_pool_id == worker_pool_1.id
+    ), "Incorrect WorkerPoolID retrieved."
+    assert camera_task_placement.placement_time == EventTime(
         0, EventTime.Unit.US
     ), "Incorrect start time retrieved."
+
+    perception_task_placement = placements.get_placement(perception_task_1)
     assert (
-        placements[1][0] == perception_task_1
-    ), "Incorrect task retrieved for placement."
-    assert placements[1][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[1][2] == EventTime(
+        perception_task_placement is not None
+    ), "The task was not found in placements."
+    assert (
+        perception_task_placement.worker_pool_id == worker_pool_1.id
+    ), "Incorrect WorkerPoolID retrieved."
+    assert perception_task_placement.placement_time == EventTime(
         5, EventTime.Unit.US
     ), "Incorrect start time retrieved."
 
@@ -198,13 +212,17 @@ def test_z3_skip_tasks_under_enforce_deadlines():
         lookahead=EventTime(0, EventTime.Unit.US),
         enforce_deadlines=True,
     )
-    runtime, placements = scheduler.schedule(
+    placements = scheduler.schedule(
         EventTime(0, EventTime.Unit.US), workload, worker_pools
     )
     assert len(placements) == 2, "Incorrect length of placements retrieved."
-    assert placements[0][0] == camera_task_1, "Incorrect task retrieved for placement."
-    assert placements[0][1] == worker_pool_1.id, "Incorrect WorkerPoolID retrieved."
-    assert placements[0][2] == EventTime(
+
+    camera_task_placement = placements.get_placement(camera_task_1)
+    assert camera_task_placement is not None, "The task was expected in placements."
+    assert (
+        camera_task_placement.worker_pool_id == worker_pool_1.id
+    ), "Incorrect WorkerPoolID retrieved."
+    assert camera_task_placement.placement_time == EventTime(
         0, EventTime.Unit.US
     ), "Incorrect start time retrieved."
 
@@ -236,21 +254,29 @@ def test_z3_delays_scheduling_under_constrained_resources():
         lookahead=EventTime(0, EventTime.Unit.US),
         enforce_deadlines=True,
     )
-    _, placements = scheduler.schedule(
+    placements = scheduler.schedule(
         EventTime(0, EventTime.Unit.US), workload, worker_pools
     )
 
     assert len(placements) == 2, "Incorrect length of placements retrieved."
+
+    camera_task_placement = placements.get_placement(camera_task_1)
+    assert camera_task_placement is not None, "The task was expected in placements."
     assert (
-        camera_task_1,
-        worker_pool_1.id,
-        EventTime.zero(),
-    ) in placements, "Incorrect placement for camera_task_1."
+        camera_task_placement.worker_pool_id == worker_pool_1.id
+    ), "Incorrect WorkerPoolID retrieved."
     assert (
-        camera_task_2,
-        worker_pool_1.id,
-        EventTime(6, EventTime.Unit.US),
-    ) in placements, "Incorrect placement for camera_task_2."
+        camera_task_placement.placement_time == EventTime.zero()
+    ), "Incorrect start time retrieved."
+
+    camera_task_2_placement = placements.get_placement(camera_task_2)
+    assert camera_task_2_placement is not None, "The task was expected in placements."
+    assert (
+        camera_task_2_placement.worker_pool_id == worker_pool_1.id
+    ), "Incorrect WorkerPoolID retrieved."
+    assert camera_task_2_placement.placement_time == EventTime(
+        6, EventTime.Unit.US
+    ), "Incorrect start time retrieved."
 
 
 def test_z3_respects_dependencies_under_delayed_scheduling():
@@ -297,25 +323,39 @@ def test_z3_respects_dependencies_under_delayed_scheduling():
         lookahead=EventTime(0, EventTime.Unit.US),
         enforce_deadlines=True,
     )
-    _, placements = scheduler.schedule(
+    placements = scheduler.schedule(
         EventTime(0, EventTime.Unit.US), workload, worker_pools
     )
     assert len(placements) == 3, "Incorrect length of placements retrieved."
+
+    camera_task_1_placement = placements.get_placement(camera_task_1)
+    assert camera_task_1_placement is not None, "The task was not found in placements."
     assert (
-        camera_task_1,
-        worker_pool_1.id,
-        EventTime.zero(),
-    ) in placements, "Incorrect placement for camera_task_1."
+        camera_task_1_placement.worker_pool_id == worker_pool_1.id
+    ), "Incorrect WorkerPoolID retrieved."
     assert (
-        camera_task_2,
-        worker_pool_1.id,
-        EventTime(6, EventTime.Unit.US),
-    ) in placements, "Incorrect placement for camera_task_2."
+        camera_task_1_placement.placement_time == EventTime.zero()
+    ), "Incorrect start time retrieved."
+
+    camera_task_2_placement = placements.get_placement(camera_task_2)
+    assert camera_task_2_placement is not None, "The task was not found in placements."
     assert (
-        perception_task_2,
-        worker_pool_1.id,
-        EventTime(11, EventTime.Unit.US),
-    ) in placements, "Incorrect placement for perception_task_2."
+        camera_task_2_placement.worker_pool_id == worker_pool_1.id
+    ), "Incorrect WorkerPoolID retrieved."
+    assert camera_task_2_placement.placement_time == EventTime(
+        6, EventTime.Unit.US
+    ), "Incorrect start time retrieved."
+
+    perception_task_2_placement = placements.get_placement(perception_task_2)
+    assert (
+        perception_task_2_placement is not None
+    ), "The task was not found in placements."
+    assert (
+        perception_task_2_placement.worker_pool_id == worker_pool_1.id
+    ), "Incorrect WorkerPoolID retrieved."
+    assert perception_task_2_placement.placement_time == EventTime(
+        11, EventTime.Unit.US
+    ), "Incorrect placement for perception_task_2."
 
 
 @pytest.mark.skip(reason="Changing the optimization objective fails the test.")
@@ -431,12 +471,13 @@ def test_z3_respects_worker_resource_constraints():
         lookahead=EventTime(0, EventTime.Unit.US),
         enforce_deadlines=True,
     )
-    runtime, placements = scheduler.schedule(
+    placements = scheduler.schedule(
         EventTime(0, EventTime.Unit.US), workload, worker_pools
     )
     assert len(placements) == 2, "Incorrect length of placements retrieved."
-    assert (
-        placements[0][1] is None or placements[1][1] is None
+    assert not (
+        placements.get_placement(camera_task_1).is_placed()
+        and placements.get_placement(camera_task_2).is_placed()
     ), "One of the tasks should not be placed."
 
 
@@ -483,20 +524,23 @@ def test_z3_does_not_schedule_across_workers():
         lookahead=EventTime(0, EventTime.Unit.US),
         enforce_deadlines=True,
     )
-    runtime, placements = scheduler.schedule(
+    placements = scheduler.schedule(
         EventTime(0, EventTime.Unit.US), workload, worker_pools
     )
     assert len(placements) == 2, "Incorrect length of placements retrieved."
+
+    camera_task_1_placement = placements.get_placement(camera_task_1)
+    assert camera_task_1_placement is not None, "The task was not found in placements."
     assert (
-        camera_task_1,
-        worker_pool_1.id,
-        EventTime.zero(),
-    ) in placements, "Incorrect placement for camera_task_1."
-    assert (
-        camera_task_2,
-        None,
-        None,
-    ) in placements, "Incorrect placement for camera_task_2."
+        camera_task_1_placement.worker_pool_id == worker_pool_1.id
+    ), "Incorrect WorkerPoolID retrieved."
+    assert camera_task_1_placement.placement_time == EventTime(
+        0, EventTime.Unit.US
+    ), "Incorrect start time retrieved."
+
+    camera_task_2_placement = placements.get_placement(camera_task_2)
+    assert camera_task_2_placement is not None, "The task was not found in placements."
+    assert not camera_task_2_placement.is_placed(), "Incorrect WorkerPoolID retrieved."
 
 
 @pytest.mark.skip(reason="Changing the optimization objective fails the test.")
@@ -617,22 +661,36 @@ def test_z3_minimize_deadline_misses():
         lookahead=EventTime(50, EventTime.Unit.US),
         enforce_deadlines=False,
     )
-    runtime, placements = scheduler.schedule(
+    placements = scheduler.schedule(
         EventTime(0, EventTime.Unit.US), workload, worker_pools
     )
     assert len(placements) == 3, "Incorrect length of placements retrieved."
+
+    camera_task_1_placement = placements.get_placement(camera_task_1)
+    assert camera_task_1_placement is not None, "The task was not found in placements."
     assert (
-        camera_task_1,
-        worker_pool_1.id,
-        EventTime.zero(),
-    ) in placements, "Incorrect placement for camera_task_1."
+        camera_task_1_placement.worker_pool_id == worker_pool_1.id
+    ), "Incorrect WorkerPoolID retrieved."
     assert (
-        perception_task_1,
-        worker_pool_1.id,
-        EventTime(10, EventTime.Unit.US),
-    ) in placements, "Incorrect placement for perception_task_1."
+        camera_task_1_placement.placement_time == EventTime.zero()
+    ), "Incorrect start time retrieved."
+
+    camera_task_2_placement = placements.get_placement(camera_task_2)
+    assert camera_task_2_placement is not None, "The task was not found in placements."
     assert (
-        camera_task_2,
-        worker_pool_1.id,
-        EventTime(12, EventTime.Unit.US),
-    ) in placements, "Incorrect placement for camera_task_2."
+        camera_task_2_placement.worker_pool_id == worker_pool_1.id
+    ), "Incorrect WorkerPoolID retrieved."
+    assert camera_task_2_placement.placement_time == EventTime(
+        12, EventTime.Unit.US
+    ), "Incorrect start time retrieved."
+
+    perception_task_1_placement = placements.get_placement(perception_task_1)
+    assert (
+        perception_task_1_placement is not None
+    ), "The task was not found in placements."
+    assert (
+        perception_task_1_placement.worker_pool_id == worker_pool_1.id
+    ), "Incorrect WorkerPoolID retrieved."
+    assert perception_task_1_placement.placement_time == EventTime(
+        10, EventTime.Unit.US
+    ), "Incorrect placement for perception_task_2."

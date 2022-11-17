@@ -174,19 +174,23 @@ def test_edf_scheduler_success():
     worker_pool_two = WorkerPool(name="WorkerPool_2", workers=[worker_two])
 
     # Schedule the tasks.
-    _, placements = edf_scheduler.schedule(
+    placements = edf_scheduler.schedule(
         EventTime(1, EventTime.Unit.US),
         workload=workload,
         worker_pools=WorkerPools([worker_pool_one, worker_pool_two]),
     )
     assert len(placements) == 2, "Incorrect length of task placements."
-    assert placements[0][0] == task_gpu, "Incorrect task received in the placement."
+
+    task_gpu_placement = placements.get_placement(task_gpu)
+    assert task_gpu_placement is not None, "The task was not found in placements."
     assert (
-        placements[0][1] == worker_pool_two.id
+        task_gpu_placement.worker_pool_id == worker_pool_two.id
     ), "Incorrect placement of the task on the WorkerPool."
-    assert placements[1][0] == task_cpu, "Incorrect task received in the placement."
+
+    task_cpu_placement = placements.get_placement(task_cpu)
+    assert task_cpu_placement is not None, "The task was not found in placements."
     assert (
-        placements[1][1] == worker_pool_one.id
+        task_cpu_placement.worker_pool_id == worker_pool_one.id
     ), "Incorrect placement of the task on the WorkerPool."
 
 
@@ -214,23 +218,27 @@ def test_edf_scheduler_limited_resources():
     worker_pool = WorkerPool(name="WorkerPool", workers=[worker])
 
     # Schedule the tasks.
-    _, placements = edf_scheduler.schedule(
+    placements = edf_scheduler.schedule(
         EventTime(1, EventTime.Unit.US),
         workload=workload,
         worker_pools=WorkerPools([worker_pool]),
     )
     assert len(placements) == 2, "Incorrect length of task placements."
+
+    task_higher_priority_placement = placements.get_placement(task_higher_priority)
     assert (
-        placements[0][0] == task_higher_priority
-    ), "Incorrect task received in the placement."
+        task_higher_priority_placement is not None
+    ), "The task was not found in placements."
     assert (
-        placements[0][1] == worker_pool.id
+        task_higher_priority_placement.worker_pool_id == worker_pool.id
     ), "Incorrect placement of the task on the WorkerPool."
+
+    task_lower_priority_placement = placements.get_placement(task_lower_priority)
     assert (
-        placements[1][0] == task_lower_priority
-    ), "Incorrect task received in the placement."
+        task_lower_priority_placement is not None
+    ), "The task was not found in placements."
     assert (
-        placements[1][1] is None
+        not task_lower_priority_placement.is_placed()
     ), "Incorrect placement of the task on the WorkerPool."
 
 
@@ -257,30 +265,39 @@ def test_edf_scheduler_non_preemptive_higher_priority():
     worker_pool = WorkerPool(name="WorkerPool", workers=[worker])
 
     # Schedule the lower priority task.
-    _, placements = edf_scheduler.schedule(
+    placements = edf_scheduler.schedule(
         EventTime(1, EventTime.Unit.US),
         workload=workload,
         worker_pools=WorkerPools([worker_pool]),
     )
-    for (task, placement, _) in placements:
-        if task == task_higher_priority:
-            assert placement is None, "Incorrect placement of the high priority task."
-        elif task == task_lower_priority:
-            assert (
-                placement == worker_pool.id
-            ), "Incorrect placement of the low priority task."
+
+    task_higher_priority_placement = placements.get_placement(task_higher_priority)
+    assert (
+        task_higher_priority_placement is None
+    ), "The task was not found in placements."
+    task_lower_priority_placement = placements.get_placement(task_lower_priority)
+    assert (
+        task_lower_priority_placement is not None
+    ), "The task was not found in placements."
+    assert (
+        task_lower_priority_placement.worker_pool_id == worker_pool.id
+    ), "Incorrect placement of the low priority task."
     worker_pool.place_task(task_lower_priority)
 
     task_higher_priority.release(EventTime(2, EventTime.Unit.US))
     # Schedule the higher priority task.
-    _, placements = edf_scheduler.schedule(
+    placements = edf_scheduler.schedule(
         EventTime(2, EventTime.Unit.US),
         workload=workload,
         worker_pools=WorkerPools([worker_pool]),
     )
-    for (task, placement, _) in placements:
-        if task == task_higher_priority:
-            assert placement is None, "Incorrect placement of the high priority task."
+    task_higher_priority_placement = placements.get_placement(task_higher_priority)
+    assert (
+        task_higher_priority_placement is not None
+    ), "The task was not found in placements."
+    assert (
+        not task_higher_priority_placement.is_placed()
+    ), "Incorrect placement of the high priority task."
 
 
 def test_edf_scheduler_preemptive_higher_priority():
@@ -306,33 +323,48 @@ def test_edf_scheduler_preemptive_higher_priority():
     worker_pool = WorkerPool(name="WorkerPool", workers=[worker])
 
     # Schedule the lower priority task.
-    _, placements = edf_scheduler.schedule(
+    placements = edf_scheduler.schedule(
         EventTime(1, EventTime.Unit.US),
         workload=workload,
         worker_pools=WorkerPools([worker_pool]),
     )
-    for (task, placement, _) in placements:
-        if task == task_higher_priority:
-            assert placement is None, "Incorrect placement of the high priority task."
-        elif task == task_lower_priority:
-            assert (
-                placement == worker_pool.id
-            ), "Incorrect placement of the low priority task."
+
+    task_higher_priority_placement = placements.get_placement(task_higher_priority)
+    assert (
+        task_higher_priority_placement is None
+    ), "The task was not found in placements."
+    task_lower_priority_placement = placements.get_placement(task_lower_priority)
+    assert (
+        task_lower_priority_placement is not None
+    ), "The task was not found in placements."
+    assert (
+        task_lower_priority_placement.worker_pool_id == worker_pool.id
+    ), "Incorrect placement of the low priority task."
+
     worker_pool.place_task(task_lower_priority)
     task_higher_priority.release(EventTime(2, EventTime.Unit.US))
-    # # Schedule the higher priority task.
-    _, placements = edf_scheduler.schedule(
+
+    # Schedule the higher priority task.
+    placements = edf_scheduler.schedule(
         EventTime(2, EventTime.Unit.US),
         workload=workload,
         worker_pools=WorkerPools([worker_pool]),
     )
-    for (task, placement, _) in placements:
-        if task == task_lower_priority:
-            assert placement is None, "Incorrect placement of the low priority task."
-        elif task == task_higher_priority:
-            assert (
-                placement == worker_pool.id
-            ), "Incorrect placement of the high priority task."
+
+    task_higher_priority_placement = placements.get_placement(task_higher_priority)
+    assert (
+        task_higher_priority_placement is not None
+    ), "The task was not found in placements."
+    assert (
+        task_higher_priority_placement.worker_pool_id == worker_pool.id
+    ), "Incorrect placement of the high priority task."
+    task_lower_priority_placement = placements.get_placement(task_lower_priority)
+    assert (
+        task_lower_priority_placement is not None
+    ), "The task was not found in placements."
+    assert (
+        not task_lower_priority_placement.is_placed()
+    ), "Incorrect placement of the low priority task."
 
 
 def test_lsf_scheduler_success():
@@ -376,19 +408,23 @@ def test_lsf_scheduler_success():
     worker_pool_two = WorkerPool(name="WorkerPool_2", workers=[worker_two])
 
     # Schedule the tasks.
-    _, placements = lsf_scheduler.schedule(
+    placements = lsf_scheduler.schedule(
         EventTime(1, EventTime.Unit.US),
         workload=workload,
         worker_pools=WorkerPools([worker_pool_one, worker_pool_two]),
     )
     assert len(placements) == 2, "Incorrect length of task placements."
-    assert placements[0][0] == task_gpu, "Incorrect task received in the placement."
+
+    task_gpu_placement = placements.get_placement(task_gpu)
+    assert task_gpu_placement is not None, "The task was not found in placements."
     assert (
-        placements[0][1] == worker_pool_two.id
+        task_gpu_placement.worker_pool_id == worker_pool_two.id
     ), "Incorrect placement of the task on the WorkerPool."
-    assert placements[1][0] == task_cpu, "Incorrect task received in the placement."
+
+    task_cpu_placement = placements.get_placement(task_cpu)
+    assert task_cpu_placement is not None, "The task was not found in placements."
     assert (
-        placements[1][1] == worker_pool_one.id
+        task_cpu_placement.worker_pool_id == worker_pool_one.id
     ), "Incorrect placement of the task on the WorkerPool."
 
 
@@ -418,23 +454,27 @@ def test_lsf_scheduler_limited_resources():
     worker_pool = WorkerPool(name="WorkerPool", workers=[worker])
 
     # Schedule the tasks.
-    _, placements = lsf_scheduler.schedule(
+    placements = lsf_scheduler.schedule(
         EventTime(50, EventTime.Unit.US),
         workload=workload,
         worker_pools=WorkerPools([worker_pool]),
     )
     assert len(placements) == 2, "Incorrect length of task placements."
+
+    task_higher_priority_placement = placements.get_placement(task_higher_priority)
     assert (
-        placements[0][0] == task_higher_priority
-    ), "Incorrect task received in the placement."
+        task_higher_priority_placement is not None
+    ), "The task was not found in placements."
     assert (
-        placements[0][1] == worker_pool.id
+        task_higher_priority_placement.worker_pool_id == worker_pool.id
     ), "Incorrect placement of the task on the WorkerPool."
+
+    task_lower_priority_placement = placements.get_placement(task_lower_priority)
     assert (
-        placements[1][0] == task_lower_priority
-    ), "Incorrect task received in the placement."
+        task_lower_priority_placement is not None
+    ), "The task was not found in placements."
     assert (
-        placements[1][1] is None
+        not task_lower_priority_placement.is_placed()
     ), "Incorrect placement of the task on the WorkerPool."
 
 

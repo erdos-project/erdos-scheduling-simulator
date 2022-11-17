@@ -8,8 +8,14 @@ import z3
 from schedulers import BaseScheduler
 from utils import EventTime
 from workers import Worker, WorkerPools
-from workload import BranchPredictionPolicy, Resource, Task
-from workload.workload import Workload
+from workload import (
+    BranchPredictionPolicy,
+    Placement,
+    Placements,
+    Resource,
+    Task,
+    Workload,
+)
 
 DEADLINE_ACHIEVEMENT_WEIGHT = 10000000
 TASK_SKIP_PENALTY = -2000000000
@@ -237,7 +243,7 @@ class Z3Scheduler(BaseScheduler):
 
     def schedule(
         self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools
-    ) -> Tuple[EventTime, Sequence[Tuple[Task, str, EventTime]]]:
+    ) -> Placements:
         print(sim_time)
         # Retrieve the schedulable tasks from the Workload.
         tasks_to_be_scheduled = workload.get_schedulable_tasks(
@@ -301,7 +307,7 @@ class Z3Scheduler(BaseScheduler):
                     worker_pool_id = worker_to_worker_pool[worker.id]
                     start_time = model[variables.start_time].as_long()
                     placements.append(
-                        (
+                        Placement(
                             variables.task,
                             worker_pool_id,
                             EventTime(start_time, EventTime.Unit.US),
@@ -312,14 +318,14 @@ class Z3Scheduler(BaseScheduler):
                         f"WorkerPool({worker_pool_id}) to be started at {start_time}."
                     )
                 else:
-                    placements.append((variables.task, None, None))
+                    placements.append(Placement(variables.task))
                     self._logger.debug(
                         f"[{sim_time.time}] Failed to place {variables.task} because "
                         f"no worker pool could accomodate the resource requirements."
                     )
         else:
             for task_name, variables in tasks_to_variables.items():
-                placements.append((variables.task, None, None))
+                placements.append(Placement(variables.task))
             self._logger.debug(f"[{sim_time.time}] Failed to place any task.")
         scheduler_end_time = time.time()
         scheduler_runtime = EventTime(
@@ -331,7 +337,7 @@ class Z3Scheduler(BaseScheduler):
             if self.runtime == EventTime(-1, EventTime.Unit.US)
             else self.runtime
         )
-        return runtime, placements
+        return Placements(runtime, placements)
 
     def _add_variables(
         self,

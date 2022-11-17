@@ -8,8 +8,14 @@ import absl  # noqa: F401
 from schedulers import BaseScheduler
 from utils import EventTime
 from workers import WorkerPools
-from workload import BranchPredictionPolicy, Task, Workload
-from workload.tasks import TaskGraph
+from workload import (
+    BranchPredictionPolicy,
+    Placement,
+    Placements,
+    Task,
+    TaskGraph,
+    Workload,
+)
 
 
 class BranchPredictionScheduler(BaseScheduler):
@@ -37,7 +43,7 @@ class BranchPredictionScheduler(BaseScheduler):
 
     def schedule(
         self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools
-    ) -> Tuple[EventTime, Sequence[Tuple[Task, str, EventTime]]]:
+    ) -> Placements:
         # Create the tasks to be scheduled, along with the state of the
         # WorkerPool to schedule them on based on preemptive or non-preemptive
         tasks_to_be_scheduled = workload.get_schedulable_tasks(
@@ -93,7 +99,7 @@ class BranchPredictionScheduler(BaseScheduler):
                 if worker_pool.can_accomodate_task(task):
                     worker_pool.place_task(task)
                     is_task_placed = True
-                    placements.append((task, worker_pool.id, sim_time))
+                    placements.append(Placement(task, worker_pool.id, sim_time))
                     self._logger.debug(
                         f"[{sim_time.time}] Placed {task} on WorkerPool "
                         f"({worker_pool.id}) to be started at {sim_time}."
@@ -111,16 +117,18 @@ class BranchPredictionScheduler(BaseScheduler):
                     f"[{sim_time.time}] Failed to place {task} because no worker pool "
                     f"could accomodate the resource requirements."
                 )
-                placements.append((task, None, None))
+                placements.append(Placement(task))
 
         end_time = time.time()
         if self.runtime == EventTime(time=-1, unit=EventTime.Unit.US):
-            return (
-                EventTime(int((end_time - start_time) * 1e6), EventTime.Unit.US),
-                placements,
+            return Placements(
+                runtime=EventTime(
+                    int((end_time - start_time) * 1e6), EventTime.Unit.US
+                ),
+                placements=placements,
             )
         else:
-            return self.runtime, placements
+            return Placements(runtime=self.runtime, placements=placements)
 
     def compute_slack(
         self, sim_time: EventTime, task_graph: TaskGraph, task_graph_name: str
