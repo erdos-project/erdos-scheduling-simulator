@@ -1,8 +1,9 @@
 import csv
+import datetime
+
 import numpy as np
 from absl import app, flags
 from tabulate import tabulate
-import datetime
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string(

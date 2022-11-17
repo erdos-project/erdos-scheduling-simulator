@@ -17,7 +17,6 @@ from workload import (
     TaskState,
     Workload,
 )
-from workload.workload import Workload
 
 
 class MockScheduler(BaseScheduler):

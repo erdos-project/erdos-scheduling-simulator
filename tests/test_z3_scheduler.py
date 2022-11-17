@@ -107,7 +107,7 @@ def test_z3_scheduling_deadline_enforcement():
     ), "Incorrect WorkerPoolID retrieved."
     assert camera_task_placement.placement_time == EventTime(
         0, EventTime.Unit.US
-    ), f"Incorrect start time retrieved."
+    ), "Incorrect start time retrieved."
 
 
 def test_z3_scheduling_dependency():
