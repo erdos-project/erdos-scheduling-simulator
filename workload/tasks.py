@@ -869,17 +869,39 @@ class TaskGraph(Graph[Task]):
         worker_pools: "WorkerPools" = None,  # noqa: F821
         policy: BranchPredictionPolicy = BranchPredictionPolicy.ALL,
     ) -> Sequence[Task]:
-        """Retrieves the all the tasks that are in RELEASED, PREEMPTED, or
-        EVICTED state, and tasks that are expected to be released by time + lookahead.
+        """Retrieves all tasks from the given TaskGraph that are expected to be
+        available for scheduling within the horizon defined by `time + lookahead`.
+
+        The method propagates the expected start times of each of the tasks in the 
+        TaskGraph according to the given release times or the completion times of the 
+        parent tasks. The tasks that are expected to be available for scheduling within
+        the horizon are then chosen, and previously scheduled or running tasks are
+        considered for schedulability if `retract_schedules` or `preemption` is 
+        enabled.
+
+        When constructing the estimated completion times of the tasks, the value of
+        the conditionals is resolved according to the specified `policy`. By default,
+        all possible conditional paths are considered for execution, and the maximum
+        estimated release time is then chosen for the child tasks.
+
+        Args:
+            time (`EventTime`): The time at which the schedulable tasks are being
+                retrieved (the current simulator time).
+            lookahead (`EventTime`): The added time upto which the schedulable tasks
+                need to be retrieved (i.e. time + lookahead).
+            preemption (`bool`): If `True`, ddd currently running tasks to the set of
+                schedulable tasks.
+            retract_schedules (`bool`): If `True`, allow already scheduled tasks to be
+                reconsidered for schedulability.
+            worker_pools (`WorkerPools`): A representation of the `WorkerPools` that
+                are currently being used for scheduling. This object is only used if
+                preemption is enabled.
+            policy (`BranchPredictionPolicy`): The branch prediction policy to use when
+                deciding what tasks can be considered in the scheduling horizon.
 
         Returns:
-            A list of tasks.
+            A list of tasks that are schedulable in the `time + lookahead` horizon.
         """
-        if type(time) != EventTime:
-            raise ValueError(f"Invalid type received for time: {type(time)}")
-        if type(lookahead) != EventTime:
-            raise ValueError(f"Invalid type received for time: {type(lookahead)}")
-
         # Estimate the completion time of materialized tasks.
         task_queue = deque([])
         estimated_completion_time = {}
@@ -1007,13 +1029,6 @@ class TaskGraph(Graph[Task]):
                     )
                 )
 
-        assert all(
-            map(
-                lambda task: task.release_time is None
-                or task.release_time <= time + lookahead,
-                tasks,
-            )
-        ), "Tasks send for scheduling beyond the scheduler lookahead"
         return tasks
 
     def release_tasks(self, time: Optional[EventTime] = None) -> Sequence[Task]:

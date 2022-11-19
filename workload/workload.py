@@ -196,6 +196,27 @@ class Workload(object):
         worker_pools: "WorkerPools" = None,  # noqa: F821
         policy: BranchPredictionPolicy = BranchPredictionPolicy.ALL,
     ) -> Sequence[Task]:
+        """Retrieves all the tasks expected to be released within the scheduling
+        horizon defined by `time + lookahead`.
+
+        Args:
+            time (`EventTime`): The time at which the schedulable tasks are being
+                retrieved (the current simulator time).
+            lookahead (`EventTime`): The added time upto which the schedulable tasks
+                need to be retrieved (i.e. time + lookahead).
+            preemption (`bool`): If `True`, ddd currently running tasks to the set of
+                schedulable tasks.
+            retract_schedules (`bool`): If `True`, allow already scheduled tasks to be
+                reconsidered for schedulability.
+            worker_pools (`WorkerPools`): A representation of the `WorkerPools` that
+                are currently being used for scheduling. This object is only used if
+                preemption is enabled.
+            policy (`BranchPredictionPolicy`): The branch prediction policy to use when
+                deciding what tasks can be considered in the scheduling horizon.
+
+        Returns:
+            A list of tasks that are schedulable in the `time + lookahead` horizon.
+        """
         schedulable_tasks = []
         for task_graph in self._task_graphs.values():
             schedulable_tasks.extend(
