@@ -227,7 +227,7 @@ class Z3Scheduler(BaseScheduler):
         self,
         preemptive: bool = False,
         runtime: EventTime = EventTime(-1, EventTime.Unit.US),
-        lookahead: int = EventTime(0, EventTime.Unit.US),
+        lookahead: int = EventTime.zero(),
         enforce_deadlines: bool = False,
         policy: BranchPredictionPolicy = BranchPredictionPolicy.RANDOM,
         retract_schedules: bool = False,

@@ -184,7 +184,7 @@ class JobGraph(Graph[Job]):
             policy_type: "ReleasePolicyType",  # noqa: F821
             period: EventTime = EventTime(100, EventTime.Unit.US),
             fixed_invocation_nums: int = 0,
-            start: EventTime = EventTime(0, EventTime.Unit.US),
+            start: EventTime = EventTime.zero(),
         ) -> None:
             self._policy_type = policy_type
             self._period = period
@@ -223,7 +223,7 @@ class JobGraph(Graph[Job]):
             if completion_time or len(self) == 0
             else sum(
                 (job.runtime for job in self.get_longest_path()),
-                start=EventTime(0, EventTime.Unit.US),
+                start=EventTime.zero(),
             )
         )
         self._deadline_variance = deadline_variance
@@ -429,7 +429,7 @@ class JobGraph(Graph[Job]):
 
         return task_graph
 
-    def __get_completion_time(self, start=EventTime(0, EventTime.Unit.US)) -> EventTime:
+    def __get_completion_time(self, start=EventTime.zero()) -> EventTime:
         return sum(
             (
                 job.runtime

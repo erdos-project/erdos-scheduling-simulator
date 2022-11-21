@@ -198,7 +198,7 @@ class TaskLoaderPylot(TaskLoader):
             `json_entries`.
         """
         tasks = []
-        first_task = defaultdict(lambda: EventTime(0, EventTime.Unit.US))
+        first_task = defaultdict(lambda: EventTime.zero())
         for entry in json_entries:
             timestamp = entry["args"]["timestamp"]
             if timestamp > max_timestamp:

@@ -26,7 +26,7 @@ class MockScheduler(BaseScheduler):
         self._runtime = runtime
         self._task_placement = placement
         self._preemptive = False
-        self._lookahead = EventTime(0, EventTime.Unit.US)
+        self._lookahead = EventTime.zero()
 
     def schedule(
         self, sim_time=None, released_tasks=None, task_graph=None, worker_pools=None
@@ -369,7 +369,7 @@ def test_simulator_handle_event():
     perception_task.release(EventTime(2, EventTime.Unit.US))
     perception_task.schedule(EventTime(2, EventTime.Unit.US))
     perception_task.start(EventTime(3, EventTime.Unit.US))
-    perception_task.update_remaining_time(EventTime(0, EventTime.Unit.US))
+    perception_task.update_remaining_time(EventTime.zero())
     perception_task.finish(EventTime(4, EventTime.Unit.US))
 
     assert len(simulator._event_queue) == 2, "Incorrect length of EventQueue."

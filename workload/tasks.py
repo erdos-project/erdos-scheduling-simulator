@@ -302,7 +302,7 @@ class Task(object):
 
         # Task can be run, step through the task's execution.
         execution_time = current_time + step_size - self._last_step_time
-        if self._remaining_time - execution_time <= EventTime(0, EventTime.Unit.US):
+        if self._remaining_time - execution_time <= EventTime.zero():
             self._last_step_time = current_time + self._remaining_time
             self._remaining_time = EventTime.zero()
             self.finish(self._last_step_time)
@@ -390,7 +390,7 @@ class Task(object):
         if self.state not in [TaskState.RUNNING, TaskState.PREEMPTED]:
             raise ValueError(f"Task {self.id} is not RUNNING or PREEMPTED right now.")
         self._completion_time = time
-        if self._remaining_time == EventTime(0, EventTime.Unit.US):
+        if self._remaining_time == EventTime.zero():
             self._state = TaskState.COMPLETED
         else:
             self._state = TaskState.EVICTED
@@ -447,7 +447,7 @@ class Task(object):
                 f"The remaining time of COMPLETED/EVICTED "
                 f"task {self.id} cannot be updated."
             )
-        if time < EventTime(0, EventTime.Unit.US):
+        if time < EventTime.zero():
             raise ValueError("Trying to set a negative value for remaining time.")
         self._remaining_time = time
 
@@ -465,7 +465,7 @@ class Task(object):
             raise ValueError(
                 f"Invalid type received for new_deadline: {type(new_deadline)}"
             )
-        if new_deadline < EventTime(0, EventTime.Unit.US):
+        if new_deadline < EventTime.zero():
             raise ValueError("Trying to set a negative value for the deadline.")
         self._deadline = new_deadline
 
@@ -1220,7 +1220,7 @@ class TaskGraph(Graph[Task]):
 
             # Calculate the average of the offsets of the source tasks and
             # offset the remainder of the tasks by the average.
-            summed_offset = sum(offsets, start=EventTime(0, EventTime.Unit.US))
+            summed_offset = sum(offsets, start=EventTime.zero())
             average_offset = int(summed_offset.time / len(offsets))
             for task in child_graph.get_nodes():
                 if not child_graph.is_source_task(task):

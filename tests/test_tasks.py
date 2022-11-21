@@ -82,7 +82,7 @@ def test_task_runtime_variability():
     default_task.schedule(EventTime(3, EventTime.Unit.US))
     default_task.start(EventTime(3, EventTime.Unit.US), variance=50)
     assert (
-        EventTime(0, EventTime.Unit.US)
+        EventTime.zero()
         <= default_task.remaining_time
         < EventTime(2, EventTime.Unit.US)
     ), "Incorrect remaining time for the Task."
@@ -132,7 +132,7 @@ def test_task_completion():
     default_task.release(EventTime(2, EventTime.Unit.US))
     default_task.schedule(EventTime(3, EventTime.Unit.US))
     default_task.start(EventTime(3, EventTime.Unit.US))
-    default_task._remaining_time = EventTime(0, EventTime.Unit.US)
+    default_task._remaining_time = EventTime.zero()
     default_task.finish(EventTime(4, EventTime.Unit.US))
     assert default_task.state == TaskState.COMPLETED, "Incorrect state for Task."
 
@@ -280,7 +280,7 @@ def test_get_schedulable_tasks():
     task_graph = TaskGraph()
     task_graph.add_task(default_task, [child_task])
     assert (
-        len(task_graph.get_schedulable_tasks(EventTime(0, EventTime.Unit.US))) == 0
+        len(task_graph.get_schedulable_tasks(EventTime.zero())) == 0
     ), "Incorrect length of schedulable tasks returned."
     default_task.release(EventTime(2, EventTime.Unit.US))
     assert (
@@ -292,7 +292,7 @@ def test_get_schedulable_tasks():
     ), "Incorrect length of schedulable tasks returned."
     default_task.schedule(EventTime(3, EventTime.Unit.US))
     default_task.start(EventTime(3, EventTime.Unit.US))
-    default_task.update_remaining_time(EventTime(0, EventTime.Unit.US))
+    default_task.update_remaining_time(EventTime.zero())
     default_task.finish(EventTime(4, EventTime.Unit.US))
     assert (
         len(task_graph.get_schedulable_tasks(EventTime(4, EventTime.Unit.US))) == 1
@@ -318,7 +318,7 @@ def test_release_tasks():
     task_graph.add_task(prediction_task, [planning_task])
     task_graph.add_task(localization_task)
     assert (
-        len(task_graph.get_schedulable_tasks(EventTime(0, EventTime.Unit.US))) == 0
+        len(task_graph.get_schedulable_tasks(EventTime.zero())) == 0
     ), "Incorrect length of released tasks returned."
 
     # Release all available tasks.
@@ -360,7 +360,7 @@ def test_task_completion_notification():
     task_graph.add_task(perception_task, [planning_task])
     task_graph.add_task(prediction_task, [planning_task])
 
-    released_tasks = task_graph.get_schedulable_tasks(EventTime(0, EventTime.Unit.US))
+    released_tasks = task_graph.get_schedulable_tasks(EventTime.zero())
     assert len(released_tasks) == 0, "Incorrect length of released tasks returned."
 
     perception_task.release(EventTime(2, EventTime.Unit.US))
@@ -378,7 +378,7 @@ def test_task_completion_notification():
     # Run and finish the execution of Perception.
     perception_task.schedule(EventTime(3, EventTime.Unit.US))
     perception_task.start(EventTime(3, EventTime.Unit.US))
-    perception_task.update_remaining_time(EventTime(0, EventTime.Unit.US))
+    perception_task.update_remaining_time(EventTime.zero())
     perception_task.finish(EventTime(4, EventTime.Unit.US))
     task_graph.notify_task_completion(perception_task, EventTime(4, EventTime.Unit.US))
     released_tasks = task_graph.get_schedulable_tasks(EventTime(4, EventTime.Unit.US))
@@ -389,7 +389,7 @@ def test_task_completion_notification():
     # Run and finish the execution of Prediction.
     prediction_task.schedule(EventTime(3, EventTime.Unit.US))
     prediction_task.start(EventTime(3, EventTime.Unit.US))
-    prediction_task.update_remaining_time(EventTime(0, EventTime.Unit.US))
+    prediction_task.update_remaining_time(EventTime.zero())
     prediction_task.finish(EventTime(4, EventTime.Unit.US))
     task_graph.notify_task_completion(prediction_task, EventTime(4, EventTime.Unit.US))
     released_tasks = task_graph.get_schedulable_tasks(EventTime(4, EventTime.Unit.US))
@@ -424,7 +424,7 @@ def test_conditional_task_completion_notification():
     task_graph.add_task(perception_task, [planning_task, prediction_task])
 
     released_tasks = task_graph.get_schedulable_tasks(
-        EventTime(0, EventTime.Unit.US), policy=release_policy
+        EventTime.zero(), policy=release_policy
     )
     assert len(released_tasks) == 0, "Incorrect length of released tasks returned."
 
@@ -437,7 +437,7 @@ def test_conditional_task_completion_notification():
     # Run and finish the execution of Perception.
     perception_task.schedule(EventTime(3, EventTime.Unit.US))
     perception_task.start(EventTime(3, EventTime.Unit.US))
-    perception_task.update_remaining_time(EventTime(0, EventTime.Unit.US))
+    perception_task.update_remaining_time(EventTime.zero())
     perception_task.finish(EventTime(4, EventTime.Unit.US))
     task_graph.notify_task_completion(perception_task, EventTime(4, EventTime.Unit.US))
     released_tasks = task_graph.get_schedulable_tasks(
@@ -478,7 +478,7 @@ def test_conditional_weighted_task_completion_notification():
     task_graph = TaskGraph()
     task_graph.add_task(perception_task, [planning_task, prediction_task])
 
-    released_tasks = task_graph.get_schedulable_tasks(EventTime(0, EventTime.Unit.US))
+    released_tasks = task_graph.get_schedulable_tasks(EventTime.zero())
     assert len(released_tasks) == 0, "Incorrect length of released tasks returned."
 
     perception_task.release(EventTime(2, EventTime.Unit.US))
@@ -488,7 +488,7 @@ def test_conditional_weighted_task_completion_notification():
     # Run and finish the execution of Perception.
     perception_task.schedule(EventTime(3, EventTime.Unit.US))
     perception_task.start(EventTime(3, EventTime.Unit.US))
-    perception_task.update_remaining_time(EventTime(0, EventTime.Unit.US))
+    perception_task.update_remaining_time(EventTime.zero())
     perception_task.finish(EventTime(4, EventTime.Unit.US))
     task_graph.notify_task_completion(perception_task, EventTime(4, EventTime.Unit.US))
     released_tasks = task_graph.get_schedulable_tasks(EventTime(4, EventTime.Unit.US))
@@ -897,10 +897,10 @@ def test_task_graph_complete():
     assert not task_graph.is_complete(), "Task Graph should not be complete initially."
 
     # Mark all tasks as complete.
-    perception_task_0.release(EventTime(0, EventTime.Unit.US))
-    perception_task_0.schedule(EventTime(0, EventTime.Unit.US))
-    perception_task_0.start(EventTime(0, EventTime.Unit.US))
-    perception_task_0.update_remaining_time(EventTime(0, EventTime.Unit.US))
+    perception_task_0.release(EventTime.zero())
+    perception_task_0.schedule(EventTime.zero())
+    perception_task_0.start(EventTime.zero())
+    perception_task_0.update_remaining_time(EventTime.zero())
     perception_task_0.finish(EventTime(1, EventTime.Unit.US))
     assert not task_graph.is_complete(), "Task Graph should not be complete."
 
@@ -911,7 +911,7 @@ def test_task_graph_complete():
     assert released_tasks[0] == prediction_task_0, "Incorrect task released."
     released_tasks[0].schedule(EventTime(1, EventTime.Unit.US))
     released_tasks[0].start(EventTime(1, EventTime.Unit.US))
-    released_tasks[0].update_remaining_time(EventTime(0, EventTime.Unit.US))
+    released_tasks[0].update_remaining_time(EventTime.zero())
     released_tasks[0].finish(EventTime(2, EventTime.Unit.US))
     assert not task_graph.is_complete(), "Task Graph should not be complete."
 
@@ -922,7 +922,7 @@ def test_task_graph_complete():
     assert released_tasks[0] == planning_task_0, "Incorrect task released."
     released_tasks[0].schedule(EventTime(2, EventTime.Unit.US))
     released_tasks[0].start(EventTime(2, EventTime.Unit.US))
-    released_tasks[0].update_remaining_time(EventTime(0, EventTime.Unit.US))
+    released_tasks[0].update_remaining_time(EventTime.zero())
     released_tasks[0].finish(EventTime(3, EventTime.Unit.US))
     assert task_graph.is_complete(), "Task Graph should be complete."
 
@@ -953,9 +953,7 @@ def test_conditional_task_graph_complete():
         timestamp=0,
     )
     final_task_0 = create_default_task(
-        job=Job(
-            "Perception_End", runtime=EventTime(0, EventTime.Unit.US), terminal=True
-        ),
+        job=Job("Perception_End", runtime=EventTime.zero(), terminal=True),
         timestamp=0,
     )
 
@@ -972,10 +970,10 @@ def test_conditional_task_graph_complete():
     assert not task_graph.is_complete(), "Task Graph should not be complete initially."
 
     # Mark all tasks as complete.
-    perception_task_0.release(EventTime(0, EventTime.Unit.US))
-    perception_task_0.schedule(EventTime(0, EventTime.Unit.US))
-    perception_task_0.start(EventTime(0, EventTime.Unit.US))
-    perception_task_0.update_remaining_time(EventTime(0, EventTime.Unit.US))
+    perception_task_0.release(EventTime.zero())
+    perception_task_0.schedule(EventTime.zero())
+    perception_task_0.start(EventTime.zero())
+    perception_task_0.update_remaining_time(EventTime.zero())
     perception_task_0.finish(EventTime(1, EventTime.Unit.US))
     assert not task_graph.is_complete(), "Task Graph should not be complete."
 
@@ -995,7 +993,7 @@ def test_conditional_task_graph_complete():
         assert False, "Incorrect task released."
     released_tasks[0].schedule(EventTime(1, EventTime.Unit.US))
     released_tasks[0].start(EventTime(1, EventTime.Unit.US))
-    released_tasks[0].update_remaining_time(EventTime(0, EventTime.Unit.US))
+    released_tasks[0].update_remaining_time(EventTime.zero())
     released_tasks[0].finish(EventTime(2, EventTime.Unit.US))
     assert not task_graph.is_complete(), "Task Graph should not be complete."
 
@@ -1006,7 +1004,7 @@ def test_conditional_task_graph_complete():
     assert released_tasks[0] == final_task_0, "Incorrect task released."
     released_tasks[0].schedule(EventTime(2, EventTime.Unit.US))
     released_tasks[0].start(EventTime(2, EventTime.Unit.US))
-    released_tasks[0].update_remaining_time(EventTime(0, EventTime.Unit.US))
+    released_tasks[0].update_remaining_time(EventTime.zero())
     released_tasks[0].finish(EventTime(3, EventTime.Unit.US))
     assert task_graph.is_complete(), "Task Graph should be complete."
 

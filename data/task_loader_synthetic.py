@@ -353,7 +353,7 @@ class TaskLoaderSynthetic(TaskLoader):
                 )
 
         tasks = {}
-        sensor_release_time = EventTime(0, EventTime.Unit.US)
+        sensor_release_time = EventTime.zero()
         for timestamp in range(max_timestamp + 1):
             for job in self._job_graph:
                 # All times are in microseconds.

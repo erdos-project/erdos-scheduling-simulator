@@ -154,7 +154,7 @@ class Workload(object):
             # The TaskGraph has finished execution, it is safe to remove
             # it from the Workload at this moment.
             tardiness = (
-                EventTime(0, EventTime.Unit.US)
+                EventTime.zero()
                 if task_graph.deadline > finish_time
                 else finish_time - task_graph.deadline
             )

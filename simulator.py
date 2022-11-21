@@ -824,7 +824,7 @@ class Simulator(object):
             self._simulator_time.time,
             step_size,
         )
-        if step_size < EventTime(0, EventTime.Unit.US):
+        if step_size < EventTime.zero():
             raise ValueError(f"Simulator cannot step backwards {step_size}")
         completed_tasks = []
         for worker_pool in self._worker_pools.values():
@@ -882,7 +882,7 @@ class Simulator(object):
             raise ValueError(f"Incorrect event type {event.event_type} passed.")
 
         scheduler_start_time = None
-        if scheduler_frequency < EventTime(0, EventTime.Unit.US):
+        if scheduler_frequency < EventTime.zero():
             # Insert a new scheduler event for the next step.
             scheduler_start_time = event.time + EventTime(1, EventTime.Unit.US)
         else:
@@ -968,7 +968,7 @@ class Simulator(object):
                 self._simulator_time
                 + min(
                     map(attrgetter("remaining_time"), running_tasks),
-                    default=EventTime(0, EventTime.Unit.US),
+                    default=EventTime.zero(),
                 )
                 + self._scheduler_delay
             )
@@ -976,7 +976,7 @@ class Simulator(object):
             next_event_invocation_time = (
                 next_event.time + self._scheduler_delay
                 if next_event is not None
-                else EventTime(0, EventTime.Unit.US)
+                else EventTime.zero()
             )
 
             next_event_time = None
