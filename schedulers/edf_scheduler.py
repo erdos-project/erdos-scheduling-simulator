@@ -2,14 +2,14 @@ import os
 import time
 from copy import copy, deepcopy
 from operator import attrgetter
-from typing import Optional, Sequence, Tuple
+from typing import Optional
 
 import absl  # noqa: F401
 
 from schedulers import BaseScheduler
 from utils import EventTime
 from workers import WorkerPools
-from workload import Placement, Placements, Task, Workload
+from workload import Placement, Placements, Workload
 
 
 class EDFScheduler(BaseScheduler):
@@ -41,8 +41,7 @@ class EDFScheduler(BaseScheduler):
         # Create the tasks to be scheduled, along with the state of the
         # WorkerPool to schedule them on based on preemptive or non-preemptive
         tasks_to_be_scheduled = workload.get_schedulable_tasks(
-            sim_time,
-            EventTime.zero(),
+            time=sim_time,
             preemption=self.preemptive,
             worker_pools=worker_pools,
         )

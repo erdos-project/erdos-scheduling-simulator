@@ -1,14 +1,14 @@
 import time
 from copy import copy
 from operator import attrgetter
-from typing import Optional, Sequence, Tuple
+from typing import Optional
 
 import absl  # noqa: F401
 
 from schedulers import BaseScheduler
 from utils import EventTime
 from workers import WorkerPools
-from workload import Placement, Placements, Task, Workload
+from workload import Placement, Placements, Workload
 
 
 class FIFOScheduler(BaseScheduler):
@@ -34,7 +34,7 @@ class FIFOScheduler(BaseScheduler):
         self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools
     ) -> Placements:
         tasks = workload.get_schedulable_tasks(
-            sim_time, EventTime.zero(), self.preemptive, worker_pools=worker_pools
+            time=sim_time, preemption=self.preemptive, worker_pools=worker_pools
         )
         # Create a virtual WorkerPool set to try scheduling decisions on.
         schedulable_worker_pools = copy(worker_pools)

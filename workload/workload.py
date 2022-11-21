@@ -190,7 +190,7 @@ class Workload(object):
     def get_schedulable_tasks(
         self,
         time: EventTime,
-        lookahead: EventTime = EventTime(0, EventTime.Unit.US),
+        lookahead: EventTime = EventTime.zero(),
         preemption: bool = False,
         retract_schedules: bool = False,
         worker_pools: "WorkerPools" = None,  # noqa: F821

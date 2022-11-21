@@ -1,21 +1,14 @@
 import os
 import time
 from copy import copy, deepcopy
-from typing import Optional, Sequence, Tuple
+from typing import Optional
 
 import absl  # noqa: F401
 
 from schedulers import BaseScheduler
 from utils import EventTime
 from workers import WorkerPools
-from workload import (
-    BranchPredictionPolicy,
-    Placement,
-    Placements,
-    Task,
-    TaskGraph,
-    Workload,
-)
+from workload import BranchPredictionPolicy, Placement, Placements, TaskGraph, Workload
 
 
 class BranchPredictionScheduler(BaseScheduler):
@@ -31,15 +24,14 @@ class BranchPredictionScheduler(BaseScheduler):
 
     def __init__(
         self,
-        policy: BranchPredictionPolicy = BranchPredictionPolicy.RANDOM,
         preemptive: bool = False,
         runtime: EventTime = EventTime(-1, EventTime.Unit.US),
+        policy: BranchPredictionPolicy = BranchPredictionPolicy.RANDOM,
         _flags: Optional["absl.flags"] = None,
     ) -> None:
         super(BranchPredictionScheduler, self).__init__(
-            preemptive=preemptive, runtime=runtime, _flags=_flags
+            preemptive=preemptive, runtime=runtime, policy=policy, _flags=_flags
         )
-        self._policy = policy
 
     def schedule(
         self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools
@@ -141,7 +133,3 @@ class BranchPredictionScheduler(BaseScheduler):
             f"The graph is expected to complete by {expected_completion_time}."
         )
         return task_graph.deadline - expected_completion_time
-
-    @property
-    def policy(self):
-        return self._policy

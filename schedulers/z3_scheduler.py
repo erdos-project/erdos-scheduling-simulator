@@ -1,6 +1,6 @@
 import time
 from collections import defaultdict
-from typing import Mapping, Optional, Sequence, Tuple
+from typing import Mapping, Optional, Sequence
 
 import absl  # noqa: F401
 import z3
@@ -225,21 +225,25 @@ class TaskOptimizerVariables:
 class Z3Scheduler(BaseScheduler):
     def __init__(
         self,
-        policy: BranchPredictionPolicy = BranchPredictionPolicy.RANDOM,
         preemptive: bool = False,
-        retract_schedules: bool = False,
         runtime: EventTime = EventTime(-1, EventTime.Unit.US),
-        goal: str = "max_slack",
         lookahead: int = EventTime(0, EventTime.Unit.US),
         enforce_deadlines: bool = False,
+        policy: BranchPredictionPolicy = BranchPredictionPolicy.RANDOM,
+        retract_schedules: bool = False,
+        goal: str = "max_slack",
         _flags: Optional["absl.flags"] = None,
     ):
         super(Z3Scheduler, self).__init__(
-            preemptive, runtime, lookahead, enforce_deadlines, _flags
+            preemptive=preemptive,
+            runtime=runtime,
+            lookahead=lookahead,
+            enforce_deadlines=enforce_deadlines,
+            policy=policy,
+            retract_schedules=retract_schedules,
+            _flags=_flags,
         )
-        self._retract_schedules = retract_schedules
         self._goal = goal
-        self._policy = policy
 
     def schedule(
         self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools
@@ -250,7 +254,7 @@ class Z3Scheduler(BaseScheduler):
             sim_time,
             self.lookahead,
             self.preemptive,
-            self._retract_schedules,
+            self.retract_schedules,
             worker_pools,
             self._policy,
         )

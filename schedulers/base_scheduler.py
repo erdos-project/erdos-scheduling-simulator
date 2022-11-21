@@ -1,12 +1,12 @@
 import heapq
 from copy import deepcopy
-from typing import Optional, Sequence, Tuple
+from typing import Optional
 
 import absl  # noqa: F401
 
 from utils import EventTime, setup_logging
 from workers import WorkerPools
-from workload import Placements, Task, TaskGraph, Workload
+from workload import BranchPredictionPolicy, Placements, TaskGraph, Workload
 
 
 class BaseScheduler(object):
@@ -21,6 +21,11 @@ class BaseScheduler(object):
             the scheduling lookahead (in us) using estimated task release times.
         enforce_deadlines (`bool`): If True then deadlines must be met or else the
             `schedule()` will return None.
+        policy (`BranchPredictionPolicy`): The branch prediction policy to use for the
+            scheduler if it schedules future tasks.
+        retract_schedules (`bool`): If the scheduler schedules future tasks, then
+            setting this to `True` enables the scheduler to retract prior scheduling
+            decisions before they are actually placed on the WorkerPools.
         _flags (`Optional[absl.flags]`): The runtime flags that are used to initialize
             a logger instance.
     """
@@ -29,19 +34,18 @@ class BaseScheduler(object):
         self,
         preemptive: bool = False,
         runtime: EventTime = EventTime(time=-1, unit=EventTime.Unit.US),
-        lookahead: EventTime = EventTime(time=0, unit=EventTime.Unit.US),
+        lookahead: EventTime = EventTime.zero(),
         enforce_deadlines: bool = False,
+        policy: BranchPredictionPolicy = BranchPredictionPolicy.RANDOM,
+        retract_schedules: bool = False,
         _flags: Optional["absl.flags"] = None,
-    ):
-        if type(runtime) != EventTime:
-            raise ValueError(f"Incorrect type for runtime: {type(runtime)}")
-        if type(lookahead) != EventTime:
-            raise ValueError(f"Incorrect type for lookahead: {type(lookahead)}")
-
+    ) -> None:
         self._preemptive = preemptive
         self._runtime = runtime
         self._lookahead = lookahead
         self._enforce_deadlines = enforce_deadlines
+        self._policy = policy
+        self._retract_schedules = retract_schedules
         self._flags = _flags
 
         if self._flags:
@@ -79,20 +83,28 @@ class BaseScheduler(object):
         raise NotImplementedError("The `log()` method has not been implemented.")
 
     @property
-    def preemptive(self):
+    def preemptive(self) -> bool:
         return self._preemptive
 
     @property
-    def runtime(self):
+    def runtime(self) -> EventTime:
         return self._runtime
 
     @property
-    def enforce_deadlines(self):
+    def enforce_deadlines(self) -> bool:
         return self._enforce_deadlines
 
     @property
-    def lookahead(self):
+    def lookahead(self) -> EventTime:
         return self._lookahead
+
+    @property
+    def policy(self) -> BranchPredictionPolicy:
+        return self._policy
+
+    @property
+    def retract_schedules(self) -> bool:
+        return self._retract_schedules
 
     def get_lookahead(self, unit="us"):
         if unit == "us":

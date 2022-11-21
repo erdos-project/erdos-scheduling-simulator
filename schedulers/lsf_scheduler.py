@@ -1,14 +1,14 @@
 import time
 from copy import copy, deepcopy
 from functools import partial
-from typing import Optional, Sequence, Tuple
+from typing import Optional
 
 import absl  # noqa: F401
 
 from schedulers import BaseScheduler
 from utils import EventTime
 from workers import WorkerPools
-from workload import Placement, Placements, Task, TaskGraph, Workload
+from workload import Placement, Placements, Task, Workload
 
 
 class LSFScheduler(BaseScheduler):
@@ -41,7 +41,7 @@ class LSFScheduler(BaseScheduler):
         # Create the tasks to be scheduled, along with the state of the
         # WorkerPool to schedule them on based on preemptive or non-preemptive
         tasks_to_be_scheduled = workload.get_schedulable_tasks(
-            sim_time, EventTime(0, EventTime.Unit.US), self.preemptive, worker_pools
+            time=sim_time, preemption=self.preemptive, worker_pools=worker_pools
         )
 
         if self.preemptive:
