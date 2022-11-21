@@ -1,0 +1,222 @@
+[
+    {
+        "name": "AMBER_Alert_First",
+        "graph": [
+            {
+                "name": "decode_image",
+                "children": [
+                    "preprocess_image"
+                ],
+                "runtime": 1000,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+
+                ]
+            },
+            {
+                "name": "preprocess_image",
+                "children": [
+                    "object_detection_begin"
+                ],
+                "runtime": 1000,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+
+                ]
+            },
+            {
+                "name": "object_detection_begin",
+                "children": [
+                    "preprocess_detection_car",
+                    "preprocess_detection_face"
+                ],
+                "conditional": true,
+                "runtime": 1000,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+
+                ]
+            },
+            {
+                "name": "preprocess_detection_face",
+                "probability": 0.5,
+                "children": [
+                    "face_recognition"
+                ],
+                "runtime": 1,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+
+                ]
+            },
+            {
+                "name": "preprocess_detection_car",
+                "probability": 0.5,
+                "children": [
+                    "car_recognition"
+                ],
+                "runtime": 4000,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+
+                ]
+            },
+            {
+                "name": "face_recognition",
+                "children": [
+                    "object_detection_end"
+                ],
+                "runtime": 1,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+
+                ]
+            },
+            {
+                "name": "car_recognition",
+                "children": [
+                    "object_detection_end"
+                ],
+                "runtime": 4000,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+
+                ]
+            },
+            {
+                "name": "object_detection_end",
+                "children": [],
+                "terminal": true,
+                "runtime": 995,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+
+                ]
+            }
+        ],
+        "release_policy": "fixed",
+        "period": 15000,
+        "invocations": 1,
+        "deadline_variance": [10, 10]
+    },
+    {
+        "name": "AMBER_Alert_Second",
+        "graph": [
+            {
+                "name": "decode_image",
+                "children": [
+                    "object_detection_begin"
+                ],
+                "runtime": 1000,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+
+                ]
+            },
+            {
+                "name": "object_detection_begin",
+                "children": [
+                    "preprocess_detection_face",
+                    "preprocess_detection_car"
+                ],
+                "conditional": true,
+                "runtime": 1000,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+
+                ]
+            },
+            {
+                "name": "preprocess_detection_face",
+                "probability": 0.5,
+                "children": [
+                    "face_recognition"
+                ],
+                "runtime": 0,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+
+                ]
+            },
+            {
+                "name": "preprocess_detection_car",
+                "probability": 0.5,
+                "children": [
+                    "car_recognition"
+                ],
+                "runtime": 4000,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+
+                ]
+            },
+            {
+                "name": "face_recognition",
+                "children": [
+                    "object_detection_end"
+                ],
+                "runtime": 0,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+
+                ]
+            },
+            {
+                "name": "car_recognition",
+                "children": [
+                    "object_detection_end"
+                ],
+                "runtime": 4000,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+
+                ]
+            },
+            {
+                "name": "object_detection_end",
+                "children": [],
+                "terminal": true,
+                "runtime": 995,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+
+                ]
+            }
+        ],
+        "release_policy": "fixed",
+        "period": 15001,
+        "start": 2001,
+        "invocations": 1,
+        "deadline_variance": [25, 25]
+    }
+]
