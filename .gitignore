@@ -13,3 +13,6 @@
 /*.log
 /*.dot
 /*.png
+
+# Virtual environment.
+venv
