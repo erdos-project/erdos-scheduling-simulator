@@ -872,11 +872,11 @@ class TaskGraph(Graph[Task]):
         """Retrieves all tasks from the given TaskGraph that are expected to be
         available for scheduling within the horizon defined by `time + lookahead`.
 
-        The method propagates the expected start times of each of the tasks in the 
-        TaskGraph according to the given release times or the completion times of the 
+        The method propagates the expected start times of each of the tasks in the
+        TaskGraph according to the given release times or the completion times of the
         parent tasks. The tasks that are expected to be available for scheduling within
         the horizon are then chosen, and previously scheduled or running tasks are
-        considered for schedulability if `retract_schedules` or `preemption` is 
+        considered for schedulability if `retract_schedules` or `preemption` is
         enabled.
 
         When constructing the estimated completion times of the tasks, the value of
