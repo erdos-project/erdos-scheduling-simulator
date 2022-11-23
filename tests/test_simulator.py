@@ -6,7 +6,7 @@ from schedulers import BaseScheduler
 from simulator import Event, EventQueue, EventType, Simulator
 from tests.utils import create_default_task
 from utils import EventTime
-from workers import Worker, WorkerPool
+from workers import Worker, WorkerPool, WorkerPools
 from workload import (
     Job,
     Placement,
@@ -14,7 +14,6 @@ from workload import (
     Resource,
     Resources,
     TaskGraph,
-    TaskState,
     Workload,
 )
 
@@ -153,7 +152,7 @@ def test_simulator_construction():
     """Test that a simulator can be correctly constructed."""
     worker_pool = __create_default_worker_pool()
     simulator = Simulator(
-        worker_pools=[worker_pool],
+        worker_pools=WorkerPools([worker_pool]),
         scheduler=MockScheduler(runtime=EventTime(1, EventTime.Unit.US), placement=[]),
         workload=Workload.empty(),
     )
@@ -167,7 +166,7 @@ def test_failed_construction_of_scheduler_start_event():
     """Test if a non SCHEDULER_FINISHED event raises an error or not."""
     worker_pool = __create_default_worker_pool()
     simulator = Simulator(
-        worker_pools=[worker_pool],
+        worker_pools=WorkerPools([worker_pool]),
         scheduler=MockScheduler(runtime=EventTime(1, EventTime.Unit.US), placement=[]),
         workload=Workload.empty(),
     )
@@ -186,7 +185,7 @@ def test_construction_of_scheduler_start_event():
     """Test the correct construction of a SCHEDULER_START event."""
     worker_pool = __create_default_worker_pool()
     simulator = Simulator(
-        worker_pools=[worker_pool],
+        worker_pools=WorkerPools([worker_pool]),
         scheduler=MockScheduler(runtime=EventTime(1, EventTime.Unit.US), placement=[]),
         workload=Workload.empty(),
     )
@@ -232,7 +231,7 @@ def test_simulator_loop_finish_event():
     """Test that a correct SIMULATOR_END event is generated."""
     worker_pool = __create_default_worker_pool()
     simulator = Simulator(
-        worker_pools=[worker_pool],
+        worker_pools=WorkerPools([worker_pool]),
         scheduler=MockScheduler(runtime=EventTime(1, EventTime.Unit.US), placement=[]),
         workload=Workload.empty(),
     )
@@ -261,7 +260,7 @@ def test_scheduler_invocation_by_simulator():
     """Test that the simulator correctly invokes the scheduler."""
     worker_pool = __create_default_worker_pool()
     simulator = Simulator(
-        worker_pools=[worker_pool],
+        worker_pools=WorkerPools([worker_pool]),
         scheduler=MockScheduler(runtime=EventTime(5, EventTime.Unit.US), placement=[]),
         workload=Workload.empty(),
     )
@@ -279,7 +278,7 @@ def test_simulator_step():
     """Test that the Simulator's step() method correctly inserts events."""
     worker_pool = __create_default_worker_pool()
     simulator = Simulator(
-        worker_pools=[worker_pool],
+        worker_pools=WorkerPools([worker_pool]),
         scheduler=MockScheduler(runtime=EventTime(5, EventTime.Unit.US), placement=[]),
         workload=Workload.empty(),
     )
@@ -344,7 +343,7 @@ def test_simulator_handle_event():
     task_graph = TaskGraph()
     task_graph.add_task(perception_task, [planning_task])
     simulator = Simulator(
-        worker_pools=[worker_pool],
+        worker_pools=WorkerPools([worker_pool]),
         scheduler=MockScheduler(runtime=EventTime(5, EventTime.Unit.US), placement=[]),
         workload=Workload.from_task_graphs({perception_task.task_graph: task_graph}),
     )

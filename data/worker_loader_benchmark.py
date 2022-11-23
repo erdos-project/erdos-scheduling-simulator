@@ -4,7 +4,7 @@ import absl  # noqa: F401
 
 import utils
 from schedulers import BaseScheduler
-from workers import Worker, WorkerPool
+from workers import Worker, WorkerPool, WorkerPools
 from workload import Resource, Resources
 
 
@@ -37,7 +37,7 @@ class WorkerLoaderBenchmark(object):
             self._logger = utils.setup_logging(name=self.__class__.__name__)
         self._flags = _flags
         if _flags:
-            self._worker_pools = (
+            self._worker_pools = WorkerPools(
                 WorkerLoaderBenchmark._WorkerLoaderBenchmark__create_worker_pools(
                     num_cpus,
                     num_gpus,
@@ -84,10 +84,10 @@ class WorkerLoaderBenchmark(object):
         )
         return [worker_pool]
 
-    def get_worker_pools(self) -> Sequence[WorkerPool]:
+    def get_worker_pools(self) -> WorkerPools:
         """Retrieve the `WorkerPool`s loaded by the WorkerLoader.
 
         Returns:
-            The `Sequence[WorkerPool]` loaded by the WorkerLoader.
+            The `WorkerPools` loaded by the WorkerLoader.
         """
         return self._worker_pools

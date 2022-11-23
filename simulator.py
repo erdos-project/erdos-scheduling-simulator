@@ -163,8 +163,8 @@ class Simulator(object):
     ensures their execution on the given set of WorkerPools.
 
     Args:
-        worker_pools (`Sequence[WorkerPool]`): A list of `WorkerPool`s
-            available for the simulator to execute the tasks on.
+        worker_pools (`WorkerPools`): A `WorkerPools` instance describing
+            the worker pools available for the simulator to execute the tasks on.
         scheduler (`Type[BaseScheduler]`): A scheduler that implements the
             `BaseScheduler` interface, and is used by the simulator to schedule
             the set of available tasks at a regular interval.
@@ -179,7 +179,7 @@ class Simulator(object):
 
     def __init__(
         self,
-        worker_pools: Sequence[WorkerPool],
+        worker_pools: WorkerPools,
         scheduler: Type[BaseScheduler],
         workload: Workload,
         loop_timeout: EventTime = EventTime(time=sys.maxsize, unit=EventTime.Unit.US),
@@ -235,11 +235,9 @@ class Simulator(object):
         self._scheduler_frequency = scheduler_frequency
         self._loop_timeout = loop_timeout
 
-        self._worker_pools = {
-            worker_pool.id: worker_pool for worker_pool in worker_pools
-        }
+        self._worker_pools = worker_pools
         self._logger.info("The Worker Pools are: ")
-        for worker_pool in worker_pools:
+        for worker_pool in self._worker_pools.worker_pools:
             self._logger.info(f"{worker_pool}")
             resources_str = ",".join(
                 [
@@ -325,9 +323,7 @@ class Simulator(object):
 
             # If there are any running tasks, step through the execution of the
             # Simulator until the closest remaining time.
-            running_tasks = []
-            for worker_pool in self._worker_pools.values():
-                running_tasks.extend(worker_pool.get_placed_tasks())
+            running_tasks = self._worker_pools.get_placed_tasks()
 
             if len(running_tasks) > 0:
                 # There are running tasks, figure out the minimum remaining
@@ -364,15 +360,13 @@ class Simulator(object):
 
     def __handle_scheduler_start(self, event: Event):
         # Log the required CSV information.
-        currently_placed_tasks = []
-        for worker_pool in self._worker_pools.values():
-            currently_placed_tasks.extend(worker_pool.get_placed_tasks())
+        currently_placed_tasks = self._worker_pools.get_placed_tasks()
         schedulable_tasks = self._workload.get_schedulable_tasks(
             event.time,
             self._scheduler.lookahead,
             self._scheduler.preemptive,
             self._retract_schedules,
-            WorkerPools(self._worker_pools.values()),
+            self._worker_pools,
             self._policy,
             self._release_taskgraphs,
         )
@@ -625,7 +619,7 @@ class Simulator(object):
         self._csv_logger.debug(
             f"{event.time.time},TASK_PREEMPT,{task.name},{task.timestamp},{task.id}"
         )
-        worker_pool = self._worker_pools[task.worker_pool_id]
+        worker_pool = self._worker_pools.get_worker_pool(task.worker_pool_id)
         worker_pool.remove_task(task)
         task.preempt(event.time)
 
@@ -675,7 +669,7 @@ class Simulator(object):
                 return
         # Initialize the task at the given placement time, and place it on
         # the WorkerPool.
-        worker_pool = self._worker_pools[event.placement]
+        worker_pool = self._worker_pools.get_worker_pool(event.placement)
         success = worker_pool.place_task(task)
         if success:
             task.start(
@@ -742,7 +736,7 @@ class Simulator(object):
             task.resource_requirements,
         )
 
-        worker_pool = self._worker_pools[event.placement]
+        worker_pool = self._worker_pools.get_worker_pool(event.placement)
         success = worker_pool.place_task(task)
         if success:
             task.resume(event.time, worker_pool_id=event.placement)
@@ -836,7 +830,7 @@ class Simulator(object):
         if step_size < EventTime.zero():
             raise ValueError(f"Simulator cannot step backwards {step_size}")
         completed_tasks = []
-        for worker_pool in self._worker_pools.values():
+        for worker_pool in self._worker_pools.worker_pools:
             completed_tasks.extend(worker_pool.step(self._simulator_time, step_size))
 
         # Add TASK_FINISHED events for all the completed tasks.
@@ -937,7 +931,7 @@ class Simulator(object):
             self._scheduler.lookahead,
             self._scheduler.preemptive,
             self._retract_schedules,
-            WorkerPools(self._worker_pools.values()),
+            self._worker_pools,
             self._policy,
             self._release_taskgraphs,
         )
@@ -972,7 +966,7 @@ class Simulator(object):
         elif (
             len(schedulable_tasks) == 0
             or all(task.state == TaskState.RUNNING for task in schedulable_tasks)
-            or all(worker_pool.is_full() for worker_pool in self._worker_pools.values())
+            or self._worker_pools.is_full()
         ):
             # If there are no schedulable tasks currently, or all schedulable tasks are
             # already running (in a preemptive scheduling scenario), or the WorkerPool
@@ -1043,7 +1037,9 @@ class Simulator(object):
 
         # Run the scheduler.
         placements = self._scheduler.schedule(
-            event.time, self._workload, WorkerPools(self._worker_pools.values())
+            event.time,
+            self._workload,
+            self._worker_pools,
         )
 
         # Calculate the time at which the placements need to be applied.
@@ -1066,7 +1062,7 @@ class Simulator(object):
         ), "The simulator time was not in microseconds."
 
         # Cumulate the resources from all the WorkerPools
-        for worker_pool in self._worker_pools.values():
+        for worker_pool in self._worker_pools.worker_pools:
             worker_pool_resources = worker_pool.resources
             for resource_name in set(
                 map(lambda value: value[0].name, worker_pool_resources.resources)

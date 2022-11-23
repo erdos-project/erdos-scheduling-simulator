@@ -5,7 +5,7 @@ import absl  # noqa: F401
 
 import utils
 from schedulers import BaseScheduler
-from workers import Worker, WorkerPool
+from workers import Worker, WorkerPool, WorkerPools
 from workload import Resource, Resources
 
 
@@ -45,13 +45,13 @@ class WorkerLoaderJSON(object):
 
         # Create the sequence of WorkerPools from the JSON data.
         if _flags:
-            self._worker_pools = (
+            self._worker_pools = WorkerPools(
                 WorkerLoaderJSON._WorkerLoaderJSON__create_worker_pools(
                     worker_data, scheduler, _flags.log_file_name, _flags.log_level
                 )
             )
         else:
-            self._worker_pools = (
+            self._worker_pools = WorkerPools(
                 WorkerLoaderJSON._WorkerLoaderJSON__create_worker_pools(
                     worker_data, scheduler
                 )
@@ -123,10 +123,10 @@ class WorkerLoaderJSON(object):
             )
         return constructed_worker_pools
 
-    def get_worker_pools(self) -> Sequence[WorkerPool]:
+    def get_worker_pools(self) -> WorkerPools:
         """Retrieve the `WorkerPool`s loaded by the WorkerLoaderJSON.
 
         Returns:
-            The `Sequence[WorkerPool]` loaded by the WorkerLoaderJSON.
+            The `WorkerPools` loaded by the WorkerLoaderJSON.
         """
         return self._worker_pools

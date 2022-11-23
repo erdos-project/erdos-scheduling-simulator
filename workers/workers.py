@@ -2,7 +2,6 @@ import logging
 import random
 import uuid
 from copy import copy, deepcopy
-from operator import attrgetter
 from typing import List, Optional, Sequence, Tuple, Type
 
 from utils import EventTime, setup_logging
@@ -500,16 +499,48 @@ class WorkerPool(object):
 
 
 class WorkerPools(object):
-    """A collection of `WorkerPool`s."""
+    """A collection of `WorkerPool`s.
 
-    def __init__(self, worker_pools: Sequence[WorkerPool]):
-        self._wps = worker_pools
+    Args:
+        worker_pools (`Sequence[WorkerPool]`): A sequence of `WorkerPool`s
+            that are contained in this instance.
+    """
 
-    def get_placed_tasks(self):
+    def __init__(self, worker_pools: Sequence[WorkerPool]) -> None:
+        self._worker_pools = {
+            worker_pool.id: worker_pool for worker_pool in worker_pools
+        }
+
+    def get_placed_tasks(self) -> Sequence[Task]:
+        """Retrieves the `Task`s placed across all the `Worker`s.
+
+        Returns:
+            A `Sequence[Task]` representing the tasks placed across the
+            `Worker`s in this instance.
+        """
         placed_tasks = []
         for wp in self.worker_pools:
             placed_tasks.extend(wp.get_placed_tasks())
         return placed_tasks
+
+    def get_worker_pool(self, id: str) -> Optional[WorkerPool]:
+        """Retrieve the WorkerPool with the given ID from this collection.
+
+        Args:
+            id (`str`): The ID of the WorkerPool to retrieve.
+
+        Returns:
+            The `WorkerPool` instance with the given ID if found, `None` otherwise.
+        """
+        return self._worker_pools.get(id)
+
+    def is_full(self) -> bool:
+        """Check if the WorkerPools is full.
+
+        Returns:
+            `True` if all the WorkerPools are full, `False` otherwise.
+        """
+        return all(worker_pool.is_full() for worker_pool in self._worker_pools.values())
 
     def get_resource_ilp_encoding(self):
         """Constructs a map from resource name to (resource_start_index,
@@ -558,7 +589,7 @@ class WorkerPools(object):
         Returns:
             A `Sequence[WorkerPool]` stored in this instance of WorkerPools.
         """
-        return self._wps
+        return self._worker_pools.values()
 
     def __copy__(self):
         cls = self.__class__
@@ -571,3 +602,6 @@ class WorkerPools(object):
         instance = cls.__new__(cls)
         cls.__init__(instance, [deepcopy(wp) for wp in self.worker_pools])
         return instance
+
+    def __len__(self):
+        return len(self._worker_pools)
