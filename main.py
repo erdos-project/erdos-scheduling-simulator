@@ -140,6 +140,12 @@ flags.DEFINE_integer(
 flags.DEFINE_bool(
     "synchronize_sensors", False, "If True then the sensor operators are synchronized."
 )
+flags.DEFINE_bool(
+    "release_taskgraphs",
+    False,
+    "If True, all tasks from a graph are released if any of the tasks have "
+    "reached their release time.",
+)
 
 # Scheduler related flags.
 flags.DEFINE_enum(
@@ -278,7 +284,6 @@ def main(args):
         raise NotImplementedError(
             f"The policy {FLAGS.scheduler_policy} is not supported."
         )
-    print(branch_prediction_policy)
 
     # Instantiate the scheduler based on the given flag.
     scheduler = None
@@ -355,6 +360,7 @@ def main(args):
         workload=workload,
         loop_timeout=EventTime(FLAGS.loop_timeout, EventTime.Unit.US),
         scheduler_frequency=EventTime(FLAGS.scheduler_frequency, EventTime.Unit.US),
+        policy=branch_prediction_policy,
         _flags=FLAGS,
     )
     simulator.simulate()

@@ -46,6 +46,7 @@ class BaseScheduler(object):
         self._enforce_deadlines = enforce_deadlines
         self._policy = policy
         self._retract_schedules = retract_schedules
+        self._release_taskgraphs = _flags.release_taskgraphs if _flags else False
         self._flags = _flags
 
         if self._flags:
@@ -105,6 +106,10 @@ class BaseScheduler(object):
     @property
     def retract_schedules(self) -> bool:
         return self._retract_schedules
+
+    @property
+    def release_taskgraphs(self) -> bool:
+        return self._release_taskgraphs
 
     def get_lookahead(self, unit="us"):
         if unit == "us":

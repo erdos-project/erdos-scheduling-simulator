@@ -195,6 +195,7 @@ class Workload(object):
         retract_schedules: bool = False,
         worker_pools: "WorkerPools" = None,  # noqa: F821
         policy: BranchPredictionPolicy = BranchPredictionPolicy.ALL,
+        release_taskgraphs: bool = False,
     ) -> Sequence[Task]:
         """Retrieves all the tasks expected to be released within the scheduling
         horizon defined by `time + lookahead`.
@@ -213,6 +214,9 @@ class Workload(object):
                 preemption is enabled.
             policy (`BranchPredictionPolicy`): The branch prediction policy to use when
                 deciding what tasks can be considered in the scheduling horizon.
+            release_taskgraphs (`bool`): If `True`, all tasks of a TaskGraph are made
+                available for scheduling if any task in the TaskGraph falls within the
+                scheduler lookahead.
 
         Returns:
             A list of tasks that are schedulable in the `time + lookahead` horizon.
@@ -227,6 +231,7 @@ class Workload(object):
                     retract_schedules,
                     worker_pools,
                     policy,
+                    release_taskgraphs,
                 )
             )
         return schedulable_tasks

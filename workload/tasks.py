@@ -868,6 +868,7 @@ class TaskGraph(Graph[Task]):
         retract_schedules: bool = False,
         worker_pools: "WorkerPools" = None,  # noqa: F821
         policy: BranchPredictionPolicy = BranchPredictionPolicy.ALL,
+        release_taskgraphs: bool = False,
     ) -> Sequence[Task]:
         """Retrieves all tasks from the given TaskGraph that are expected to be
         available for scheduling within the horizon defined by `time + lookahead`.
@@ -898,6 +899,10 @@ class TaskGraph(Graph[Task]):
                 preemption is enabled.
             policy (`BranchPredictionPolicy`): The branch prediction policy to use when
                 deciding what tasks can be considered in the scheduling horizon.
+            release_taskgraphs (`bool`): If `True`, all tasks of the `TaskGraph` are
+                made available for scheduling if any task in the `TaskGraph` fall within
+                the scheduler lookahead. This option uses the `policy` to decide what
+                tasks to release if they are made available for scheduling.
 
         Returns:
             A list of tasks that are schedulable in the `time + lookahead` horizon.
@@ -985,9 +990,15 @@ class TaskGraph(Graph[Task]):
                     estimated_completion_time[child_task] = child_completion_time
                     task_queue.append(child_task)
 
-        # Add the tasks that are within the lookahead,
-        # and conform to the provided policy.
+        # Add the tasks conforming to the policy within the lookahead.
         tasks = []
+
+        # Track if any released tasks have been added to the set of available
+        # tasks. If yes, and the `release_taskgraphs` option was set, then
+        # forego the checking of the estimated completion time for the virtual
+        # tasks. This works in a loop since we iterate on the tasks in the
+        # topologically-sorted order.
+        any_released = False
         for task in self.topological_sort():
             if (
                 task.state == TaskState.RELEASED
@@ -996,13 +1007,17 @@ class TaskGraph(Graph[Task]):
                 # The Task has already been released and its release time is within
                 # the lookahead.
                 tasks.append(task)
+                any_released = True
             elif task.state in (TaskState.PREEMPTED, TaskState.EVICTED):
                 # PREEMPTED and EVICTED tasks are always available for scheduling.
                 tasks.append(task)
             elif (
                 task.state == TaskState.VIRTUAL
                 and task in estimated_completion_time
-                and estimated_completion_time[task] <= time + lookahead
+                and (
+                    (any_released and release_taskgraphs)
+                    or estimated_completion_time[task] <= time + lookahead
+                )
             ):
                 # A VIRTUAL task that may be available for scheduling.
                 tasks.append(task)
@@ -1010,7 +1025,10 @@ class TaskGraph(Graph[Task]):
                 retract_schedules
                 and task.state == TaskState.SCHEDULED
                 and task in estimated_completion_time
-                and estimated_completion_time[task] <= time + lookahead
+                and (
+                    (any_released and release_taskgraphs)
+                    or estimated_completion_time[task] <= time + lookahead
+                )
             ):
                 # A SCHEDULED task that is being reconsidered for scheduling.
                 tasks.append(task)

@@ -257,6 +257,7 @@ class Z3Scheduler(BaseScheduler):
             self.retract_schedules,
             worker_pools,
             self.policy,
+            self.release_taskgraphs,
         )
         self._logger.debug(
             f"[{sim_time.time}] The scheduler received "

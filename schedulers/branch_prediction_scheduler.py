@@ -43,6 +43,8 @@ class BranchPredictionScheduler(BaseScheduler):
             EventTime.zero(),
             self.preemptive,
             worker_pools,
+            policy=self.policy,
+            release_taskgraphs=self.release_taskgraphs,
         )
         tasks_to_be_scheduled = [
             (

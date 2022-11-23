@@ -11,8 +11,7 @@ import absl  # noqa: F401
 from schedulers import BaseScheduler
 from utils import EventTime, setup_csv_logging, setup_logging
 from workers import WorkerPool, WorkerPools
-from workload import Resource, Task, TaskState
-from workload.workload import Workload
+from workload import BranchPredictionPolicy, Resource, Task, TaskState, Workload
 
 
 @total_ordering
@@ -185,6 +184,7 @@ class Simulator(object):
         workload: Workload,
         loop_timeout: EventTime = EventTime(time=sys.maxsize, unit=EventTime.Unit.US),
         scheduler_frequency: EventTime = EventTime(time=-1, unit=EventTime.Unit.US),
+        policy: BranchPredictionPolicy = BranchPredictionPolicy.ALL,
         _flags: Optional["absl.flags"] = None,
     ):
         if not isinstance(scheduler, BaseScheduler):
@@ -265,6 +265,9 @@ class Simulator(object):
             _flags.scheduler_delay if _flags else 1, EventTime.Unit.US
         )
         self._runtime_variance = _flags.runtime_variance if _flags else 0
+        self._policy = policy
+        self._release_taskgraphs = _flags.release_taskgraphs if _flags else False
+        self._retract_schedules = _flags.retract_schedules if _flags else False
 
         # Initialize the event queue, and add a SIMULATOR_START task to
         # signify the beginning of the simulator loop. Also add a
@@ -365,7 +368,13 @@ class Simulator(object):
         for worker_pool in self._worker_pools.values():
             currently_placed_tasks.extend(worker_pool.get_placed_tasks())
         schedulable_tasks = self._workload.get_schedulable_tasks(
-            event.time, self._scheduler.lookahead, self._scheduler.preemptive
+            event.time,
+            self._scheduler.lookahead,
+            self._scheduler.preemptive,
+            self._retract_schedules,
+            WorkerPools(self._worker_pools.values()),
+            self._policy,
+            self._release_taskgraphs,
         )
         self._csv_logger.debug(
             f"{event.time.time},SCHEDULER_START,{len(schedulable_tasks)},"
@@ -924,7 +933,13 @@ class Simulator(object):
             lambda task: task.state in (TaskState.SCHEDULED, TaskState.RUNNING)
         )
         schedulable_tasks = self._workload.get_schedulable_tasks(
-            event.time, self._scheduler.lookahead, self._scheduler.preemptive
+            event.time,
+            self._scheduler.lookahead,
+            self._scheduler.preemptive,
+            self._retract_schedules,
+            WorkerPools(self._worker_pools.values()),
+            self._policy,
+            self._release_taskgraphs,
         )
         self._logger.debug(
             "[%s] The schedulable tasks are %s, and the running tasks are %s.",
