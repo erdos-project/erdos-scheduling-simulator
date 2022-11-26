@@ -24,6 +24,15 @@ TASK_SKIP_PENALTY = -2000000000
 class TaskOptimizerVariables:
     """This class represents the optimizer variables to be used for each of the task
     that need to be scheduled in a particular run of the Scheduler.
+
+    Args:
+        current_time (`EventTime`): The time at which the scheduler was invoked.
+        task (`Task`): The task for which the variables are to be constructed.
+        workers (`Mapping[int, Worker]`): A shared mapping of an index to the
+            Workers available at this scheduling run.
+        optimizer (`z3.z3.Optimize`): The optimizer instance to add the variables to.
+        enforce_deadlines (`bool`): If `True`, the variables are forced to enforce
+            deadlines.
     """
 
     def __init__(

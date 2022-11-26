@@ -16,6 +16,7 @@ from schedulers import (
     EDFScheduler,
     FIFOScheduler,
     GurobiScheduler2,
+    ILPScheduler,
     LSFScheduler,
     Z3Scheduler,
 )
@@ -151,7 +152,7 @@ flags.DEFINE_bool(
 flags.DEFINE_enum(
     "scheduler",
     "EDF",
-    ["FIFO", "EDF", "LSF", "Gurobi", "Z3", "BranchPrediction"],
+    ["FIFO", "EDF", "LSF", "Gurobi", "Z3", "BranchPrediction", "ILP"],
     "The scheduler to use for this execution.",
 )
 flags.DEFINE_bool(
@@ -196,7 +197,7 @@ flags.DEFINE_bool(
 flags.DEFINE_enum(
     "ilp_goal",
     "max_slack",
-    ["max_slack", "min_placement_delay"],
+    ["max_slack", "min_placement_delay", "max_goodput"],
     "Sets the goal of the ILP solver.",
 )
 
@@ -317,13 +318,13 @@ def main(args):
         )
     elif FLAGS.scheduler == "Z3":
         scheduler = Z3Scheduler(
-            policy=branch_prediction_policy,
             preemptive=FLAGS.preemption,
-            retract_schedules=FLAGS.retract_schedules,
             runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
-            goal=FLAGS.ilp_goal,
-            enforce_deadlines=FLAGS.enforce_deadlines,
             lookahead=EventTime(FLAGS.scheduler_lookahead, EventTime.Unit.US),
+            enforce_deadlines=FLAGS.enforce_deadlines,
+            policy=branch_prediction_policy,
+            retract_schedules=FLAGS.retract_schedules,
+            goal=FLAGS.ilp_goal,
             _flags=FLAGS,
         )
     elif FLAGS.scheduler == "BranchPrediction":
@@ -331,6 +332,17 @@ def main(args):
             policy=branch_prediction_policy,
             preemptive=FLAGS.preemption,
             runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
+            _flags=FLAGS,
+        )
+    elif FLAGS.scheduler == "ILP":
+        scheduler = ILPScheduler(
+            preemptive=FLAGS.preemption,
+            runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
+            lookahead=EventTime(FLAGS.scheduler_lookahead, EventTime.Unit.US),
+            enforce_deadlines=FLAGS.enforce_deadlines,
+            policy=branch_prediction_policy,
+            retract_schedules=FLAGS.retract_schedules,
+            goal=FLAGS.ilp_goal,
             _flags=FLAGS,
         )
     else:

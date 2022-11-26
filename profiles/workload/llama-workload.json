@@ -215,7 +215,7 @@
         ],
         "release_policy": "fixed",
         "period": 15001,
-        "start": 2001,
+        "start": 0,
         "invocations": 1,
         "deadline_variance": [25, 25]
     }
