@@ -158,7 +158,7 @@ class ILPScheduler(BaseScheduler):
             the scheduling lookahead (in us) using estimated task release times.
         enforce_deadlines (`bool`): If True then deadlines must be met or else the
             `schedule()` will return None.
-                policy (`BranchPredictionPolicy`): The branch prediction policy to use for the
+        policy (`BranchPredictionPolicy`): The branch prediction policy to use for the
             scheduler if it schedules future tasks.
         retract_schedules (`bool`): If the scheduler schedules future tasks, then
             setting this to `True` enables the scheduler to retract prior scheduling
@@ -293,12 +293,23 @@ class ILPScheduler(BaseScheduler):
         tasks_to_variables: Mapping[str, TaskOptimizerVariables],
         workload: Workload,
     ) -> None:
+        """Generates the variables and constraints to ensure that the dependencies
+        due to a TaskGraph are respected.
+
+        Args:
+            optimizer (`gp.Model`): The instance of the Gurobi model to which the
+                variables and constraints must be added.
+            tasks_to_variables (`Mapping[str, TaskOptimizerVariables]`): A mapping
+                from the name of the Task to its corresponding variables inside the
+                optimizer.
+            workload (`Workload`): The workload with which the scheduler was invoked.
+        """
         for task_name, variable in tasks_to_variables.items():
-            task = variable.task
-            task_graph = workload.get_task_graph(task.task_graph)
+            # Retrieve the variables for all the parents of this Task.
+            task_graph = workload.get_task_graph(variable.task.task_graph)
             parent_variables = [
                 tasks_to_variables[parent.unique_name]
-                for parent in task_graph.get_parents(task)
+                for parent in task_graph.get_parents(variable.task)
                 if parent.unique_name in tasks_to_variables
             ]
 
@@ -309,14 +320,9 @@ class ILPScheduler(BaseScheduler):
             )
             parent_placements = []
             for parent_variable in parent_variables:
-                print(
-                    f"  [x] Remaining Time for parent "
-                    f"({parent_variable.name}): "
-                    f"{parent_variable.task.remaining_time.time}."
-                )
                 optimizer.addConstr(
                     variable.start_time
-                    >= parent_variable.start_time
+                    > parent_variable.start_time
                     + parent_variable.task.remaining_time.to(EventTime.Unit.US).time
                 )
                 parent_placements.extend(parent_variable.placed_on_workers)
@@ -339,6 +345,7 @@ class ILPScheduler(BaseScheduler):
             )
 
             # If all of the parents were not placed, then we cannot place this task.
+            # Otherwise, we allow the optimizer to choose when to place the task.
             optimizer.addGenConstrIndicator(
                 all_parents_placed,
                 0,
@@ -408,11 +415,11 @@ class ILPScheduler(BaseScheduler):
                         task
                     ].task.resource_requirements.get_total_quantity(resource)
                     if quantity == 0 or task_request_for_resource == 0:
-                        # We ensure earlier that the Worker has enough space to accomodate
-                        # each task. If the quantity of the resource is 0 or the task does
-                        # not need this resource, then we can skip the addition of a
-                        # constraint since the task would not have been placed on this
-                        # worker or taken up this resource.
+                        # We ensure earlier that the Worker has enough space to
+                        # accomodate # each task. If the quantity of the resource is
+                        # 0 or the task does not need this resource, then we can
+                        # skip the addition of a constraint since the task would not
+                        # have been placed on this worker or taken up this resource.
                         continue
 
                     # If the dependency overlaps and the dependency is placed on this
