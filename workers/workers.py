@@ -523,16 +523,16 @@ class WorkerPools(object):
             placed_tasks.extend(wp.get_placed_tasks())
         return placed_tasks
 
-    def get_worker_pool(self, id: str) -> Optional[WorkerPool]:
+    def get_worker_pool(self, worker_pool_id: str) -> Optional[WorkerPool]:
         """Retrieve the WorkerPool with the given ID from this collection.
 
         Args:
-            id (`str`): The ID of the WorkerPool to retrieve.
+            worker_pool_id (`str`): The ID of the WorkerPool to retrieve.
 
         Returns:
             The `WorkerPool` instance with the given ID if found, `None` otherwise.
         """
-        return self._worker_pools.get(id)
+        return self._worker_pools.get(worker_pool_id)
 
     def is_full(self) -> bool:
         """Check if the WorkerPools is full.
@@ -541,45 +541,6 @@ class WorkerPools(object):
             `True` if all the WorkerPools are full, `False` otherwise.
         """
         return all(worker_pool.is_full() for worker_pool in self._worker_pools.values())
-
-    def get_resource_ilp_encoding(self):
-        """Constructs a map from resource name to (resource_start_index,
-        resource_end_index) and a map from worker pool id to resource_id.
-
-        The resource_start_index and resource_end_index are derived based on the
-        available quantify of the given resource.
-        """
-        # Unique list of resource names -- not relying on set stability.
-        resource_names = list(
-            {r.name for wp in self.worker_pools for r in wp.resources}
-        )
-        # Uniquify scrambles the order.
-        resource_names.sort()
-
-        res_type_to_index_range = {}
-        res_index_to_wp_id = {}
-        res_index_to_wp_index = {-1: -1}
-        start_range_index = 0
-        for res_name in resource_names:
-            cur_range_index = start_range_index
-            for index, wp in enumerate(self.worker_pools):
-                res_available = wp.resources.get_available_quantity(
-                    Resource(name=res_name, _id="any")
-                )
-                for res_index in range(
-                    cur_range_index, cur_range_index + res_available
-                ):
-                    res_index_to_wp_id[res_index] = wp.id
-                    res_index_to_wp_index[res_index] = index
-                cur_range_index += res_available
-            res_type_to_index_range[res_name] = (start_range_index, cur_range_index)
-            start_range_index = cur_range_index
-        return (
-            res_type_to_index_range,
-            res_index_to_wp_id,
-            res_index_to_wp_index,
-            len(self.worker_pools),
-        )
 
     @property
     def worker_pools(self) -> Sequence[WorkerPool]:
