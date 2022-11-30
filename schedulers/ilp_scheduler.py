@@ -13,7 +13,22 @@ from workload import BranchPredictionPolicy, Placements, Task, Workload
 
 class TaskOptimizerVariables:
     """TaskOptimizerVariables is used to represent the optimizer variables for
-    every particular task to be scheduled by the Scheduler."""
+    every particular task to be scheduled by the Scheduler.
+
+    The initialization of this instance sets up the basic task-only constraints
+    required by the problem.
+    
+    Args:
+        current_time (`EventTime`): The time at which the scheduler was invoked.
+            This is used to set a lower bound on the placement time of the tasks.
+        task (`Task`): The Task instance for which the variables are generated.
+        workers (`Mapping[int, Worker]`): A mapping of the unique index of the
+            Worker to its instance.
+        optimizer (`gp.Model`): The instance of the Gurobi model to which the
+            variables and constraints must be added.
+        enforce_deadlines (`bool`): If `True`, the scheduler tries to enforce
+            deadline constraints on the tasks.
+        """
 
     def __init__(
         self,
@@ -34,6 +49,8 @@ class TaskOptimizerVariables:
         # Set up individual variables to signify where the task is placed.
         self._placed_on_worker = {}
         for worker_id, worker in workers.items():
+            # If the worker cannot accomodate the task, we set the placement variable
+            # to 0 to reduce the number of constraints in the system.
             if worker.can_accomodate_task(task):
                 placed_on_worker_variable = optimizer.addVar(
                     vtype=GRB.BINARY, name=f"{task.unique_name}_placed_on_{worker_id}"
@@ -190,7 +207,7 @@ class ILPScheduler(BaseScheduler):
         for variable in tasks_to_variables.values():
             print(
                 f"  [x] {variable.name}: Start Time = {variable.start_time.X}, "
-                f"Deadline = {variable.task.deadline}"
+                f"Deadline = {variable.task.deadline}, Runtime = {variable.task.remaining_time}"
             )
             for _, dependency_variable in task_dependency_overlaps[variable.name]:
                 print(
@@ -443,6 +460,9 @@ class ILPScheduler(BaseScheduler):
         # TODO (Sukrit): This is wrong. FIX.
         placed_on_workers = []
         for task_variable in tasks_to_variables.values():
-            placed_on_workers.extend(task_variable.placed_on_workers)
+            if workload.get_task_graph(task_variable.task.task_graph).is_sink_task(
+                task_variable.task
+            ):
+                placed_on_workers.extend(task_variable.placed_on_workers)
 
         optimizer.setObjective(gp.quicksum(placed_on_workers), sense=GRB.MAXIMIZE)
