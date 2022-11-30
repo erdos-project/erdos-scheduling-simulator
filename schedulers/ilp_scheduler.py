@@ -98,6 +98,12 @@ class TaskOptimizerVariables:
         task on the collection of `Worker`s registered with the instance."""
         return self._placed_on_worker.values()
 
+    def __str__(self) -> str:
+        return f"TaskOptimizerVariables(name={self.name})"
+
+    def __repr__(self) -> str:
+        return str(self)
+
     def _initialize_timing_constraints(
         self,
         current_time: EventTime,
@@ -319,11 +325,13 @@ class ILPScheduler(BaseScheduler):
                 vtype=GRB.BINARY, name=f"{task_name}_all_parents_placed"
             )
             parent_placements = []
+            print(parent_variables)
             for parent_variable in parent_variables:
                 optimizer.addConstr(
                     variable.start_time
-                    > parent_variable.start_time
+                    >= parent_variable.start_time
                     + parent_variable.task.remaining_time.to(EventTime.Unit.US).time
+                    + 1
                 )
                 parent_placements.extend(parent_variable.placed_on_workers)
 
