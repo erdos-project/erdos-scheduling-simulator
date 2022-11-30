@@ -1,5 +1,5 @@
 absl-py
-gurobipy
+gurobipy==10.0
 gurobipy-stubs
 numpy
 pyparsing<=3.0.1  # Fix parsing error in pydot.
