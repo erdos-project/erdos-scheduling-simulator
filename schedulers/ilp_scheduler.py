@@ -1,4 +1,5 @@
 from collections import defaultdict
+from copy import copy, deepcopy
 from typing import Mapping, Optional, Sequence, Union
 
 import absl  # noqa: F401
@@ -64,21 +65,37 @@ class TaskOptimizerVariables:
 
     @property
     def start_time(self) -> gp.Var:
+        """Returns a Gurobi variable representing the start time for this Task."""
         return self._start_time
 
     @property
     def task(self) -> Task:
+        """Returns the Task that this instance of TaskOptimizerVariables represents."""
         return self._task
 
     @property
     def name(self) -> str:
+        """Returns the name of the Task that this instance represents."""
         return self._task.unique_name
 
     def placed_on_worker(self, worker_id: int) -> Optional[Union[int, gp.Var]]:
+        """Check if the Task was placed on a particular Worker.
+
+        Args:
+            worker_id (`int`): The ID of the Worker to check.
+
+        Returns:
+            The method has the following return values:
+                - `None`: If the `Worker` ID was not registered with the instance.
+                - `int`: If the `Worker` was forced to not be placed on this Worker.
+                - `gp.Var`: A Gurobi variable representing the placement solution.
+        """
         return self._placed_on_worker.get(worker_id)
 
     @property
     def placed_on_workers(self) -> Sequence[gp.Var]:
+        """Retrieves the binary Gurobi variables representing the placement of the
+        task on the collection of `Worker`s registered with the instance."""
         return self._placed_on_worker.values()
 
     def _initialize_timing_constraints(
@@ -116,6 +133,15 @@ class TaskOptimizerVariables:
         optimizer: gp.Model,
         enforce_deadlines: bool = True,
     ) -> None:
+        """Initializes the constraints for the particular `Task`.
+
+        Args:
+            current_time (`EventTime`): The time at which the scheduler was invoked.
+            optimizer (`gp.Model`): The Gurobi model to which the constraints must
+                be added.
+            enforce_deadlines (`bool`): If `True`, the scheduler tries to enforce
+                the deadlines.
+        """
         self._initialize_timing_constraints(current_time, optimizer, enforce_deadlines)
         self._initialize_placement_constraints(optimizer)
 
@@ -132,6 +158,12 @@ class ILPScheduler(BaseScheduler):
             the scheduling lookahead (in us) using estimated task release times.
         enforce_deadlines (`bool`): If True then deadlines must be met or else the
             `schedule()` will return None.
+                policy (`BranchPredictionPolicy`): The branch prediction policy to use for the
+            scheduler if it schedules future tasks.
+        retract_schedules (`bool`): If the scheduler schedules future tasks, then
+            setting this to `True` enables the scheduler to retract prior scheduling
+            decisions before they are actually placed on the WorkerPools.
+        goal (`str`): The goal to use as the optimization objective.
         _flags (`Optional[absl.flags]`): The runtime flags that are used to initialize
             a logger instance.
     """
@@ -171,23 +203,26 @@ class ILPScheduler(BaseScheduler):
             policy=self.policy,
             release_taskgraphs=self.release_taskgraphs,
         )
-        print(
-            f"[{sim_time.time}] The scheduler received "
-            f"{[task.unique_name for task in tasks_to_be_scheduled]} "
-            f"tasks for scheduling."
-        )
 
-        # TODO (Sukrit): Reconstruct a worker pool based on the preemptive
-        # nature of the scheduler.
+        if self.preemptive:
+            # Restart the state of the WorkerPool.
+            schedulable_worker_pools = deepcopy(worker_pools)
+        else:
+            # Create a virtual WorkerPool set to try scheduling decisions on.
+            schedulable_worker_pools = copy(worker_pools)
 
         # Construct a mapping of the index of a Worker to the Worker itself.
         worker_index = 1
         workers = {}
-        for worker_pool in worker_pools.worker_pools:
+        for worker_pool in schedulable_worker_pools.worker_pools:
             for worker in worker_pool.workers:
                 workers[worker_index] = worker
                 worker_index += 1
-        print(f"[x] The scheduler constructed {len(workers)} workers for scheduling.")
+
+        self._logger.debug(
+            f"[{sim_time.time}] The scheduler received {len(tasks_to_be_scheduled)}"
+            f"tasks for scheduling across {len(workers)} workers."
+        )
 
         # Construct the model and the variables for each of the tasks.
         optimizer = gp.Model("ILPScheduler")
@@ -230,6 +265,21 @@ class ILPScheduler(BaseScheduler):
         tasks_to_be_scheduled: Sequence[Task],
         workers: Mapping[int, Worker],
     ) -> Mapping[str, TaskOptimizerVariables]:
+        """Generates the variables for the optimization problem.
+
+        Args:
+            sim_time (`EventTime`): The time at which the scheduler was invoked.
+            optimizer (`gp.Model`): The instance of the Gurobi model to which the
+                variables and constraints must be added.
+            tasks_to_be_scheduled (`Sequence[Task]`): The tasks to be scheduled
+                in this scheduling run.
+            workers (`Mapping[int, Worker]`): The collection of Workers to schedule
+                the tasks on.
+
+        Returns:
+            A mapping from the unique name of the Task to the variables representing
+            its optimization objective.
+        """
         tasks_to_variables = {}
         for task in tasks_to_be_scheduled:
             tasks_to_variables[task.unique_name] = TaskOptimizerVariables(
@@ -243,10 +293,9 @@ class ILPScheduler(BaseScheduler):
         tasks_to_variables: Mapping[str, TaskOptimizerVariables],
         workload: Workload,
     ) -> None:
-        for variable in tasks_to_variables.values():
+        for task_name, variable in tasks_to_variables.items():
             task = variable.task
-            print(f"[x] Working for {task.unique_name}.")
-            task_graph = workload.get_task_graph(variable.task.task_graph)
+            task_graph = workload.get_task_graph(task.task_graph)
             parent_variables = [
                 tasks_to_variables[parent.unique_name]
                 for parent in task_graph.get_parents(task)
@@ -256,7 +305,7 @@ class ILPScheduler(BaseScheduler):
             # Ensure that the task is only placed if all of its parents are placed,
             # and that it is started after the last parent has finished.
             all_parents_placed = optimizer.addVar(
-                vtype=GRB.BINARY, name=f"{variable.name}_all_parents_placed"
+                vtype=GRB.BINARY, name=f"{task_name}_all_parents_placed"
             )
             parent_placements = []
             for parent_variable in parent_variables:
