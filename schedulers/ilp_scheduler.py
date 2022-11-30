@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import Mapping, Optional, Sequence, Set
+from typing import Mapping, Optional, Sequence, Union
 
 import absl  # noqa: F401
 import gurobipy as gp
@@ -33,14 +33,14 @@ class TaskOptimizerVariables:
         # Placement characteristics
         # Set up individual variables to signify where the task is placed.
         self._placed_on_worker = {}
-        for worker_id in workers.keys():
-            # TODO (Sukrit): Check if the worker can potentially accomodate the
-            # task by itself, if it cannot, we can just set the variable to False.
-            placed_on_worker_variable = optimizer.addVar(
-                vtype=GRB.BINARY, name=f"{task.unique_name}_placed_on_{worker_id}"
-            )
+        for worker_id, worker in workers.items():
+            if worker.can_accomodate_task(task):
+                placed_on_worker_variable = optimizer.addVar(
+                    vtype=GRB.BINARY, name=f"{task.unique_name}_placed_on_{worker_id}"
+                )
+            else:
+                self.placed_on_worker[worker_id] = 0
             self._placed_on_worker[worker_id] = placed_on_worker_variable
-        self._overlaps_with = {}
 
         # Initialize the constraints for the variables.
         self.initialize_constraints(current_time, optimizer, enforce_deadlines)
@@ -57,19 +57,12 @@ class TaskOptimizerVariables:
     def name(self) -> str:
         return self._task.unique_name
 
-    def placed_on_worker(self, worker_id: int) -> Optional[gp.Var]:
+    def placed_on_worker(self, worker_id: int) -> Optional[Union[int, gp.Var]]:
         return self._placed_on_worker.get(worker_id)
 
     @property
     def placed_on_workers(self) -> Sequence[gp.Var]:
         return self._placed_on_worker.values()
-
-    def overlaps_with(self, task_name: str) -> Optional[gp.Var]:
-        return self._overlaps_with.get(task_name)
-
-    @property
-    def overlaps(self) -> Mapping[str, gp.Var]:
-        return self._overlaps_with
 
     def _initialize_timing_constraints(
         self,
@@ -98,8 +91,7 @@ class TaskOptimizerVariables:
         # We constrain the sum of the individual indicator variables for the placement
         # on a specific Worker to be at most 1.
         # A sum of 0 implies that the task was not placed on any Worker.
-        # optimizer.addConstr(gp.quicksum(self._placed_on_worker.values()) <= 1)
-        pass
+        optimizer.addConstr(gp.quicksum(self._placed_on_worker.values()) <= 1)
 
     def initialize_constraints(
         self,
@@ -109,19 +101,6 @@ class TaskOptimizerVariables:
     ) -> None:
         self._initialize_timing_constraints(current_time, optimizer, enforce_deadlines)
         self._initialize_placement_constraints(optimizer)
-
-    def initialize_overlap_constraints(
-        self, optimizer: gp.Model, dependent_tasks: Set[str]
-    ) -> None:
-        for dependent_task in dependent_tasks:
-            overlap_variable = optimizer.addVar(
-                vtype=GRB.BINARY, name=f"{self.name}_overlap_{dependent_task}"
-            )
-
-            optimizer.addGenConstrIndicator(
-                overlap_variable,
-                1,
-            )
 
 
 class ILPScheduler(BaseScheduler):
@@ -218,9 +197,10 @@ class ILPScheduler(BaseScheduler):
                     f"      [x] {dependency_variable.VarName}: {dependency_variable.X}"
                 )
             for worker_id in range(1, worker_index):
-                print(
-                    f"      [x] Placed on Worker {worker_id}: {variable.placed_on_worker(worker_id).X}."
-                )
+                placement = variable.placed_on_worker(worker_id)
+                if isinstance(placement, gp.Var):
+                    placement = placement.X
+                print(f"      [x] Placed on Worker {worker_id}: {placement}.")
 
         raise NotImplementedError(
             "The scheduler has not been finished implementing yet."
@@ -380,6 +360,8 @@ class ILPScheduler(BaseScheduler):
                             dependent_task
                         ].task.resource_requirements.get_total_quantity(resource)
                         if dependent_task_request_for_resource == 0:
+                            # The dependent task's request for this resource was empty.
+                            # It cannot contend with the current task on this resource.
                             continue
                         resource_constraint_expression.add(
                             tasks_to_variables[dependent_task].placed_on_worker(
@@ -444,7 +426,6 @@ class ILPScheduler(BaseScheduler):
         task_1_task_2_overlap = optimizer.addVar(
             vtype=GRB.BINARY, name=f"{task_1.name}_overlaps_{task_2.name}"
         )
-        # TODO (Sukrit): This constraint below should work.
         optimizer.addConstr(
             task_1_ends_before_task_2_starts
             + task_2_ends_before_task_1_starts
