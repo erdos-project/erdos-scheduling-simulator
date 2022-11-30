@@ -17,7 +17,7 @@ class TaskOptimizerVariables:
 
     The initialization of this instance sets up the basic task-only constraints
     required by the problem.
-    
+
     Args:
         current_time (`EventTime`): The time at which the scheduler was invoked.
             This is used to set a lower bound on the placement time of the tasks.
@@ -28,7 +28,7 @@ class TaskOptimizerVariables:
             variables and constraints must be added.
         enforce_deadlines (`bool`): If `True`, the scheduler tries to enforce
             deadline constraints on the tasks.
-        """
+    """
 
     def __init__(
         self,
@@ -396,13 +396,28 @@ class ILPScheduler(BaseScheduler):
         task_1: TaskOptimizerVariables,
         task_2: TaskOptimizerVariables,
     ) -> gp.Var:
+        """Insert an indicator variable that specifies if the two tasks overlap in
+        their execution.
+
+        The method checks if either tasks start / end before the other, and assumes
+        that they overlap otherwise.
+
+        Args:
+            optimizer (`gp.Model`): The model to which the variables and constraints
+                must be attached.
+            task_1 (`TaskOptimizerVariables`): The optimizer variables associated
+                with the first task.
+            task_2 (`TaskOptimizerVariables`): The optimizer variables associated
+                with the second task.
+
+        Returns
+            A `gp.Var` whose post-solution value specifies if the two tasks overlap.
+        """
+        # Add an indicator variable that checks if the first task ends before the
+        # second task starts.
         task_1_ends_before_task_2_starts = optimizer.addVar(
             vtype=GRB.BINARY,
             name=f"{task_1.name}_ends_before_{task_2.name}_starts",
-        )
-        task_2_ends_before_task_1_starts = optimizer.addVar(
-            vtype=GRB.BINARY,
-            name=f"{task_2.name}_ends_before_task_2_starts",
         )
         optimizer.addGenConstrIndicator(
             task_1_ends_before_task_2_starts,
@@ -422,6 +437,13 @@ class ILPScheduler(BaseScheduler):
             GRB.LESS_EQUAL,
             -1,
         )
+
+        # Add an indicator variable that checks if the second task ends before the
+        # first task starts.
+        task_2_ends_before_task_1_starts = optimizer.addVar(
+            vtype=GRB.BINARY,
+            name=f"{task_2.name}_ends_before_task_2_starts",
+        )
         optimizer.addGenConstrIndicator(
             task_2_ends_before_task_1_starts,
             0,
@@ -440,6 +462,9 @@ class ILPScheduler(BaseScheduler):
             GRB.GREATER_EQUAL,
             1,
         )
+
+        # Add an indicator variable that is set to 1 if neither of the above
+        # options can be evaluted to 1.
         task_1_task_2_overlap = optimizer.addVar(
             vtype=GRB.BINARY, name=f"{task_1.name}_overlaps_{task_2.name}"
         )
