@@ -45,7 +45,16 @@ class TaskOptimizerVariables:
 
         # Timing characteristics.
         self._start_time = optimizer.addVar(
-            vtype=GRB.INTEGER, name=f"{task.unique_name}_start"
+            lb=max(
+                current_time.to(EventTime.Unit.US).time,
+                task.release_time.to(EventTime.Unit.US).time,
+            ),
+            ub=(
+                task.deadline.to(EventTime.Unit.US).time
+                - task.remaining_time.to(EventTime.Unit.US).time
+            ),
+            vtype=GRB.INTEGER,
+            name=f"{task.unique_name}_start",
         )
 
         # Placement characteristics
@@ -55,12 +64,11 @@ class TaskOptimizerVariables:
             # If the worker cannot accomodate the task, we set the placement variable
             # to 0 to reduce the number of constraints in the system.
             if worker.can_accomodate_task(task):
-                placed_on_worker_variable = optimizer.addVar(
-                    vtype=GRB.BINARY, name=f"{task.unique_name}_placed_on_{worker_id}"
+                self._placed_on_worker[worker_id] = optimizer.addVar(
+                    vtype=GRB.BINARY, name=f"{task.unique_name}_placed_on_{worker.name}"
                 )
             else:
-                self.placed_on_worker[worker_id] = 0
-            self._placed_on_worker[worker_id] = placed_on_worker_variable
+                self._placed_on_worker[worker_id] = 0
 
         # Initialize the constraints for the variables.
         self.initialize_constraints(current_time, optimizer, enforce_deadlines)
@@ -106,30 +114,6 @@ class TaskOptimizerVariables:
     def __repr__(self) -> str:
         return str(self)
 
-    def _initialize_timing_constraints(
-        self,
-        current_time: EventTime,
-        optimizer: gp.Model,
-        enforce_deadlines: bool = True,
-    ) -> None:
-        # Require the task to start atleast at its release time or the current
-        # simulator time, whichever one is later.
-        optimizer.addConstr(
-            self.start_time
-            >= max(
-                current_time.to(EventTime.Unit.US).time,
-                self.task.release_time.to(EventTime.Unit.US).time,
-            ),
-            name=f"{self.name}_minimum_time",
-        )
-
-        if enforce_deadlines:
-            optimizer.addConstr(
-                self.start_time + self.task.remaining_time.to(EventTime.Unit.US).time
-                <= self.task.deadline.to(EventTime.Unit.US).time,
-                name=f"{self.name}_deadline",
-            )
-
     def _initialize_placement_constraints(self, optimizer: gp.Model) -> None:
         # Add a constraint to ensure that the task is only placed on a single Worker.
         # We constrain the sum of the individual indicator variables for the placement
@@ -155,7 +139,6 @@ class TaskOptimizerVariables:
             enforce_deadlines (`bool`): If `True`, the scheduler tries to enforce
                 the deadlines.
         """
-        self._initialize_timing_constraints(current_time, optimizer, enforce_deadlines)
         self._initialize_placement_constraints(optimizer)
 
 
@@ -254,14 +237,19 @@ class ILPScheduler(BaseScheduler):
         # Add the objectives and optimize the model.
         self._add_objective(optimizer, tasks_to_variables, workload)
         optimizer.optimize()
+        optimizer.write("test_file.lp")
         self._logger.info(
             f"[{sim_time.to(EventTime.Unit.US).time}] The scheduler returned the "
-            f"status {optimizer.status} with an objective value of {optimizer.objVal}."
+            f"status {optimizer.status}."
         )
 
         # Collect the placement results.
         placements = []
         if optimizer.Status == GRB.OPTIMAL:
+            self._logger.info(
+                f"[{sim_time.to(EventTime.Unit.US).time}] The scheduler returned the "
+                f"objective value {optimizer.objVal}."
+            )
             for task_name, variables in tasks_to_variables.items():
                 # Find the Worker where the Task was placed.
                 worker_pool_id = None
@@ -269,11 +257,11 @@ class ILPScheduler(BaseScheduler):
                     if isinstance(variables.placed_on_worker(worker_id), gp.Var):
                         placement = variables.placed_on_worker(worker_id).X
                         if placement == 1:
-                            worker_pool_id = worker_to_worker_pool[worker_id]
+                            worker_pool_id = worker_to_worker_pool[worker.id]
 
                 # If the task was placed, find the start time.
                 if worker_pool_id is not None:
-                    start_time = variables.start_time.X
+                    start_time = int(variables.start_time.X)
                     placements.append(
                         Placement(
                             variables.task,
@@ -285,6 +273,7 @@ class ILPScheduler(BaseScheduler):
                         "[%s] Placed %s on WorkerPool(%s) to be started at %d.",
                         sim_time.to(EventTime.Unit.US).time,
                         task_name,
+                        worker_pool_id,
                         start_time,
                     )
                 else:
@@ -371,46 +360,50 @@ class ILPScheduler(BaseScheduler):
 
             # Ensure that the task is only placed if all of its parents are placed,
             # and that it is started after the last parent has finished.
-            all_parents_placed = optimizer.addVar(
-                vtype=GRB.BINARY, name=f"{task_name}_all_parents_placed"
-            )
-            parent_placements = []
-            for parent_variable in parent_variables:
-                optimizer.addConstr(
-                    variable.start_time
-                    >= parent_variable.start_time
-                    + parent_variable.task.remaining_time.to(EventTime.Unit.US).time
-                    + 1,
-                    name=f"{task_name}_start_after_{parent_variable.name}",
+            if len(parent_variables) > 0:
+                all_parents_placed = optimizer.addVar(
+                    vtype=GRB.BINARY, name=f"{task_name}_all_parents_placed"
                 )
-                parent_placements.extend(parent_variable.placed_on_workers)
+                parent_placements = []
+                for parent_variable in parent_variables:
+                    optimizer.addConstr(
+                        variable.start_time
+                        >= parent_variable.start_time
+                        + parent_variable.task.remaining_time.to(EventTime.Unit.US).time
+                        + 1,
+                        name=f"{task_name}_start_after_{parent_variable.name}",
+                    )
+                    parent_placements.extend(parent_variable.placed_on_workers)
 
-            # Construct an indicator variable that checks if all the parents were
-            # placed on some worker or not.
-            optimizer.addGenConstrIndicator(
-                all_parents_placed,
-                0,
-                gp.quicksum(parent_placements),
-                GRB.LESS_EQUAL,
-                len(parent_variables) - 1,
-            )
-            optimizer.addGenConstrIndicator(
-                all_parents_placed,
-                1,
-                gp.quicksum(parent_placements),
-                GRB.EQUAL,
-                len(parent_variables),
-            )
+                # Construct an indicator variable that checks if all the parents were
+                # placed on some worker or not.
+                optimizer.addGenConstrIndicator(
+                    all_parents_placed,
+                    0,
+                    gp.quicksum(parent_placements),
+                    GRB.LESS_EQUAL,
+                    len(parent_variables) - 1,
+                    name=f"{task_name}_parents_placed_False",
+                )
+                optimizer.addGenConstrIndicator(
+                    all_parents_placed,
+                    1,
+                    gp.quicksum(parent_placements),
+                    GRB.EQUAL,
+                    len(parent_variables),
+                    name=f"{task_name}_parents_placed_True",
+                )
 
-            # If all of the parents were not placed, then we cannot place this task.
-            # Otherwise, we allow the optimizer to choose when to place the task.
-            optimizer.addGenConstrIndicator(
-                all_parents_placed,
-                0,
-                gp.quicksum(variable.placed_on_workers),
-                GRB.EQUAL,
-                0,
-            )
+                # If all of the parents were not placed, then we cannot place this task.
+                # Otherwise, we allow the optimizer to choose when to place the task.
+                optimizer.addGenConstrIndicator(
+                    all_parents_placed,
+                    0,
+                    gp.quicksum(variable.placed_on_workers),
+                    GRB.EQUAL,
+                    0,
+                    name=f"{task_name}_placement_False",
+                )
 
     def _add_resource_constraints(
         self,
@@ -610,6 +603,7 @@ class ILPScheduler(BaseScheduler):
             - task_2.start_time,
             GRB.GREATER_EQUAL,
             0,
+            name=f"{task_1.name}_ends_before_{task_2.name}_starts_False",
         )
         optimizer.addGenConstrIndicator(
             task_1_ends_before_task_2_starts,
@@ -619,13 +613,14 @@ class ILPScheduler(BaseScheduler):
             - task_2.start_time,
             GRB.LESS_EQUAL,
             -1,
+            name=f"{task_1.name}_ends_before_{task_2.name}_starts_True",
         )
 
         # Add an indicator variable that checks if the second task ends before the
         # first task starts.
         task_2_ends_before_task_1_starts = optimizer.addVar(
             vtype=GRB.BINARY,
-            name=f"{task_2.name}_ends_before_task_2_starts",
+            name=f"{task_2.name}_ends_before_{task_1.name}_starts",
         )
         optimizer.addGenConstrIndicator(
             task_2_ends_before_task_1_starts,
@@ -635,6 +630,7 @@ class ILPScheduler(BaseScheduler):
             - task_2.task.remaining_time.to(EventTime.Unit.US).time,
             GRB.LESS_EQUAL,
             0,
+            name=f"{task_2.name}_ends_before_{task_1.name}_starts_False",
         )
         optimizer.addGenConstrIndicator(
             task_2_ends_before_task_1_starts,
@@ -644,6 +640,7 @@ class ILPScheduler(BaseScheduler):
             - task_2.task.remaining_time.to(EventTime.Unit.US).time,
             GRB.GREATER_EQUAL,
             1,
+            name=f"{task_2.name}_ends_before_{task_1.name}_starts_True",
         )
 
         # Add an indicator variable that is set to 1 if neither of the above
@@ -657,6 +654,7 @@ class ILPScheduler(BaseScheduler):
             + task_2_ends_before_task_1_starts
             + overlap_variable
             == 1,
+            name=f"{task_1.name}_overlap_{task_2.name}",
         )
         return overlap_variable
 
