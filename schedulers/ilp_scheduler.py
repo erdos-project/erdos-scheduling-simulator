@@ -366,7 +366,22 @@ class ILPScheduler(BaseScheduler):
         tasks_to_variables: Mapping[str, TaskOptimizerVariables],
         workload: Workload,
         workers: Mapping[int, Worker],
-    ):
+    ) -> None:
+        """Generates the variables and constraints to ensure that the resource
+        availability inside the Workers is not violated.
+
+        Args:
+            current_time (`EventTime`): The time at which the scheduler was
+                invoked.
+            optimizer (`gp.Model`): The instance of the Gurobi model to which the
+                variables and constraints must be added.
+            tasks_to_variables (`Mapping[str, TaskOptimizerVariables]`): A mapping
+                from the name of the Task to its corresponding variables inside the
+                optimizer.
+            workload (`Workload`): The workload with which the scheduler was invoked.
+            workers (`Mapping[int, Worker]`): A mapping of the unique index of the
+                Worker to its instance.
+        """
         # Construct variables for all the possible task pairs.
         task_pairs = list(combinations(tasks_to_variables.keys(), r=2))
         task_pair_overlap_variables = optimizer.addVars(
@@ -412,6 +427,14 @@ class ILPScheduler(BaseScheduler):
                 task_graph = workload.get_task_graph(task_1_variable.task.task_graph)
                 if task_graph.are_dependent(task_1_variable.task, task_2_variable.task):
                     # If the tasks are dependent on each other, they can never overlap.
+                    self._logger.debug(
+                        "[%s] Forcing overlap of %s and %s to be 0 since they "
+                        "are dependent tasks of the TaskGraph %s.",
+                        current_time.to(EventTime.Unit.US).time,
+                        task_1_name,
+                        task_2_name,
+                        task_1_variable.task.task_graph,
+                    )
                     optimizer.addConstr(task_pair_overlap_variable == 0)
                 else:
                     # If the tasks are not dependent on each other, they may overlap.
@@ -428,8 +451,6 @@ class ILPScheduler(BaseScheduler):
                     task_2_variable,
                     task_pair_overlap_variable,
                 )
-
-        print(task_pair_overlap_variables)
 
         # We now ensure that for all the tasks, their overlap dependencies don't
         # end up oversubscribing any Worker's resources.
