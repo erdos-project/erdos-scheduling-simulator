@@ -338,7 +338,7 @@ class Z3Scheduler(BaseScheduler):
                         f"no worker pool could accomodate the resource requirements."
                     )
         else:
-            for task_name, variables in tasks_to_variables.items():
+            for variables in tasks_to_variables.values():
                 placements.append(Placement(variables.task))
             self._logger.debug(f"[{sim_time.time}] Failed to place any task.")
         scheduler_end_time = time.time()
