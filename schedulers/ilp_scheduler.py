@@ -1,5 +1,6 @@
 from collections import defaultdict
 from copy import copy, deepcopy
+from itertools import combinations
 from typing import Mapping, Optional, Sequence, Union
 
 import absl  # noqa: F401
@@ -236,8 +237,8 @@ class ILPScheduler(BaseScheduler):
             sim_time, optimizer, tasks_to_be_scheduled, workers
         )
         self._add_task_dependency_constraints(optimizer, tasks_to_variables, workload)
-        task_dependency_overlaps = self._add_resource_constraints(
-            optimizer, tasks_to_variables, workload, workers
+        self._add_resource_constraints(
+            sim_time, optimizer, tasks_to_variables, workload, workers
         )
 
         # Add the objectives and return the results.
@@ -250,10 +251,6 @@ class ILPScheduler(BaseScheduler):
                 f"  [x] {variable.name}: Start Time = {variable.start_time.X}, "
                 f"Deadline = {variable.task.deadline}, Runtime = {variable.task.remaining_time}"
             )
-            for _, dependency_variable in task_dependency_overlaps[variable.name]:
-                print(
-                    f"      [x] {dependency_variable.VarName}: {dependency_variable.X}"
-                )
             for worker_id in range(1, worker_index):
                 placement = variable.placed_on_worker(worker_id)
                 if isinstance(placement, gp.Var):
@@ -364,63 +361,98 @@ class ILPScheduler(BaseScheduler):
 
     def _add_resource_constraints(
         self,
+        current_time: EventTime,
         optimizer: gp.Model,
         tasks_to_variables: Mapping[str, TaskOptimizerVariables],
         workload: Workload,
         workers: Mapping[int, Worker],
-    ) -> None:
-        # Find all tasks that might run in parallel when a particular task is placed.
-        task_resource_dependencies: Mapping[str, str] = defaultdict(set)
-        for task_name_1, variable_1 in tasks_to_variables.items():
-            for task_name_2, variable_2 in tasks_to_variables.items():
-                if (
-                    task_name_1 == task_name_2
-                    or len(variable_1.placed_on_workers) == 0
-                    or len(variable_2.placed_on_workers) == 0
-                ):
-                    # Either same task or one of the tasks cannot be placed.
-                    continue
+    ):
+        # Construct variables for all the possible task pairs.
+        task_pairs = list(combinations(tasks_to_variables.keys(), r=2))
+        task_pair_overlap_variables = optimizer.addVars(
+            task_pairs, vtype=GRB.BINARY, name="Overlap"
+        )
+        optimizer.update()
 
-                if variable_1.task.task_graph == variable_2.task.task_graph:
-                    # If the tasks are in the same graph, and they are not dependent
-                    # on each other, they can run in parallel, and hence, must be
-                    # checked for overlaps.
-                    task_graph = workload.get_task_graph(variable_1.task.task_graph)
-                    if not task_graph.are_dependent(variable_1.task, variable_2.task):
-                        task_resource_dependencies[task_name_1].add(task_name_2)
+        # For each pair, set up constraints for the overlap variables.
+        for task_1_name, task_2_name in task_pairs:
+            task_1_variable = tasks_to_variables[task_1_name]
+            task_2_variable = tasks_to_variables[task_2_name]
+            overlap_variables = task_pair_overlap_variables.select(
+                task_1_name, task_2_name
+            )
+            if len(overlap_variables) != 1:
+                raise ValueError(
+                    f"Expected only one Overlap variable for ({task_1_name}, "
+                    "{task_2_name}). Found {len(overlap_variables)}."
+                )
+            task_pair_overlap_variable = overlap_variables[0]
+
+            # If one of the tasks cannot be placed, force the overlap
+            # variable to be set to 0 during the preprocessing step.
+            if (
+                len(task_1_variable.placed_on_workers) == 0
+                or len(task_2_variable.placed_on_workers) == 0
+            ):
+                self._logger.debug(
+                    "[%s] Forcing overlap of %s and %s to be 0 since the length "
+                    "of their available workers was %d and %d respectively.",
+                    current_time.to(EventTime.Unit.US).time,
+                    task_1_name,
+                    task_2_name,
+                    len(task_1_variable.placed_on_workers),
+                    len(task_2_variable.placed_on_workers),
+                )
+                optimizer.addConstr(task_pair_overlap_variable == 0)
+                continue
+
+            # If the tasks belong to the same graph, then they need to be checked
+            # for overlap, otherwise, the two tasks can always overlap.
+            if task_1_variable.task.task_graph == task_2_variable.task.task_graph:
+                task_graph = workload.get_task_graph(task_1_variable.task.task_graph)
+                if task_graph.are_dependent(task_1_variable.task, task_2_variable.task):
+                    # If the tasks are dependent on each other, they can never overlap.
+                    optimizer.addConstr(task_pair_overlap_variable == 0)
                 else:
-                    # If the tasks belong to different graphs, they can always run in
-                    # parallel, and hence, must be checked for overlaps.
-                    task_resource_dependencies[task_name_1].add(task_name_2)
-
-        # For all of the tasks, specify variables to check if the task is running
-        # when the particular task is started.
-        task_dependency_overlaps = defaultdict(list)
-        for task, task_dependencies in task_resource_dependencies.items():
-            print(f"[x] Dependencies of {task_name_1}: {task_dependencies}.")
-            for task_dependency in task_dependencies:
-                task_dependency_overlaps[task].append(
-                    (
-                        task_dependency,
-                        self._overlaps(
-                            optimizer,
-                            tasks_to_variables[task],
-                            tasks_to_variables[task_dependency],
-                        ),
+                    # If the tasks are not dependent on each other, they may overlap.
+                    self._overlaps(
+                        optimizer,
+                        task_1_variable,
+                        task_2_variable,
+                        task_pair_overlap_variable,
                     )
+            else:
+                self._overlaps(
+                    optimizer,
+                    task_1_variable,
+                    task_2_variable,
+                    task_pair_overlap_variable,
                 )
 
-        # We now ensure that for all the Tasks along with their potential overlap
-        # dependencies, whatever subset of the Tasks are placed on the same Worker
-        # do not end up oversubscribing the Worker's resources.
-        for task, task_dependencies in task_dependency_overlaps.items():
+        print(task_pair_overlap_variables)
+
+        # We now ensure that for all the tasks, their overlap dependencies don't
+        # end up oversubscribing any Worker's resources.
+        for task_name in tasks_to_variables:
+            # Find all the dependencies of this task that can overlap with it.
+            task_dependencies = []
+            for (
+                task_1_name,
+                task_2_name,
+            ), variable in task_pair_overlap_variables.items():
+                if task_1_name == task_name:
+                    task_dependencies.append((task_2_name, variable))
+                elif task_2_name == task_name:
+                    task_dependencies.append((task_1_name, variable))
+
+            # For each Worker and each of its resources, ensure no oversubscription.
             for worker_index, worker in workers.items():
                 for (
                     resource,
                     quantity,
                 ) in worker.resources.get_unique_resource_types().items():
                     task_request_for_resource = tasks_to_variables[
-                        task
+                        task_name
                     ].task.resource_requirements.get_total_quantity(resource)
                     if quantity == 0 or task_request_for_resource == 0:
                         # We ensure earlier that the Worker has enough space to
@@ -433,32 +465,34 @@ class ILPScheduler(BaseScheduler):
                     # If the dependency overlaps and the dependency is placed on this
                     # worker, then ensure that the resource type is not oversubscribed.
                     resource_constraint_expression = gp.QuadExpr(
-                        tasks_to_variables[task].placed_on_worker(worker_index)
+                        tasks_to_variables[task_name].placed_on_worker(worker_index)
                         * task_request_for_resource
                     )
-                    for dependent_task, overlap_variable in task_dependencies:
+                    for dependent_task_name, overlap_variable in task_dependencies:
                         dependent_task_request_for_resource = tasks_to_variables[
-                            dependent_task
+                            dependent_task_name
                         ].task.resource_requirements.get_total_quantity(resource)
                         if dependent_task_request_for_resource == 0:
                             # The dependent task's request for this resource was empty.
                             # It cannot contend with the current task on this resource.
                             continue
                         resource_constraint_expression.add(
-                            tasks_to_variables[dependent_task].placed_on_worker(
+                            tasks_to_variables[dependent_task_name].placed_on_worker(
                                 worker_index
                             )
                             * overlap_variable
                             * dependent_task_request_for_resource
                         )
+
+                    # Add the constraint to the optimizer.
                     optimizer.addConstr(resource_constraint_expression <= quantity)
-        return task_dependency_overlaps
 
     def _overlaps(
         self,
         optimizer: gp.Model,
         task_1: TaskOptimizerVariables,
         task_2: TaskOptimizerVariables,
+        overlap_variable: Optional[gp.Var] = None,
     ) -> gp.Var:
         """Insert an indicator variable that specifies if the two tasks overlap in
         their execution.
@@ -473,6 +507,8 @@ class ILPScheduler(BaseScheduler):
                 with the first task.
             task_2 (`TaskOptimizerVariables`): The optimizer variables associated
                 with the second task.
+            overlap_variable (`Optional[gp.Var]`): If provided, the overlap variable
+                is used instead of defining and returning a new variable.
 
         Returns
             A `gp.Var` whose post-solution value specifies if the two tasks overlap.
@@ -529,16 +565,17 @@ class ILPScheduler(BaseScheduler):
 
         # Add an indicator variable that is set to 1 if neither of the above
         # options can be evaluted to 1.
-        task_1_task_2_overlap = optimizer.addVar(
-            vtype=GRB.BINARY, name=f"{task_1.name}_overlaps_{task_2.name}"
-        )
+        if overlap_variable is None:
+            overlap_variable = optimizer.addVar(
+                vtype=GRB.BINARY, name=f"Overlap({task_1.name}, {task_2.name})"
+            )
         optimizer.addConstr(
             task_1_ends_before_task_2_starts
             + task_2_ends_before_task_1_starts
-            + task_1_task_2_overlap
+            + overlap_variable
             == 1
         )
-        return task_1_task_2_overlap
+        return overlap_variable
 
     def _add_objective(
         self,
