@@ -345,7 +345,9 @@ class Z3Scheduler(BaseScheduler):
         scheduler_runtime = EventTime(
             int((scheduler_end_time - scheduler_start_time) * 1e6), EventTime.Unit.US
         )
-        self._logger.debug(f"The runtime of the scheduler was: {scheduler_runtime}.")
+        self._logger.debug(
+            f"[{sim_time.time}] The runtime of the scheduler was: {scheduler_runtime}."
+        )
         runtime = (
             scheduler_runtime
             if self.runtime == EventTime(-1, EventTime.Unit.US)

@@ -1,3 +1,4 @@
+import time
 from collections import defaultdict
 from copy import copy, deepcopy
 from itertools import combinations
@@ -10,7 +11,7 @@ from gurobipy import GRB
 from schedulers import BaseScheduler
 from utils import EventTime
 from workers import Worker, WorkerPools
-from workload import BranchPredictionPolicy, Placements, Task, Workload
+from workload import BranchPredictionPolicy, Placement, Placements, Task, Workload
 
 
 class TaskOptimizerVariables:
@@ -223,13 +224,16 @@ class ILPScheduler(BaseScheduler):
             # Create a virtual WorkerPool set to try scheduling decisions on.
             schedulable_worker_pools = copy(worker_pools)
 
-        # Construct a mapping of the index of a Worker to the Worker itself.
+        # Construct a mapping of the index of a Worker to the Worker itself, and
+        # a mapping from the Worker to the WorkerPool to which it belongs.
         worker_index = 1
         workers = {}
+        worker_to_worker_pool = {}
         for worker_pool in schedulable_worker_pools.worker_pools:
             for worker in worker_pool.workers:
                 workers[worker_index] = worker
                 worker_index += 1
+                worker_to_worker_pool[worker.id] = worker_pool.id
 
         self._logger.debug(
             f"[{sim_time.time}] The scheduler received {len(tasks_to_be_scheduled)}"
@@ -237,6 +241,7 @@ class ILPScheduler(BaseScheduler):
         )
 
         # Construct the model and the variables for each of the tasks.
+        scheduler_start_time = time.time()
         optimizer = gp.Model("ILPScheduler")
         tasks_to_variables = self._add_variables(
             sim_time, optimizer, tasks_to_be_scheduled, workers
@@ -246,25 +251,68 @@ class ILPScheduler(BaseScheduler):
             sim_time, optimizer, tasks_to_variables, workload, workers
         )
 
-        # Add the objectives and return the results.
+        # Add the objectives and optimize the model.
         self._add_objective(optimizer, tasks_to_variables, workload)
         optimizer.optimize()
-        print(f"Found the optimal value: {optimizer.objVal}.")
-        print(f"[x] Found values: ")
-        for variable in tasks_to_variables.values():
-            print(
-                f"  [x] {variable.name}: Start Time = {variable.start_time.X}, "
-                f"Deadline = {variable.task.deadline}, Runtime = {variable.task.remaining_time}"
-            )
-            for worker_id in range(1, worker_index):
-                placement = variable.placed_on_worker(worker_id)
-                if isinstance(placement, gp.Var):
-                    placement = placement.X
-                print(f"      [x] Placed on Worker {worker_id}: {placement}.")
-
-        raise NotImplementedError(
-            "The scheduler has not been finished implementing yet."
+        self._logger.info(
+            f"[{sim_time.to(EventTime.Unit.US).time}] The scheduler returned the "
+            f"status {optimizer.status} with an objective value of {optimizer.objVal}."
         )
+
+        # Collect the placement results.
+        placements = []
+        if optimizer.Status == GRB.OPTIMAL:
+            for task_name, variables in tasks_to_variables.items():
+                # Find the Worker where the Task was placed.
+                worker_pool_id = None
+                for worker_id, worker in workers.items():
+                    if isinstance(variables.placed_on_worker(worker_id), gp.Var):
+                        placement = variables.placed_on_worker(worker_id).X
+                        if placement == 1:
+                            worker_pool_id = worker_to_worker_pool[worker_id]
+
+                # If the task was placed, find the start time.
+                if worker_pool_id is not None:
+                    start_time = variables.start_time.X
+                    placements.append(
+                        Placement(
+                            variables.task,
+                            worker_pool_id,
+                            EventTime(start_time, EventTime.Unit.US),
+                        )
+                    )
+                    self._logger.debug(
+                        "[%s] Placed %s on WorkerPool(%s) to be started at %d.",
+                        sim_time.to(EventTime.Unit.US).time,
+                        task_name,
+                        start_time,
+                    )
+                else:
+                    placements.append(Placement(variables.task))
+                    self._logger.debug(
+                        "[%s] Failed to place %s because no WorkerPool "
+                        "could accomodate the resource requirements.",
+                        sim_time.to(EventTime.Unit.US).time,
+                        task_name,
+                    )
+
+        else:
+            for task_name, variables in tasks_to_variables.items():
+                placements.append(Placement(variables.task))
+            self._logger.warning(f"[{sim_time.time}] Failed to place any task.")
+        scheduler_end_time = time.time()
+        scheduler_runtime = EventTime(
+            int((scheduler_end_time - scheduler_start_time) * 1e6), EventTime.Unit.US
+        )
+        self._logger.debug(
+            f"[{sim_time.time}] The runtime of the scheduler was: {scheduler_runtime}."
+        )
+        runtime = (
+            scheduler_runtime
+            if self.runtime == EventTime(-1, EventTime.Unit.US)
+            else self.runtime
+        )
+        return Placements(runtime, placements)
 
     def _add_variables(
         self,
