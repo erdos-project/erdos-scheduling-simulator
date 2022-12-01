@@ -118,13 +118,15 @@ class TaskOptimizerVariables:
             >= max(
                 current_time.to(EventTime.Unit.US).time,
                 self.task.release_time.to(EventTime.Unit.US).time,
-            )
+            ),
+            name=f"{self.name}_minimum_time",
         )
 
         if enforce_deadlines:
             optimizer.addConstr(
                 self.start_time + self.task.remaining_time.to(EventTime.Unit.US).time
-                <= self.task.deadline.to(EventTime.Unit.US).time
+                <= self.task.deadline.to(EventTime.Unit.US).time,
+                name=f"{self.name}_deadline",
             )
 
     def _initialize_placement_constraints(self, optimizer: gp.Model) -> None:
@@ -132,7 +134,10 @@ class TaskOptimizerVariables:
         # We constrain the sum of the individual indicator variables for the placement
         # on a specific Worker to be at most 1.
         # A sum of 0 implies that the task was not placed on any Worker.
-        optimizer.addConstr(gp.quicksum(self._placed_on_worker.values()) <= 1)
+        optimizer.addConstr(
+            gp.quicksum(self._placed_on_worker.values()) <= 1,
+            name=f"{self.name}_consistent_worker_placement",
+        )
 
     def initialize_constraints(
         self,
@@ -322,13 +327,13 @@ class ILPScheduler(BaseScheduler):
                 vtype=GRB.BINARY, name=f"{task_name}_all_parents_placed"
             )
             parent_placements = []
-            print(parent_variables)
             for parent_variable in parent_variables:
                 optimizer.addConstr(
                     variable.start_time
                     >= parent_variable.start_time
                     + parent_variable.task.remaining_time.to(EventTime.Unit.US).time
-                    + 1
+                    + 1,
+                    name=f"{task_name}_start_after_{parent_variable.name}",
                 )
                 parent_placements.extend(parent_variable.placed_on_workers)
 
@@ -418,7 +423,10 @@ class ILPScheduler(BaseScheduler):
                     len(task_1_variable.placed_on_workers),
                     len(task_2_variable.placed_on_workers),
                 )
-                optimizer.addConstr(task_pair_overlap_variable == 0)
+                optimizer.addConstr(
+                    task_pair_overlap_variable == 0,
+                    name=f"{task_1_name}_no_overlap_{task_2_name}_cannot_place",
+                )
                 continue
 
             # If the tasks belong to the same graph, then they need to be checked
@@ -435,7 +443,10 @@ class ILPScheduler(BaseScheduler):
                         task_2_name,
                         task_1_variable.task.task_graph,
                     )
-                    optimizer.addConstr(task_pair_overlap_variable == 0)
+                    optimizer.addConstr(
+                        task_pair_overlap_variable == 0,
+                        name=f"{task_1_name}_no_overlap_{task_2_name}_dependent",
+                    )
                 else:
                     # If the tasks are not dependent on each other, they may overlap.
                     self._overlaps(
@@ -506,7 +517,10 @@ class ILPScheduler(BaseScheduler):
                         )
 
                     # Add the constraint to the optimizer.
-                    optimizer.addConstr(resource_constraint_expression <= quantity)
+                    optimizer.addConstr(
+                        resource_constraint_expression <= quantity,
+                        name=f"{task_name}_{worker.name}_{resource.name}_constraint",
+                    )
 
     def _overlaps(
         self,
@@ -594,7 +608,7 @@ class ILPScheduler(BaseScheduler):
             task_1_ends_before_task_2_starts
             + task_2_ends_before_task_1_starts
             + overlap_variable
-            == 1
+            == 1,
         )
         return overlap_variable
 
