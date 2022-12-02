@@ -44,18 +44,28 @@ class TaskOptimizerVariables:
         self._task = task
 
         # Timing characteristics.
-        self._start_time = optimizer.addVar(
-            lb=max(
-                current_time.to(EventTime.Unit.US).time,
-                task.release_time.to(EventTime.Unit.US).time,
-            ),
-            ub=(
-                task.deadline.to(EventTime.Unit.US).time
-                - task.remaining_time.to(EventTime.Unit.US).time
-            ),
-            vtype=GRB.INTEGER,
-            name=f"{task.unique_name}_start",
-        )
+        if enforce_deadlines:
+            self._start_time = optimizer.addVar(
+                lb=max(
+                    current_time.to(EventTime.Unit.US).time,
+                    task.release_time.to(EventTime.Unit.US).time,
+                ),
+                ub=(
+                    task.deadline.to(EventTime.Unit.US).time
+                    - task.remaining_time.to(EventTime.Unit.US).time
+                ),
+                vtype=GRB.INTEGER,
+                name=f"{task.unique_name}_start",
+            )
+        else:
+            self._start_time = optimizer.addVar(
+                lb=max(
+                    current_time.to(EventTime.Unit.US).time,
+                    task.release_time.to(EventTime.Unit.US).time,
+                ),
+                vtype=GRB.INTEGER,
+                name=f"{task.unique_name}_start",
+            )
 
         # Placement characteristics
         # Set up individual variables to signify where the task is placed.
@@ -71,7 +81,7 @@ class TaskOptimizerVariables:
                 self._placed_on_worker[worker_id] = 0
 
         # Initialize the constraints for the variables.
-        self.initialize_constraints(current_time, optimizer, enforce_deadlines)
+        self.initialize_constraints(optimizer)
 
     @property
     def start_time(self) -> gp.Var:
@@ -126,18 +136,13 @@ class TaskOptimizerVariables:
 
     def initialize_constraints(
         self,
-        current_time: EventTime,
         optimizer: gp.Model,
-        enforce_deadlines: bool = True,
     ) -> None:
         """Initializes the constraints for the particular `Task`.
 
         Args:
-            current_time (`EventTime`): The time at which the scheduler was invoked.
             optimizer (`gp.Model`): The Gurobi model to which the constraints must
                 be added.
-            enforce_deadlines (`bool`): If `True`, the scheduler tries to enforce
-                the deadlines.
         """
         self._initialize_placement_constraints(optimizer)
 
