@@ -50,7 +50,7 @@ jobs:
 
       - name: Check Flake8 compatibility
         run: |
-          flake8 --inline-quotes="double" ./
+          flake8 ./
 
       - name: Run Tests
         run: |
