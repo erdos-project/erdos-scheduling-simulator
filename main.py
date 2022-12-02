@@ -15,7 +15,6 @@ from schedulers import (
     BranchPredictionScheduler,
     EDFScheduler,
     FIFOScheduler,
-    GurobiScheduler2,
     ILPScheduler,
     LSFScheduler,
     Z3Scheduler,
@@ -152,7 +151,7 @@ flags.DEFINE_bool(
 flags.DEFINE_enum(
     "scheduler",
     "EDF",
-    ["FIFO", "EDF", "LSF", "Gurobi", "Z3", "BranchPrediction", "ILP"],
+    ["FIFO", "EDF", "LSF", "Z3", "BranchPrediction", "ILP"],
     "The scheduler to use for this execution.",
 )
 flags.DEFINE_bool(
@@ -305,16 +304,6 @@ def main(args):
             preemptive=FLAGS.preemption,
             runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
             _flags=FLAGS,
-        )
-    elif FLAGS.scheduler == "Gurobi":
-        scheduler = GurobiScheduler2(
-            preemptive=FLAGS.preemption,
-            runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
-            goal=FLAGS.ilp_goal,
-            enforce_deadlines=FLAGS.enforce_deadlines,
-            lookahead=EventTime(FLAGS.scheduler_lookahead, EventTime.Unit.US),
-            _flags=FLAGS,
-            _time_unit=EventTime.Unit.MS,
         )
     elif FLAGS.scheduler == "Z3":
         scheduler = Z3Scheduler(

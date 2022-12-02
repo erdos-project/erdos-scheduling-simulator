@@ -242,7 +242,6 @@ class ILPScheduler(BaseScheduler):
         # Add the objectives and optimize the model.
         self._add_objective(optimizer, tasks_to_variables, workload)
         optimizer.optimize()
-        optimizer.write("test_file.lp")
         self._logger.info(
             f"[{sim_time.to(EventTime.Unit.US).time}] The scheduler returned the "
             f"status {optimizer.status}."
