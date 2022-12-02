@@ -699,15 +699,6 @@ class Task(object):
     def remaining_time(self):
         return self._remaining_time
 
-    def get_remaining_time(self, unit=EventTime.Unit.US):
-        if unit == EventTime.Unit.US:
-            return self._remaining_time.time
-        elif unit == EventTime.Unit.MS:
-            # Round up to return a conservative estimate of the exact remaining time.
-            return math.ceil(self._remaining_time.time / 1000)
-        else:
-            raise ValueError(f"Unit {unit} not supported")
-
     @property
     def completion_time(self):
         return self._completion_time

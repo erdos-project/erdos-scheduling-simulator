@@ -24,6 +24,15 @@ TASK_SKIP_PENALTY = -2000000000
 class TaskOptimizerVariables:
     """This class represents the optimizer variables to be used for each of the task
     that need to be scheduled in a particular run of the Scheduler.
+
+    Args:
+        current_time (`EventTime`): The time at which the scheduler was invoked.
+        task (`Task`): The task for which the variables are to be constructed.
+        workers (`Mapping[int, Worker]`): A shared mapping of an index to the
+            Workers available at this scheduling run.
+        optimizer (`z3.z3.Optimize`): The optimizer instance to add the variables to.
+        enforce_deadlines (`bool`): If `True`, the variables are forced to enforce
+            deadlines.
     """
 
     def __init__(
@@ -329,14 +338,16 @@ class Z3Scheduler(BaseScheduler):
                         f"no worker pool could accomodate the resource requirements."
                     )
         else:
-            for task_name, variables in tasks_to_variables.items():
+            for variables in tasks_to_variables.values():
                 placements.append(Placement(variables.task))
             self._logger.debug(f"[{sim_time.time}] Failed to place any task.")
         scheduler_end_time = time.time()
         scheduler_runtime = EventTime(
             int((scheduler_end_time - scheduler_start_time) * 1e6), EventTime.Unit.US
         )
-        self._logger.debug(f"The runtime of the scheduler was: {scheduler_runtime}.")
+        self._logger.debug(
+            f"[{sim_time.time}] The runtime of the scheduler was: {scheduler_runtime}."
+        )
         runtime = (
             scheduler_runtime
             if self.runtime == EventTime(-1, EventTime.Unit.US)
