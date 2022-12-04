@@ -3,14 +3,14 @@ import logging
 import sys
 from enum import Enum
 from functools import total_ordering
-from operator import attrgetter
-from typing import Optional, Sequence, Type
+from operator import attrgetter, itemgetter
+from typing import Optional, Type
 
 import absl  # noqa: F401
 
 from schedulers import BaseScheduler
 from utils import EventTime, setup_csv_logging, setup_logging
-from workers import WorkerPool, WorkerPools
+from workers import WorkerPools
 from workload import BranchPredictionPolicy, Resource, Task, TaskState, Workload
 
 
@@ -965,7 +965,10 @@ class Simulator(object):
             )
         elif (
             len(schedulable_tasks) == 0
-            or all(task.state == TaskState.RUNNING for task in schedulable_tasks)
+            or all(
+                task.state in (TaskState.RUNNING, TaskState.SCHEDULED)
+                for task in schedulable_tasks
+            )
             or self._worker_pools.is_full()
         ):
             # If there are no schedulable tasks currently, or all schedulable tasks are
@@ -973,12 +976,36 @@ class Simulator(object):
             # is full, adjust the scheduler invocation time according to either the
             # time of invocation of the next event, or the minimum completion time
             # of a running task.
+
+            # Find the minimum remaining time from all the running / scheduled tasks.
+            remaining_times = []
+            for task in running_tasks:
+                if task.state == TaskState.SCHEDULED:
+                    remaining_times.append(
+                        (
+                            task.unique_name,
+                            task.expected_start_time + task.remaining_time,
+                        )
+                    )
+                elif task.state == TaskState.RUNNING:
+                    remaining_times.append(
+                        (task.unique_name, self._simulator_time + task.remaining_time)
+                    )
+                else:
+                    raise ValueError(
+                        f"The task {task.unique_name} was in an "
+                        f"unexpected state: {task.state}."
+                    )
+            self._logger.debug(
+                "[%d] The running tasks along with their remaining time are: %s.",
+                event.time.to(EventTime.Unit.US).time,
+                [
+                    f"{task_name} ({remaining_time})"
+                    for task_name, remaining_time in remaining_times
+                ],
+            )
             minimum_running_task_completion_time = (
-                self._simulator_time
-                + min(
-                    map(attrgetter("remaining_time"), running_tasks),
-                    default=EventTime.zero(),
-                )
+                min(map(itemgetter(1), remaining_times), default=EventTime.zero())
                 + self._scheduler_delay
             )
 
@@ -1005,7 +1032,7 @@ class Simulator(object):
                     "[%s] The scheduler start time was pushed from %s to %s since "
                     "either the next running task finishes at %s or the next event "
                     "is being invoked at %s.",
-                    event.time.time,
+                    event.time.to(EventTime.Unit.US).time,
                     scheduler_start_time,
                     adjusted_scheduler_start_time,
                     minimum_running_task_completion_time,
