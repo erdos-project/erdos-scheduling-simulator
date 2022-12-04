@@ -6,7 +6,7 @@ import absl  # noqa: F401
 
 from utils import EventTime, setup_logging
 from workers import WorkerPools
-from workload import BranchPredictionPolicy, Placements, TaskGraph, Workload
+from workload import BranchPredictionPolicy, Placements, TaskState, Workload
 
 
 class BaseScheduler(object):
@@ -111,51 +111,161 @@ class BaseScheduler(object):
     def release_taskgraphs(self) -> bool:
         return self._release_taskgraphs
 
-    def _verify_schedule(
-        self, worker_pools: WorkerPools, task_graph: TaskGraph, placements
-    ):
-        placed_tasks = [
-            (task, placement, start_time)
-            for task, placement, start_time in placements
-            if placement is not None
-        ]
-        for task, placement, start_time in placed_tasks:
-            # Ensure that the task didn't start before it was released.
-            assert (
-                start_time >= task.release_time
-            ), f"Task {task} start time {start_time} is less than the release time"
-            if self._enforce_deadlines:
-                # Check if the task finished before the deadline.
-                assert (
-                    task.deadline >= start_time + task.runtime
-                ), f"Task {task} did not finish before its deadline"
+    def verify_schedule(
+        self,
+        sim_time: EventTime,
+        workload: Workload,
+        worker_pools: WorkerPools,
+        placements: Placements,
+    ) -> None:
+        """Verifies a schedule returned by any scheduler.
 
-        # Check if task dependencies are satisfied.
-        start_times = {task.id: start_time for task, _, start_time in placed_tasks}
-        for task, placement, start_time in placed_tasks:
-            children = task_graph.get_children(task)
-            # Check that the children of the placed task weren't scheduled to
-            # start before the task completes.
-            for child_task in children:
-                if child_task.id in start_times:
-                    assert (
-                        start_time + task.remaining_time <= start_times[child_task.id]
-                    ), f"Task dependency not valid{task.id}->{child_task.id}"
+        Args:
+            sim_time (`EventTime`): The time at which the scheduler was invoked.
+            workload (`Workload`): The workload that was passed to the scheduler.
+            worker_pools (`WorkerPools`): The worker pools that the tasks are supposed
+                to be scheduled on.
+            placements (`Placements`): The placements of the Tasks computed by the
+                scheduler
+        """
+        for placement in placements:
+            if not placement.is_placed():
+                self._logger.debug(
+                    "[%d] Any checks for task %s were skipped since it was not placed.",
+                    sim_time.to(EventTime.Unit.US).time,
+                    placement.task.unique_name,
+                )
+                continue
 
-        # Check if resource requirements are satisfied.
-        placed_tasks.sort(key=lambda e: e[2])
-        wps = deepcopy(worker_pools)
-        id_to_wp = {wp.id: wp for wp in wps.worker_pools}
-        # A heap storing the task in order of their completion time.
-        task_completion = []
-        for task, wp_id, start_time in placed_tasks:
-            # Remove task that finished before start_time.
-            while len(task_completion) > 0 and start_time >= task_completion[0][0]:
-                (end_time, wp_id, task) = heapq.heappop(task_completion)
-                id_to_wp[wp_id].remove_task(task)
-            wp = id_to_wp[wp_id]
-            assert wp.can_accomodate_task(
-                task
-            ), f"WorkerPool {wp.id} doesn't have resources for {task.id}"
-            wp.place_task(task)
-            heapq.heappush(task_completion, (start_time + task.runtime, wp_id, task))
+            # Ensure that the task starts after the time at which the scheduler
+            # was invoked and after its release time.
+            if (
+                placement.placement_time < sim_time
+                or placement.placement_time < placement.task.release_time
+            ):
+                self._logger.warn(
+                    "[%d] The task %s was placed at %s, but was released at %s.",
+                    sim_time.to(EventTime.Unit.US).time,
+                    placement.task.unique_name,
+                    placement.placement_time,
+                    placement.task.release_time,
+                )
+                raise ValueError(
+                    f"The placement for task {placement.task.unique_name} did not "
+                    f"satisfy the lower bounds for placement time."
+                )
+
+            # Ensure that the task is expected to finish before its deadline if the
+            # scheduler was required to enforce deadlines.
+            if (
+                self.enforce_deadlines
+                and placement.placement_time + placement.task.remaining_time
+                >= placement.task.deadline
+            ):
+                self._logger.warn(
+                    "[%d] The task %s was placed at %s and has %s remaining time, "
+                    "but has a deadline of %s.",
+                    sim_time.to(EventTime.Unit.US).time,
+                    placement.task.unique_name,
+                    placement.placement_time,
+                    placement.task.remaining_time,
+                    placement.task.deadline,
+                )
+                raise ValueError(
+                    f"The placement for task {placement.task.unique_name} did not "
+                    f"respect its deadline."
+                )
+
+            # Ensure that the task is only placed if all its parents are placed.
+            task_graph = workload.get_task_graph(placement.task.task_graph)
+            parents = task_graph.get_parents(placement.task)
+            for parent in parents:
+                parent_placement = placements.get_placement(parent)
+                if parent.state in (
+                    TaskState.VIRTUAl,
+                    TaskState.RELEASED,
+                    TaskState.PREEMPTED,
+                ) or (
+                    parent.state == TaskState.SCHEDULED and parent_placement is not None
+                ):
+                    # If the parent was supposed to be scheduled by this run, ensure
+                    # that all the dependencies are being satisfied.
+                    if parent_placement is None or not parent_placement.is_placed():
+                        self._logger.warn(
+                            "[%d] The task %s was placed without a valid placement "
+                            "for a parent task %s in state %s.",
+                            sim_time.to(EventTime.Unit.US).time,
+                            placement.task.unique_name,
+                            parent.unique_name,
+                            parent.state,
+                        )
+                        raise ValueError(
+                            f"The placement for {placement.task.unique_name} did not "
+                            f"respect the task dependencies."
+                        )
+
+                    if (
+                        parent_placement.placement_time + parent.remaining_time
+                        <= placement.placement_time
+                    ):
+                        self._logger.warn(
+                            "[%d] The task %s was placed at %s before the parent %s "
+                            "(placed at %s with remaining time of %s) finishes at %s.",
+                            sim_time.to(EventTime.Unit.US).time,
+                            placement.task.unique_name,
+                            parent.unique_name,
+                            parent_placement.placement_time,
+                            parent.remaining_time,
+                            parent_placement.placement_time + parent.remaining_time,
+                        )
+                        raise ValueError(
+                            f"The placement for {placement.task.unique_name} did not "
+                            f"respect the task dependencies."
+                        )
+                elif parent.state == TaskState.SCHEDULED and parent_placement is None:
+                    # If the task was scheduled previously, and was not reconsidered
+                    # for scheduling, use the previously decided start time.
+                    if (
+                        parent.expected_start_time + parent.remaining_time
+                        <= placement.placement_time
+                    ):
+                        self._logger.warn(
+                            "[%d] The task %s was placed at %s before a previously "
+                            "scheduled parent %s (with an expected start time of %s "
+                            "and remaining time of %s) finishes at %s.",
+                            sim_time.to(EventTime.Unit.US).time,
+                            placement.task.unique_name,
+                            parent.unique_name,
+                            parent.expected_start_time,
+                            parent.remaining_time,
+                            parent.expected_start_time + parent.remaining_time,
+                        )
+                        raise ValueError(
+                            f"The placement for {placement.task.unique_name} did not "
+                            f"respect the task dependencies."
+                        )
+                elif parent.state == TaskState.RUNNING:
+                    # If the task is currently running, use the remaining time to
+                    # ensure that the dependencies were respected.
+                    if sim_time + parent.remaining_time <= placement.placement_time:
+                        self._logger.warn(
+                            "[%d] The task %s was placed before a running parent task "
+                            "%s (with a remaining time of %s) finishes at %s.",
+                            sim_time.to(EventTime.Unit.US).time,
+                            placement.task.unique_name,
+                            parent.unique_name,
+                            parent.remaining_time,
+                            sim_time + parent.remaining_time,
+                        )
+                elif parent.state == TaskState.COMPLETED:
+                    # If the task was finished, this task should be good since its
+                    # lower bound was checked correctly.
+                    pass
+                else:
+                    raise ValueError(
+                        f"The placement for {placement.task.unique_name} occurred "
+                        f"even though its parent {parent.unique_name} was in the "
+                        f"{parent.state} state."
+                    )
+
+        # TODO (Sukrit): Ensure that the WorkerPools are not oversubscribed.
