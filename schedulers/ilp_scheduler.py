@@ -1,5 +1,4 @@
 import time
-from collections import defaultdict
 from copy import copy, deepcopy
 from itertools import combinations
 from typing import Mapping, Optional, Sequence, Union
@@ -191,6 +190,20 @@ class ILPScheduler(BaseScheduler):
         )
         self._goal = goal
 
+    def _initialize_optimizer(self) -> gp.Model:
+        """Initializes the Optimizer and sets the required parameters.
+
+        Returns:
+            An optimizer of type `gp.Model` to whom the variables and constraints
+            can be added.
+        """
+        optimizer = gp.Model("ILPScheduler")
+
+        # Don't log the output to the console.
+        optimizer.Params.LogToConsole = 0
+
+        return optimizer
+
     def schedule(
         self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools
     ) -> Placements:
@@ -224,13 +237,13 @@ class ILPScheduler(BaseScheduler):
                 worker_to_worker_pool[worker.id] = worker_pool.id
 
         self._logger.debug(
-            f"[{sim_time.time}] The scheduler received {len(tasks_to_be_scheduled)}"
+            f"[{sim_time.time}] The scheduler received {len(tasks_to_be_scheduled)} "
             f"tasks for scheduling across {len(workers)} workers."
         )
 
         # Construct the model and the variables for each of the tasks.
         scheduler_start_time = time.time()
-        optimizer = gp.Model("ILPScheduler")
+        optimizer = self._initialize_optimizer()
         tasks_to_variables = self._add_variables(
             sim_time, optimizer, tasks_to_be_scheduled, workers
         )
