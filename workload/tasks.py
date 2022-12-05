@@ -1249,7 +1249,12 @@ class TaskGraph(Graph[Task]):
         raise NotImplementedError("Merging of Taskgraphs has not been implemented yet.")
 
     def is_complete(self) -> bool:
-        """Check if the task graph has finished execution."""
+        """Check if the task graph has finished execution.
+
+        Returns:
+            `True` if all the sink tasks in the TaskGraphs have finished execution,
+            and `False` otherwise.
+        """
         return all(task.is_complete() for task in self.get_sink_tasks())
 
     def resolve_conditional(
