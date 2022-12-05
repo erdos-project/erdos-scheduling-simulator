@@ -585,7 +585,7 @@ def test_task_graph_index_failure():
             perception_task_1: [prediction_task_1],
             prediction_task_1: [planning_task_1],
             planning_task_1: [],
-        }
+        },
     )
     assert len(task_graph) == 6, "Incorrect length of TaskGraph."
 
@@ -643,7 +643,7 @@ def test_task_graph_slice_success():
             perception_task_2: [prediction_task_2],
             prediction_task_2: [planning_task_2],
             planning_task_2: [],
-        }
+        },
     )
     assert len(task_graph) == 9, "Incorrect length of TaskGraph."
 
@@ -693,7 +693,7 @@ def test_is_source_task():
             perception_task_1: [prediction_task_1],
             prediction_task_1: [planning_task_1],
             planning_task_1: [],
-        }
+        },
     )
 
     # Check that the is_source_task works correctly.
@@ -755,7 +755,7 @@ def test_is_sink_task():
             perception_task_1: [prediction_task_1],
             prediction_task_1: [planning_task_1],
             planning_task_1: [],
-        }
+        },
     )
 
     # Check that the is_sink_task works correctly.
@@ -813,7 +813,7 @@ def test_get_source_tasks():
             perception_task_1: [prediction_task_1],
             prediction_task_1: [planning_task_1],
             planning_task_1: [],
-        }
+        },
     )
 
     # Check that the get_source_tasks works correctly.
@@ -863,7 +863,7 @@ def test_get_sink_tasks():
             perception_task_1: [prediction_task_1],
             prediction_task_1: [planning_task_1],
             planning_task_1: [],
-        }
+        },
     )
 
     # Check that the get_source_tasks works correctly.
@@ -898,7 +898,7 @@ def test_task_graph_complete():
             perception_task_0: [prediction_task_0],
             prediction_task_0: [planning_task_0],
             planning_task_0: [],
-        }
+        },
     )
 
     # Ensure that the TaskGraph is not complete in the beginning.
@@ -972,7 +972,7 @@ def test_conditional_task_graph_complete():
             perception_task_0: [prediction_task_0, planning_task_0],
             prediction_task_0: [final_task_0],
             planning_task_0: [final_task_0],
-        }
+        },
     )
 
     # Ensure that the TaskGraph is not complete in the beginning.
@@ -1061,7 +1061,7 @@ def test_task_find():
             perception_task_1: [prediction_task_1],
             prediction_task_1: [planning_task_1],
             planning_task_1: [],
-        }
+        },
     )
 
     # Check that find works correctly.
@@ -1150,7 +1150,7 @@ def test_task_time_dilation():
             perception_task_1: [prediction_task_1],
             prediction_task_1: [planning_task_1],
             planning_task_1: [],
-        }
+        },
     )
 
     # Check that time dilation works correctly.
@@ -1205,7 +1205,7 @@ def test_task_graph_remaining_time_simple():
             perception_task: [prediction_task],
             prediction_task: [planning_task],
             planning_task: [],
-        }
+        },
     )
     assert task_graph.get_remaining_time() == EventTime(
         6, EventTime.Unit.MS
@@ -1291,7 +1291,7 @@ def test_task_graph_remaining_time_complex():
             perception_task: [prediction_task, planning_task],
             prediction_task: [planning_task],
             planning_task: [],
-        }
+        },
     )
     assert task_graph.get_remaining_time() == EventTime(
         11, EventTime.Unit.MS
@@ -1359,7 +1359,7 @@ def test_task_cancellation():
             preprocess_car_task: [car_recognition_task],
             face_recognition_task: [detection_end_task],
             car_recognition_task: [detection_end_task],
-        }
+        },
     )
 
     # Ensure that the TaskGraph is not complete at the beginning.
