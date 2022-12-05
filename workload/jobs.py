@@ -403,7 +403,7 @@ class JobGraph(Graph[Job]):
             task_graph_mapping[parent_task] = task_children
 
         # Now that the task probabilities have been set, update the deadlines.
-        task_graph = TaskGraph(tasks=task_graph_mapping)
+        task_graph = TaskGraph(name=task_graph_name, tasks=task_graph_mapping)
 
         # Compute the deadline based on if the knowledge of branches is assumed or not.
         if use_branch_predicated_deadlines:

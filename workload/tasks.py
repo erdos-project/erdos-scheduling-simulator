@@ -719,9 +719,19 @@ class TaskGraph(Graph[Task]):
 
     A `TaskGraph` is a runtime entity that constantly evolves as more tasks
     are released by the `JobGraph` and added to the given `TaskGraph`.
+
+    Args:
+        name (`str`): The name of this TaskGraph.
+        tasks (`Optional[Mapping[Task, Sequence[Task]]]`): An optional
+            sequence of mapping between Tasks and their children.
     """
 
-    def __init__(self, tasks: Optional[Mapping[Task, Sequence[Task]]] = {}):
+    def __init__(
+        self, name: str, tasks: Optional[Mapping[Task, Sequence[Task]]] = {}
+    ) -> None:
+        if type(name) != str:
+            raise ValueError("The name must be a string.")
+        self._name = name
         super().__init__(tasks)
 
     def add_task(self, task: Task, children: Optional[Sequence[Task]] = []):
@@ -1115,7 +1125,7 @@ class TaskGraph(Graph[Task]):
 
                 # Add the task to the representation.
                 tasks[task] = same_timestamp_children
-            return TaskGraph(tasks=tasks)
+            return TaskGraph(name=f"{self.name}_slice", tasks=tasks)
         elif isinstance(slice_obj, slice):
             max_timestamp = -sys.maxsize
             for task in self.get_nodes():
@@ -1362,6 +1372,15 @@ class TaskGraph(Graph[Task]):
             An `EventTime` denoting the maximum deadline of all the Tasks.
         """
         return max(task.deadline for task in self.get_nodes())
+
+    @property
+    def name(self) -> str:
+        """Retrieves the name of the TaskGraph.
+
+        Returns:
+            A `str` representation of the name of the TaskGraph.
+        """
+        return self._name
 
     def __str__(self):
         constructed_string = ""

@@ -212,13 +212,13 @@ def test_fail_step_non_running():
 
 def test_empty_task_graph_construction():
     """Test that an empty TaskGraph is constructed correctly."""
-    task_graph = TaskGraph()
+    task_graph = TaskGraph(name="TestTaskGraph")
     assert len(task_graph) == 0, "Incorrect length of the TaskGraph."
 
 
 def test_task_graph_construction_from_mapping():
     """Test that a TaskGraph is correctly initialized from a Mapping."""
-    task_graph = TaskGraph(tasks={create_default_task(): []})
+    task_graph = TaskGraph(name="TestTaskGraph", tasks={create_default_task(): []})
     assert len(task_graph) == 1, "Incorrect length of the TaskGraph."
 
 
@@ -230,7 +230,7 @@ def test_task_addition_to_task_graph():
     child_task = create_default_task(
         job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US))
     )
-    task_graph = TaskGraph()
+    task_graph = TaskGraph(name="TestTaskGraph")
     assert len(task_graph) == 0, "Incorrect length of the TaskGraph."
     task_graph.add_task(default_task, [child_task])
     assert len(task_graph) == 2, "Incorrect length of the TaskGraph."
@@ -244,7 +244,7 @@ def test_addition_of_child_to_task():
     child_task = create_default_task(
         job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US))
     )
-    task_graph = TaskGraph()
+    task_graph = TaskGraph(name="TestTaskGraph")
     assert len(task_graph) == 0, "Incorrect length of the TaskGraph."
     task_graph.add_task(default_task)
     assert len(task_graph) == 1, "Incorrect length of the TaskGraph."
@@ -260,7 +260,7 @@ def test_retrieval_of_children():
     child_task = create_default_task(
         job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US))
     )
-    task_graph = TaskGraph()
+    task_graph = TaskGraph(name="TestTaskGraph")
     task_graph.add_task(default_task, [child_task])
     children = task_graph.get_children(default_task)
     assert len(children) == 1, "Incorrect length of the children retrieved."
@@ -277,7 +277,7 @@ def test_get_schedulable_tasks():
         job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)),
         runtime=1000,
     )
-    task_graph = TaskGraph()
+    task_graph = TaskGraph(name="TestTaskGraph")
     task_graph.add_task(default_task, [child_task])
     assert (
         len(task_graph.get_schedulable_tasks(EventTime.zero())) == 0
@@ -313,7 +313,7 @@ def test_release_tasks():
     localization_task = create_default_task(
         job=Job(name="Localization", runtime=EventTime(1000, EventTime.Unit.US))
     )
-    task_graph = TaskGraph()
+    task_graph = TaskGraph(name="TestTaskGraph")
     task_graph.add_task(perception_task, [prediction_task])
     task_graph.add_task(prediction_task, [planning_task])
     task_graph.add_task(localization_task)
@@ -338,7 +338,7 @@ def test_retrieval_of_parents():
     child_task = create_default_task(
         job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US))
     )
-    task_graph = TaskGraph()
+    task_graph = TaskGraph(name="TestTaskGraph")
     task_graph.add_task(default_task, [child_task])
     parents = task_graph.get_parents(child_task)
     assert len(parents) == 1, "Incorrect length of the parents retrieved."
@@ -356,7 +356,7 @@ def test_task_completion_notification():
     planning_task = create_default_task(
         job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US))
     )
-    task_graph = TaskGraph()
+    task_graph = TaskGraph(name="TestTaskGraph")
     task_graph.add_task(perception_task, [planning_task])
     task_graph.add_task(prediction_task, [planning_task])
 
@@ -419,7 +419,7 @@ def test_conditional_task_completion_notification():
             name="Planning", runtime=EventTime(1000, EventTime.Unit.US), probability=0.5
         )
     )
-    task_graph = TaskGraph()
+    task_graph = TaskGraph(name="TestTaskGraph")
     release_policy = BranchPredictionPolicy.RANDOM
     task_graph.add_task(perception_task, [planning_task, prediction_task])
 
@@ -475,7 +475,7 @@ def test_conditional_weighted_task_completion_notification():
             name="Planning", runtime=EventTime(1000, EventTime.Unit.US), probability=0.0
         )
     )
-    task_graph = TaskGraph()
+    task_graph = TaskGraph(name="TestTaskGraph")
     task_graph.add_task(perception_task, [planning_task, prediction_task])
 
     released_tasks = task_graph.get_schedulable_tasks(EventTime.zero())
@@ -529,6 +529,7 @@ def test_task_graph_index_success():
 
     # Create the TaskGraph.
     task_graph = TaskGraph(
+        name="TestTaskGraph",
         tasks={
             perception_task_0: [prediction_task_0, perception_task_1],
             prediction_task_0: [planning_task_0, prediction_task_1],
@@ -536,7 +537,7 @@ def test_task_graph_index_success():
             perception_task_1: [prediction_task_1],
             prediction_task_1: [planning_task_1],
             planning_task_1: [],
-        }
+        },
     )
     assert len(task_graph) == 6, "Incorrect length of TaskGraph."
 
@@ -576,6 +577,7 @@ def test_task_graph_index_failure():
 
     # Create the TaskGraph.
     task_graph = TaskGraph(
+        name="TestTaskGraph",
         tasks={
             perception_task_0: [prediction_task_0, perception_task_1],
             prediction_task_0: [planning_task_0, prediction_task_1],
@@ -630,6 +632,7 @@ def test_task_graph_slice_success():
 
     # Create the TaskGraph.
     task_graph = TaskGraph(
+        name="TestTaskGraph",
         tasks={
             perception_task_0: [prediction_task_0, perception_task_1],
             prediction_task_0: [planning_task_0, prediction_task_1],
@@ -682,6 +685,7 @@ def test_is_source_task():
 
     # Create the TaskGraph.
     task_graph = TaskGraph(
+        name="TestTaskGraph",
         tasks={
             perception_task_0: [prediction_task_0, perception_task_1],
             prediction_task_0: [planning_task_0, prediction_task_1],
@@ -743,6 +747,7 @@ def test_is_sink_task():
 
     # Create the TaskGraph.
     task_graph = TaskGraph(
+        name="TestTaskGraph",
         tasks={
             perception_task_0: [prediction_task_0, perception_task_1],
             prediction_task_0: [planning_task_0, prediction_task_1],
@@ -800,6 +805,7 @@ def test_get_source_tasks():
 
     # Create the TaskGraph.
     task_graph = TaskGraph(
+        name="TestTaskGraph",
         tasks={
             perception_task_0: [prediction_task_0, perception_task_1],
             prediction_task_0: [planning_task_0, prediction_task_1],
@@ -849,6 +855,7 @@ def test_get_sink_tasks():
 
     # Create the TaskGraph.
     task_graph = TaskGraph(
+        name="TestTaskGraph",
         tasks={
             perception_task_0: [prediction_task_0, perception_task_1],
             prediction_task_0: [planning_task_0, prediction_task_1],
@@ -886,6 +893,7 @@ def test_task_graph_complete():
 
     # Create the TaskGraph.
     task_graph = TaskGraph(
+        name="TestTaskGraph",
         tasks={
             perception_task_0: [prediction_task_0],
             prediction_task_0: [planning_task_0],
@@ -959,6 +967,7 @@ def test_conditional_task_graph_complete():
 
     # Create the TaskGraph.
     task_graph = TaskGraph(
+        name="TestTaskGraph",
         tasks={
             perception_task_0: [prediction_task_0, planning_task_0],
             prediction_task_0: [final_task_0],
@@ -1044,6 +1053,7 @@ def test_task_find():
 
     # Create the TaskGraph.
     task_graph = TaskGraph(
+        name="TestTaskGraph",
         tasks={
             perception_task_0: [prediction_task_0, perception_task_1],
             prediction_task_0: [planning_task_0, prediction_task_1],
@@ -1128,6 +1138,7 @@ def test_task_time_dilation():
 
     # Create the TaskGraph.
     task_graph = TaskGraph(
+        name="TestTaskGraph",
         tasks={
             # Timestamp = 0
             localization_task_0: [prediction_task_0, localization_task_1],
@@ -1189,6 +1200,7 @@ def test_task_graph_remaining_time_simple():
         runtime=3000,
     )
     task_graph = TaskGraph(
+        name="TestTaskGraph",
         tasks={
             perception_task: [prediction_task],
             prediction_task: [planning_task],
@@ -1270,6 +1282,7 @@ def test_task_graph_remaining_time_complex():
         runtime=3000,
     )
     task_graph = TaskGraph(
+        name="TestTaskGraph",
         tasks={
             gnss_task: [localization_task],
             imu_task: [localization_task],
@@ -1339,6 +1352,7 @@ def test_task_cancellation():
         runtime=1000,
     )
     task_graph = TaskGraph(
+        name="TestTaskGraph",
         tasks={
             detection_start_task: [preprocess_face_task, preprocess_car_task],
             preprocess_face_task: [face_recognition_task],

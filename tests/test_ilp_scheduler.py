@@ -17,8 +17,8 @@ def test_ilp_scheduling_success_basic():
         timestamp=0,
         deadline=1100,
     )
-    task_graph = TaskGraph(tasks={camera_task_1: []})
-    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
+    task_graph = TaskGraph(name="TestTaskGraph", tasks={camera_task_1: []})
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
     camera_task_1.release(EventTime.zero())
 
     # Create the workers.
@@ -71,8 +71,8 @@ def test_ilp_scheduling_multiple_tasks_different_resources():
         ),
         deadline=50,
     )
-    task_graph = TaskGraph(tasks={cpu_task: [], cpu_gpu_task: []})
-    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
+    task_graph = TaskGraph(name="TestTaskGraph", tasks={cpu_task: [], cpu_gpu_task: []})
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
     cpu_task.release(EventTime.zero())
     cpu_gpu_task.release(EventTime.zero())
 
@@ -126,8 +126,8 @@ def test_ilp_scheduler_limited_resources():
     # Create the tasks and the graph.
     task_one = create_default_task(name="Task 1", deadline=200, runtime=100)
     task_two = create_default_task(name="Task 2", deadline=220, runtime=150)
-    task_graph = TaskGraph(tasks={task_one: [], task_two: []})
-    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
+    task_graph = TaskGraph(name="TestTaskGraph", tasks={task_one: [], task_two: []})
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
 
     # Release the tasks.
     release_time = EventTime(50, EventTime.Unit.US)
@@ -169,8 +169,8 @@ def test_ilp_scheduling_deadline_enforcement():
         runtime=5,
         deadline=2,
     )
-    task_graph = TaskGraph(tasks={camera_task_1: []})
-    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
+    task_graph = TaskGraph(name="TestTaskGraph", tasks={camera_task_1: []})
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
     camera_task_1.release(EventTime.zero())
 
     # Create the workers.
@@ -231,8 +231,10 @@ def test_ilp_scheduling_dependency():
         runtime=8,
         deadline=20,
     )
-    task_graph = TaskGraph(tasks={camera_task_1: [perception_task_1]})
-    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
+    task_graph = TaskGraph(
+        name="TestTaskGraph", tasks={camera_task_1: [perception_task_1]}
+    )
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
     camera_task_1.release(EventTime.zero())
     perception_task_1.release(EventTime.zero())
 
@@ -297,8 +299,10 @@ def test_ilp_skip_taskgraphs_under_enforce_deadlines():
         runtime=8,
         deadline=10,
     )
-    task_graph = TaskGraph(tasks={camera_task_1: [perception_task_1]})
-    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
+    task_graph = TaskGraph(
+        name="TestTaskGraph", tasks={camera_task_1: [perception_task_1]}
+    )
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
     camera_task_1.release(EventTime.zero())
     perception_task_1.release(EventTime.zero())
 
@@ -341,8 +345,10 @@ def test_ilp_delays_scheduling_under_constrained_resources():
     camera_task_2 = create_default_task(
         name="Camera_2", timestamp=0, runtime=5, deadline=20
     )
-    task_graph = TaskGraph(tasks={camera_task_1: [], camera_task_2: []})
-    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
+    task_graph = TaskGraph(
+        name="TestTaskGraph", tasks={camera_task_1: [], camera_task_2: []}
+    )
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
     camera_task_1.release(EventTime.zero())
     camera_task_2.release(EventTime.zero())
 
@@ -405,9 +411,10 @@ def test_ilp_respects_dependencies_under_delayed_scheduling():
         deadline=30,
     )
     task_graph = TaskGraph(
-        tasks={camera_task_1: [], camera_task_2: [perception_task_2]}
+        name="TestTaskGraph",
+        tasks={camera_task_1: [], camera_task_2: [perception_task_2]},
     )
-    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
     camera_task_1.release(EventTime.zero())
     camera_task_2.release(EventTime.zero())
     perception_task_2.release(EventTime.zero())
@@ -493,9 +500,10 @@ def test_ilp_respects_dependencies_under_constrained_resources():
         deadline=30,
     )
     task_graph = TaskGraph(
-        tasks={camera_task_1: [], camera_task_2: [perception_task_2]}
+        name="TestTaskGraph",
+        tasks={camera_task_1: [], camera_task_2: [perception_task_2]},
     )
-    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
     camera_task_1.release(EventTime.zero())
     camera_task_2.release(EventTime.zero())
     perception_task_2.release(EventTime.zero())
@@ -559,8 +567,10 @@ def test_ilp_respects_worker_resource_constraints():
         deadline=10,
     )
 
-    task_graph = TaskGraph(tasks={camera_task_1: [], camera_task_2: []})
-    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
+    task_graph = TaskGraph(
+        name="TestTaskGraph", tasks={camera_task_1: [], camera_task_2: []}
+    )
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
     camera_task_1.release(EventTime.zero())
     camera_task_2.release(EventTime.zero())
 
@@ -606,8 +616,10 @@ def test_ilp_does_not_schedule_across_workers():
         deadline=10,
     )
 
-    task_graph = TaskGraph(tasks={camera_task_1: [], camera_task_2: []})
-    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
+    task_graph = TaskGraph(
+        name="TestTaskGraph", tasks={camera_task_1: [], camera_task_2: []}
+    )
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
     camera_task_1.release(EventTime.zero())
     camera_task_2.release(EventTime.zero())
 
@@ -674,9 +686,10 @@ def test_ilp_not_work_conserving():
     )
 
     task_graph = TaskGraph(
-        tasks={camera_task_1: [perception_task_1], camera_task_2: []}
+        name="TestTaskGraph",
+        tasks={camera_task_1: [perception_task_1], camera_task_2: []},
     )
-    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
     camera_task_1.release(EventTime.zero())
     camera_task_2.release(EventTime.zero())
 

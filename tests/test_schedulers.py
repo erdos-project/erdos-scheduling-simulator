@@ -41,8 +41,8 @@ def test_edf_scheduler_success():
         deadline=50,
     )
     task_gpu.release(EventTime(1, EventTime.Unit.US))
-    task_graph = TaskGraph(tasks={task_cpu: [], task_gpu: []})
-    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
+    task_graph = TaskGraph(name="TestTaskGraph", tasks={task_cpu: [], task_gpu: []})
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
 
     # Create the WorkerPool.
     worker_one = Worker(
@@ -90,8 +90,10 @@ def test_edf_scheduler_limited_resources():
     task_lower_priority.release(EventTime(1, EventTime.Unit.US))
     task_higher_priority = create_default_task(name="task_high_priority", deadline=50)
     task_higher_priority.release(EventTime(1, EventTime.Unit.US))
-    task_graph = TaskGraph(tasks={task_lower_priority: [], task_higher_priority: []})
-    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
+    task_graph = TaskGraph(
+        name="TestTaskGraph", tasks={task_lower_priority: [], task_higher_priority: []}
+    )
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
 
     # Create the WorkerPool.
     worker = Worker(
@@ -137,8 +139,10 @@ def test_edf_scheduler_non_preemptive_higher_priority():
     task_lower_priority = create_default_task(name="task_low_priority", deadline=200)
     task_lower_priority.release(EventTime(1, EventTime.Unit.US))
     task_higher_priority = create_default_task(name="task_high_priority", deadline=50)
-    task_graph = TaskGraph(tasks={task_lower_priority: [], task_higher_priority: []})
-    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
+    task_graph = TaskGraph(
+        name="TestTaskGraph", tasks={task_lower_priority: [], task_higher_priority: []}
+    )
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
 
     # Create the WorkerPool.
     worker = Worker(
@@ -195,8 +199,10 @@ def test_edf_scheduler_preemptive_higher_priority():
     task_lower_priority = create_default_task(name="task_low_priority", deadline=200)
     task_lower_priority.release(EventTime(1, EventTime.Unit.US))
     task_higher_priority = create_default_task(name="task_high_priority", deadline=50)
-    task_graph = TaskGraph(tasks={task_lower_priority: [], task_higher_priority: []})
-    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
+    task_graph = TaskGraph(
+        name="TestTaskGraph", tasks={task_lower_priority: [], task_higher_priority: []}
+    )
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
 
     # Create the WorkerPool.
     worker = Worker(
@@ -275,8 +281,8 @@ def test_lsf_scheduler_success():
         deadline=50,
     )
     task_gpu.release(EventTime(1, EventTime.Unit.US))
-    task_graph = TaskGraph(tasks={task_cpu: [], task_gpu: []})
-    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
+    task_graph = TaskGraph(name="TestTaskGraph", tasks={task_cpu: [], task_gpu: []})
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
 
     # Create the WorkerPool.
     worker_one = Worker(
@@ -326,8 +332,10 @@ def test_lsf_scheduler_limited_resources():
     task_higher_priority = create_default_task(name="task_high_priority", deadline=220)
     task_higher_priority.release(EventTime(50, EventTime.Unit.US))
     task_higher_priority.update_remaining_time(EventTime(150, EventTime.Unit.US))
-    task_graph = TaskGraph(tasks={task_lower_priority: [], task_higher_priority: []})
-    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
+    task_graph = TaskGraph(
+        name="TestTaskGraph", tasks={task_lower_priority: [], task_higher_priority: []}
+    )
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
 
     # Create the WorkerPool.
     worker = Worker(
@@ -409,14 +417,15 @@ def test_branch_prediction_scheduler_slack():
         deadline=15000,
     )
     task_graph = TaskGraph(
-        {
+        name="TestTaskGraph",
+        tasks={
             perception_task: [prediction_task_0, planning_task_0],
             prediction_task_0: [prediction_task_1],
             planning_task_0: [planning_task_1],
             prediction_task_1: [perception_terminal_task],
             planning_task_1: [perception_terminal_task],
             perception_terminal_task: [],
-        }
+        },
     )
 
     # Assert schedulers with different policies and remaining time.
@@ -424,7 +433,7 @@ def test_branch_prediction_scheduler_slack():
         policy=BranchPredictionPolicy.WORST_CASE
     )
     slack = worst_case_scheduler.compute_slack(
-        EventTime.zero(), task_graph, "test_task_graph"
+        EventTime.zero(), task_graph, "TestTaskGraph"
     )
     assert slack == EventTime.zero(), "Incorrect slack returned."
 
@@ -432,13 +441,13 @@ def test_branch_prediction_scheduler_slack():
         policy=BranchPredictionPolicy.BEST_CASE
     )
     slack = best_case_scheduler.compute_slack(
-        EventTime.zero(), task_graph, "test_task_graph"
+        EventTime.zero(), task_graph, "TestTaskGraph"
     )
     assert slack == EventTime(8, EventTime.Unit.MS), "Incorrect slack returned."
 
     random_scheduler = BranchPredictionScheduler(policy=BranchPredictionPolicy.RANDOM)
     slack = random_scheduler.compute_slack(
-        EventTime.zero(), task_graph, "test_task_graph"
+        EventTime.zero(), task_graph, "TestTaskGraph"
     )
     assert (
         slack == EventTime(8, EventTime.Unit.MS) or slack == EventTime.zero()

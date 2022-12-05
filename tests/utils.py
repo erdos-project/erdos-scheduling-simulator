@@ -18,7 +18,7 @@ def create_default_task(
     """Helper function to create a default task."""
     return Task(
         name=name if name else f"{job.name}_Task",
-        task_graph="test_task_graph",
+        task_graph="TestTaskGraph",
         job=job,
         resource_requirements=resource_requirements,
         runtime=EventTime(runtime, EventTime.Unit.US),

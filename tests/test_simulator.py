@@ -340,7 +340,7 @@ def test_simulator_handle_event():
     planning_task = create_default_task(
         job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US))
     )
-    task_graph = TaskGraph()
+    task_graph = TaskGraph(name="TestTaskGraph")
     task_graph.add_task(perception_task, [planning_task])
     simulator = Simulator(
         worker_pools=WorkerPools([worker_pool]),

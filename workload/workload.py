@@ -72,6 +72,10 @@ class Workload(object):
         Args:
             task_graphs: A mapping from the name of the application to its TaskGraph.
         """
+        for task_graph_name, task_graph in task_graphs.items():
+            assert (
+                task_graph_name == task_graph.name
+            ), "Naming mismatch between TaskGraph and Workload."
         return Workload(task_graphs=task_graphs, _flags=_flags)
 
     @staticmethod

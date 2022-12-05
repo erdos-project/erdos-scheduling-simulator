@@ -15,8 +15,8 @@ def test_z3_scheduling_success_basic():
         job=Job(name="Camera_1", runtime=EventTime(1000, EventTime.Unit.US)),
         timestamp=0,
     )
-    task_graph = TaskGraph(tasks={camera_task_1: []})
-    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
+    task_graph = TaskGraph(name="TestTaskGraph", tasks={camera_task_1: []})
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
     camera_task_1.release(EventTime.zero())
 
     # Create the workers.
@@ -58,8 +58,8 @@ def test_z3_scheduling_deadline_enforcement():
         runtime=5,
         deadline=2,
     )
-    task_graph = TaskGraph(tasks={camera_task_1: []})
-    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
+    task_graph = TaskGraph(name="TestTaskGraph", tasks={camera_task_1: []})
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
     camera_task_1.release(EventTime.zero())
 
     # Create the workers.
@@ -120,8 +120,10 @@ def test_z3_scheduling_dependency():
         runtime=8,
         deadline=20,
     )
-    task_graph = TaskGraph(tasks={camera_task_1: [perception_task_1]})
-    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
+    task_graph = TaskGraph(
+        name="TestTaskGraph", tasks={camera_task_1: [perception_task_1]}
+    )
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
     camera_task_1.release(EventTime.zero())
     perception_task_1.release(EventTime.zero())
 
@@ -184,8 +186,10 @@ def test_z3_skip_tasks_under_enforce_deadlines():
         runtime=8,
         deadline=10,
     )
-    task_graph = TaskGraph(tasks={camera_task_1: [perception_task_1]})
-    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
+    task_graph = TaskGraph(
+        name="TestTaskGraph", tasks={camera_task_1: [perception_task_1]}
+    )
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
     camera_task_1.release(EventTime.zero())
     perception_task_1.release(EventTime.zero())
 
@@ -227,8 +231,10 @@ def test_z3_delays_scheduling_under_constrained_resources():
     camera_task_2 = create_default_task(
         name="Camera_2", timestamp=0, runtime=5, deadline=20
     )
-    task_graph = TaskGraph(tasks={camera_task_1: [], camera_task_2: []})
-    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
+    task_graph = TaskGraph(
+        name="TestTaskGraph", tasks={camera_task_1: [], camera_task_2: []}
+    )
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
     camera_task_1.release(EventTime.zero())
     camera_task_2.release(EventTime.zero())
 
@@ -289,9 +295,10 @@ def test_z3_respects_dependencies_under_delayed_scheduling():
         deadline=30,
     )
     task_graph = TaskGraph(
-        tasks={camera_task_1: [], camera_task_2: [perception_task_2]}
+        name="TestTaskGraph",
+        tasks={camera_task_1: [], camera_task_2: [perception_task_2]},
     )
-    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
     camera_task_1.release(EventTime.zero())
     camera_task_2.release(EventTime.zero())
     perception_task_2.release(EventTime.zero())
@@ -375,9 +382,10 @@ def test_z3_respects_dependencies_under_constrained_resources():
         deadline=30,
     )
     task_graph = TaskGraph(
-        tasks={camera_task_1: [], camera_task_2: [perception_task_2]}
+        name="TestTaskGraph",
+        tasks={camera_task_1: [], camera_task_2: [perception_task_2]},
     )
-    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
     camera_task_1.release(EventTime.zero())
     camera_task_2.release(EventTime.zero())
     perception_task_2.release(EventTime.zero())
@@ -435,8 +443,10 @@ def test_z3_respects_worker_resource_constraints():
         deadline=10,
     )
 
-    task_graph = TaskGraph(tasks={camera_task_1: [], camera_task_2: []})
-    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
+    task_graph = TaskGraph(
+        name="TestTaskGraph", tasks={camera_task_1: [], camera_task_2: []}
+    )
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
     camera_task_1.release(EventTime.zero())
     camera_task_2.release(EventTime.zero())
 
@@ -482,8 +492,10 @@ def test_z3_does_not_schedule_across_workers():
         deadline=10,
     )
 
-    task_graph = TaskGraph(tasks={camera_task_1: [], camera_task_2: []})
-    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
+    task_graph = TaskGraph(
+        name="TestTaskGraph", tasks={camera_task_1: [], camera_task_2: []}
+    )
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
     camera_task_1.release(EventTime.zero())
     camera_task_2.release(EventTime.zero())
 
@@ -551,9 +563,10 @@ def test_z3_not_work_conserving():
     )
 
     task_graph = TaskGraph(
-        tasks={camera_task_1: [perception_task_1], camera_task_2: []}
+        name="TestTaskGraph",
+        tasks={camera_task_1: [perception_task_1], camera_task_2: []},
     )
-    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
     camera_task_1.release(EventTime.zero())
     camera_task_2.release(EventTime.zero())
 
@@ -617,9 +630,10 @@ def test_z3_minimize_deadline_misses():
     )
 
     task_graph = TaskGraph(
-        tasks={camera_task_1: [perception_task_1], camera_task_2: []}
+        name="TestTaskGraph",
+        tasks={camera_task_1: [perception_task_1], camera_task_2: []},
     )
-    workload = Workload.from_task_graphs({"test_task_graph": task_graph})
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
     camera_task_1.release(EventTime.zero())
     camera_task_2.release(EventTime.zero())
     perception_task_1.release(EventTime.zero())

@@ -25,6 +25,9 @@ class TaskLoader(object):
             A `TaskGraph` defining the order of the different tasks in the
             system.
         """
+        if len(tasks) == 0:
+            raise ValueError("Cannot create TaskGraph from empty Task list.")
+
         # Group all the Tasks by their Job name and order them by timestamp.
         grouped_tasks = defaultdict(list)
         for task in tasks:
@@ -65,7 +68,7 @@ class TaskLoader(object):
                     for parent_task in parent_task_same_timestamp:
                         task_graph[parent_task].append(task)
 
-        return grouped_tasks, TaskGraph(tasks=task_graph)
+        return grouped_tasks, TaskGraph(name=tasks[0].task_graph, tasks=task_graph)
 
     def get_jobs(self) -> Sequence[Job]:
         """Retrieve the set of `Job`s loaded.
