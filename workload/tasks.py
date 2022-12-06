@@ -1001,7 +1001,12 @@ class TaskGraph(Graph[Task]):
         # topologically-sorted order.
         any_released = False
         for task in self.topological_sort():
-            if (
+            if task.state in (TaskState.COMPLETED, TaskState.RUNNING):
+                # The task has already been completed or is running,
+                # we should notify that all tasks of this TaskGraph
+                # must be released now if required.
+                any_released = True
+            elif (
                 task.state == TaskState.RELEASED
                 and task.release_time <= time + lookahead
             ):
@@ -1012,6 +1017,7 @@ class TaskGraph(Graph[Task]):
             elif task.state in (TaskState.PREEMPTED, TaskState.EVICTED):
                 # PREEMPTED and EVICTED tasks are always available for scheduling.
                 tasks.append(task)
+                any_released = True
             elif (
                 task.state == TaskState.VIRTUAL
                 and task in estimated_completion_time
