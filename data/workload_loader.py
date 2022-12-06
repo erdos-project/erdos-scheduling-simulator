@@ -70,6 +70,12 @@ class WorkloadLoader(object):
                     num_invocations=jobs["invocations"],
                     start=start_time,
                 )
+            elif jobs["release_policy"] == "poisson":
+                release_policy = JobGraph.ReleasePolicy.poisson(
+                    rate=jobs["rate"],
+                    num_invocations=jobs["invocations"],
+                    start=start_time,
+                )
             else:
                 raise NotImplementedError(
                     f"The release policy {jobs['release_policy']} is not implemented."

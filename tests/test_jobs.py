@@ -435,3 +435,55 @@ def test_periodic_release_policy():
     assert (
         perception_task_2.release_time - perception_task_1.release_time
     ).time == 100, "Incorrect time between periodic releases."
+
+
+def test_poisson_release_policy_failure():
+    """Tests that a Poisson release policy fails with a high rate parameter."""
+    perception_job = Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US))
+    prediction_job = Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US))
+    planning_job = Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US))
+    job_graph = JobGraph(
+        name="test_graph",
+        jobs={
+            perception_job: [prediction_job],
+            prediction_job: [planning_job],
+            planning_job: [],
+        },
+        release_policy=JobGraph.ReleasePolicy.poisson(
+            rate=2.0,
+            num_invocations=1,
+        ),
+    )
+    assert len(job_graph) == 3, "Incorrect number of jobs in the `JobGraph`."
+
+    # Create instances of TaskGraphs according to the Poisson release policy.
+    with pytest.raises(ValueError):
+        job_graph.generate_task_graphs(
+            completion_time=EventTime(500, EventTime.Unit.US)
+        )
+
+
+def test_poisson_release_policy_success():
+    """Tests that a Poisson release policy succeeds."""
+    perception_job = Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US))
+    prediction_job = Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US))
+    planning_job = Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US))
+    job_graph = JobGraph(
+        name="test_graph",
+        jobs={
+            perception_job: [prediction_job],
+            prediction_job: [planning_job],
+            planning_job: [],
+        },
+        release_policy=JobGraph.ReleasePolicy.poisson(
+            rate=0.002,
+            num_invocations=3,
+        ),
+    )
+    assert len(job_graph) == 3, "Incorrect number of jobs in the `JobGraph`."
+
+    # Create instances of TaskGraphs according to the Poisson release policy.
+    task_graphs = job_graph.generate_task_graphs(
+        completion_time=EventTime(500, EventTime.Unit.US)
+    )
+    assert len(task_graphs) == 3, "Incorrect number of task graphs returned."

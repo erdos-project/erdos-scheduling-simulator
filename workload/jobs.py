@@ -175,8 +175,12 @@ class JobGraph(Graph[Job]):
     class ReleasePolicyType(Enum):
         """Represents the different release policies supported by a JobGraph."""
 
-        PERIODIC = 1  # Releases a TaskGraph after the period time has elapsed.
-        FIXED = 2  # Releases a fixed number of TaskGraphs seperated by the period.
+        # Releases a TaskGraph after the period time has elapsed.
+        PERIODIC = 1
+        # Releases a fixed number of TaskGraphs seperated by the period.
+        FIXED = 2
+        # Releases a fixed number of TaskGraphs seperated by a Poisson arrival rate.
+        POISSON = 3
 
     class ReleasePolicy(object):
         """A class representing the parameters of the release policy by which the
@@ -193,11 +197,13 @@ class JobGraph(Graph[Job]):
             policy_type: "ReleasePolicyType",  # noqa: F821
             period: EventTime,
             fixed_invocation_nums: int,
+            poisson_rate: float,
             start: EventTime,
         ) -> None:
             self._policy_type = policy_type
             self._period = period
             self._fixed_invocation_nums = fixed_invocation_nums
+            self._poisson_rate = poisson_rate
             self._start = start
 
         @staticmethod
@@ -219,6 +225,7 @@ class JobGraph(Graph[Job]):
                 policy_type=JobGraph.ReleasePolicyType.PERIODIC,
                 period=period,
                 fixed_invocation_nums=-1,
+                poisson_rate=-1.0,
                 start=start,
             )
 
@@ -227,7 +234,7 @@ class JobGraph(Graph[Job]):
             period: EventTime,
             num_invocations: int,
             start: EventTime = EventTime.zero(),
-        ):
+        ) -> "ReleasePolicy":  # noqa: F821
             """Creates the parameters corresponding to the `FIXED` release policy.
 
             Args:
@@ -244,6 +251,33 @@ class JobGraph(Graph[Job]):
                 policy_type=JobGraph.ReleasePolicyType.FIXED,
                 period=period,
                 fixed_invocation_nums=num_invocations,
+                poisson_rate=-1.0,
+                start=start,
+            )
+
+        @staticmethod
+        def poisson(
+            rate: float,
+            num_invocations: int,
+            start: EventTime = EventTime.zero(),
+        ) -> "ReleasePolicy":  # noqa: F821
+            """Creates the parameters corresponding to the `POISSON` release policy.
+
+            Args:
+                rate (`float`): The lambda (rate) parameter defining the Poisson
+                    arrival distribution.
+                num_invocations (`int`): The number of invocations of the `TaskGraph`.
+                start (`EventTime`): The time at which the poisson arrival of the
+                    `TaskGraph`s should begin.
+
+            Returns:
+                A `ReleasePolicy` instance with the required parameters.
+            """
+            return JobGraph.ReleasePolicy(
+                policy_type=JobGraph.ReleasePolicyType.POISSON,
+                period=EventTime(-1, EventTime.Unit.US),
+                fixed_invocation_nums=num_invocations,
+                poisson_rate=rate,
                 start=start,
             )
 
@@ -265,12 +299,23 @@ class JobGraph(Graph[Job]):
 
         @property
         def num_invocations(self) -> int:
-            if self.policy_type != JobGraph.ReleasePolicyType.FIXED:
+            if self.policy_type not in (
+                JobGraph.ReleasePolicyType.FIXED,
+                JobGraph.ReleasePolicyType.POISSON,
+            ):
                 raise ValueError(
-                    "The `period` parameter is only available in `PERIODIC` "
-                    "and `FIXED` release policy types."
+                    "The `num_invocations` parameter is only available in `FIXED` "
+                    "and `POISSON` release policy types."
                 )
             return self._fixed_invocation_nums
+
+        @property
+        def rate(self) -> float:
+            if self.policy_type != JobGraph.ReleasePolicyType.POISSON:
+                raise ValueError(
+                    "The `rate` parameter is only available in `POISSON` policy ."
+                )
+            return self._poisson_rate
 
         @property
         def start_time(self) -> EventTime:
@@ -351,6 +396,18 @@ class JobGraph(Graph[Job]):
             for _ in range(self.release_policy.num_invocations):
                 releases.append(current_release)
                 current_release += self.release_policy.period
+        elif self.release_policy.policy_type == self.ReleasePolicyType.POISSON:
+            current_release = self.release_policy.start_time
+            for _ in range(self.release_policy.num_invocations):
+                releases.append(current_release)
+                inter_arrival_time = int(random.expovariate(self.release_policy.rate))
+                if inter_arrival_time <= 0:
+                    raise ValueError(
+                        f"An inter-arrival time of {inter_arrival_time} was received. "
+                        f"Adjust rate parameter ({self.release_policy.rate}) in "
+                        f"Poisson arrival of {self.name}."
+                    )
+                current_release += EventTime(inter_arrival_time, EventTime.Unit.US)
         else:
             raise NotImplementedError(
                 f"The policy {self.release_policy} has not been implemented yet."
