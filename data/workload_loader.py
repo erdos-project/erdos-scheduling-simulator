@@ -60,16 +60,14 @@ class WorkloadLoader(object):
 
             # Construct the ReleasePolicy for the JobGraph.
             if jobs["release_policy"] == "periodic":
-                release_policy = JobGraph.ReleasePolicy(
-                    policy_type=JobGraph.ReleasePolicyType.PERIODIC,
+                release_policy = JobGraph.ReleasePolicy.periodic(
                     period=EventTime(jobs["period"], EventTime.Unit.US),
                     start=start_time,
                 )
             elif jobs["release_policy"] == "fixed":
-                release_policy = JobGraph.ReleasePolicy(
-                    policy_type=JobGraph.ReleasePolicyType.FIXED,
+                release_policy = JobGraph.ReleasePolicy.fixed(
                     period=EventTime(jobs["period"], EventTime.Unit.US),
-                    fixed_invocation_nums=jobs["invocations"],
+                    num_invocations=jobs["invocations"],
                     start=start_time,
                 )
             else:

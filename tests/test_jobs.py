@@ -419,8 +419,7 @@ def test_periodic_release_policy():
             prediction_job: [planning_job],
             planning_job: [],
         },
-        release_policy=JobGraph.ReleasePolicy(
-            policy_type=JobGraph.ReleasePolicyType.PERIODIC,
+        release_policy=JobGraph.ReleasePolicy.periodic(
             period=EventTime(100, EventTime.Unit.US),
         ),
     )

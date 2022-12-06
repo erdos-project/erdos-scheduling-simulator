@@ -179,17 +179,73 @@ class JobGraph(Graph[Job]):
         FIXED = 2  # Releases a fixed number of TaskGraphs seperated by the period.
 
     class ReleasePolicy(object):
+        """A class representing the parameters of the release policy by which the
+        instances of a `TaskGraph` are generated from this `JobGraph`.
+
+        See `JobGraph.generate_task_graphs` for more details.
+
+        The class instance should be initialized from the specific `staticmethod`s
+        corresponding to the `ReleasePolicyType` as opposed to the `__init__` method.
+        """
+
         def __init__(
             self,
             policy_type: "ReleasePolicyType",  # noqa: F821
-            period: EventTime = EventTime(100, EventTime.Unit.US),
-            fixed_invocation_nums: int = 0,
-            start: EventTime = EventTime.zero(),
+            period: EventTime,
+            fixed_invocation_nums: int,
+            start: EventTime,
         ) -> None:
             self._policy_type = policy_type
             self._period = period
             self._fixed_invocation_nums = fixed_invocation_nums
             self._start = start
+
+        @staticmethod
+        def periodic(
+            period: EventTime, start: EventTime = EventTime.zero()
+        ) -> "ReleasePolicy":  # noqa: F821
+            """Creates the parameters corresponding to the `PERIODIC` release policy.
+
+            Args:
+                period (`EventTime`): The exact time between two successive
+                    invocations of the `TaskGraph`.
+                start (`EventTime`): The time at which the periodic release of the
+                    `TaskGraph`s should begin.
+
+            Returns:
+                A `ReleasePolicy` instance with the required parameters.
+            """
+            return JobGraph.ReleasePolicy(
+                policy_type=JobGraph.ReleasePolicyType.PERIODIC,
+                period=period,
+                fixed_invocation_nums=-1,
+                start=start,
+            )
+
+        @staticmethod
+        def fixed(
+            period: EventTime,
+            num_invocations: int,
+            start: EventTime = EventTime.zero(),
+        ):
+            """Creates the parameters corresponding to the `FIXED` release policy.
+
+            Args:
+                period (`EventTime`): The exact time between two successive
+                    invocations of the `TaskGraph`.
+                num_invocations (`int`): The number of invocations of the `TaskGraph`.
+                start (`EventTime`): The time at which the periodic release of the
+                    `TaskGraph`s should begin.
+
+            Returns:
+                A `ReleasePolicy` instance with the required parameters.
+            """
+            return JobGraph.ReleasePolicy(
+                policy_type=JobGraph.ReleasePolicyType.FIXED,
+                period=period,
+                fixed_invocation_nums=num_invocations,
+                start=start,
+            )
 
         @property
         def policy_type(self) -> "ReleasePolicyType":  # noqa: F821
@@ -197,10 +253,23 @@ class JobGraph(Graph[Job]):
 
         @property
         def period(self) -> EventTime:
+            if self.policy_type not in (
+                JobGraph.ReleasePolicyType.PERIODIC,
+                JobGraph.ReleasePolicyType.FIXED,
+            ):
+                raise ValueError(
+                    "The `period` parameter is only available in `PERIODIC` "
+                    "and `FIXED` release policy types."
+                )
             return self._period
 
         @property
-        def fixed_invocation_nums(self) -> int:
+        def num_invocations(self) -> int:
+            if self.policy_type != JobGraph.ReleasePolicyType.FIXED:
+                raise ValueError(
+                    "The `period` parameter is only available in `PERIODIC` "
+                    "and `FIXED` release policy types."
+                )
             return self._fixed_invocation_nums
 
         @property
@@ -279,7 +348,7 @@ class JobGraph(Graph[Job]):
                 current_release += self.release_policy.period
         elif self.release_policy.policy_type == self.ReleasePolicyType.FIXED:
             current_release = self.release_policy.start_time
-            for _ in range(self.release_policy.fixed_invocation_nums):
+            for _ in range(self.release_policy.num_invocations):
                 releases.append(current_release)
                 current_release += self.release_policy.period
         else:
