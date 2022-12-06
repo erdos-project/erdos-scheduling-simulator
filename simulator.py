@@ -257,8 +257,6 @@ class Simulator(object):
         self._next_scheduler_event = None
         self._last_task_placement = None
         self._future_placements = {}  # Mapping from TaskID to its future placements.
-        self._finished_tasks = 0
-        self._missed_deadlines = 0
         self._scheduler_delay = EventTime(
             _flags.scheduler_delay if _flags else 1, EventTime.Unit.US
         )
@@ -266,6 +264,15 @@ class Simulator(object):
         self._policy = policy
         self._release_taskgraphs = _flags.release_taskgraphs if _flags else False
         self._retract_schedules = _flags.retract_schedules if _flags else False
+
+        # Statistics about the Task.
+        self._finished_tasks = 0
+        self._missed_task_deadlines = 0
+
+        # Statistics about the TaskGraph.
+        self._finished_task_graphs = 0
+        self._missed_task_graph_deadlines = 0
+        self._dropped_task_graphs = 0
 
         # Initialize the event queue, and add a SIMULATOR_START task to
         # signify the beginning of the simulator loop. Also add a
@@ -568,6 +575,7 @@ class Simulator(object):
                 self._event_queue.reheapify()
 
     def __handle_task_finished(self, event: Event):
+        # Log the TASK_FINISHED event into the CSV.
         self._finished_tasks += 1
         self._csv_logger.debug(
             f"{event.time.time},TASK_FINISHED,{event.task.name},{event.task.timestamp},"
@@ -575,13 +583,49 @@ class Simulator(object):
             f"{event.task.deadline.to(EventTime.Unit.US).time},{event.task.id}"
         )
 
+        # If the TaskGraph corresponding to this task finished too, log that event.
+        task_graph = self._workload.get_task_graph(event.task.task_graph)
+        if (
+            task_graph is not None
+            and task_graph.is_sink_task(event.task)
+            and task_graph.is_complete()
+        ):
+            self._finished_task_graphs += 1
+            self._csv_logger.debug(
+                f"{event.time.time},TASK_GRAPH_FINISHED,{task_graph.name},"
+                f"{task_graph.deadline.to(EventTime.Unit.US).time}"
+            )
+            self._logger.info(
+                "[%d] Finished the TaskGraph %s with a deadline %s at the "
+                "completion of the task %s.",
+                event.time.to(EventTime.Unit.US).time,
+                task_graph.name,
+                task_graph.deadline,
+                event.task.name,
+            )
+
         # Log if the task missed its deadline or not.
         if event.time > event.task.deadline:
-            self._missed_deadlines += 1
+            self._missed_task_deadlines += 1
             self._csv_logger.debug(
                 f"{event.time.time},MISSED_DEADLINE,{event.task.name},"
                 f"{event.task.timestamp},"
                 f"{event.task.deadline.to(EventTime.Unit.US).time},{event.task.id}"
+            )
+
+        # Log if the TaskGraph missed its deadline.
+        if task_graph is not None and event.time > task_graph.deadline:
+            self._missed_task_graph_deadlines += 1
+            self._logger.warn(
+                "[%d] Missed the deadline %s of the TaskGraph %s by %s.",
+                event.time.to(EventTime.Unit.US).time,
+                task_graph.deadline,
+                task_graph.name,
+                (event.time - task_graph.deadline).to(EventTime.Unit.US),
+            )
+            self._csv_logger.debug(
+                f"{event.time.time},MISSED_TASK_GRAPH_DEADLINE,{task_graph.name},"
+                f"{task_graph.deadline.to(EventTime.Unit.US).time}"
             )
 
         # The given task has finished execution, unlock dependencies from the `Workload`
@@ -791,7 +835,8 @@ class Simulator(object):
             # End of the simulator loop.
             self._csv_logger.debug(
                 f"{event.time.time},SIMULATOR_END,{self._finished_tasks},"
-                f"{self._missed_deadlines}"
+                f"{self._missed_task_deadlines},{self._finished_task_graphs},"
+                f"{self._missed_task_graph_deadlines}"
             )
             self._logger.info("[%s] Ending the simulator loop.", event.time.time)
             return True
