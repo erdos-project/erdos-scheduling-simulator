@@ -264,15 +264,16 @@ class Simulator(object):
         self._policy = policy
         self._release_taskgraphs = _flags.release_taskgraphs if _flags else False
         self._retract_schedules = _flags.retract_schedules if _flags else False
+        self._drop_skipped_tasks = _flags.drop_skipped_tasks if _flags else False
 
         # Statistics about the Task.
         self._finished_tasks = 0
+        self._dropped_tasks = 0
         self._missed_task_deadlines = 0
 
         # Statistics about the TaskGraph.
         self._finished_task_graphs = 0
         self._missed_task_graph_deadlines = 0
-        self._dropped_task_graphs = 0
 
         # Initialize the event queue, and add a SIMULATOR_START task to
         # signify the beginning of the simulator loop. Also add a
@@ -448,13 +449,26 @@ class Simulator(object):
                     )
                 else:
                     # Task was not placed.
-                    self._csv_logger.debug(
-                        f"{event.time.time},TASK_SKIP,{task.name},"
-                        f"{task.timestamp},{task.id}"
-                    )
-                    self._logger.warning(
-                        "[%s] Failed to place %s.", event.time.time, task
-                    )
+                    if self._drop_skipped_tasks:
+                        # If the configuration requires us to drop skipped
+                        # tasks, then we cancel the task, and log the event.
+                        self._dropped_tasks += 1
+                        self._csv_logger.debug(
+                            f"{event.time.time},TASK_CANCEL,{task.name},"
+                            f"{task.task_graph},{task.timestamp},{task.id}"
+                        )
+                        task.cancel(event.time)
+                    else:
+                        self._csv_logger.debug(
+                            f"{event.time.time},TASK_SKIP,{task.name},"
+                            f"{task.task_graph},{task.timestamp},{task.id}"
+                        )
+                        self._logger.warning(
+                            "[%s] Failed to place %s, skipping the Task "
+                            "for future reconsideration.",
+                            event.time.time,
+                            task,
+                        )
             elif task.worker_pool_id == worker_pool_id:
                 # Task remained on the same worker pool.
                 # If the start time has changed, apply the new start time.
@@ -835,7 +849,9 @@ class Simulator(object):
             # End of the simulator loop.
             self._csv_logger.debug(
                 f"{event.time.time},SIMULATOR_END,{self._finished_tasks},"
-                f"{self._missed_task_deadlines},{self._finished_task_graphs},"
+                f"{self._dropped_tasks},{self._missed_task_deadlines},"
+                f"{self._finished_task_graphs},"
+                f"{len(self._workload.get_cancelled_task_graphs())},"
                 f"{self._missed_task_graph_deadlines}"
             )
             self._logger.info("[%s] Ending the simulator loop.", event.time.time)

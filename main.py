@@ -84,6 +84,13 @@ flags.DEFINE_bool(
     "True if the conditionals are to be resolved at the Job submission time "
     "instead of when the previous node finishes execution.",
 )
+flags.DEFINE_bool(
+    "drop_skipped_tasks",
+    False,
+    "True if the simulator is allowed to drop tasks that cannot be scheduled."
+    "This option can be used with SAT/ILP based schedulers to stop wastefully"
+    "reconsidering tasks that will never meet their deadlines.",
+)
 
 # Benchmark related flags.
 flags.DEFINE_integer(

@@ -255,6 +255,20 @@ class Workload(object):
             filtered_tasks.extend(task_graph.filter(function))
         return filtered_tasks
 
+    def get_cancelled_task_graphs(self) -> Sequence[TaskGraph]:
+        """Retrieves the TaskGraphs that have been cancelled and will not
+        finish execution.
+
+        Returns:
+            A (possibly empty) sequence of `TaskGraph`s that have atleast
+            one of their tasks in the `CANCELLED` state.
+        """
+        cancelled_task_graphs = []
+        for task_graph in self._task_graphs.values():
+            if task_graph.is_cancelled():
+                cancelled_task_graphs.append(task_graph)
+        return cancelled_task_graphs
+
     def __len__(self) -> int:
         """Returns the total number of Tasks in the Workload."""
         total_tasks = 0
