@@ -608,7 +608,7 @@ class Simulator(object):
             if task_graph.deadline < event.time:
                 self._missed_task_graph_deadlines += 1
             self._logger.info(
-                "[%d] Finished the TaskGraph %s with a deadline %s at the "
+                "[%s] Finished the TaskGraph %s with a deadline %s at the "
                 "completion of the task %s.",
                 event.time.to(EventTime.Unit.US).time,
                 task_graph.name,
@@ -628,7 +628,7 @@ class Simulator(object):
         # Log if the TaskGraph missed its deadline.
         if task_graph is not None and event.time > task_graph.deadline:
             self._logger.warn(
-                "[%d] Missed the deadline %s of the TaskGraph %s by %s.",
+                "[%s] Missed the deadline %s of the TaskGraph %s by %s.",
                 event.time.to(EventTime.Unit.US).time,
                 task_graph.deadline,
                 task_graph.name,
@@ -880,13 +880,16 @@ class Simulator(object):
             step_size (`EventTime`) [default=1]: The amount by which to advance
                 the clock (in us).
         """
+        if step_size == EventTime.zero():
+            return
+        elif step_size < EventTime.zero():
+            raise ValueError(f"Simulator cannot step backwards {step_size}")
+
         self._logger.info(
             "[%s] Stepping for %s timesteps.",
             self._simulator_time.time,
             step_size,
         )
-        if step_size < EventTime.zero():
-            raise ValueError(f"Simulator cannot step backwards {step_size}")
         completed_tasks = []
         for worker_pool in self._worker_pools.worker_pools:
             completed_tasks.extend(worker_pool.step(self._simulator_time, step_size))
