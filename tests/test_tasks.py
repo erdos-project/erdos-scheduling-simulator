@@ -363,32 +363,23 @@ def test_task_completion_notification():
     released_tasks = task_graph.get_schedulable_tasks(EventTime.zero())
     assert len(released_tasks) == 0, "Incorrect length of released tasks returned."
 
+    # Release and finish the execution of the perception task.
     perception_task.release(EventTime(2, EventTime.Unit.US))
     released_tasks = task_graph.get_schedulable_tasks(EventTime(2, EventTime.Unit.US))
     assert len(released_tasks) == 1, "Incorrect length of released tasks returned."
     assert released_tasks[0] == perception_task, "Incorrect task released."
-
-    prediction_task.release(EventTime(2, EventTime.Unit.US))
-    released_tasks = task_graph.get_schedulable_tasks(EventTime(2, EventTime.Unit.US))
-    assert len(released_tasks) == 2, "Incorrect length of released tasks returned."
-    assert (
-        perception_task in released_tasks and prediction_task in released_tasks
-    ), "Incorrect tasks released."
-
-    # Run and finish the execution of Perception.
     perception_task.schedule(EventTime(3, EventTime.Unit.US))
     perception_task.start(EventTime(3, EventTime.Unit.US))
     perception_task.update_remaining_time(EventTime.zero())
     perception_task.finish(EventTime(4, EventTime.Unit.US))
-    task_graph.notify_task_completion(perception_task, EventTime(4, EventTime.Unit.US))
-    released_tasks = task_graph.get_schedulable_tasks(EventTime(4, EventTime.Unit.US))
-    assert perception_task.is_complete(), "Task was not completed."
-    assert len(released_tasks) == 1, "Incorrect length of released tasks returned."
-    assert released_tasks[0] == prediction_task, "Incorrect task released."
 
-    # Run and finish the execution of Prediction.
-    prediction_task.schedule(EventTime(3, EventTime.Unit.US))
-    prediction_task.start(EventTime(3, EventTime.Unit.US))
+    # Release and finish the execution of the prediction task.
+    prediction_task.release(EventTime(4, EventTime.Unit.US))
+    released_tasks = task_graph.get_schedulable_tasks(EventTime(4, EventTime.Unit.US))
+    assert len(released_tasks) == 1, "Incorrect length of released tasks returned."
+    assert released_tasks[0] == prediction_task, "Incorrect tasks released."
+    prediction_task.schedule(EventTime(4, EventTime.Unit.US))
+    prediction_task.start(EventTime(4, EventTime.Unit.US))
     prediction_task.update_remaining_time(EventTime.zero())
     prediction_task.finish(EventTime(4, EventTime.Unit.US))
     task_graph.notify_task_completion(prediction_task, EventTime(4, EventTime.Unit.US))
