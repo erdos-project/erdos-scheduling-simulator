@@ -294,6 +294,9 @@ class ILPScheduler(BaseScheduler):
         # Don't log the output to the console.
         optimizer.Params.LogToConsole = 0
 
+        # Always decide between INFINITE or UNBOUNDED.
+        optimizer.Params.DualReductions = 0
+
         return optimizer
 
     def schedule(
@@ -419,7 +422,6 @@ class ILPScheduler(BaseScheduler):
                         sim_time.to(EventTime.Unit.US).time,
                         task.unique_name,
                     )
-
         else:
             for task in tasks_to_be_scheduled:
                 placements.append(Placement(task))
@@ -789,11 +791,38 @@ class ILPScheduler(BaseScheduler):
         workload: Workload,
     ):
         # TODO (Sukrit): This is wrong. FIX.
-        placed_on_workers = []
-        for task_variable in tasks_to_variables.values():
-            if workload.get_task_graph(task_variable.task.task_graph).is_sink_task(
-                task_variable.task
-            ):
-                placed_on_workers.extend(task_variable.placed_on_workers)
+        if self._goal == "max_goodput":
+            # Find the set of unique TaskGraphs in the system.
+            schedulable_taskgraphs = {}
+            for task_variable in tasks_to_variables.values():
+                task_graph = workload.get_task_graph(task_variable.task.task_graph)
+                if task_graph.name not in schedulable_taskgraphs:
+                    schedulable_taskgraphs[task_graph.name] = optimizer.addVar(
+                        vtype=GRB.INTEGER, name=f"{task_graph.name}_reward"
+                    )
 
-        optimizer.setObjective(gp.quicksum(placed_on_workers), sense=GRB.MAXIMIZE)
+            for task_graph_name, task_graph_variable in schedulable_taskgraphs.items():
+                placement_variables = []
+                num_sink_tasks = 0
+                task_graph = workload.get_task_graph(task_graph_name)
+                for task_variable in tasks_to_variables.values():
+                    if (
+                        task_variable.task.task_graph == task_graph_name
+                        and task_graph.is_sink_task(task_variable.task)
+                    ):
+                        placement_variables.extend(task_variable.placed_on_workers)
+                        num_sink_tasks += 1
+
+                # Note (Sukrit): We add 1 to the sum since the solver runs into
+                # numerical difficulties otherwise.
+                optimizer.addConstr(
+                    task_graph_variable
+                    == (gp.quicksum(placement_variables) - num_sink_tasks) + 1,
+                    name=f"{task_graph_name}_objective_constraint",
+                )
+
+            optimizer.setObjective(
+                gp.quicksum(schedulable_taskgraphs.values()), sense=GRB.MAXIMIZE
+            )
+        else:
+            raise ValueError(f"The goal {self._goal} is not supported.")
