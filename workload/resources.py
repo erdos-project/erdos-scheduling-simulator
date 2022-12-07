@@ -267,19 +267,19 @@ class Resources(object):
         return all(quantity == 0 for quantity in self._resource_vector.values())
 
     def get_unique_resource_types(self) -> Mapping[Resource, int]:
-        """Returns the available quantity of each unique type of Resource in
+        """Returns the total quantity of each unique type of Resource in
         this Resources object.
 
         Returns:
             A Mapping of (Resource, int) pairs where each Resource is of type
-            Resource(name, id="any"), and quantity is the available quantity
+            Resource(name, id="any"), and quantity is the total quantity
             of that resource.
         """
         unique_resource_types = {}
         for resource in self.__total_resources.keys():
             if resource.name not in unique_resource_types:
                 resource_type = Resource(name=resource.name, _id="any")
-                unique_resource_types[resource_type] = self.get_available_quantity(
+                unique_resource_types[resource_type] = self.get_total_quantity(
                     resource_type
                 )
         return unique_resource_types
