@@ -599,16 +599,14 @@ class Simulator(object):
 
         # If the TaskGraph corresponding to this task finished too, log that event.
         task_graph = self._workload.get_task_graph(event.task.task_graph)
-        if (
-            task_graph is not None
-            and task_graph.is_sink_task(event.task)
-            and task_graph.is_complete()
-        ):
+        if task_graph is not None and task_graph.is_complete():
             self._finished_task_graphs += 1
             self._csv_logger.debug(
                 f"{event.time.time},TASK_GRAPH_FINISHED,{task_graph.name},"
                 f"{task_graph.deadline.to(EventTime.Unit.US).time}"
             )
+            if task_graph.deadline < event.time:
+                self._missed_task_graph_deadlines += 1
             self._logger.info(
                 "[%d] Finished the TaskGraph %s with a deadline %s at the "
                 "completion of the task %s.",
@@ -629,7 +627,6 @@ class Simulator(object):
 
         # Log if the TaskGraph missed its deadline.
         if task_graph is not None and event.time > task_graph.deadline:
-            self._missed_task_graph_deadlines += 1
             self._logger.warn(
                 "[%d] Missed the deadline %s of the TaskGraph %s by %s.",
                 event.time.to(EventTime.Unit.US).time,

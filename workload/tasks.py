@@ -603,7 +603,7 @@ class Task(object):
 
     @property
     def unique_name(self):
-        return f"{self._name}@{self._task_graph}@{str(self._timestamp)}"
+        return f"{self._name}@{self._task_graph}"
 
     @property
     def id(self):
@@ -785,11 +785,14 @@ class TaskGraph(Graph[Task]):
             child_to_release = random.choices(
                 population=task_children, weights=task_children_probabilities, k=1
             )[0]
-            if child_to_release.state > TaskState.SCHEDULED:
+            if (
+                child_to_release.state > TaskState.SCHEDULED
+                and child.state < TaskState.CANCELLED
+            ):
                 # Task should not move past the scheduled state until its
                 # last parent finishes.
                 raise RuntimeError(
-                    f"Child task {child_to_release} moved beyond SCHEDULED state"
+                    f"Child task {child_to_release} moved beyond SCHEDULED state "
                     f"without completion of the parent {task}."
                 )
 
@@ -819,11 +822,14 @@ class TaskGraph(Graph[Task]):
             released_tasks.append(child_to_release)
         else:
             for child in self.get_children(task):
-                if child.state > TaskState.SCHEDULED:
+                if (
+                    child.state > TaskState.SCHEDULED
+                    and child.state < TaskState.CANCELLED
+                ):
                     # Task should not move past the scheduled state until its
                     # last parent finishes.
                     raise RuntimeError(
-                        f"Child task {child} moved beyond SCHEDULED state"
+                        f"Child task {child} moved beyond SCHEDULED state "
                         f"without completion of the parent {task}."
                     )
                 if child.terminal or all(
@@ -1028,6 +1034,7 @@ class TaskGraph(Graph[Task]):
             ):
                 # A VIRTUAL task that may be available for scheduling.
                 tasks.append(task)
+                any_released = True
             elif (
                 retract_schedules
                 and task.state == TaskState.SCHEDULED
@@ -1039,6 +1046,7 @@ class TaskGraph(Graph[Task]):
             ):
                 # A SCHEDULED task that is being reconsidered for scheduling.
                 tasks.append(task)
+                any_released = True
 
         # No need to add already running tasks if preemption is not enabled.
         if preemption:
