@@ -88,7 +88,7 @@ class Event(object):
             return f"Event(time={self.time}, type={self.event_type}, task={self.task})"
 
     def __repr__(self):
-        return f"{self.event_type}@{self.time}"
+        return str(self)
 
     @property
     def time(self) -> EventTime:

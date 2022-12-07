@@ -122,8 +122,7 @@ class TaskOptimizerVariables:
                         name=f"{task.unique_name}_SCHEDULED_NOT_PLACED",
                     )
         else:
-            # The task hasn't been previously placed, set a variable to decide
-            # its optimal starting time.
+            # The task's start time has to be decided.
             if enforce_deadlines:
                 self._start_time = optimizer.addVar(
                     lb=max(
@@ -146,6 +145,13 @@ class TaskOptimizerVariables:
                     vtype=GRB.INTEGER,
                     name=f"{task.unique_name}_start",
                 )
+
+            # If the task was previously scheduled, seed the start time
+            # with the previously obtained solution.
+            if task.state == TaskState.SCHEDULED:
+                self._start_time.VarHintVal = task.expected_start_time.to(
+                    EventTime.Unit.US
+                ).time
 
             # Check that the Workers that can never accomodate a Task are forced
             # to be 0 in the optimizer.
@@ -365,7 +371,7 @@ class ILPScheduler(BaseScheduler):
         # Add the objectives and optimize the model.
         self._add_objective(optimizer, tasks_to_variables, workload)
         optimizer.optimize()
-        self._logger.info(
+        self._logger.debug(
             f"[{sim_time.to(EventTime.Unit.US).time}] The scheduler returned the "
             f"status {optimizer.status}."
         )
@@ -373,7 +379,7 @@ class ILPScheduler(BaseScheduler):
         # Collect the placement results.
         placements = []
         if optimizer.Status == GRB.OPTIMAL:
-            self._logger.info(
+            self._logger.debug(
                 f"[{sim_time.to(EventTime.Unit.US).time}] The scheduler returned the "
                 f"objective value {optimizer.objVal}."
             )
