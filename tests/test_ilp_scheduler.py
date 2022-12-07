@@ -650,12 +650,14 @@ def test_ilp_does_not_schedule_across_workers():
     assert (
         camera_task_1_placement.worker_pool_id == worker_pool_1.id
     ), "Incorrect WorkerPoolID retrieved."
-    assert camera_task_1_placement.placement_time == EventTime(
-        0, EventTime.Unit.US
+    assert (
+        camera_task_1_placement.placement_time == EventTime.zero()
     ), "Incorrect start time retrieved."
 
     camera_task_2_placement = placements.get_placement(camera_task_2)
     assert camera_task_2_placement is not None, "The task was not found in placements."
+    print(camera_task_2_placement.placement_time)
+    print(camera_task_2_placement.worker_pool_id)
     assert not camera_task_2_placement.is_placed(), "Incorrect WorkerPoolID retrieved."
 
 
