@@ -969,6 +969,11 @@ class TaskGraph(Graph[Task]):
                     f"Task {task.unique_name} in unknown state: {task.state}."
                 )
             task_queue.append(task)
+            task._logger.debug(
+                f"[{time.to(EventTime.Unit.US).time}] After considering the "
+                f"task {task.unique_name}, the task queue is "
+                f"{[_task.unique_name for _task in task_queue]}."
+            )
 
         # Estimate the completion time of VIRTUAL tasks.
         while len(task_queue) > 0:
@@ -1011,6 +1016,16 @@ class TaskGraph(Graph[Task]):
                     estimated_completion_time[child_task] = child_completion_time
                     task_queue.append(child_task)
 
+        estimated_completion_time_output = [
+            f"{_task.unique_name} ({_completion_time})"
+            for _task, _completion_time in estimated_completion_time.items()
+        ]
+        task._logger.debug(
+            f"[{time.to(EventTime.Unit.US).time}] The set of tasks with their "
+            f"available estimated completion times are: "
+            f"{estimated_completion_time_output}."
+        )
+
         # Add the tasks conforming to the policy within the lookahead.
         tasks = []
 
@@ -1043,7 +1058,8 @@ class TaskGraph(Graph[Task]):
                 and task in estimated_completion_time
                 and (
                     (any_released and release_taskgraphs)
-                    or estimated_completion_time[task] <= time + lookahead
+                    or estimated_completion_time[task]
+                    <= time + lookahead + task.remaining_time  # Check the release time
                 )
             ):
                 # A VIRTUAL task that may be available for scheduling.
@@ -1055,12 +1071,19 @@ class TaskGraph(Graph[Task]):
                 and task in estimated_completion_time
                 and (
                     (any_released and release_taskgraphs)
-                    or estimated_completion_time[task] <= time + lookahead
+                    or estimated_completion_time[task]
+                    <= time + lookahead + task.remaining_time
                 )
             ):
                 # A SCHEDULED task that is being reconsidered for scheduling.
                 tasks.append(task)
                 any_released = True
+            task._logger.debug(
+                f"[{time.to(EventTime.Unit.US).time}] After considering "
+                f"{task.unique_name} ({task.state}), the set of potentially "
+                f"schedulable tasks are {[_task.unique_name for _task in tasks]},"
+                f" and the status of any_released is {any_released}."
+            )
 
         # No need to add already running tasks if preemption is not enabled.
         if preemption:
