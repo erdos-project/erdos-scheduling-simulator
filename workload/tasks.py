@@ -168,6 +168,16 @@ class Task(object):
                 "Release time should be specified either while "
                 "creating the Task or when releasing it."
             )
+        if self.state not in (
+            TaskState.VIRTUAL,
+            TaskState.SCHEDULED,
+            TaskState.PREEMPTED,
+        ):
+            # Only PREEMPTED, SCHEDULED and VIRTUAL tasks can be released.
+            raise ValueError(
+                f"The task {self.unique_name} cannot be released from "
+                f"state {self.state}."
+            )
         if time is not None:
             self._logger.debug(
                 f"[{time.to(EventTime.Unit.US).time}] Transitioning {self} "
@@ -787,7 +797,7 @@ class TaskGraph(Graph[Task]):
             )[0]
             if (
                 child_to_release.state > TaskState.SCHEDULED
-                and child.state < TaskState.CANCELLED
+                and child_to_release.state < TaskState.CANCELLED
             ):
                 # Task should not move past the scheduled state until its
                 # last parent finishes.
@@ -832,6 +842,10 @@ class TaskGraph(Graph[Task]):
                         f"Child task {child} moved beyond SCHEDULED state "
                         f"without completion of the parent {task}."
                     )
+                elif child.state == TaskState.CANCELLED:
+                    # If the future task has been cancelled, then we skip
+                    # releasing the task to prevent blocking the simulator.
+                    continue
                 if child.terminal or all(
                     map(lambda task: task.is_complete(), self.get_parents(child))
                 ):
