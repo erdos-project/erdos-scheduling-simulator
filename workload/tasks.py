@@ -788,8 +788,16 @@ class TaskGraph(Graph[Task]):
             # Ensure that the probability of the children is adding up to 1.
             task_children = self.get_children(task)
             task_children_probabilities = [child.probability for child in task_children]
+            if all(
+                [prob <= sys.float_info.epsilon for prob in task_children_probabilities]
+            ):
+                # The task was conditional, and no child was available for execution.
+                return []
             if abs(sum(task_children_probabilities) - 1.0) > sys.float_info.epsilon:
-                raise ValueError("The sum of the probability of children exceeds 1.0")
+                raise ValueError(
+                    f"The sum of the probability of children of {task.unique_name}"
+                    f" exceeds 1.0: {task_children_probabilities}."
+                )
 
             # Choose a child to release using the probability distribution.
             child_to_release = random.choices(
