@@ -90,7 +90,6 @@ class TaskOptimizerVariables:
                         worker_placed_on_variable == 0,
                         name=f"{task.unique_name}_RUNNING_NOT_PLACED",
                     )
-
         elif task.state == TaskState.SCHEDULED and not retract_schedules:
             # The task was scheduled and we are not allowing retractions, set
             # the start time of the Task to the previously decided start time
@@ -110,48 +109,42 @@ class TaskOptimizerVariables:
                     f"cached WorkerID."
                 )
             previously_placed_worker = previous_placements[task.id]
-            for worker_id, placed_variable in self._placed_on_worker.items():
-                if worker_id == previously_placed_worker:
+            for worker_id, worker in workers.items():
+                worker_placed_on_variable = self._placed_on_worker[worker_id]
+                if worker.id == previously_placed_worker:
                     optimizer.addConstr(
-                        placed_variable == 1,
+                        worker_placed_on_variable == 1,
                         name=f"{task.unique_name}_SCHEDULED_PLACED",
                     )
                 else:
                     optimizer.addConstr(
-                        placed_variable == 0,
+                        worker_placed_on_variable == 0,
                         name=f"{task.unique_name}_SCHEDULED_NOT_PLACED",
                     )
         else:
             # The task's start time has to be decided.
-            if enforce_deadlines:
-                self._start_time = optimizer.addVar(
-                    lb=max(
-                        current_time.to(EventTime.Unit.US).time,
-                        task.release_time.to(EventTime.Unit.US).time,
-                    ),
-                    ub=(
-                        task.deadline.to(EventTime.Unit.US).time
-                        - task.remaining_time.to(EventTime.Unit.US).time
-                    ),
-                    vtype=GRB.INTEGER,
-                    name=f"{task.unique_name}_start",
-                )
-            else:
-                self._start_time = optimizer.addVar(
-                    lb=max(
-                        current_time.to(EventTime.Unit.US).time,
-                        task.release_time.to(EventTime.Unit.US).time,
-                    ),
-                    vtype=GRB.INTEGER,
-                    name=f"{task.unique_name}_start",
-                )
+            self._start_time = optimizer.addVar(
+                lb=max(
+                    current_time.to(EventTime.Unit.US).time,
+                    task.release_time.to(EventTime.Unit.US).time,
+                ),
+                vtype=GRB.INTEGER,
+                name=f"{task.unique_name}_start",
+            )
 
             # If the task was previously scheduled, seed the start time
-            # with the previously obtained solution.
+            # and the worker placement with the previously obtained solution.
             if task.state == TaskState.SCHEDULED:
-                self._start_time.VarHintVal = task.expected_start_time.to(
+                self._start_time.Start = task.expected_start_time.to(
                     EventTime.Unit.US
                 ).time
+                previously_placed_worker = previous_placements[task.id]
+                for worker_id, worker in workers.items():
+                    worker_placed_on_variable = self._placed_on_worker[worker_id]
+                    if worker.id == previously_placed_worker:
+                        worker_placed_on_variable.Start = 1
+                    else:
+                        worker_placed_on_variable.Start = 0
 
             # Check that the Workers that can never accomodate a Task are forced
             # to be 0 in the optimizer.
@@ -264,6 +257,11 @@ class ILPScheduler(BaseScheduler):
         goal: str = "max_goodput",
         _flags: Optional["absl.flags"] = None,
     ):
+        if not enforce_deadlines and goal == "max_goodput":
+            raise ValueError(
+                f"The goal {goal} cannot be optimized when "
+                f"deadline enforcement is {enforce_deadlines}."
+            )
         super(ILPScheduler, self).__init__(
             preemptive=preemptive,
             runtime=runtime,
@@ -366,6 +364,9 @@ class ILPScheduler(BaseScheduler):
             tasks_to_be_scheduled + previously_placed_tasks,
             workers,
         )
+
+        # Add the constraints to ensure that dependency constraints are met and
+        # resources are not oversubscribed.
         self._add_task_dependency_constraints(optimizer, tasks_to_variables, workload)
         self._add_resource_constraints(
             sim_time, optimizer, tasks_to_variables, workload, workers
@@ -399,18 +400,19 @@ class ILPScheduler(BaseScheduler):
 
                 # If the task was placed, find the start time.
                 if worker_pool_id is not None:
-                    start_time = int(task_variables.start_time.X)
+                    start_time = EventTime(
+                        int(task_variables.start_time.X), EventTime.Unit.US
+                    )
                     placements.append(
-                        Placement(
-                            task_variables.task,
-                            worker_pool_id,
-                            EventTime(start_time, EventTime.Unit.US),
-                        )
+                        Placement(task_variables.task, worker_pool_id, start_time)
                     )
                     self._logger.debug(
-                        "[%s] Placed %s on WorkerPool(%s) to be started at %d.",
+                        "[%s] Placed %s (with deadline %s and remaining time %s) "
+                        "on WorkerPool(%s) to be started at %s.",
                         sim_time.to(EventTime.Unit.US).time,
                         task.unique_name,
+                        task.deadline,
+                        task.remaining_time,
                         worker_pool_id,
                         start_time,
                     )
@@ -790,39 +792,125 @@ class ILPScheduler(BaseScheduler):
         tasks_to_variables: Mapping[str, TaskOptimizerVariables],
         workload: Workload,
     ):
-        # TODO (Sukrit): This is wrong. FIX.
-        if self._goal == "max_goodput":
-            # Find the set of unique TaskGraphs in the system.
-            schedulable_taskgraphs = {}
-            for task_variable in tasks_to_variables.values():
-                task_graph = workload.get_task_graph(task_variable.task.task_graph)
-                if task_graph.name not in schedulable_taskgraphs:
-                    schedulable_taskgraphs[task_graph.name] = optimizer.addVar(
-                        vtype=GRB.INTEGER, name=f"{task_graph.name}_reward"
-                    )
+        # Construct the reward variables for each of the TaskGraphs were
+        # made available for scheduling.
+        task_graph_reward_variables = {}
+        for task_variable in tasks_to_variables.values():
+            task_graph = workload.get_task_graph(task_variable.task.task_graph)
+            if task_graph.name not in task_graph_reward_variables:
+                task_graph_reward_variables[task_graph.name] = optimizer.addVar(
+                    vtype=GRB.INTEGER,
+                    name=f"{task_graph.name}_reward",
+                    lb=-GRB.INFINITY,
+                    ub=GRB.INFINITY,
+                )
 
-            for task_graph_name, task_graph_variable in schedulable_taskgraphs.items():
-                placement_variables = []
-                num_sink_tasks = 0
+        if self._goal == "max_goodput":
+            for (
+                task_graph_name,
+                task_graph_reward_variable,
+            ) in task_graph_reward_variables.items():
+                task_reward_variables = []
                 task_graph = workload.get_task_graph(task_graph_name)
                 for task_variable in tasks_to_variables.values():
                     if (
                         task_variable.task.task_graph == task_graph_name
                         and task_graph.is_sink_task(task_variable.task)
                     ):
-                        placement_variables.extend(task_variable.placed_on_workers)
-                        num_sink_tasks += 1
+                        # Check if the task is placed.
+                        is_placed = optimizer.addVar(
+                            vtype=GRB.BINARY, name=f"{task_variable.name}_is_placed"
+                        )
+                        optimizer.addGenConstrIndicator(
+                            is_placed,
+                            0,
+                            gp.quicksum(task_variable.placed_on_workers),
+                            GRB.EQUAL,
+                            0,
+                            name=f"{task_variable.name}_is_placed_TRUE",
+                        )
+                        optimizer.addGenConstrIndicator(
+                            is_placed,
+                            1,
+                            gp.quicksum(task_variable.placed_on_workers),
+                            GRB.EQUAL,
+                            1,
+                            name=f"{task_variable.name}_is_placed_FALSE",
+                        )
 
-                # Note (Sukrit): We add 1 to the sum since the solver runs into
-                # numerical difficulties otherwise.
-                optimizer.addConstr(
-                    task_graph_variable
-                    == (gp.quicksum(placement_variables) - num_sink_tasks) + 1,
-                    name=f"{task_graph_name}_objective_constraint",
+                        # Check if the task meets its deadline.
+                        meets_deadline = optimizer.addVar(
+                            vtype=GRB.BINARY,
+                            name=f"{task_variable.name}_meets_deadline",
+                        )
+                        optimizer.addGenConstrIndicator(
+                            meets_deadline,
+                            0,
+                            task_variable.start_time
+                            + task_variable.task.remaining_time.to(
+                                EventTime.Unit.US
+                            ).time,
+                            GRB.GREATER_EQUAL,
+                            task_variable.task.deadline.to(EventTime.Unit.US).time + 1,
+                            name=f"{task_variable.name}_meets_deadline_FALSE",
+                        )
+                        optimizer.addGenConstrIndicator(
+                            meets_deadline,
+                            1,
+                            task_variable.start_time
+                            + task_variable.task.remaining_time.to(
+                                EventTime.Unit.US
+                            ).time,
+                            GRB.LESS_EQUAL,
+                            task_variable.task.deadline.to(EventTime.Unit.US).time,
+                            name=f"{task_variable.name}_meets_deadline_TRUE",
+                        )
+
+                        # Compute the reward.
+                        task_reward = optimizer.addVar(
+                            vtype=GRB.BINARY, name=f"{task_variable.name}_reward"
+                        )
+                        optimizer.addGenConstrAnd(
+                            task_reward,
+                            [is_placed, meets_deadline],
+                            name=f"{task_variable.name}_reward_constraint",
+                        )
+                        task_reward_variables.append(task_reward)
+
+                # Now that we have all the rewards for the individual task, compute
+                # the final reward as an AND of all these rewards.
+                optimizer.addGenConstrAnd(
+                    task_graph_reward_variable,
+                    task_reward_variables,
+                    name=f"{task_graph_name}_reward_constraint",
                 )
 
             optimizer.setObjective(
-                gp.quicksum(schedulable_taskgraphs.values()), sense=GRB.MAXIMIZE
+                gp.quicksum(task_graph_reward_variables.values()), sense=GRB.MAXIMIZE
             )
+        elif self._goal == "max_slack":
+            optimization_expression = gp.QuadExpr()
+            for (
+                task_graph_name,
+                task_graph_reward_variable,
+            ) in task_graph_reward_variables.items():
+                task_graph = workload.get_task_graph(task_graph_name)
+                for task_variable in tasks_to_variables.values():
+                    if (
+                        task_variable.task.task_graph == task_graph_name
+                        and task_graph.is_sink_task(task_variable.task)
+                    ):
+                        optimization_expression.add(
+                            (
+                                gp.quicksum(task_variable.placed_on_workers)
+                                * (
+                                    task_variable.task.deadline.to(
+                                        EventTime.Unit.US
+                                    ).time
+                                    - task_variable.start_time
+                                )
+                            )
+                        )
+            optimizer.setObjective(optimization_expression, sense=GRB.MAXIMIZE)
         else:
             raise ValueError(f"The goal {self._goal} is not supported.")
