@@ -14,11 +14,12 @@ def create_default_task(
     release_time=-1,
     start_time=-1,
     completion_time=-1,
+    task_graph_name="TestTaskGraph",
 ):
     """Helper function to create a default task."""
     return Task(
         name=name if name else f"{job.name}_Task",
-        task_graph="TestTaskGraph",
+        task_graph=task_graph_name,
         job=job,
         resource_requirements=resource_requirements,
         runtime=EventTime(runtime, EventTime.Unit.US),

@@ -158,7 +158,7 @@ class TaskOptimizerVariables:
                     )
 
         # Initialize the constraints for the variables.
-        self.initialize_constraints(optimizer)
+        self.initialize_constraints(optimizer, enforce_deadlines)
 
     @property
     def start_time(self) -> gp.Var:
@@ -201,6 +201,28 @@ class TaskOptimizerVariables:
     def __repr__(self) -> str:
         return str(self)
 
+    def _initialize_timing_constraints(
+        self, optimizer: gp.Model, enforce_deadlines: bool
+    ) -> None:
+        # Add a constraint to ensure that if enforcing deadlines is required, then
+        # we are setting the start time to something that meets the deadline.
+        if enforce_deadlines:
+            is_placed = optimizer.addVar(
+                vtype=GRB.BINARY, name=f"{self.name}_is_placed"
+            )
+            optimizer.addGenConstrIndicator(
+                is_placed, 1, gp.quicksum(self.placed_on_workers), GRB.EQUAL, 1
+            )
+            optimizer.addGenConstrIndicator(
+                is_placed, 0, gp.quicksum(self.placed_on_workers), GRB.EQUAL, 0
+            )
+            optimizer.addGenConstrIndicator(
+                is_placed,
+                1,
+                self.start_time + self.task.remaining_time.to(EventTime.Unit.US).time
+                <= self.task.deadline.to(EventTime.Unit.US).time,
+            )
+
     def _initialize_placement_constraints(self, optimizer: gp.Model) -> None:
         # Add a constraint to ensure that the task is only placed on a single Worker.
         # We constrain the sum of the individual indicator variables for the placement
@@ -214,6 +236,7 @@ class TaskOptimizerVariables:
     def initialize_constraints(
         self,
         optimizer: gp.Model,
+        enforce_deadlines: bool,
     ) -> None:
         """Initializes the constraints for the particular `Task`.
 
@@ -221,6 +244,7 @@ class TaskOptimizerVariables:
             optimizer (`gp.Model`): The Gurobi model to which the constraints must
                 be added.
         """
+        self._initialize_timing_constraints(optimizer, enforce_deadlines)
         self._initialize_placement_constraints(optimizer)
 
 
@@ -368,9 +392,7 @@ class ILPScheduler(BaseScheduler):
         # Add the constraints to ensure that dependency constraints are met and
         # resources are not oversubscribed.
         self._add_task_dependency_constraints(optimizer, tasks_to_variables, workload)
-        self._add_resource_constraints(
-            sim_time, optimizer, tasks_to_variables, workload, workers
-        )
+        self._add_resource_constraints(optimizer, tasks_to_variables, workload, workers)
 
         # Add the objectives and optimize the model.
         self._add_objective(optimizer, tasks_to_variables, workload)
@@ -389,6 +411,12 @@ class ILPScheduler(BaseScheduler):
             )
             for task in tasks_to_be_scheduled:
                 task_variables = tasks_to_variables[task.unique_name]
+                # Find the starting time of the Task.
+                start_time = EventTime(
+                    int(task_variables.start_time.X), EventTime.Unit.US
+                )
+                meets_deadline = start_time + task.remaining_time <= task.deadline
+
                 # Find the Worker where the Task was placed.
                 worker_pool_id = None
                 for worker_id, worker in workers.items():
@@ -400,30 +428,37 @@ class ILPScheduler(BaseScheduler):
 
                 # If the task was placed, find the start time.
                 if worker_pool_id is not None:
-                    start_time = EventTime(
-                        int(task_variables.start_time.X), EventTime.Unit.US
-                    )
-                    placements.append(
-                        Placement(task_variables.task, worker_pool_id, start_time)
-                    )
-                    self._logger.debug(
-                        "[%s] Placed %s (with deadline %s and remaining time %s) "
-                        "on WorkerPool(%s) to be started at %s.",
-                        sim_time.to(EventTime.Unit.US).time,
-                        task.unique_name,
-                        task.deadline,
-                        task.remaining_time,
-                        worker_pool_id,
-                        start_time,
-                    )
+                    if self.enforce_deadlines and not meets_deadline:
+                        self._logger.debug(
+                            "[%s] Failed to place %s because the deadline "
+                            "could not be met with the suggested start time of %s.",
+                            sim_time.to(EventTime.Unit.US).time,
+                            task.unique_name,
+                            start_time,
+                        )
+                        placements.append(Placement(task_variables.task))
+                    else:
+                        self._logger.debug(
+                            "[%s] Placed %s (with deadline %s and remaining time %s) "
+                            "on WorkerPool(%s) to be started at %s.",
+                            sim_time.to(EventTime.Unit.US).time,
+                            task.unique_name,
+                            task.deadline,
+                            task.remaining_time,
+                            worker_pool_id,
+                            start_time,
+                        )
+                        placements.append(
+                            Placement(task_variables.task, worker_pool_id, start_time)
+                        )
                 else:
-                    placements.append(Placement(task_variables.task))
                     self._logger.debug(
                         "[%s] Failed to place %s because no WorkerPool "
                         "could accomodate the resource requirements.",
                         sim_time.to(EventTime.Unit.US).time,
                         task.unique_name,
                     )
+                    placements.append(Placement(task_variables.task))
         else:
             for task in tasks_to_be_scheduled:
                 placements.append(Placement(task))
@@ -552,7 +587,6 @@ class ILPScheduler(BaseScheduler):
 
     def _add_resource_constraints(
         self,
-        current_time: EventTime,
         optimizer: gp.Model,
         tasks_to_variables: Mapping[str, TaskOptimizerVariables],
         workload: Workload,
