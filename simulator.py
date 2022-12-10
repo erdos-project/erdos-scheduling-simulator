@@ -422,7 +422,8 @@ class Simulator(object):
         self._csv_logger.debug(
             f"{event.time.time},SCHEDULER_FINISHED,"
             f"{scheduler_runtime.to(EventTime.Unit.US).time},"
-            f"{num_placed},{num_unplaced}"
+            f"{num_placed},{num_unplaced},"
+            f"{self._last_task_placement.true_runtime.to(EventTime.Unit.US).time}"
         )
 
         placement_events = []
