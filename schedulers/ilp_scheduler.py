@@ -304,8 +304,12 @@ class ILPScheduler(BaseScheduler):
         # was assigned to.
         self._previous_placements: Mapping[str, str] = {}
 
-    def _initialize_optimizer(self) -> gp.Model:
+    def _initialize_optimizer(self, current_time: EventTime) -> gp.Model:
         """Initializes the Optimizer and sets the required parameters.
+
+        Args:
+            current_time (`EventTime`): The time at which the model was supposed
+                to be invoked.
 
         Returns:
             An optimizer of type `gp.Model` to whom the variables and constraints
@@ -313,11 +317,17 @@ class ILPScheduler(BaseScheduler):
         """
         optimizer = gp.Model("ILPScheduler")
 
-        # Don't log the output to the console.
+        # Don't log the output to the console, instead log it to a file.
         optimizer.Params.LogToConsole = 0
+        optimizer.Params.LogFile = (
+            f"./gurobi_{current_time.to(EventTime.Unit.US).time}.log"
+        )
 
         # Always decide between INFINITE or UNBOUNDED.
         optimizer.Params.DualReductions = 0
+
+        # Ask Gurobi to focus on proving bounds than finding more solutions.
+        optimizer.Params.MIPFocus = 2
 
         return optimizer
 
@@ -381,7 +391,7 @@ class ILPScheduler(BaseScheduler):
 
         # Construct the model and the variables for each of the tasks.
         scheduler_start_time = time.time()
-        optimizer = self._initialize_optimizer()
+        optimizer = self._initialize_optimizer(sim_time)
         tasks_to_variables = self._add_variables(
             sim_time,
             optimizer,
