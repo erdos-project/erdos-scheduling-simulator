@@ -46,7 +46,7 @@ flags.DEFINE_string(
     short_name="csv",
 )
 flags.DEFINE_string(
-    "graph_file_name", None, "Name of the Graph file to log the JobGraph to."
+    "graph_file_prefix", None, "Name of the Graph file to log the JobGraph to."
 )
 flags.DEFINE_string(
     "scheduler_log_base_name",
@@ -274,10 +274,11 @@ def main(args):
             # Workload too.
             pass
         return
-    if FLAGS.graph_file_name:
-        # Log the graph to the given file and do not execute the Simulator.
-        job_graph = task_loader.get_job_graph()
-        job_graph.to_dot(FLAGS.graph_file_name)
+
+    if FLAGS.graph_file_prefix:
+        # Log a DOT representation of each of the JobGraph to the required file.
+        for job_graph_name, job_graph in workload.job_graphs.items():
+            job_graph.to_dot(FLAGS.graph_file_prefix + f"_{job_graph_name}.dot")
         return
 
     # Retrieve the branch prediction policy from the flags.
