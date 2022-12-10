@@ -275,3 +275,13 @@ class Workload(object):
         for task_graph in self._task_graphs.values():
             total_tasks += len(task_graph)
         return total_tasks
+
+    @property
+    def job_graphs(self) -> Mapping[str, JobGraph]:
+        """Retrieve the JobGraph instances stored in this Workload."""
+        return self._job_graphs
+
+    @property
+    def task_graphs(self) -> Mapping[str, TaskGraph]:
+        """Retrieve the TaskGraph instances stored in this Workload."""
+        return self._task_graphs
