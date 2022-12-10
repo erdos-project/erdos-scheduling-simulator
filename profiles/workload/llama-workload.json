@@ -1,6 +1,6 @@
 [
     {
-        "name": "AMBER_Alert_First",
+        "name": "AMBER_Alert",
         "graph": [
             {
                 "name": "decode_image",
@@ -12,7 +12,6 @@
                     {
                         "CPU:any": 1
                     }
-
                 ]
             },
             {
@@ -110,32 +109,43 @@
                 ]
             }
         ],
-        "release_policy": "fixed",
-        "period": 15000,
-        "invocations": 1,
+        "release_policy": "poisson",
+        "rate": 0.001,
+        "invocations": 10,
         "deadline_variance": [10, 10]
     },
     {
-        "name": "AMBER_Alert_Second",
+        "name": "Face_Blur",
         "graph": [
             {
                 "name": "decode_image",
                 "children": [
-                    "object_detection_begin"
+                    "preprocess_image"
                 ],
                 "runtime": 1000,
                 "resource_requirements": [
                     {
                         "CPU:any": 1
                     }
-
                 ]
             },
             {
-                "name": "object_detection_begin",
+                "name": "preprocess_image",
                 "children": [
-                    "preprocess_detection_face",
-                    "preprocess_detection_car"
+                    "face_recognition_begin"
+                ],
+                "runtime": 1000,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+                ]
+            },
+            {
+                "name": "face_recognition_begin",
+                "children": [
+                    "template_match",
+                    "no_match"
                 ],
                 "conditional": true,
                 "runtime": 1000,
@@ -143,80 +153,280 @@
                     {
                         "CPU:any": 1
                     }
-
                 ]
             },
             {
-                "name": "preprocess_detection_face",
+                "name": "no_match",
                 "probability": 0.5,
+                "children": [
+                    "face_recognition_end"
+                ],
+                "runtime": 1,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+                ]
+            },
+            {
+                "name": "template_match",
+                "probability": 0.5,
+                "children": [
+                    "blur_frame"
+                ],
+                "runtime": 1000,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+                ]
+            },
+            {
+                "name": "blur_frame",
+                "children": [
+                    "face_recognition_end"
+                ],
+                "runtime": 1000,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+                ]
+            },
+            {
+                "name": "face_recognition_end",
+                "children": [],
+                "terminal": true,
+                "runtime": 1000,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+                ]
+            }
+        ],
+        "release_policy": "poisson",
+        "rate": 0.001,
+        "invocations": 10,
+        "deadline_variance": [10, 10]
+    },
+    {
+        "name": "Denoise",
+        "graph": [
+            {
+                "name": "decode_image",
+                "children": [
+                    "preprocess_image"
+                ],
+                "runtime": 1000,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+                ]
+            },
+            {
+                "name": "preprocess_image",
+                "children": [
+                    "face_recognition_begin"
+                ],
+                "runtime": 1000,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+                ]
+            },
+            {
+                "name": "face_recognition_begin",
+                "children": [
+                    "template_match",
+                    "no_match"
+                ],
+                "conditional": true,
+                "runtime": 1000,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+                ]
+            },
+            {
+                "name": "no_match",
+                "probability": 0.5,
+                "children": [
+                    "face_recognition_end"
+                ],
+                "runtime": 1,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+                ]
+            },
+            {
+                "name": "template_match",
+                "probability": 0.5,
+                "children": [
+                    "mean_shift"
+                ],
+                "runtime": 1000,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+                ]
+            },
+            {
+                "name": "mean_shift",
+                "children": [
+                    "face_recognition_end"
+                ],
+                "runtime": 1000,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+                ]
+            },
+            {
+                "name": "face_recognition_end",
+                "children": [],
+                "terminal": true,
+                "runtime": 1000,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+                ]
+            }
+        ],
+        "release_policy": "poisson",
+        "rate": 0.001,
+        "invocations": 10,
+        "deadline_variance": [10, 10]
+    },
+    {
+        "name": "Toonify",
+        "graph": [
+            {
+                "name": "decode_image",
+                "children": [
+                    "edge_detect"
+                ],
+                "runtime": 1000,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+                ]
+            },
+            {
+                "name": "edge_detect",
+                "children": [
+                    "bilateral_filter",
+                    "merge_edge_filter"
+                ],
+                "runtime": 1000,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+                ]
+            },
+            {
+                "name": "bilateral_filter",
+                "children": [
+                    "mean_shift"
+                ],
+                "runtime": 1000,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+                ]
+            },
+            {
+                "name": "merge_edge_filter",
+                "children": [
+                    "mean_shift"
+                ],
+                "runtime": 1000,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+                ]
+            },
+            {
+                "name": "mean_shift",
+                "children": [],
+                "runtime": 1000,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+                ]
+            }
+        ],
+        "release_policy": "poisson",
+        "rate": 0.001,
+        "invocations": 10,
+        "deadline_variance": [10, 10]
+    },
+    {
+        "name": "Synthetic",
+        "graph": [
+            {
+                "name": "decode_image",
+                "children": [
+                    "blur_frame"
+                ],
+                "runtime": 1000,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+                ]
+            },
+            {
+                "name": "blur_frame",
+                "children": [
+                    "preprocess_image"
+                ],
+                "runtime": 1000,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1
+                    }
+                ]
+            },
+            {
+                "name": "preprocess_image",
                 "children": [
                     "face_recognition"
                 ],
-                "runtime": 0,
+                "runtime": 1000,
                 "resource_requirements": [
                     {
                         "CPU:any": 1
                     }
-
-                ]
-            },
-            {
-                "name": "preprocess_detection_car",
-                "probability": 0.5,
-                "children": [
-                    "car_recognition"
-                ],
-                "runtime": 4000,
-                "resource_requirements": [
-                    {
-                        "CPU:any": 1
-                    }
-
                 ]
             },
             {
                 "name": "face_recognition",
-                "children": [
-                    "object_detection_end"
-                ],
-                "runtime": 0,
-                "resource_requirements": [
-                    {
-                        "CPU:any": 1
-                    }
-
-                ]
-            },
-            {
-                "name": "car_recognition",
-                "children": [
-                    "object_detection_end"
-                ],
-                "runtime": 4000,
-                "resource_requirements": [
-                    {
-                        "CPU:any": 1
-                    }
-
-                ]
-            },
-            {
-                "name": "object_detection_end",
                 "children": [],
-                "terminal": true,
-                "runtime": 995,
+                "runtime": 1000,
                 "resource_requirements": [
                     {
                         "CPU:any": 1
                     }
-
                 ]
             }
         ],
-        "release_policy": "fixed",
-        "period": 15001,
-        "start": 0,
-        "invocations": 1,
-        "deadline_variance": [25, 25]
+        "release_policy": "poisson",
+        "rate": 0.001,
+        "invocations": 10,
+        "deadline_variance": [10, 10]
     }
 ]
