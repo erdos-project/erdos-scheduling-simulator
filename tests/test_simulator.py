@@ -393,9 +393,13 @@ def test_simulator_handle_event():
     assert len(simulator._event_queue) == 4, "Incorrect length of EventQueue."
 
     # Test the SCHEDULER_FINISHED event.
-    simulator._last_task_placement = [
-        Placement(planning_task, worker_pool.id, EventTime(6, EventTime.Unit.US))
-    ]
+    simulator._last_task_placement = Placements(
+        runtime=EventTime.zero(),
+        true_runtime=EventTime.zero(),
+        placements=[
+            Placement(planning_task, worker_pool.id, EventTime(6, EventTime.Unit.US))
+        ],
+    )
     return_value = simulator._Simulator__handle_event(
         event=Event(
             event_type=EventType.SCHEDULER_FINISHED,

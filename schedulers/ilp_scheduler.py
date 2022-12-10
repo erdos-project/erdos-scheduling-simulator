@@ -475,7 +475,9 @@ class ILPScheduler(BaseScheduler):
             if self.runtime == EventTime(-1, EventTime.Unit.US)
             else self.runtime
         )
-        return Placements(runtime, placements)
+        return Placements(
+            runtime=runtime, true_runtime=scheduler_runtime, placements=placements
+        )
 
     def _add_variables(
         self,

@@ -115,12 +115,16 @@ class EDFScheduler(BaseScheduler):
                 placements.append(Placement(task=task))
 
         end_time = time.time()
-        if self.runtime == EventTime(time=-1, unit=EventTime.Unit.US):
-            return Placements(
-                runtime=EventTime(
-                    int((end_time - start_time) * 1e6), EventTime.Unit.US
-                ),
-                placements=placements,
-            )
-        else:
-            return Placements(runtime=self.runtime, placements=placements)
+
+        # Compute and return the Placements object.
+        scheduler_runtime = EventTime(
+            int((end_time - start_time) * 1e6), EventTime.Unit.US
+        )
+        runtime = (
+            scheduler_runtime
+            if self.runtime == EventTime(-1, EventTime.Unit.US)
+            else self.runtime
+        )
+        return Placements(
+            runtime=runtime, true_runtime=scheduler_runtime, placements=placements
+        )

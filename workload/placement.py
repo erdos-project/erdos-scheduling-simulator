@@ -66,9 +66,13 @@ class Placements(object):
     """
 
     def __init__(
-        self, runtime: EventTime, placements: Sequence[Placement] = []
+        self,
+        runtime: EventTime,
+        true_runtime: Optional[EventTime] = None,
+        placements: Sequence[Placement] = [],
     ) -> None:
         self._runtime = runtime
+        self._true_runtime = true_runtime
         self._placements = {placement.task.id: placement for placement in placements}
 
     def add_placement(
@@ -103,6 +107,11 @@ class Placements(object):
     def runtime(self) -> EventTime:
         """Returns the runtime of the Scheduler invocation."""
         return self._runtime
+
+    @property
+    def true_runtime(self) -> Optional[EventTime]:
+        """Returns the actual runtime of the Scheduler invocation."""
+        return self._true_runtime
 
     def __iter__(self):
         for item in self._placements.values():
