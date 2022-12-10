@@ -43,52 +43,79 @@ class WorkloadLoader(object):
 
         # Create the sequence of JobGraphs for each application.
         job_graph_mapping = {}
-        for jobs in workload_data:
-            job_name = jobs["name"]
+        for index, job in enumerate(workload_data):
+            # Retrieve the name of the JobGraph.
+            if "name" not in job:
+                raise ValueError(f"A name was not defined for the JobGraph {index}.")
+            job_name = job["name"]
+
+            for required_key in ["graph", "release_policy"]:
+                if required_key not in job:
+                    raise ValueError(
+                        f'The value for a required key ("{required_key}") '
+                        f'was not found in definition of JobGraph ("{job_name}").'
+                    )
 
             # Retrieve the start time from the definition, if provided.
-            if "start" in jobs:
-                start_time = EventTime(jobs["start"], EventTime.Unit.US)
+            if "start" in job:
+                start_time = EventTime(job["start"], EventTime.Unit.US)
             else:
                 start_time = EventTime.zero()
 
             # Retrieve the deadline variance from the definition, if provided.
-            if "deadline_variance" in jobs:
-                deadline_variance = tuple(jobs["deadline_variance"])
+            if "deadline_variance" in job:
+                deadline_variance = tuple(job["deadline_variance"])
             else:
                 deadline_variance = (0, 0)
 
             # Construct the ReleasePolicy for the JobGraph.
-            if jobs["release_policy"] == "periodic":
+            if job["release_policy"] == "periodic":
+                if "period" not in job:
+                    raise ValueError(
+                        f'A "periodic" release policy was requested, but a '
+                        f'`period` was not defined for the JobGraph ("{job_name}").'
+                    )
                 release_policy = JobGraph.ReleasePolicy.periodic(
-                    period=EventTime(jobs["period"], EventTime.Unit.US),
+                    period=EventTime(job["period"], EventTime.Unit.US),
                     start=start_time,
                 )
-            elif jobs["release_policy"] == "fixed":
+            elif job["release_policy"] == "fixed":
+                if "period" not in job or "invocations" not in job:
+                    raise ValueError(
+                        f'A "fixed" release policy was requested, but either a '
+                        f"`period` or `invocations` was not defined for the "
+                        f'JobGraph ("{job_name}").'
+                    )
                 release_policy = JobGraph.ReleasePolicy.fixed(
-                    period=EventTime(jobs["period"], EventTime.Unit.US),
-                    num_invocations=jobs["invocations"],
+                    period=EventTime(job["period"], EventTime.Unit.US),
+                    num_invocations=job["invocations"],
                     start=start_time,
                 )
-            elif jobs["release_policy"] == "poisson":
+            elif job["release_policy"] == "poisson":
+                if "rate" not in job or "invocations" not in job:
+                    raise ValueError(
+                        f'A "poisson" release policy was requested, but either a '
+                        f"`rate` or `invocations` was not defined for the "
+                        f'JobGraph ("{job_name}").'
+                    )
                 release_policy = JobGraph.ReleasePolicy.poisson(
-                    rate=jobs["rate"],
-                    num_invocations=jobs["invocations"],
+                    rate=job["rate"],
+                    num_invocations=job["invocations"],
                     start=start_time,
                 )
             else:
                 raise NotImplementedError(
-                    f"The release policy {jobs['release_policy']} is not implemented."
+                    f"The release policy {job['release_policy']} is not implemented."
                 )
 
             # Create the JobGraph.
-            job_graph_mapping[jobs["name"]] = WorkloadLoader.load_job_graph(
+            job_graph_mapping[job["name"]] = WorkloadLoader.load_job_graph(
                 JobGraph(
                     name=job_name,
                     release_policy=release_policy,
                     deadline_variance=deadline_variance,
                 ),
-                jobs["graph"],
+                job["graph"],
                 self._resource_logger,
             )
 
