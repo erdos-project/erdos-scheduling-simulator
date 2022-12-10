@@ -323,6 +323,12 @@ class Graph(Generic[T]):
             return check_dependency(node_1, node_2)
 
     def to_dot(self, filename: str) -> None:
+        """Save a DOT representation of the Graph to the given `filename`.
+
+        Args:
+            filename (`str`): The path where the DOT file to visualize this
+                Graph needs to be stored.
+        """
         with open(filename, "w") as output_file:
             output_file.write(f"digraph {self.__class__.__name__} {{\n")
             for node, _ in self._graph.items():
