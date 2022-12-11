@@ -1,3 +1,5 @@
+import multiprocessing
+import sys
 import time
 from copy import copy, deepcopy
 from itertools import combinations
@@ -266,6 +268,10 @@ class ILPScheduler(BaseScheduler):
             setting this to `True` enables the scheduler to retract prior scheduling
             decisions before they are actually placed on the WorkerPools.
         goal (`str`): The goal to use as the optimization objective.
+        time_limit (`int`): The time (in seconds) to keep searching for new solutions
+            without any changes to either the incumbent or the best bound.
+        log_to_file (`bool`): If `True`, the scheduler writes the Gurobi search
+            log to files with the format "gurobi_{sim_time}.log".
         _flags (`Optional[absl.flags]`): The runtime flags that are used to initialize
             a logger instance.
     """
@@ -279,6 +285,8 @@ class ILPScheduler(BaseScheduler):
         policy: BranchPredictionPolicy = BranchPredictionPolicy.RANDOM,
         retract_schedules: bool = False,
         goal: str = "max_goodput",
+        time_limit: int = 20,
+        log_to_file: bool = False,
         _flags: Optional["absl.flags"] = None,
     ):
         if not enforce_deadlines and goal == "max_goodput":
@@ -296,6 +304,8 @@ class ILPScheduler(BaseScheduler):
             _flags=_flags,
         )
         self._goal = goal
+        self._gap_time_limit = time_limit  # In seconds.
+        self._log_to_file = log_to_file
 
         # Cache the prior placement Workers since there is currently a mismatch
         # between the granularity at which the Scheduler computes the placements
@@ -319,15 +329,22 @@ class ILPScheduler(BaseScheduler):
 
         # Don't log the output to the console, instead log it to a file.
         optimizer.Params.LogToConsole = 0
-        optimizer.Params.LogFile = (
-            f"./gurobi_{current_time.to(EventTime.Unit.US).time}.log"
-        )
+        if self._log_to_file:
+            optimizer.Params.LogFile = (
+                f"./gurobi_{current_time.to(EventTime.Unit.US).time}.log"
+            )
 
         # Always decide between INFINITE or UNBOUNDED.
         optimizer.Params.DualReductions = 0
 
-        # Ask Gurobi to focus on proving bounds than finding more solutions.
-        optimizer.Params.MIPFocus = 2
+        # Ask Gurobi to focus on finding solutions rather than proving optimality.
+        optimizer.Params.MIPFocus = 1
+
+        # Ask Gurobi to aggressively cut the search space for proving optimality.
+        optimizer.Params.Cuts = 3
+
+        # Set the number of threads for this machine.
+        optimizer.Params.Threads = multiprocessing.cpu_count()
 
         return optimizer
 
@@ -406,7 +423,11 @@ class ILPScheduler(BaseScheduler):
 
         # Add the objectives and optimize the model.
         self._add_objective(optimizer, tasks_to_variables, workload)
-        optimizer.optimize()
+        optimizer.optimize(
+            callback=lambda optimizer, where: self._termination_check_callback(
+                sim_time, optimizer, where
+            )
+        )
         self._logger.debug(
             f"[{sim_time.to(EventTime.Unit.US).time}] The scheduler returned the "
             f"status {optimizer.status}."
@@ -960,3 +981,56 @@ class ILPScheduler(BaseScheduler):
             optimizer.setObjective(optimization_expression, sense=GRB.MAXIMIZE)
         else:
             raise ValueError(f"The goal {self._goal} is not supported.")
+
+        # Update the time at which the gap was updated and the gap itself.
+        optimizer._current_gap = float("inf")
+        optimizer._last_gap_update = time.time()
+
+    def _termination_check_callback(
+        self, sim_time: EventTime, optimizer: gp.Model, where: GRB.Callback
+    ) -> None:
+        """The callback that is invoked by the Gurobi optimizer at the end of every
+        iteration to check if the search has to be terminated.
+
+        Args:
+            sim_time (`EventTime`): The time at which the scheduler was invoked.
+            optimizer (`gp.Model`): The model that is being optimized.
+            where (`GRB.Callback`): The site where the callback was invoked.
+        """
+        if where == GRB.Callback.MIPNODE:
+            # Retrieve the current bound and the solution from the model, and use it
+            # to compute the Gap between the solution according to the formula.
+            best_objective_bound = optimizer.cbGet(GRB.Callback.MIPNODE_OBJBND)
+            incumbent_objective = optimizer.cbGet(GRB.Callback.MIPNODE_OBJBST)
+            if abs(incumbent_objective) < sys.float_info.epsilon:
+                # If we have no solution, assume the gap is infinity.
+                gap = float("inf")
+            else:
+                gap = abs(best_objective_bound - incumbent_objective) / abs(
+                    incumbent_objective
+                )
+
+            # If the gap changed, update the time at which it changed.
+            if abs(gap - optimizer._current_gap) > sys.float_info.epsilon:
+                self._logger.debug(
+                    "[%s] The gap between the incumbent (%f) and the best bound "
+                    "(%f) was updated from %f to %f.",
+                    sim_time.to(EventTime.Unit.US).time,
+                    incumbent_objective,
+                    best_objective_bound,
+                    optimizer._current_gap,
+                    gap,
+                )
+                optimizer._current_gap = gap
+                optimizer._last_gap_update = time.time()
+
+        # If the gap hasn't changed in the predefined time, terminate the model.
+        solver_time = time.time()
+        if solver_time - optimizer._last_gap_update > self._gap_time_limit:
+            self._logger.debug(
+                "[%s] The gap between the incumbent and best bound hasn't "
+                "changed in %f seconds. Terminating.",
+                sim_time.to(EventTime.Unit.US).time,
+                solver_time - optimizer._last_gap_update,
+            )
+            optimizer.terminate()

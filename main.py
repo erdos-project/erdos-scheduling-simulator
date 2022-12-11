@@ -48,11 +48,6 @@ flags.DEFINE_string(
 flags.DEFINE_string(
     "graph_file_prefix", None, "Name of the Graph file to log the JobGraph to."
 )
-flags.DEFINE_string(
-    "scheduler_log_base_name",
-    None,
-    "Base name to use to log info about scheduler runs.",
-)
 flags.DEFINE_string("log_level", "debug", "Level of logging.")
 flags.DEFINE_string(
     "workload_profile_path",
@@ -206,6 +201,18 @@ flags.DEFINE_enum(
     ["max_slack", "min_placement_delay", "max_goodput"],
     "Sets the goal of the ILP solver.",
 )
+flags.DEFINE_integer(
+    "scheduler_time_limit",
+    20,
+    "The time limit (in seconds) to allow the scheduler to keep "
+    "searching for solutions without finding a better one.",
+)
+flags.DEFINE_bool(
+    "scheduler_log_to_file",
+    False,
+    "If True, the scheduler writes the status of each run to a seperate"
+    "log file in a format unique to every scheduler.",
+)
 
 
 def main(args):
@@ -340,6 +347,8 @@ def main(args):
             policy=branch_prediction_policy,
             retract_schedules=FLAGS.retract_schedules,
             goal=FLAGS.ilp_goal,
+            time_limit=FLAGS.scheduler_time_limit,
+            log_to_file=FLAGS.scheduler_log_to_file,
             _flags=FLAGS,
         )
     else:
