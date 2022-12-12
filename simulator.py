@@ -484,6 +484,14 @@ class Simulator(object):
                         self._future_placements[task.id].time,
                         start_time,
                     )
+
+                    # Update the time both in our cached placements and on
+                    # the task itself.
+                    task.schedule(
+                        event.time,
+                        expected_start_time=max(start_time, event.time),
+                        worker_pool_id=worker_pool_id,
+                    )
                     self._future_placements[task.id]._time = start_time
                     reheapify = True
             elif task.worker_pool_id is None:
@@ -881,9 +889,7 @@ class Simulator(object):
             step_size (`EventTime`) [default=1]: The amount by which to advance
                 the clock (in us).
         """
-        if step_size == EventTime.zero():
-            return
-        elif step_size < EventTime.zero():
+        if step_size < EventTime.zero():
             raise ValueError(f"Simulator cannot step backwards {step_size}")
 
         self._logger.info(
@@ -989,13 +995,13 @@ class Simulator(object):
             lambda task: task.state in (TaskState.SCHEDULED, TaskState.RUNNING)
         )
         schedulable_tasks = self._workload.get_schedulable_tasks(
-            event.time,
-            self._scheduler.lookahead,
-            self._scheduler.preemptive,
-            self._retract_schedules,
-            self._worker_pools,
-            self._policy,
-            self._release_taskgraphs,
+            time=event.time,
+            lookahead=self._scheduler.lookahead,
+            preemption=self._scheduler.preemptive,
+            retract_schedules=self._retract_schedules,
+            worker_pools=self._worker_pools,
+            policy=self._policy,
+            release_taskgraphs=self._release_taskgraphs,
         )
         self._logger.debug(
             "[%s] The schedulable tasks are %s, and the running tasks are %s.",
@@ -1046,12 +1052,17 @@ class Simulator(object):
                     remaining_times.append(
                         (
                             task.unique_name,
+                            task.expected_start_time,
                             task.expected_start_time + task.remaining_time,
                         )
                     )
                 elif task.state == TaskState.RUNNING:
                     remaining_times.append(
-                        (task.unique_name, self._simulator_time + task.remaining_time)
+                        (
+                            task.unique_name,
+                            self._simulator_time,
+                            self._simulator_time + task.remaining_time,
+                        )
                     )
                 else:
                     raise ValueError(
@@ -1059,15 +1070,16 @@ class Simulator(object):
                         f"unexpected state: {task.state}."
                     )
             self._logger.debug(
-                "[%d] The running tasks along with their remaining time are: %s.",
+                "[%d] The running tasks along with their start time "
+                "and expected completion times are: %s.",
                 event.time.to(EventTime.Unit.US).time,
                 [
-                    f"{task_name} ({remaining_time})"
-                    for task_name, remaining_time in remaining_times
+                    f"{task_name} ({start_time}, {completion_time})"
+                    for task_name, start_time, completion_time in remaining_times
                 ],
             )
             minimum_running_task_completion_time = (
-                min(map(itemgetter(1), remaining_times), default=EventTime.zero())
+                min(map(itemgetter(2), remaining_times), default=EventTime.zero())
                 + self._scheduler_delay
             )
 
@@ -1086,6 +1098,14 @@ class Simulator(object):
                 next_event_time = min(
                     minimum_running_task_completion_time, next_event_invocation_time
                 )
+            self._logger.debug(
+                "[%s] The next event time was %s because the minimum running task "
+                "completion time was %s and the next event in the queue was at %s.",
+                event.time.to(EventTime.Unit.US).time,
+                next_event_time,
+                minimum_running_task_completion_time,
+                next_event_invocation_time,
+            )
 
             adjusted_scheduler_start_time = max(scheduler_start_time, next_event_time)
 
