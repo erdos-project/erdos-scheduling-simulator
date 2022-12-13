@@ -399,7 +399,6 @@ class JobGraph(Graph[Job]):
         elif self.release_policy.policy_type == self.ReleasePolicyType.POISSON:
             current_release = self.release_policy.start_time
             for _ in range(self.release_policy.num_invocations):
-                releases.append(current_release)
                 inter_arrival_time = int(random.expovariate(self.release_policy.rate))
                 if inter_arrival_time <= 0:
                     raise ValueError(
@@ -408,6 +407,7 @@ class JobGraph(Graph[Job]):
                         f"Poisson arrival of {self.name}."
                     )
                 current_release += EventTime(inter_arrival_time, EventTime.Unit.US)
+                releases.append(current_release)
         else:
             raise NotImplementedError(
                 f"The policy {self.release_policy} has not been implemented yet."
