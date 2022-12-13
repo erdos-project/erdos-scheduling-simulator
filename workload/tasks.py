@@ -758,7 +758,7 @@ class TaskGraph(Graph[Task]):
 
     def notify_task_completion(
         self, task: Task, finish_time: EventTime
-    ) -> Sequence[Task]:
+    ) -> (Sequence[Task], Sequence[Task]):
         """Notify the completion of the task.
 
         The caller must set the type of the task completion before invoking
@@ -769,7 +769,8 @@ class TaskGraph(Graph[Task]):
             finish_time (`EventTime`): The time (in us) at which the task finished.
 
         Returns:
-            The set of tasks released by the completion of this task.
+            A tuple with the set of tasks released by the completion of this task,
+            along with the set of tasks cancelled by the completion of this task.
 
         Raises:
             `ValueError` if an incomplete task is passed.
@@ -785,6 +786,11 @@ class TaskGraph(Graph[Task]):
         # Release any tasks that can be unlocked by the completion.
         # If the task was conditional, only release one of the children randomly.
         released_tasks = []
+
+        # Inform the caller of any tasks that were cancelled byt the completion of this
+        # task. If the task was conditional, all the children on the path that was not
+        # released will be cancelled by this task.
+        cancelled_tasks = []
 
         if task.conditional:
             # Choose a child randomly from the set of children.
@@ -829,6 +835,7 @@ class TaskGraph(Graph[Task]):
                         if child.terminal:
                             break
                         child.cancel(finish_time)
+                        cancelled_tasks.append(child)
 
             if child_to_release.release_time == EventTime(-1, EventTime.Unit.US):
                 # If the child does not have a release time, then set it to now,
@@ -876,7 +883,7 @@ class TaskGraph(Graph[Task]):
                             )
                         child.release(earliest_release)
                     released_tasks.append(child)
-        return released_tasks
+        return released_tasks, cancelled_tasks
 
     def find(self, task_name: str) -> Sequence[Task]:
         """Find all the instances of a task with the given name.

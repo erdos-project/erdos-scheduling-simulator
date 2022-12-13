@@ -19,15 +19,18 @@ class EventType(Enum):
     """Represents the different Events that a simulator has to simulate."""
 
     SIMULATOR_START = 0  # Signify the start of the simulator loop.
-    TASK_RELEASE = 1  # Ask the simulator to release the task.
-    TASK_FINISHED = 2  # Notify the simulator of the end of a task.
-    TASK_PREEMPT = 3  # Ask the simulator to preempt a task.
-    TASK_MIGRATION = 4  # Ask the simulator to migrate a task.
-    TASK_PLACEMENT = 5  # Ask the simulator to place a task.
-    SCHEDULER_START = 6  # Requires the simulator to invoke the scheduler.
-    SCHEDULER_FINISHED = 7  # Signifies the end of the scheduler loop.
-    SIMULATOR_END = 8  # Signify the end of the simulator loop.
-    LOG_UTILIZATION = 9  # Ask the simulator to log the utilization of the worker pools.
+    TASK_CANCEL = 1  # Ask the simulator to cancel the task.
+    TASK_RELEASE = 2  # Ask the simulator to release the task.
+    TASK_FINISHED = 3  # Notify the simulator of the end of a task.
+    TASK_PREEMPT = 4  # Ask the simulator to preempt a task.
+    TASK_MIGRATION = 5  # Ask the simulator to migrate a task.
+    TASK_PLACEMENT = 6  # Ask the simulator to place a task.
+    SCHEDULER_START = 7  # Requires the simulator to invoke the scheduler.
+    SCHEDULER_FINISHED = 8  # Signifies the end of the scheduler loop.
+    SIMULATOR_END = 9  # Signify the end of the simulator loop.
+    LOG_UTILIZATION = (
+        10  # Ask the simulator to log the utilization of the worker pools.
+    )
 
     def __lt__(self, other):
         # This method is used to order events in the event queue. We prioritize
@@ -58,6 +61,7 @@ class Event(object):
         placement: Optional[str] = None,
     ):
         if event_type in [
+            EventType.TASK_CANCEL,
             EventType.TASK_RELEASE,
             EventType.TASK_PLACEMENT,
             EventType.TASK_PREEMPT,
@@ -123,6 +127,18 @@ class EventQueue(object):
             event (`Event`): The event to be added to the queue.
         """
         heapq.heappush(self._event_queue, event)
+
+    def remove_event(self, event: Event):
+        """Removes the event from the queue.
+
+        Args:
+            event (`Event`): The event to be removed from the queue.
+
+        Raises:
+            `ValueError` if the event was not found.
+        """
+        self._event_queue.remove(event)
+        self.reheapify()
 
     def next(self) -> Event:
         """Retrieve the next event from the queue.
@@ -454,11 +470,14 @@ class Simulator(object):
                         # If the configuration requires us to drop skipped
                         # tasks, then we cancel the task, and log the event.
                         self._dropped_tasks += 1
-                        self._csv_logger.debug(
-                            f"{event.time.time},TASK_CANCEL,{task.name},"
-                            f"{task.task_graph},{task.timestamp},{task.id}"
-                        )
                         task.cancel(event.time)
+                        placement_events.append(
+                            Event(
+                                event_type=EventType.TASK_CANCEL,
+                                time=event.time,
+                                task=task,
+                            )
+                        )
                     else:
                         self._csv_logger.debug(
                             f"{event.time.time},TASK_SKIP,{task.name},"
@@ -563,10 +582,35 @@ class Simulator(object):
             Event(event_type=EventType.LOG_UTILIZATION, time=event.time)
         )
 
+    def _handle_task_cancellation(self, event: Event):
+        self._logger.info(
+            "[%s] Cancelling the task %s.",
+            event.time.to(EventTime.Unit.US).time,
+            event.task,
+        )
+        self._csv_logger.debug(
+            f"{event.time.to(EventTime.Unit.US).time},TASK_CANCEL,{event.task.name},"
+            f"{event.task.timestamp},{event.task.id},{event.task.task_graph}"
+        )
+
+        # If the task already had a placement, we remove the placement from our queue.
+        if event.task.id in self._future_placements:
+            placement_event = self._future_placements[event.task.id]
+            self._logger.debug(
+                "[%s] The task %s being cancelled has a future placement for %s.",
+                event.time.to(EventTime.Unit.US).time,
+                event.task,
+                placement_event.time,
+            )
+            self._event_queue.remove_event(placement_event)
+            del self._future_placements[event.task.id]
+
     def __handle_task_release(self, event: Event):
         # Release a task for the scheduler.
         self._logger.info(
-            "[%s] Added the task from %s to the released tasks.", event.time.time, event
+            "[%s] Added the task from %s to the released tasks.",
+            event.time.to(EventTime.Unit.US).time,
+            event,
         )
         self._csv_logger.debug(
             f"{event.time.time},TASK_RELEASE,{event.task.name},"
@@ -649,7 +693,7 @@ class Simulator(object):
             )
 
         # The given task has finished execution, unlock dependencies from the `Workload`
-        new_tasks = self._workload.notify_task_completion(
+        released_tasks, cancelled_tasks = self._workload.notify_task_completion(
             event.task, event.time, self._csv_logger
         )
         self._logger.info(
@@ -658,11 +702,26 @@ class Simulator(object):
             event.time.time,
             event.task,
             event.task.task_graph,
-            len(new_tasks),
+            len(released_tasks),
         )
 
+        # Add events to cancel the required tasks.
+        for index, task in enumerate(cancelled_tasks, start=1):
+            event = Event(
+                event_type=EventType.TASK_CANCEL, time=task.cancellation_time, task=task
+            )
+            self._event_queue.add_event(event)
+            self._logger.info(
+                "[%s] (%s/%s) Added %s for %s to the event queue.",
+                event.time.to(EventTime.Unit.US).time,
+                index,
+                len(cancelled_tasks),
+                event,
+                task,
+            )
+
         # Add events corresponding to the dependencies.
-        for index, task in enumerate(new_tasks, start=1):
+        for index, task in enumerate(released_tasks, start=1):
             event = Event(
                 event_type=EventType.TASK_RELEASE,
                 time=task.release_time,
@@ -673,7 +732,7 @@ class Simulator(object):
                 "[%s] (%s/%s) Added %s for %s to the event queue.",
                 event.time.time,
                 index,
-                len(new_tasks),
+                len(released_tasks),
                 event,
                 task,
             )
@@ -692,6 +751,7 @@ class Simulator(object):
         task = event.task
         assert task.id in self._future_placements, "Inconsistency in future placements."
         task_graph = workload.get_task_graph(task.task_graph)
+        assert task_graph is not None, "Inconsistency in Task placement and Workload."
         if not task.is_ready_to_run(task_graph):
             if task.state == TaskState.CANCELLED:
                 # The Task was cancelled. Consume the event.
@@ -862,6 +922,8 @@ class Simulator(object):
             )
             self._logger.info("[%s] Ending the simulator loop.", event.time.time)
             return True
+        elif event.event_type == EventType.TASK_CANCEL:
+            self._handle_task_cancellation(event)
         elif event.event_type == EventType.TASK_RELEASE:
             self.__handle_task_release(event)
         elif event.event_type == EventType.TASK_FINISHED:

@@ -903,7 +903,7 @@ def test_task_graph_complete():
     perception_task_0.finish(EventTime(1, EventTime.Unit.US))
     assert not task_graph.is_complete(), "Task Graph should not be complete."
 
-    released_tasks = task_graph.notify_task_completion(
+    released_tasks, _ = task_graph.notify_task_completion(
         perception_task_0, EventTime(1, EventTime.Unit.US)
     )
     assert len(released_tasks) == 1, "Incorrect number of tasks released."
@@ -914,7 +914,7 @@ def test_task_graph_complete():
     released_tasks[0].finish(EventTime(2, EventTime.Unit.US))
     assert not task_graph.is_complete(), "Task Graph should not be complete."
 
-    released_tasks = task_graph.notify_task_completion(
+    released_tasks, _ = task_graph.notify_task_completion(
         prediction_task_0, EventTime(2, EventTime.Unit.US)
     )
     assert len(released_tasks) == 1, "Incorrect number of tasks released."
@@ -977,17 +977,19 @@ def test_conditional_task_graph_complete():
     perception_task_0.finish(EventTime(1, EventTime.Unit.US))
     assert not task_graph.is_complete(), "Task Graph should not be complete."
 
-    released_tasks = task_graph.notify_task_completion(
+    released_tasks, cancelled_tasks = task_graph.notify_task_completion(
         perception_task_0, EventTime(1, EventTime.Unit.US)
     )
     assert len(released_tasks) == 1, "Incorrect number of tasks released."
     if released_tasks[0] == prediction_task_0:
         assert (
             planning_task_0.state == TaskState.CANCELLED
+            and planning_task_0 in cancelled_tasks
         ), "The branch not taken was not cancelled."
     elif released_tasks[0] == planning_task_0:
         assert (
             prediction_task_0.state == TaskState.CANCELLED
+            and prediction_task_0 in cancelled_tasks
         ), "The branch not taken was not cancelled."
     else:
         assert False, "Incorrect task released."
@@ -997,7 +999,7 @@ def test_conditional_task_graph_complete():
     released_tasks[0].finish(EventTime(2, EventTime.Unit.US))
     assert not task_graph.is_complete(), "Task Graph should not be complete."
 
-    released_tasks = task_graph.notify_task_completion(
+    released_tasks, _ = task_graph.notify_task_completion(
         released_tasks[0], EventTime(2, EventTime.Unit.US)
     )
     assert len(released_tasks) == 1, "Incorrect number of tasks released."
@@ -1379,7 +1381,7 @@ def test_task_cancellation():
     assert (
         detection_start_task.state == TaskState.COMPLETED
     ), "DetectionStart@0 should be finished."
-    released_tasks = task_graph.notify_task_completion(
+    released_tasks, cancelled_tasks = task_graph.notify_task_completion(
         detection_start_task, EventTime(1, EventTime.Unit.US)
     )
 
@@ -1391,10 +1393,12 @@ def test_task_cancellation():
         assert preprocess_car_task.probability == 0.0, "Incorrect probability set."
         assert (
             preprocess_car_task.state == TaskState.CANCELLED
+            and preprocess_car_task in cancelled_tasks
         ), "Incorrect state for Task."
         assert car_recognition_task.probability == 0.0, "Incorrect probability set."
         assert (
             car_recognition_task.state == TaskState.CANCELLED
+            and car_recognition_task in cancelled_tasks
         ), "Incorrect state for Task."
         assert (
             detection_end_task.state == TaskState.VIRTUAL
@@ -1405,10 +1409,12 @@ def test_task_cancellation():
         assert preprocess_face_task.probability == 0.0, "Incorrect probability set."
         assert (
             preprocess_face_task.state == TaskState.CANCELLED
+            and preprocess_face_task in cancelled_tasks
         ), "Incorrect state for Task."
         assert face_recognition_task.probability == 0.0, "Incorrect probability set."
         assert (
             face_recognition_task.state == TaskState.CANCELLED
+            and face_recognition_task in cancelled_tasks
         ), "Incorrect state for Task."
         assert (
             detection_end_task.state == TaskState.VIRTUAL
