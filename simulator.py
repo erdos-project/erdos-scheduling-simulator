@@ -747,7 +747,11 @@ class Simulator(object):
         task.preempt(event.time)
 
     def __handle_task_placement(self, event: Event, workload: Workload):
-        self._logger.debug("[%s] Handling TASK_PLACEMENT event: %s.", event.time, event)
+        self._logger.debug(
+            "[%s] Handling TASK_PLACEMENT event: %s.",
+            event.time.to(EventTime.Unit.US).time,
+            event,
+        )
         task = event.task
         assert task.id in self._future_placements, "Inconsistency in future placements."
         task_graph = workload.get_task_graph(task.task_graph)
@@ -782,7 +786,7 @@ class Simulator(object):
                 self._logger.info(
                     "[%s] The Task %s was not ready to run, and has been pushed for "
                     "later placement at %s.",
-                    event.time,
+                    event.time.to(EventTime.Unit.US).time,
                     task,
                     next_placement_time,
                 )
