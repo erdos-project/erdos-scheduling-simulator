@@ -1340,10 +1340,14 @@ class TaskGraph(Graph[Task]):
         """Check if the task graph has been cancelled, and will not finish execution.
 
         Returns
-            `True` if any of the tasks in the TaskGraph have been cancelled, and
+            `True` if any of the sink tasks in the TaskGraph have been cancelled, and
             `False` otherwise.
         """
-        return any(task.state == TaskState.CANCELLED for task in self.get_nodes())
+        return any(
+            task.state == TaskState.CANCELLED
+            for task in self.get_nodes()
+            if self.is_sink_task(task)
+        )
 
     def resolve_conditional(
         self, task: Task, policy: BranchPredictionPolicy
