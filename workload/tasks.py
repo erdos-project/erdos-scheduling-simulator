@@ -6,7 +6,7 @@ import uuid
 from collections import defaultdict, deque
 from enum import Enum
 from functools import total_ordering
-from typing import Mapping, Optional, Sequence, Union
+from typing import Mapping, Optional, Sequence, Tuple, Union
 
 from utils import EventTime, fuzz_time, setup_logging
 
@@ -758,7 +758,7 @@ class TaskGraph(Graph[Task]):
 
     def notify_task_completion(
         self, task: Task, finish_time: EventTime
-    ) -> (Sequence[Task], Sequence[Task]):
+    ) -> Tuple[Sequence[Task], Sequence[Task]]:
         """Notify the completion of the task.
 
         The caller must set the type of the task completion before invoking
@@ -801,7 +801,7 @@ class TaskGraph(Graph[Task]):
                 [prob <= sys.float_info.epsilon for prob in task_children_probabilities]
             ):
                 # The task was conditional, and no child was available for execution.
-                return []
+                return (released_tasks, cancelled_tasks)
             if abs(sum(task_children_probabilities) - 1.0) > sys.float_info.epsilon:
                 raise ValueError(
                     f"The sum of the probability of children of {task.unique_name}"

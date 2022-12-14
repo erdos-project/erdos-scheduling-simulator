@@ -1,4 +1,4 @@
-from typing import Callable, Mapping, Optional, Sequence
+from typing import Callable, Mapping, Optional, Sequence, Tuple
 
 import absl
 
@@ -136,7 +136,7 @@ class Workload(object):
         task: Task,
         finish_time: EventTime,
         csv_logger=None,
-    ) -> Sequence[Task]:
+    ) -> Tuple[Sequence[Task], Sequence[Task]]:
         """Notifies the Workload of the completion of a task.
 
         Args:
@@ -144,8 +144,9 @@ class Workload(object):
             finish_time: The time at which the task finished its execution.
 
         Returns:
-            A sequence of `Task`s that are released upon the successful completion
-            of the given task.
+            A tuple of sequence of `Task`s that are released upon the successful
+            completion of the given task, and the tasks that were cancelled as a
+            result of this successful completion.
         """
         if task.task_graph not in self._task_graphs:
             raise ValueError(
@@ -153,7 +154,9 @@ class Workload(object):
             )
 
         task_graph = self._task_graphs[task.task_graph]
-        new_tasks = task_graph.notify_task_completion(task, finish_time)
+        new_tasks, cancelled_tasks = task_graph.notify_task_completion(
+            task, finish_time
+        )
         if len(new_tasks) == 0 and task_graph.is_complete():
             # The TaskGraph has finished execution, it is safe to remove
             # it from the Workload at this moment.
@@ -174,7 +177,7 @@ class Workload(object):
                     f"{tardiness.to(EventTime.Unit.US).time}"
                 )
             del self._task_graphs[task.task_graph]
-        return new_tasks
+        return new_tasks, cancelled_tasks
 
     def release_tasks(self, time: Optional[EventTime] = None) -> Sequence[Task]:
         """Requests the Workload to release the set of `Task`s corresponding
