@@ -450,7 +450,7 @@ def test_poisson_release_policy_failure():
             planning_job: [],
         },
         release_policy=JobGraph.ReleasePolicy.poisson(
-            rate=2.0,
+            rate=200.0,
             num_invocations=1,
         ),
     )
