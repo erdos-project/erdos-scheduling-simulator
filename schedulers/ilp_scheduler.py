@@ -877,13 +877,30 @@ class ILPScheduler(BaseScheduler):
                 task_graph_name,
                 task_graph_reward_variable,
             ) in task_graph_reward_variables.items():
-                task_reward_variables = []
                 task_graph = workload.get_task_graph(task_graph_name)
+
+                # Define reward variables for the deepest tasks released during this
+                # invocation. A `deep` task is defined as one whose children either
+                # do not exist (sink task) or that they were not released during
+                # this invocation. If the `release_taskgraphs` option was set, this
+                # defaults to checking the status of the sink nodes in a TaskGraph.
+                task_reward_variables = []
                 for task_variable in tasks_to_variables.values():
-                    if (
-                        task_variable.task.task_graph == task_graph_name
-                        and task_graph.is_sink_task(task_variable.task)
-                    ):
+                    if task_variable.task.task_graph == task_graph_name:
+                        # Check if the task is a sink task.
+                        # Either the task is a sink task (i.e., has no children), or
+                        # none of its children are included in the currently released
+                        # tasks during this invocation of the Scheduler.
+                        is_sink_task = task_graph.is_sink_task(
+                            task_variable.task
+                        ) or not any(
+                            child.unique_name in tasks_to_variables
+                            for child in task_graph.get_children(task_variable.task)
+                        )
+
+                        if not is_sink_task:
+                            continue
+
                         # Check if the task is placed.
                         is_placed = optimizer.addVar(
                             vtype=GRB.BINARY, name=f"{task_variable.name}_is_placed"
@@ -962,11 +979,24 @@ class ILPScheduler(BaseScheduler):
                 task_graph_reward_variable,
             ) in task_graph_reward_variables.items():
                 task_graph = workload.get_task_graph(task_graph_name)
+
+                # Compute the reward for the deepest tasks released.
                 for task_variable in tasks_to_variables.values():
-                    if (
-                        task_variable.task.task_graph == task_graph_name
-                        and task_graph.is_sink_task(task_variable.task)
-                    ):
+                    if task_variable.task.task_graph == task_graph_name:
+                        # Check if the task is a sink task.
+                        # Either the task is a sink task (i.e., has no children), or
+                        # none of its children are included in the currently released
+                        # tasks during this invocation of the Scheduler.
+                        is_sink_task = task_graph.is_sink_task(
+                            task_variable.task
+                        ) or not any(
+                            child.unique_name in tasks_to_variables
+                            for child in task_graph.get_children(task_variable.task)
+                        )
+
+                        if not is_sink_task:
+                            continue
+
                         optimization_expression.add(
                             (
                                 gp.quicksum(task_variable.placed_on_workers)
