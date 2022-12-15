@@ -195,13 +195,13 @@ class Graph(Generic[T]):
         visited_nodes = set()
         if node:
             # Start from the location provided by the caller, and mark all
-            # the sibling nodes as visited.
+            # the other parents of your children as visited.
             frontier = deque([node])
 
-            node_depth = self.get_node_depth(node)
-            for sibling_node in self.get_nodes():
-                if self.get_node_depth(sibling_node) == node_depth:
-                    visited_nodes.add(sibling_node)
+            for child in self.get_children(node):
+                for parent in self.get_parents(child):
+                    if parent != node:
+                        visited_nodes.add(parent)
         else:
             # Start from the root of the graph.
             frontier = deque(self.get_sources())
