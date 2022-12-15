@@ -1006,9 +1006,7 @@ class TaskGraph(Graph[Task]):
             elif task.state == TaskState.SCHEDULED:
                 if retract_schedules:
                     # Assume that the task will be placed again now.
-                    estimated_completion_time[task] = (
-                        time + task.remaining_time
-                    )
+                    estimated_completion_time[task] = time + task.remaining_time
                 else:
                     estimated_completion_time[task] = (
                         task.expected_start_time + task.remaining_time
