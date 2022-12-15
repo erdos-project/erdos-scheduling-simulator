@@ -1004,11 +1004,10 @@ class TaskGraph(Graph[Task]):
                     task.release_time + task.remaining_time
                 )
             elif task.state == TaskState.SCHEDULED:
-                if retract_schedules and task not in self.get_source_tasks():
-                    continue
-                elif retract_schedules:
+                if retract_schedules:
+                    # Assume that the task will be placed again now.
                     estimated_completion_time[task] = (
-                        task.release_time + task.remaining_time
+                        time + task.remaining_time
                     )
                 else:
                     estimated_completion_time[task] = (
