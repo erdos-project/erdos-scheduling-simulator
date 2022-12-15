@@ -214,6 +214,14 @@ flags.DEFINE_bool(
     "log file in a format unique to every scheduler.",
 )
 
+# Override JSON / CONF settings.
+flags.DEFINE_float(
+    "override_poisson_arrival_rate",
+    0.0,
+    "Override the Poisson arrival rate for all TaskGraphs defined"
+    "in the JSON workload definition.",
+)
+
 
 def main(args):
     """Main loop that loads the data from the given profile paths, and

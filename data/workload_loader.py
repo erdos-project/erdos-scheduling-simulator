@@ -1,5 +1,6 @@
 import json
 import logging
+import sys
 from typing import Mapping, Optional, Sequence
 
 import absl  # noqa: F401
@@ -29,9 +30,15 @@ class WorkloadLoader(object):
                 log_file=_flags.log_file_name,
                 log_level=_flags.log_level,
             )
+            self._poisson_arrival_rate = None
         else:
             self._logger = setup_logging(name=self.__class__.__name__)
             self._resource_logger = setup_logging(name="Resources")
+            self._poisson_arrival_rate = (
+                _flags.override_poisson_arrival_rate
+                if _flags.override_poisson_arrival_rate > sys.float_info.epsilon
+                else None
+            )
 
         # Read the JSON file for applications and create a JobGraph for
         # each application.
@@ -92,14 +99,18 @@ class WorkloadLoader(object):
                     start=start_time,
                 )
             elif job["release_policy"] == "poisson":
-                if "rate" not in job or "invocations" not in job:
+                if (
+                    "rate" not in job and self._poisson_arrival_rate is None
+                ) or "invocations" not in job:
                     raise ValueError(
                         f'A "poisson" release policy was requested, but either a '
                         f"`rate` or `invocations` was not defined for the "
                         f'JobGraph ("{job_name}").'
                     )
                 release_policy = JobGraph.ReleasePolicy.poisson(
-                    rate=job["rate"],
+                    rate=job["rate"]
+                    if not self._poisson_arrival_rate
+                    else self._poisson_arrival_rate,
                     num_invocations=job["invocations"],
                     start=start_time,
                 )
