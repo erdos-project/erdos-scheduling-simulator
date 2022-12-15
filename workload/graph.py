@@ -193,7 +193,19 @@ class Graph(Generic[T]):
             node: The node to start the breadth-first search from.
         """
         visited_nodes = set()
-        frontier = deque(self.get_sources() if node is None else [node])
+        if node:
+            # Start from the location provided by the caller, and mark all
+            # the sibling nodes as visited.
+            frontier = deque([node])
+
+            node_depth = self.get_node_depth(node)
+            for sibling_node in self.get_nodes():
+                if self.get_node_depth(sibling_node) == node_depth:
+                    visited_nodes.add(sibling_node)
+        else:
+            # Start from the root of the graph.
+            frontier = deque(self.get_sources())
+
         while len(frontier) > 0:
             node = frontier.popleft()
             visited_nodes.add(node)

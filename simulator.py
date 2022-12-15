@@ -468,16 +468,23 @@ class Simulator(object):
                     # Task was not placed.
                     if self._drop_skipped_tasks:
                         # If the configuration requires us to drop skipped
-                        # tasks, then we cancel the task, and log the event.
-                        self._dropped_tasks += 1
-                        task.cancel(event.time)
-                        placement_events.append(
-                            Event(
-                                event_type=EventType.TASK_CANCEL,
-                                time=event.time,
-                                task=task,
+                        # tasks, then we cancel the task, along with all its
+                        # dependent tasks and log the event.
+                        task_graph = self._workload.get_task_graph(task.task_graph)
+                        assert (
+                            task_graph is not None
+                        ), f"Empty TaskGraph received for {task.unique_name}"
+
+                        cancelled_tasks = task_graph.cancel(task, event.time)
+                        self._dropped_tasks += len(cancelled_tasks)
+                        for cancelled_task in cancelled_tasks:
+                            placement_events.append(
+                                Event(
+                                    event_type=EventType.TASK_CANCEL,
+                                    time=cancelled_task.cancellation_time,
+                                    task=cancelled_task,
+                                )
                             )
-                        )
                     else:
                         self._csv_logger.debug(
                             f"{event.time.time},TASK_SKIP,{task.name},"
@@ -654,19 +661,26 @@ class Simulator(object):
         task_graph = self._workload.get_task_graph(event.task.task_graph)
         if task_graph is not None and task_graph.is_complete():
             self._finished_task_graphs += 1
+            tardiness = (
+                EventTime.zero()
+                if task_graph.deadline > event.time
+                else event.time - task_graph.deadline
+            )
             self._csv_logger.debug(
                 f"{event.time.time},TASK_GRAPH_FINISHED,{task_graph.name},"
-                f"{task_graph.deadline.to(EventTime.Unit.US).time}"
+                f"{task_graph.deadline.to(EventTime.Unit.US).time},"
+                f"{tardiness.to(EventTime.Unit.US).time}"
             )
             if task_graph.deadline < event.time:
                 self._missed_task_graph_deadlines += 1
             self._logger.info(
                 "[%s] Finished the TaskGraph %s with a deadline %s at the "
-                "completion of the task %s.",
+                "completion of the task %s with a tardiness of %s.",
                 event.time.to(EventTime.Unit.US).time,
                 task_graph.name,
                 task_graph.deadline,
                 event.task.name,
+                tardiness,
             )
 
         # Log if the task missed its deadline or not.
@@ -694,7 +708,7 @@ class Simulator(object):
 
         # The given task has finished execution, unlock dependencies from the `Workload`
         released_tasks, cancelled_tasks = self._workload.notify_task_completion(
-            event.task, event.time, self._csv_logger
+            event.task, event.time
         )
         self._logger.info(
             "[%s] Notified the Workload of the completion of %s from %s, "

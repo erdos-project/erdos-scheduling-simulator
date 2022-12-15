@@ -135,7 +135,6 @@ class Workload(object):
         self,
         task: Task,
         finish_time: EventTime,
-        csv_logger=None,
     ) -> Tuple[Sequence[Task], Sequence[Task]]:
         """Notifies the Workload of the completion of a task.
 
@@ -154,30 +153,7 @@ class Workload(object):
             )
 
         task_graph = self._task_graphs[task.task_graph]
-        new_tasks, cancelled_tasks = task_graph.notify_task_completion(
-            task, finish_time
-        )
-        if len(new_tasks) == 0 and task_graph.is_complete():
-            # The TaskGraph has finished execution, it is safe to remove
-            # it from the Workload at this moment.
-            tardiness = (
-                EventTime.zero()
-                if task_graph.deadline > finish_time
-                else finish_time - task_graph.deadline
-            )
-            self._logger.info(
-                f"[{finish_time.time}] Finished the execution of TaskGraph "
-                f"{task.task_graph} with the deadline {task_graph.deadline}. "
-                f"The tardiness was {tardiness}."
-            )
-            if csv_logger:
-                csv_logger.info(
-                    f"{finish_time.time},TASK_GRAPH_FINISH,{task.task_graph},"
-                    f"{task_graph.deadline.to(EventTime.Unit.US).time},"
-                    f"{tardiness.to(EventTime.Unit.US).time}"
-                )
-            del self._task_graphs[task.task_graph]
-        return new_tasks, cancelled_tasks
+        return task_graph.notify_task_completion(task, finish_time)
 
     def release_tasks(self, time: Optional[EventTime] = None) -> Sequence[Task]:
         """Requests the Workload to release the set of `Task`s corresponding

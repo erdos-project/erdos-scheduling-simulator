@@ -756,6 +756,50 @@ class TaskGraph(Graph[Task]):
         """
         self.add_node(task, *children)
 
+    def cancel(self, task: Task, time: EventTime) -> Sequence[Task]:
+        """Cancels a task along with any tasks that cannot execute as a result
+        of this task's cancellation. Note that this method also cancels the
+        execution of the task thus removing the need to call cancel on the task
+        independently.
+
+        Args:
+            task (`Task`): The task that needs to be cancelled along with its
+                descendants.
+            time (`EventTime`): The time at which the tasks need to be cancelled.
+
+        Returns:
+            The set of tasks that were cancelled as a result of the cancellation
+            of this task (includes the calling task).
+        """
+        # Do a breadth-first traversal from this task to all the children of this
+        # task until the first terminal task, or until no task is left.
+        cancelled_tasks = []
+        for child in self.breadth_first(task):
+            if (
+                child.terminal
+                and child != task
+                and not all(
+                    parent.state == TaskState.CANCELLED
+                    for parent in self.get_parents(child)
+                )
+            ):
+                # If the terminal child cannot be cancelled because one or more
+                # of its parents can still finish execution, then stop, otherwise
+                # continue the cancellation of children.
+                # Note: We only use this check to ensure that we do not inadvertently
+                # cancel a terminal task as a result of a cascading cancellation.
+                # However, if the cancellation of the terminal task is requested, then
+                # we comply with the request.
+                break
+
+            if child.state == TaskState.CANCELLED:
+                # This child (and all its children) were cancelled, stop execution.
+                break
+            cancelled_tasks.append(child)
+            child.cancel(time)
+
+        return cancelled_tasks
+
     def notify_task_completion(
         self, task: Task, finish_time: EventTime
     ) -> Tuple[Sequence[Task], Sequence[Task]]:
@@ -831,11 +875,7 @@ class TaskGraph(Graph[Task]):
                 if child == child_to_release:
                     child.update_probability(1.0)
                 else:
-                    for child in self.breadth_first(child):
-                        if child.terminal:
-                            break
-                        child.cancel(finish_time)
-                        cancelled_tasks.append(child)
+                    cancelled_tasks.extend(self.cancel(child, finish_time))
 
             if child_to_release.release_time == EventTime(-1, EventTime.Unit.US):
                 # If the child does not have a release time, then set it to now,
