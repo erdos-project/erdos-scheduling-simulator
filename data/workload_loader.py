@@ -30,15 +30,15 @@ class WorkloadLoader(object):
                 log_file=_flags.log_file_name,
                 log_level=_flags.log_level,
             )
-            self._poisson_arrival_rate = None
-        else:
-            self._logger = setup_logging(name=self.__class__.__name__)
-            self._resource_logger = setup_logging(name="Resources")
             self._poisson_arrival_rate = (
                 _flags.override_poisson_arrival_rate
                 if _flags.override_poisson_arrival_rate > sys.float_info.epsilon
                 else None
             )
+        else:
+            self._logger = setup_logging(name=self.__class__.__name__)
+            self._resource_logger = setup_logging(name="Resources")
+            self._poisson_arrival_rate = None
 
         # Read the JSON file for applications and create a JobGraph for
         # each application.
@@ -109,7 +109,7 @@ class WorkloadLoader(object):
                     )
                 release_policy = JobGraph.ReleasePolicy.poisson(
                     rate=job["rate"]
-                    if not self._poisson_arrival_rate
+                    if self._poisson_arrival_rate is None
                     else self._poisson_arrival_rate,
                     num_invocations=job["invocations"],
                     start=start_time,
