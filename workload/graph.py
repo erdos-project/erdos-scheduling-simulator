@@ -201,9 +201,9 @@ class Graph(Generic[T]):
             frontier = deque(self.get_sources())
 
         while len(frontier) > 0:
-            node = frontier.popleft()
-            visited_nodes.add(node)
-            for child in self.get_children(node):
+            current_node = frontier.popleft()
+            visited_nodes.add(current_node)
+            for child in self.get_children(current_node):
                 if node is None and all(
                     parent in visited_nodes for parent in self.get_parents(child)
                 ):
@@ -220,7 +220,7 @@ class Graph(Generic[T]):
                     # ensure that a child gets added when all the parents that are
                     # dependent on the node have been visited.
                     frontier.append(child)
-            yield node
+            yield current_node
 
     def depth_first(self, node: T = None) -> Generator[T, None, None]:
         """Iterates over the graph in a depth-first manner.

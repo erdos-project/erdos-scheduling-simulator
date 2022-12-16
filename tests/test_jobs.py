@@ -130,7 +130,7 @@ def test_iteration_jobgraph():
     job_graph.add_job(lidar_coordinate_mapping_job, [perception_job])
 
     traversal = []
-    for job in job_graph:
+    for job in job_graph.breadth_first():
         traversal.append(job)
 
     assert traversal == [
@@ -138,7 +138,10 @@ def test_iteration_jobgraph():
         lidar_job,
         lidar_coordinate_mapping_job,
         perception_job,
-    ], "Incorrect BFS traversal returned by the JobGraph."
+    ], (
+        f"Incorrect BFS traversal returned by "
+        f"the JobGraph: {[job.name for job in traversal]}."
+    )
 
 
 def test_depth_first_jobgraph():
