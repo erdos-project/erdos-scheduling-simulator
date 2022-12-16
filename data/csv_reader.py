@@ -383,6 +383,7 @@ class CSVReader(object):
                         "tid": tid,
                         "args": {
                             "name": task.name,
+                            "task_graph": task.task_graph,
                             "id": str(task.id),
                             "timestamp": task.timestamp,
                             "intended_release_time": task.intended_release_time,
@@ -392,7 +393,6 @@ class CSVReader(object):
                             "start_time": task.start_time,
                             "completion_time": task.completion_time,
                             "missed_deadline": task.missed_deadline,
-                            "placement": placement,
                             "skipped_times": task.skipped_times,
                         },
                     }
@@ -464,6 +464,7 @@ class CSVReader(object):
                             "tid": tid,
                             "args": {
                                 "name": task.name,
+                                "task_graph": task.task_graph,
                                 "id": str(task.id),
                                 "timestamp": task.timestamp,
                                 "intended_release_time": task.intended_release_time,
@@ -473,8 +474,8 @@ class CSVReader(object):
                                 "start_time": task.start_time,
                                 "completion_time": task.completion_time,
                                 "missed_deadline": task.missed_deadline,
-                                "placement": placement,
                                 "skipped_times": task.skipped_times,
+                                "worker_name": placement.worker_pool.name,
                             },
                         }
                         trace["traceEvents"].append(trace_event)
@@ -551,6 +552,4 @@ class CSVReader(object):
                         trace["traceEvents"].append(trace_event)
 
         with open(output_path, "w") as f:
-            json.dump(
-                trace, f, default=lambda obj: obj.__dict__, indent=4, sort_keys=True
-            )
+            json.dump(trace, f, default=lambda obj: obj.__dict__, indent=4)
