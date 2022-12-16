@@ -194,14 +194,8 @@ class Graph(Generic[T]):
         """
         visited_nodes = set()
         if node:
-            # Start from the location provided by the caller, and mark all
-            # the other parents of your children as visited.
+            # Start from the location provided by the caller.
             frontier = deque([node])
-
-            for child in self.get_children(node):
-                for parent in self.get_parents(child):
-                    if parent != node:
-                        visited_nodes.add(parent)
         else:
             # Start from the root of the graph.
             frontier = deque(self.get_sources())
@@ -210,7 +204,21 @@ class Graph(Generic[T]):
             node = frontier.popleft()
             visited_nodes.add(node)
             for child in self.get_children(node):
-                if all(parent in visited_nodes for parent in self.get_parents(child)):
+                if node is None and all(
+                    parent in visited_nodes for parent in self.get_parents(child)
+                ):
+                    # If no starting node was provided, we should have visited all the
+                    # parent nodes of a child before we add it to the frontier.
+                    frontier.append(child)
+                elif node is not None and all(
+                    parent in visited_nodes
+                    for parent in self.get_parents(child)
+                    if self.are_dependent(node, parent)
+                ):
+                    # If the breadth-first traversal was initialized from a node, we
+                    # can have children whose parents can never be visited. Hence, we
+                    # ensure that a child gets added when all the parents that are
+                    # dependent on the node have been visited.
                     frontier.append(child)
             yield node
 

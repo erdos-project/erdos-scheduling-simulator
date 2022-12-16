@@ -245,7 +245,12 @@ class Workload(object):
         cancelled_task_graphs = []
         for task_graph in self._task_graphs.values():
             if task_graph.is_cancelled():
+                self._logger.debug("The TaskGraph %s was cancelled.", task_graph.name)
                 cancelled_task_graphs.append(task_graph)
+            else:
+                self._logger.debug(
+                    "The TaskGraph %s was not cancelled.", task_graph.name
+                )
         return cancelled_task_graphs
 
     def __len__(self) -> int:

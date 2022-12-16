@@ -775,6 +775,12 @@ class TaskGraph(Graph[Task]):
         # task until the first terminal task, or until no task is left.
         cancelled_tasks = []
         for child in self.breadth_first(task):
+            task._logger.debug(
+                "[%s] The TaskGraph %s is considering whether to cancel Task %s.",
+                time.to(EventTime.Unit.US).time,
+                self.name,
+                child.unique_name,
+            )
             if (
                 child.terminal
                 and child != task
@@ -790,11 +796,33 @@ class TaskGraph(Graph[Task]):
                 # cancel a terminal task as a result of a cascading cancellation.
                 # However, if the cancellation of the terminal task is requested, then
                 # we comply with the request.
+                task._logger.debug(
+                    "[%s] The cancellation of the Task %s and any future tasks was "
+                    "stopped because %s was a terminal task and the state of its "
+                    "parents was: %s.",
+                    time.to(EventTime.Unit.US).time,
+                    child.unique_name,
+                    child.unique_name,
+                    str(
+                        [
+                            (parent.unique_name, parent.state)
+                            for parent in self.get_parents(child)
+                        ]
+                    ),
+                )
                 break
 
             if child.state == TaskState.CANCELLED:
                 # This child (and all its children) were cancelled, stop execution.
+                task._logger.debug(
+                    "[%s] The Task %s was in the state %s, and no future children "
+                    "are being cancelled.",
+                    time.to(EventTime.Unit.US).time,
+                    child.unique_name,
+                    child.state,
+                )
                 break
+
             cancelled_tasks.append(child)
             child.cancel(time)
 
@@ -1380,11 +1408,7 @@ class TaskGraph(Graph[Task]):
             `True` if any of the sink tasks in the TaskGraph have been cancelled, and
             `False` otherwise.
         """
-        return any(
-            task.state == TaskState.CANCELLED
-            for task in self.get_nodes()
-            if self.is_sink_task(task)
-        )
+        return any(task.state == TaskState.CANCELLED for task in self.get_sink_tasks())
 
     def resolve_conditional(
         self, task: Task, policy: BranchPredictionPolicy
