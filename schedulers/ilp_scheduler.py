@@ -923,7 +923,7 @@ class ILPScheduler(BaseScheduler):
                             gp.quicksum(task_variable.placed_on_workers),
                             GRB.EQUAL,
                             0,
-                            name=f"{task_variable.name}_is_placed_reward_TRUE",
+                            name=f"{task_variable.name}_is_placed_reward_FALSE",
                         )
                         optimizer.addGenConstrIndicator(
                             is_placed,
@@ -931,7 +931,7 @@ class ILPScheduler(BaseScheduler):
                             gp.quicksum(task_variable.placed_on_workers),
                             GRB.EQUAL,
                             1,
-                            name=f"{task_variable.name}_is_placed_reward_FALSE",
+                            name=f"{task_variable.name}_is_placed_reward_TRUE",
                         )
 
                         # Check if the task meets its deadline.
