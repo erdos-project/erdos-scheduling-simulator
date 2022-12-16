@@ -284,7 +284,7 @@ class Simulator(object):
 
         # Statistics about the Task.
         self._finished_tasks = 0
-        self._dropped_tasks = 0
+        self._cancelled_tasks = 0
         self._missed_task_deadlines = 0
 
         # Statistics about the TaskGraph.
@@ -475,9 +475,7 @@ class Simulator(object):
                             task_graph is not None
                         ), f"Empty TaskGraph received for {task.unique_name}"
 
-                        cancelled_tasks = task_graph.cancel(task, event.time)
-                        self._dropped_tasks += len(cancelled_tasks)
-                        for cancelled_task in cancelled_tasks:
+                        for cancelled_task in task_graph.cancel(task, event.time):
                             placement_events.append(
                                 Event(
                                     event_type=EventType.TASK_CANCEL,
@@ -590,9 +588,11 @@ class Simulator(object):
         )
 
     def _handle_task_cancellation(self, event: Event):
+        self._cancelled_tasks += 1
         self._logger.info(
-            "[%s] The Simulator is cancelling the task %s.",
+            "[%s] (%d) The Simulator is cancelling the task %s.",
             event.time.to(EventTime.Unit.US).time,
+            self._cancelled_tasks,
             event.task,
         )
         self._csv_logger.debug(
@@ -934,7 +934,7 @@ class Simulator(object):
             # End of the simulator loop.
             self._csv_logger.debug(
                 f"{event.time.time},SIMULATOR_END,{self._finished_tasks},"
-                f"{self._dropped_tasks},{self._missed_task_deadlines},"
+                f"{self._cancelled_tasks},{self._missed_task_deadlines},"
                 f"{self._finished_task_graphs},"
                 f"{len(self._workload.get_cancelled_task_graphs())},"
                 f"{self._missed_task_graph_deadlines}"
