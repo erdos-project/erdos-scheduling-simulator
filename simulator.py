@@ -591,7 +591,7 @@ class Simulator(object):
 
     def _handle_task_cancellation(self, event: Event):
         self._logger.info(
-            "[%s] Cancelling the task %s.",
+            "[%s] The Simulator is cancelling the task %s.",
             event.time.to(EventTime.Unit.US).time,
             event.task,
         )
@@ -653,6 +653,7 @@ class Simulator(object):
         self._finished_tasks += 1
         self._csv_logger.debug(
             f"{event.time.time},TASK_FINISHED,{event.task.name},{event.task.timestamp},"
+            f"{event.task.task_graph},"
             f"{event.task.completion_time.to(EventTime.Unit.US).time},"
             f"{event.task.deadline.to(EventTime.Unit.US).time},{event.task.id}"
         )

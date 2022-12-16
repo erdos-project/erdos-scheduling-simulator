@@ -76,7 +76,7 @@ class CSVReader(object):
                     )
                 elif reading[1] == "TASK_FINISHED":
                     # Update the task with the completion event data.
-                    tasks[reading[6]].update_finish(reading)
+                    tasks[reading[7]].update_finish(reading)
                 elif reading[1] == "MISSED_DEADLINE":
                     # Update the task with the completion event data.
                     tasks[reading[5]].update_missed_deadline(reading)

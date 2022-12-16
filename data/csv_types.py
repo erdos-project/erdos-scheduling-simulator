@@ -194,8 +194,8 @@ class Task(object):
         assert (
             csv_reading[1] == "TASK_FINISHED"
         ), f"The event {csv_reading[1]} was not of type TASK_FINISHED."
-        self.completion_time = int(csv_reading[4])
-        self.placements[-1].completion_time = int(csv_reading[4])
+        self.completion_time = int(csv_reading[5])
+        self.placements[-1].completion_time = int(csv_reading[5])
 
     def update_missed_deadline(self, csv_reading: str):
         """Updates the values of the Task based on the MISSED_DEADLINE event from CSV.
