@@ -1,4 +1,5 @@
 import logging
+import os
 import random
 import sys
 from enum import Enum
@@ -121,6 +122,7 @@ def setup_logging(
     name: str,
     fmt: Optional[str] = None,
     date_fmt: Optional[str] = None,
+    log_dir: Optional[str] = None,
     log_file: Optional[str] = None,
     log_level: str = "debug",
 ) -> logging.Logger:
@@ -130,7 +132,9 @@ def setup_logging(
         name (`str`): The name of the logger.
         fmt (`str`): The format of the logging.
         date_fmt (`str`): The format of the date to be logged.
-        log_file (`str`): The path of the log file to log results to.
+        log_dir (`Optional[str]`): The directory where the log results are to be
+            stored. If `None`, the current working directory is chosen.
+        log_file (`str`): The name of the log file to log results to.
         log_level (`str`): The level of logging to do. (DEBUG/INFO/WARN)
 
     Returns:
@@ -149,7 +153,9 @@ def setup_logging(
     if log_file is None:
         handler = logging.StreamHandler(sys.stdout)
     else:
-        handler = logging.FileHandler(log_file)
+        handler = logging.FileHandler(
+            os.path.join(log_dir if log_dir is not None else os.getcwd(), log_file)
+        )
 
     # Create the logger based on the level.
     if log_level == "debug" and fmt is None:
@@ -167,7 +173,11 @@ def setup_logging(
     return logger
 
 
-def setup_csv_logging(name: str, log_file: str) -> logging.Logger:
+def setup_csv_logging(
+    name: str,
+    log_dir: Optional[str] = None,
+    log_file: Optional[str] = None,
+) -> logging.Logger:
     """Sets up the CSV logging for the module.
 
     The CSV provides the data required to plot the performance characteristics
@@ -175,7 +185,9 @@ def setup_csv_logging(name: str, log_file: str) -> logging.Logger:
 
     Args:
         name (`str`): The name of the logger.
-        log_file (`str`): The path of the log file to log results to.
+        log_dir (`Optional[str]`): The directory where the log results are to be
+            stored. If `None`, the current working directory is chosen.
+        log_file (`Optional[str]`): The name of the log file to store the results in.
 
     Returns:
         A `logging.Logger` instance that logs the required information to the
@@ -185,6 +197,7 @@ def setup_csv_logging(name: str, log_file: str) -> logging.Logger:
         name=name + "_CSV",
         fmt="%(message)s",
         date_fmt=None,
+        log_dir=log_dir,
         log_file=log_file,
         log_level="debug",
     )

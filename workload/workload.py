@@ -35,7 +35,10 @@ class Workload(object):
         self._flags = _flags
         if self._flags:
             self._logger = setup_logging(
-                "Workload", log_file=_flags.log_file_name, log_level=_flags.log_level
+                "Workload",
+                log_dir=_flags.log_dir,
+                log_file=_flags.log_file_name,
+                log_level=_flags.log_level,
             )
         else:
             self._logger = setup_logging("Workload")

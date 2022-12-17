@@ -22,11 +22,13 @@ class WorkloadLoader(object):
         if _flags:
             self._logger = setup_logging(
                 name=self.__class__.__name__,
+                log_dir=_flags.log_dir,
                 log_file=_flags.log_file_name,
                 log_level=_flags.log_level,
             )
             self._resource_logger = setup_logging(
                 name="Resources",
+                log_dir=_flags.log_dir,
                 log_file=_flags.log_file_name,
                 log_level=_flags.log_level,
             )

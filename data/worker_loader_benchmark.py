@@ -30,6 +30,7 @@ class WorkerLoaderBenchmark(object):
         if _flags:
             self._logger = utils.setup_logging(
                 name=self.__class__.__name__,
+                log_dir=_flags.log_dir,
                 log_file=_flags.log_file_name,
                 log_level=_flags.log_level,
             )
@@ -42,6 +43,7 @@ class WorkerLoaderBenchmark(object):
                     num_cpus,
                     num_gpus,
                     scheduler,
+                    _flags.log_dir,
                     _flags.log_file_name,
                     _flags.log_level,
                 )
@@ -58,6 +60,7 @@ class WorkerLoaderBenchmark(object):
         num_cpus: int,
         num_gpus: int,
         scheduler: Type[BaseScheduler],
+        log_dir: Optional[str] = None,
         log_file: Optional[str] = None,
         log_level: Optional[str] = "debug",
     ) -> Sequence[WorkerPool]:
@@ -65,13 +68,16 @@ class WorkerLoaderBenchmark(object):
         resources[Resource(name="CPU")] = num_cpus
         resources[Resource(name="GPU")] = num_gpus
         resource_logger = utils.setup_logging(
-            name="Resources_worker", log_file=log_file, log_level=log_level
+            name="Resources_worker",
+            log_dir=log_dir,
+            log_file=log_file,
+            log_level=log_level,
         )
         worker = Worker(
             name="Worker",
             resources=Resources(resource_vector=resources, _logger=resource_logger),
             _logger=utils.setup_logging(
-                name="Worker", log_file=log_file, log_level=log_level
+                name="Worker", log_dir=log_dir, log_file=log_file, log_level=log_level
             ),
         )
         worker_pool = WorkerPool(
@@ -79,7 +85,10 @@ class WorkerLoaderBenchmark(object):
             workers=[worker],
             scheduler=scheduler,
             _logger=utils.setup_logging(
-                name="worker_pool", log_file=log_file, log_level=log_level
+                name="worker_pool",
+                log_dir=log_dir,
+                log_file=log_file,
+                log_level=log_level,
             ),
         )
         return [worker_pool]

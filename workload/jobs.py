@@ -378,7 +378,10 @@ class JobGraph(Graph[Job]):
                 _flags.resolve_conditionals_at_submission
             )
             task_logger = setup_logging(
-                name="Task", log_file=_flags.log_file_name, log_level=_flags.log_level
+                name="Task",
+                log_dir=_flags.log_dir,
+                log_file=_flags.log_file_name,
+                log_level=_flags.log_level,
             )
         else:
             random_number_generator = None

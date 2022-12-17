@@ -229,7 +229,10 @@ def main(args):
     """
     random.seed(FLAGS.random_seed)
     logger = setup_logging(
-        name=__name__, log_file=FLAGS.log_file_name, log_level=FLAGS.log_level
+        name=__name__,
+        log_dir=FLAGS.log_dir,
+        log_file=FLAGS.log_file_name,
+        log_level=FLAGS.log_level,
     )
     logger.info("Starting the execution of the simulator loop.")
     logger.info("Workload File: %s", FLAGS.workload_profile_path)

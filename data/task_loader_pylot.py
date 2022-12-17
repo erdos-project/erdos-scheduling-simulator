@@ -32,11 +32,19 @@ class TaskLoaderPylot(TaskLoader):
         if _flags:
             self._logger = setup_logging(
                 name=self.__class__.__name__,
+                log_dir=_flags.log_dir,
+                log_file=_flags.log_file_name,
+                log_level=_flags.log_level,
+            )
+            task_logger = setup_logging(
+                name="Task",
+                log_dir=_flags.log_dir,
                 log_file=_flags.log_file_name,
                 log_level=_flags.log_level,
             )
         else:
             self._logger = setup_logging(name=self.__class__.__name__)
+            task_logger = setup_logging(name="Task")
 
         # Read the data from the profile path.
         with open(profile_path, "r") as f:
@@ -91,9 +99,6 @@ class TaskLoaderPylot(TaskLoader):
         )
 
         # Create the Tasks and the TaskGraph from the Jobs.
-        task_logger = setup_logging(
-            name="Task", log_file=_flags.log_file_name, log_level=_flags.log_level
-        )
         max_timestamp = (
             _flags.max_timestamp if _flags.max_timestamp is not None else sys.max_size
         )

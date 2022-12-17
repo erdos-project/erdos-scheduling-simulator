@@ -52,6 +52,7 @@ class BaseScheduler(object):
         if self._flags:
             self._logger = setup_logging(
                 name=self.__class__.__name__,
+                log_dir=_flags.log_dir,
                 log_file=self._flags.log_file_name,
                 log_level=self._flags.log_level,
             )
