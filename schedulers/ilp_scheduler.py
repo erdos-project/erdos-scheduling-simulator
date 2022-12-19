@@ -56,73 +56,36 @@ class TaskOptimizerVariables:
         # Placement characteristics
         # Set up individual variables to signify where the task is placed.
         self._placed_on_worker = {}
-        for worker_id, worker in workers.items():
-            self._placed_on_worker[worker_id] = optimizer.addVar(
-                vtype=GRB.BINARY, name=f"{task.unique_name}_placed_on_{worker.name}"
-            )
 
         # Timing characteristics.
-        if task.state == TaskState.RUNNING:
-            # The task is already running, set the start time to the current
-            # simulation time, since we use the remaining time to count the
-            # time at which this Task will relinquish its resources.
-            self._start_time = optimizer.addVar(
-                lb=current_time.to(EventTime.Unit.US).time,
-                ub=current_time.to(EventTime.Unit.US).time,
-                vtype=GRB.INTEGER,
-                name=f"{task.unique_name}_start",
-            )
+        if task.state == TaskState.RUNNING or (
+            task.state == TaskState.SCHEDULED and not retract_schedules
+        ):
+            if task.state == TaskState.RUNNING:
+                # The task is already running, set the start time to the current
+                # simulation time, since we use the remaining time to count the
+                # time at which this Task will relinquish its resources.
+                self._start_time = current_time.to(EventTime.Unit.US).time
+            else:
+                # The task was scheduled and we are not allowing retractions, set
+                # the start time of the Task to the previously decided start time
+                # to find the time at which the Task will relinquish its resources.
+                self._start_time = task.expected_start_time.to(EventTime.Unit.US).time
 
             # Find the Worker where the Task was previously placed and add
             # constraints to inform the scheduler of its placement.
             if task.id not in previous_placements:
                 raise ValueError(
-                    f"Running Task {task.unique_name} does not have a cached WorkerID."
+                    f"Task {task.unique_name} in state {task.state} does "
+                    f"not have a cached WorkerID."
                 )
-            previously_placed_worker = previous_placements[task.id]
-            for worker_id, worker in workers.items():
-                worker_placed_on_variable = self._placed_on_worker[worker_id]
-                if worker.id == previously_placed_worker:
-                    optimizer.addConstr(
-                        worker_placed_on_variable == 1,
-                        name=f"{task.unique_name}_RUNNING_PLACED",
-                    )
-                else:
-                    optimizer.addConstr(
-                        worker_placed_on_variable == 0,
-                        name=f"{task.unique_name}_RUNNING_NOT_PLACED",
-                    )
-        elif task.state == TaskState.SCHEDULED and not retract_schedules:
-            # The task was scheduled and we are not allowing retractions, set
-            # the start time of the Task to the previously decided start time
-            # to find the time at which the Task will relinquish its resources.
-            self._start_time = optimizer.addVar(
-                lb=task.expected_start_time.to(EventTime.Unit.US).time,
-                ub=task.expected_start_time.to(EventTime.Unit.US).time,
-                vtype=GRB.INTEGER,
-                name=f"{task.unique_name}_start",
-            )
 
-            # Find the Worker where the Task was previously placed and add the
-            # constraints to inform the scheduler of its placement.
-            if task.id not in previous_placements:
-                raise ValueError(
-                    f"Scheduled Task {task.unique_name} does not have a "
-                    f"cached WorkerID."
-                )
             previously_placed_worker = previous_placements[task.id]
             for worker_id, worker in workers.items():
-                worker_placed_on_variable = self._placed_on_worker[worker_id]
                 if worker.id == previously_placed_worker:
-                    optimizer.addConstr(
-                        worker_placed_on_variable == 1,
-                        name=f"{task.unique_name}_SCHEDULED_PLACED",
-                    )
+                    self._placed_on_worker[worker_id] = 1
                 else:
-                    optimizer.addConstr(
-                        worker_placed_on_variable == 0,
-                        name=f"{task.unique_name}_SCHEDULED_NOT_PLACED",
-                    )
+                    self._placed_on_worker[worker_id] = 0
         else:
             # The task's start time has to be decided.
             self._start_time = optimizer.addVar(
@@ -133,6 +96,12 @@ class TaskOptimizerVariables:
                 vtype=GRB.INTEGER,
                 name=f"{task.unique_name}_start",
             )
+
+            # Set up variables to signify if the Task was placed on a Worker.
+            for worker_id, worker in workers.items():
+                self._placed_on_worker[worker_id] = optimizer.addVar(
+                    vtype=GRB.BINARY, name=f"{task.unique_name}_placed_on_{worker.name}"
+                )
 
             # If the task was previously scheduled, seed the start time
             # and the worker placement with the previously obtained solution.
@@ -159,11 +128,11 @@ class TaskOptimizerVariables:
                         name=f"{worker_name}_cannot_accomodate_{task.unique_name}",
                     )
 
-        # Initialize the constraints for the variables.
-        self.initialize_constraints(optimizer, enforce_deadlines)
+            # Initialize the constraints for the variables.
+            self.initialize_constraints(optimizer, enforce_deadlines)
 
     @property
-    def start_time(self) -> gp.Var:
+    def start_time(self) -> Union[int, gp.Var]:
         """Returns a Gurobi variable representing the start time for this Task."""
         return self._start_time
 
@@ -192,7 +161,7 @@ class TaskOptimizerVariables:
         return self._placed_on_worker.get(worker_id)
 
     @property
-    def placed_on_workers(self) -> Sequence[gp.Var]:
+    def placed_on_workers(self) -> Sequence[Union[int, gp.Var]]:
         """Retrieves the binary Gurobi variables representing the placement of the
         task on the collection of `Worker`s registered with the instance."""
         return self._placed_on_worker.values()
@@ -454,12 +423,18 @@ class ILPScheduler(BaseScheduler):
             for task in tasks_to_be_scheduled:
                 task_variables = tasks_to_variables[task.unique_name]
                 # Find the starting time of the Task.
+                assert type(task_variables.start_time) == gp.Var, (
+                    f"Incorrect type retrieved for start time of {task.unique_name}:"
+                    f"{type(task_variables.start_time)}"
+                )
                 start_time = EventTime(
                     int(task_variables.start_time.X), EventTime.Unit.US
                 )
                 meets_deadline = start_time + task.remaining_time <= task.deadline
 
                 # Find the Worker where the Task was placed.
+                # BUG (Sukrit): This should be cached only if we actually return a
+                # placement./
                 worker_pool_id = None
                 for worker_id, worker in workers.items():
                     if isinstance(task_variables.placed_on_worker(worker_id), gp.Var):
