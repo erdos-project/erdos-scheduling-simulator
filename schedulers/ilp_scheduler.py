@@ -61,6 +61,7 @@ class TaskOptimizerVariables:
         if task.state == TaskState.RUNNING or (
             task.state == TaskState.SCHEDULED and not retract_schedules
         ):
+            self._previously_placed = True
             if task.state == TaskState.RUNNING:
                 # The task is already running, set the start time to the current
                 # simulation time, since we use the remaining time to count the
@@ -87,6 +88,7 @@ class TaskOptimizerVariables:
                 else:
                     self._placed_on_worker[worker_id] = 0
         else:
+            self._previously_placed = False
             # The task's start time has to be decided.
             self._start_time = optimizer.addVar(
                 lb=max(
@@ -145,6 +147,12 @@ class TaskOptimizerVariables:
     def name(self) -> str:
         """Returns the name of the Task that this instance represents."""
         return self._task.unique_name
+
+    @property
+    def previously_placed(self) -> bool:
+        """Returns a Boolean indicating whether the task denoted by this instance
+        has been previously placed or not."""
+        return self._previously_placed
 
     def placed_on_worker(self, worker_id: int) -> Optional[Union[int, gp.Var]]:
         """Check if the Task was placed on a particular Worker.
@@ -395,6 +403,19 @@ class ILPScheduler(BaseScheduler):
             tasks_to_be_scheduled + previously_placed_tasks,
             workers,
         )
+        assert all(
+            not tasks_to_variables[task.unique_name].previously_placed
+            for task in tasks_to_be_scheduled
+        ), (
+            "The tasks to be scheduled were incorrectly assumed to"
+            "be previously scheduled by the Optimizer."
+        )
+        assert all(
+            tasks_to_variables[task.unique_name] for task in previously_placed_tasks
+        ), (
+            "The previously placed tasks were incorrectly assumed "
+            "to be schedulable by the Optimizer."
+        )
 
         # Add the constraints to ensure that dependency constraints are met and
         # resources are not oversubscribed.
@@ -549,6 +570,11 @@ class ILPScheduler(BaseScheduler):
             workload (`Workload`): The workload with which the scheduler was invoked.
         """
         for task_name, variable in tasks_to_variables.items():
+            if variable.previously_placed:
+                # The task was previously placed, we should not add any constraints
+                # for this Task.
+                continue
+
             # Retrieve the variables for all the parents of this Task.
             task_graph = workload.get_task_graph(variable.task.task_graph)
             parent_variables = [
@@ -626,89 +652,110 @@ class ILPScheduler(BaseScheduler):
             workers (`Mapping[int, Worker]`): A mapping of the unique index of the
                 Worker to its instance.
         """
-        # Construct variables for all the possible task pairs.
-        task_pairs = list(combinations(tasks_to_variables.keys(), r=2))
+        # Construct variables for overlaps with all the other tasks corresponding to
+        # each task.
+        task_pairs = []
+        for task_1_name, task_1_variable in tasks_to_variables.items():
+            if task_1_variable.previously_placed:
+                # If the task was previously placed, we don't need to check for
+                # overlaps and its resource constraints.
+                continue
+            for task_2_name in tasks_to_variables.keys():
+                if task_1_name != task_2_name:
+                    task_pairs.append((task_1_name, task_2_name))
         task_pair_overlap_variables = optimizer.addVars(
             task_pairs, vtype=GRB.BINARY, name="Overlap"
         )
         optimizer.update()
 
-        # For each pair, set up constraints for the overlap variables.
-        for task_1_name, task_2_name in task_pairs:
-            task_1_variable = tasks_to_variables[task_1_name]
-            task_2_variable = tasks_to_variables[task_2_name]
-            overlap_variables = task_pair_overlap_variables.select(
-                task_1_name, task_2_name
-            )
-            if len(overlap_variables) != 1:
-                raise ValueError(
-                    f"Expected only one Overlap variable for ({task_1_name}, "
-                    f"{task_2_name}). Found {len(overlap_variables)}."
-                )
-            task_pair_overlap_variable = overlap_variables[0]
-
-            # If one of the tasks cannot be placed, force the overlap
-            # variable to be set to 0 during the preprocessing step.
-            if (
-                len(task_1_variable.placed_on_workers) == 0
-                or len(task_2_variable.placed_on_workers) == 0
-            ):
-                optimizer.addConstr(
-                    task_pair_overlap_variable == 0,
-                    name=f"{task_1_name}_no_overlap_{task_2_name}_cannot_place",
-                )
+        # For each task, add constraints to the Overlap variable that ensures that
+        # it is set to 1 if the task's start time overlaps with the execution of the
+        # other task, and 0 otherwise.
+        for task_1_name, task_1_variable in tasks_to_variables.items():
+            if task_1_variable.previously_placed:
+                # If the task was previously placed, there are no overlap variables.
                 continue
 
-            # If the tasks belong to the same graph, then they need to be checked
-            # for overlap, otherwise, the two tasks can always overlap.
-            if task_1_variable.task.task_graph == task_2_variable.task.task_graph:
-                task_graph = workload.get_task_graph(task_1_variable.task.task_graph)
-                if task_graph.are_dependent(task_1_variable.task, task_2_variable.task):
-                    # If the tasks are dependent on each other, they can never overlap.
-                    optimizer.addConstr(
-                        task_pair_overlap_variable == 0,
-                        name=f"{task_1_name}_no_overlap_{task_2_name}_dependent",
+            for task_2_name, task_2_variable in tasks_to_variables.items():
+                if task_1_name == task_2_name:
+                    continue
+
+                # Find the overlap variable for this pair.
+                overlap_variables = task_pair_overlap_variables.select(
+                    task_1_name, task_2_name
+                )
+                if len(overlap_variables) != 1:
+                    raise ValueError(
+                        f"Expected only one Overlap variable for ({task_1_name}, "
+                        f"{task_2_name}). Found {len(overlap_variables)}."
                     )
+                task_pair_overlap_variable = overlap_variables[0]
+
+                # If the tasks belong to the same graph, then they need to be checked
+                # for overlap, otherwise, the two tasks can always overlap.
+                if task_1_variable.task.task_graph == task_2_variable.task.task_graph:
+                    task_graph = workload.get_task_graph(
+                        task_1_variable.task.task_graph
+                    )
+                    if task_graph.are_dependent(
+                        task_1_variable.task, task_2_variable.task
+                    ):
+                        # If the tasks are dependent on each other,
+                        # they can never overlap.
+                        optimizer.addConstr(
+                            task_pair_overlap_variable == 0,
+                            name=f"{task_1_name}_no_overlap_{task_2_name}_dependent",
+                        )
+                    else:
+                        # If the tasks are not dependent on each other,
+                        # they may overlap.
+                        self._overlaps(
+                            optimizer,
+                            task_1_variable,
+                            task_2_variable,
+                            task_pair_overlap_variable,
+                        )
                 else:
-                    # If the tasks are not dependent on each other, they may overlap.
                     self._overlaps(
                         optimizer,
                         task_1_variable,
                         task_2_variable,
                         task_pair_overlap_variable,
                     )
-            else:
-                self._overlaps(
-                    optimizer,
-                    task_1_variable,
-                    task_2_variable,
-                    task_pair_overlap_variable,
-                )
 
-        # We now ensure that for all the tasks, their overlap dependencies don't
-        # end up oversubscribing any Worker's resources.
-        for task_name in tasks_to_variables:
-            # Find all the dependencies of this task that can overlap with it.
+        # Now, for each task, we ensure that the cumulative sum of the resource
+        # requirements for all the tasks running at the start time doesn't end up
+        # oversubscribing any Worker's resources.
+        for task_1_name, task_1_variable in tasks_to_variables.items():
+            if task_1_variable.previously_placed:
+                # If the task was previously placed, there are no overlap variables.
+                continue
+
             task_dependencies = []
-            for (
-                task_1_name,
-                task_2_name,
-            ), variable in task_pair_overlap_variables.items():
-                if task_1_name == task_name:
-                    task_dependencies.append((task_2_name, variable))
-                elif task_2_name == task_name:
-                    task_dependencies.append((task_1_name, variable))
+            for task_2_name, task_2_variable in tasks_to_variables.items():
+                if task_1_name != task_2_name:
+                    task_dependencies.append((task_2_name, task_2_variable))
 
             # For each Worker and each of its resources, ensure no oversubscription.
             for worker_index, worker in workers.items():
+                if (
+                    task_1_variable.previously_placed
+                    and task_1_variable.placed_on_worker(worker_index) == 0
+                ):
+                    # The task was previously placed, but not on this worker. Thus,
+                    # we should skip adding the constraints here.
+                    continue
+
                 for (
                     resource,
                     quantity,
                 ) in worker.resources.get_unique_resource_types().items():
-                    task_request_for_resource = tasks_to_variables[
-                        task_name
-                    ].task.resource_requirements.get_total_quantity(resource)
-                    if quantity == 0 or task_request_for_resource == 0:
+                    task_1_request_for_resource = (
+                        task_1_variable.task.resource_requirements.get_total_quantity(
+                            resource
+                        )
+                    )
+                    if quantity == 0 or task_1_request_for_resource == 0:
                         # We ensure earlier that the Worker has enough space to
                         # accomodate # each task. If the quantity of the resource is
                         # 0 or the task does not need this resource, then we can
@@ -719,29 +766,38 @@ class ILPScheduler(BaseScheduler):
                     # If the dependency overlaps and the dependency is placed on this
                     # worker, then ensure that the resource type is not oversubscribed.
                     resource_constraint_expression = gp.QuadExpr(
-                        tasks_to_variables[task_name].placed_on_worker(worker_index)
-                        * task_request_for_resource
+                        task_1_variable.placed_on_worker(worker_index)
+                        * task_1_request_for_resource
                     )
-                    for dependent_task_name, overlap_variable in task_dependencies:
-                        dependent_task_request_for_resource = tasks_to_variables[
-                            dependent_task_name
-                        ].task.resource_requirements.get_total_quantity(resource)
-                        if dependent_task_request_for_resource == 0:
-                            # The dependent task's request for this resource was empty.
-                            # It cannot contend with the current task on this resource.
+                    for task_2_name, task_2_variable in task_dependencies:
+                        task_2_placed_on_worker_var = task_2_variable.placed_on_worker(
+                            worker_index
+                        )
+                        task_2_resource_reqs = (
+                            task_2_variable.task.resource_requirements
+                        )
+                        if (
+                            task_2_variable.previously_placed
+                            and task_2_placed_on_worker_var == 0
+                        ) or task_2_resource_reqs.get_total_quantity(resource) == 0:
+                            # The task was either not placed on this Worker, or the
+                            # requirements of this resource was 0. Thus, this task
+                            # cannot affect the resource oversubscription.
                             continue
+
+                        overlap_variable = task_pair_overlap_variables[
+                            (task_1_name, task_2_name)
+                        ]
                         resource_constraint_expression.add(
-                            tasks_to_variables[dependent_task_name].placed_on_worker(
-                                worker_index
-                            )
+                            task_2_placed_on_worker_var
                             * overlap_variable
-                            * dependent_task_request_for_resource
+                            * task_2_resource_reqs.get_total_quantity(resource)
                         )
 
                     # Add the constraint to the optimizer.
                     optimizer.addConstr(
                         resource_constraint_expression <= quantity,
-                        name=f"{task_name}_{worker.name}_{resource.name}_constraint",
+                        name=f"{task_1_name}_{worker.name}_{resource.name}_constraint",
                     )
 
     def _overlaps(
@@ -770,58 +826,48 @@ class ILPScheduler(BaseScheduler):
         Returns
             A `gp.Var` whose post-solution value specifies if the two tasks overlap.
         """
-        # Add an indicator variable that checks if the first task ends before the
-        # second task starts.
-        task_1_ends_before_task_2_starts = optimizer.addVar(
-            vtype=GRB.BINARY,
-            name=f"{task_1.name}_ends_before_{task_2.name}_starts",
+        # Add an indicator variable that checks if the first task starts after the
+        # second task ends.
+        task_1_starts_after_task_2_ends = optimizer.addVar(
+            vtype=GRB.BINARY, name=f"{task_1.name}_starts_after_{task_2.name}_ends"
         )
         optimizer.addGenConstrIndicator(
-            task_1_ends_before_task_2_starts,
+            task_1_starts_after_task_2_ends,
             0,
-            task_1.start_time
-            + task_1.task.remaining_time.to(EventTime.Unit.US).time
-            - task_2.start_time,
-            GRB.GREATER_EQUAL,
-            0,
-            name=f"{task_1.name}_ends_before_{task_2.name}_starts_False",
-        )
-        optimizer.addGenConstrIndicator(
-            task_1_ends_before_task_2_starts,
-            1,
-            task_1.start_time
-            + task_1.task.remaining_time.to(EventTime.Unit.US).time
-            - task_2.start_time,
+            task_1.start_time - task_2.start_time,
             GRB.LESS_EQUAL,
-            -1,
-            name=f"{task_1.name}_ends_before_{task_2.name}_starts_True",
+            task_2.task.remaining_time.to(EventTime.Unit.US).time,
+            name=f"{task_1.name}_starts_after_{task_2.name}_ends_False",
+        )
+        optimizer.addGenConstrIndicator(
+            task_1_starts_after_task_2_ends,
+            1,
+            task_1.start_time - task_2.start_time,
+            GRB.GREATER_EQUAL,
+            task_2.task.remaining_time.to(EventTime.Unit.US).time + 1,
+            name=f"{task_1.name}_starts_after_{task_2.name}_ends_True",
         )
 
-        # Add an indicator variable that checks if the second task ends before the
-        # first task starts.
-        task_2_ends_before_task_1_starts = optimizer.addVar(
-            vtype=GRB.BINARY,
-            name=f"{task_2.name}_ends_before_{task_1.name}_starts",
+        # Add an indicator variable that checks if the first task starts before the
+        # second task starts.
+        task_1_starts_before_task_2_starts = optimizer.addVar(
+            vtype=GRB.BINARY, name=f"{task_1.name}_starts_before_{task_2.name}_starts"
         )
         optimizer.addGenConstrIndicator(
-            task_2_ends_before_task_1_starts,
+            task_1_starts_before_task_2_starts,
             0,
-            task_1.start_time
-            - task_2.start_time
-            - task_2.task.remaining_time.to(EventTime.Unit.US).time,
-            GRB.LESS_EQUAL,
-            0,
-            name=f"{task_2.name}_ends_before_{task_1.name}_starts_False",
-        )
-        optimizer.addGenConstrIndicator(
-            task_2_ends_before_task_1_starts,
-            1,
-            task_1.start_time
-            - task_2.start_time
-            - task_2.task.remaining_time.to(EventTime.Unit.US).time,
+            task_1.start_time - task_2.start_time,
             GRB.GREATER_EQUAL,
+            0,
+            name=f"{task_1.name}_starts_before_{task_2.name}_starts_False",
+        )
+        optimizer.addGenConstrIndicator(
+            task_1_starts_before_task_2_starts,
             1,
-            name=f"{task_2.name}_ends_before_{task_1.name}_starts_True",
+            task_1.start_time - task_2.start_time,
+            GRB.LESS_EQUAL,
+            -1,
+            name=f"{task_1.name}_starts_before_{task_2.name}_starts_True",
         )
 
         # Add an indicator variable that is set to 1 if neither of the above
@@ -831,8 +877,8 @@ class ILPScheduler(BaseScheduler):
                 vtype=GRB.BINARY, name=f"Overlap({task_1.name}, {task_2.name})"
             )
         optimizer.addConstr(
-            task_1_ends_before_task_2_starts
-            + task_2_ends_before_task_1_starts
+            task_1_starts_after_task_2_ends
+            + task_1_starts_before_task_2_starts
             + overlap_variable
             == 1,
             name=f"{task_1.name}_overlap_{task_2.name}",
