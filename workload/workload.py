@@ -158,19 +158,16 @@ class Workload(object):
         task_graph = self._task_graphs[task.task_graph]
         return task_graph.notify_task_completion(task, finish_time)
 
-    def release_tasks(self, time: Optional[EventTime] = None) -> Sequence[Task]:
-        """Requests the Workload to release the set of `Task`s corresponding
-        to each `TaskGraph`.
-
-        Args:
-            time: The time at which the `Task`s were requested for release.
+    def get_releasable_tasks(self) -> Sequence[Task]:
+        """Retrieves the set of Tasks that are ready to run, and can be released
+        from each `TaskGraph` in the `Workload`.
 
         Returns:
             A sequence of `Task`s released from the set of `TaskGraph`s.
         """
         released_tasks = []
         for task_graph in self._task_graphs.values():
-            released_tasks.extend(task_graph.release_tasks(time))
+            released_tasks.extend(task_graph.get_releasable_tasks())
         return released_tasks
 
     def get_schedulable_tasks(

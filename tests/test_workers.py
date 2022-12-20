@@ -252,8 +252,12 @@ def test_worker_step_tasks():
     worker.step(EventTime(5, EventTime.Unit.US))
 
     # Ensure that the tasks are finished.
-    assert task_one.is_complete(), "Task should have been completed."
-    assert task_two.is_complete(), "Task should have been completed."
+    assert (
+        task_one.remaining_time == EventTime.zero()
+    ), "Task should have been completed."
+    assert (
+        task_two.remaining_time == EventTime.zero()
+    ), "Task should have been completed."
 
 
 def test_worker_pool_construction():

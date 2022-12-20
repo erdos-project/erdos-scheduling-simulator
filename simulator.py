@@ -20,8 +20,8 @@ class EventType(Enum):
 
     SIMULATOR_START = 0  # Signify the start of the simulator loop.
     TASK_CANCEL = 1  # Ask the simulator to cancel the task.
-    TASK_RELEASE = 2  # Ask the simulator to release the task.
-    TASK_FINISHED = 3  # Notify the simulator of the end of a task.
+    TASK_FINISHED = 2  # Notify the simulator of the end of a task.
+    TASK_RELEASE = 3  # Ask the simulator to release the task.
     TASK_PREEMPT = 4  # Ask the simulator to preempt a task.
     TASK_MIGRATION = 5  # Ask the simulator to migrate a task.
     TASK_PLACEMENT = 6  # Ask the simulator to place a task.
@@ -329,7 +329,7 @@ class Simulator(object):
         # At the beginning, this should consist of all the sensor tasks
         # that we expect to run during the execution of the workload,
         # along with their expected release times.
-        for task in self._workload.release_tasks():
+        for task in self._workload.get_releasable_tasks():
             event = Event(
                 event_type=EventType.TASK_RELEASE,
                 time=task.release_time,
@@ -617,11 +617,7 @@ class Simulator(object):
 
     def __handle_task_release(self, event: Event):
         # Release a task for the scheduler.
-        self._logger.info(
-            "[%s] Added the task from %s to the released tasks.",
-            event.time.to(EventTime.Unit.US).time,
-            event,
-        )
+        event.task.release(event.time)
         self._csv_logger.debug(
             f"{event.time.time},TASK_RELEASE,{event.task.name},"
             f"{event.task.timestamp},"
@@ -653,6 +649,7 @@ class Simulator(object):
 
     def __handle_task_finished(self, event: Event):
         # Log the TASK_FINISHED event into the CSV.
+        event.task.finish()
         self._finished_tasks += 1
         self._csv_logger.debug(
             f"{event.time.time},TASK_FINISHED,{event.task.name},{event.task.timestamp},"
@@ -742,7 +739,7 @@ class Simulator(object):
         for index, task in enumerate(released_tasks, start=1):
             event = Event(
                 event_type=EventType.TASK_RELEASE,
-                time=task.release_time,
+                time=max(task.release_time, event.time),
                 task=task,
             )
             self._event_queue.add_event(event)

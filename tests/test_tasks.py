@@ -164,9 +164,10 @@ def test_task_step_one():
         4, EventTime.Unit.US
     ), "Incorrect last step time in the Task."
     default_task.step(EventTime(4, EventTime.Unit.US))
-    assert default_task._remaining_time == EventTime(
-        0, EventTime.Unit.US
+    assert (
+        default_task.remaining_time == EventTime.zero()
     ), "Incorrect remaining time for the Task."
+    default_task.finish(EventTime(4, EventTime.Unit.US))
     assert default_task.is_complete(), "Expected the Task to be finished."
 
 
@@ -176,25 +177,26 @@ def test_task_step_two():
     default_task.release(EventTime(2, EventTime.Unit.US))
     default_task.schedule(EventTime(5, EventTime.Unit.US))
     default_task.start(EventTime(5, EventTime.Unit.US))
-    assert default_task._remaining_time == EventTime(
+    assert default_task.remaining_time == EventTime(
         10, EventTime.Unit.US
     ), "Incorrect remaining time for the Task."
     default_task.step(EventTime(3, EventTime.Unit.US), EventTime(1, EventTime.Unit.US))
-    assert default_task._remaining_time == EventTime(
+    assert default_task.remaining_time == EventTime(
         10, EventTime.Unit.US
     ), "Incorrect remaining time for the Task."
     default_task.step(EventTime(4, EventTime.Unit.US), EventTime(2, EventTime.Unit.US))
-    assert default_task._remaining_time == EventTime(
+    assert default_task.remaining_time == EventTime(
         9, EventTime.Unit.US
     ), "Incorrect remaining time for the Task."
     default_task.step(EventTime(6, EventTime.Unit.US), EventTime(3, EventTime.Unit.US))
-    assert default_task._remaining_time == EventTime(
+    assert default_task.remaining_time == EventTime(
         6, EventTime.Unit.US
     ), "Incorrect remaining time for the Task."
     default_task.step(EventTime(9, EventTime.Unit.US), EventTime(9, EventTime.Unit.US))
-    assert default_task._remaining_time == EventTime(
-        0, EventTime.Unit.US
+    assert (
+        default_task.remaining_time == EventTime.zero()
     ), "Incorrect remaining time for the Task."
+    default_task.finish(EventTime(9, EventTime.Unit.US))
     assert default_task.is_complete(), "Expected the Task to be finished."
 
 
@@ -322,7 +324,7 @@ def test_release_tasks():
     ), "Incorrect length of released tasks returned."
 
     # Release all available tasks.
-    released_tasks = task_graph.release_tasks(EventTime(1, EventTime.Unit.US))
+    released_tasks = task_graph.get_releasable_tasks()
     assert len(released_tasks) == 2, "Incorrect number of released tasks."
     assert released_tasks == [
         perception_task,

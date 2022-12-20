@@ -191,6 +191,9 @@ class Task(object):
                     f"time was {self.intended_release_time}."
                 )
         if self._state < TaskState.RELEASED:
+            self._logger.debug(
+                f"[{time}] Released task {self.unique_name} from state {self._state}."
+            )
             self._state = TaskState.RELEASED
 
     def schedule(
@@ -318,7 +321,6 @@ class Task(object):
         if self._remaining_time - execution_time <= EventTime.zero():
             self._last_step_time = current_time + self._remaining_time
             self._remaining_time = EventTime.zero()
-            self.finish(self._last_step_time)
             return True
         else:
             self._last_step_time = current_time + step_size
@@ -389,20 +391,18 @@ class Task(object):
         self._state = TaskState.RUNNING
         self._worker_pool_id = new_worker_pool
 
-    def finish(self, time: EventTime):
+    def finish(self, time: Optional[EventTime] = None):
         """Completes the execution of the task at the given simulation time.
 
         If the remaining time is not 0, the task is considered to be preempted.
 
         Args:
             time (`EventTime`): The simulation time (in us) at which the task was
-                finished.
+                finished. If `None`, the last step time is used.
         """
-        if type(time) != EventTime:
-            raise ValueError(f"Invalid type received for time: {type(time)}")
         if self.state not in [TaskState.RUNNING, TaskState.PREEMPTED]:
             raise ValueError(f"Task {self.id} is not RUNNING or PREEMPTED right now.")
-        self._completion_time = time
+        self._completion_time = time if time is not None else self._last_step_time
         if self._remaining_time == EventTime.zero():
             self._state = TaskState.COMPLETED
         else:
@@ -410,7 +410,8 @@ class Task(object):
 
         self._worker_pool_id = None
         self._logger.debug(
-            f"[{time.to(EventTime.Unit.US).time}] Finished execution of {self}."
+            f"[{self._completion_time.to(EventTime.Unit.US).time}] Finished "
+            f"execution of {self}."
         )
         # TODO (Sukrit): We should notify the `Job` of the completion of this
         # particular task, so it can release new tasks to the scheduler.
@@ -897,24 +898,14 @@ class TaskGraph(Graph[Task]):
 
             # Set the child's probability to 1.0 now that a decision has been made.
             # Do a breadth first search until the first terminal node from the children
-            # whose branch is not taken, update their remaining time to 0
-            # and cancel the tasks.
+            # whose branch is not taken, and cancel the tasks.
             for child in task_children:
                 if child == child_to_release:
                     child.update_probability(1.0)
                 else:
                     cancelled_tasks.extend(self.cancel(child, finish_time))
 
-            if child_to_release.release_time == EventTime(-1, EventTime.Unit.US):
-                # If the child does not have a release time, then set it to now,
-                # which is the time of the completion of the last parent task.
-                child_to_release.release(finish_time)
-            else:
-                earliest_release = child_to_release.release_time
-                # Update the task's release time if parent tasks delayed it.
-                for parent in self.get_parents(child_to_release):
-                    earliest_release = max(earliest_release, parent.completion_time)
-                child_to_release.release(earliest_release)
+            # Request the Simulator to release the tasks.
             released_tasks.append(child_to_release)
         else:
             for child in self.get_children(task):
@@ -938,18 +929,6 @@ class TaskGraph(Graph[Task]):
                     # If the child was a terminal of a conditional, then only one
                     # of the parents being released should release the task.
                     # We release the task now since one parent has completed.
-                    if child.release_time == EventTime(-1, EventTime.Unit.US):
-                        # If the child does not have a release time, then set it to now,
-                        # which is the time of the completion of the last parent task.
-                        child.release(finish_time)
-                    else:
-                        earliest_release = child.release_time
-                        # Update the task's release time if parent tasks delayed it.
-                        for parent in self.get_parents(child):
-                            earliest_release = max(
-                                earliest_release, parent.completion_time
-                            )
-                        child.release(earliest_release)
                     released_tasks.append(child)
         return released_tasks, cancelled_tasks
 
@@ -1184,31 +1163,18 @@ class TaskGraph(Graph[Task]):
 
         return tasks
 
-    def release_tasks(self, time: Optional[EventTime] = None) -> Sequence[Task]:
-        """Releases the set of tasks that have no dependencies and are thus
-        available to run.
-
-        Args:
-            time (`Optional[int]`): The simulation time (inus) at which to
-                release the task. If None, the time should have been specified
-                at task construction time.
+    def get_releasable_tasks(self) -> Sequence[Task]:
+        """Retrieves the set of Tasks that have no dependencies and are thus available
+        to run.
 
         Returns:
-            A list of tasks that can be run (are in RELEASED state).
-
-        Raises:
-            `ValueError` if no `time` for release is passed, and the tasks
-            were not instantiated with a `release_time`.
+            A list of tasks that can be released.
         """
         tasks_to_be_released = []
         for task in self.get_nodes():
             parents = self.get_parents(task)
-            if len(parents) == 0 or all(map(lambda task: task.is_complete(), parents)):
+            if all(map(lambda task: task.is_complete(), parents)):
                 tasks_to_be_released.append(task)
-
-        # Release the tasks.
-        for task in tasks_to_be_released:
-            task.release(time)
         return tasks_to_be_released
 
     def clean(self):
