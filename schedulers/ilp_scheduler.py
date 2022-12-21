@@ -322,6 +322,10 @@ class ILPScheduler(BaseScheduler):
                 f"./gurobi_{current_time.to(EventTime.Unit.US).time}.log"
             )
 
+        # If the goal is goodput, set the MIPGap to 0.1.
+        if self._goal == "max_goodput":
+            optimizer.Params.MIPGap = 0.1
+
         # Always decide between INFINITE or UNBOUNDED.
         optimizer.Params.DualReductions = 0
 
@@ -436,7 +440,7 @@ class ILPScheduler(BaseScheduler):
 
         # Collect the placement results.
         placements = []
-        if optimizer.Status == GRB.OPTIMAL:
+        if optimizer.Status in (GRB.OPTIMAL, GRB.INTERRUPTED):
             self._logger.debug(
                 f"[{sim_time.to(EventTime.Unit.US).time}] The scheduler returned the "
                 f"objective value {optimizer.objVal}."
