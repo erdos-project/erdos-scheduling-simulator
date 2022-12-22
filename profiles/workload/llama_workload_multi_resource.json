@@ -1,0 +1,478 @@
+[
+    {
+        "name": "AMBER_Alert",
+        "graph": [
+            {
+                "name": "decode_image",
+                "children": [
+                    "preprocess_image"
+                ],
+                "runtime": 800,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1,
+                        "RAM:any": 1
+                    }
+                ],
+                "comment": "Uses the runtime profile from EfficientDet family."
+            },
+            {
+                "name": "preprocess_image",
+                "children": [
+                    "object_detection_begin"
+                ],
+                "runtime": 40,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1,
+                        "RAM:any": 1
+                    }
+
+                ]
+            },
+            {
+                "name": "object_detection_begin",
+                "children": [
+                    "preprocess_detection_car",
+                    "preprocess_detection_face"
+                ],
+                "conditional": true,
+                "runtime": 0,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1,
+                        "RAM:any": 1
+                    }
+
+                ]
+            },
+            {
+                "name": "preprocess_detection_face",
+                "probability": 0.05,
+                "children": [
+                    "face_recognition"
+                ],
+                "runtime": 1850,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 8,
+                        "RAM:any": 10
+                    }
+                ],
+                "comment": "Uses the runtime profile from EfficientDet D7 (assuming postprocess time is included here)."
+            },
+            {
+                "name": "preprocess_detection_car",
+                "probability": 0.95,
+                "children": [
+                    "car_recognition"
+                ],
+                "runtime": 765,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1,
+                        "RAM:any": 3
+                    }
+                ],
+                "comment": "Uses the runtime profile from EfficientDet D2."
+            },
+            {
+                "name": "face_recognition",
+                "children": [
+                    "object_detection_end"
+                ],
+                "runtime": 600,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 4,
+                        "RAM:any": 10
+                    }
+                ]
+            },
+            {
+                "name": "car_recognition",
+                "children": [
+                    "object_detection_end"
+                ],
+                "runtime": 350,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1,
+                        "RAM:any": 3
+                    }
+
+                ]
+            },
+            {
+                "name": "object_detection_end",
+                "children": [],
+                "terminal": true,
+                "runtime": 0,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1,
+                        "RAM:any": 1
+                    }
+
+                ]
+            }
+        ],
+        "release_policy": "poisson",
+        "rate": 0.001,
+        "invocations": 50,
+        "deadline_variance": [5, 5]
+    },
+    {
+        "name": "Face_Blur",
+        "graph": [
+            {
+                "name": "decode_image",
+                "children": [
+                    "preprocess_image"
+                ],
+                "runtime": 800,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1,
+                        "RAM:any": 1
+                    }
+                ],
+                "comment": "Uses the runtime profile from EfficientDet family."
+            },
+            {
+                "name": "preprocess_image",
+                "children": [
+                    "face_recognition_begin"
+                ],
+                "runtime": 40,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1,
+                        "RAM:any": 1
+                    }
+                ]
+            },
+            {
+                "name": "face_recognition_begin",
+                "children": [
+                    "template_match",
+                    "no_match"
+                ],
+                "conditional": true,
+                "runtime": 600,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 4,
+                        "RAM:any": 10
+                    }
+                ],
+                "comment": "Uses the runtime profile from EfficientDet D7 (detection)."
+            },
+            {
+                "name": "no_match",
+                "probability": 0.95,
+                "children": [
+                    "face_recognition_end"
+                ],
+                "runtime": 0,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1,
+                        "RAM:any": 1
+                    }
+                ]
+            },
+            {
+                "name": "template_match",
+                "probability": 0.05,
+                "children": [
+                    "blur_frame"
+                ],
+                "runtime": 1600,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 8,
+                        "RAM:any": 10
+                    }
+                ],
+                "comment": "Uses the runtime profile from EfficientDet D7 (postprocess)."
+            },
+            {
+                "name": "blur_frame",
+                "children": [
+                    "face_recognition_end"
+                ],
+                "runtime": 30,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 2,
+                        "RAM:any": 2
+                    }
+                ],
+                "comment": "Uses an approximate runtime from the cv2.GaussianBlur() method, with a kernel size of (133, 133)."
+            },
+            {
+                "name": "face_recognition_end",
+                "children": [],
+                "terminal": true,
+                "runtime": 0,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1,
+                        "RAM:any": 1
+                    }
+                ]
+            }
+        ],
+        "release_policy": "poisson",
+        "rate": 0.001,
+        "invocations": 50,
+        "deadline_variance": [5, 5]
+    },
+    {
+        "name": "Denoise",
+        "graph": [
+            {
+                "name": "decode_image",
+                "children": [
+                    "preprocess_image"
+                ],
+                "runtime": 800,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1,
+                        "RAM:any": 1
+                    }
+                ],
+                "comment": "Uses the runtime profile from EfficientDet family."
+            },
+            {
+                "name": "preprocess_image",
+                "children": [
+                    "face_recognition_begin"
+                ],
+                "runtime": 40,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1,
+                        "RAM:any": 1
+                    }
+                ]
+            },
+            {
+                "name": "face_recognition_begin",
+                "children": [
+                    "template_match",
+                    "no_match"
+                ],
+                "conditional": true,
+                "runtime": 600,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 4,
+                        "RAM:any": 10
+                    }
+                ],
+                "comment": "Uses the runtime profile from EfficientDet D7 (detection)."
+            },
+            {
+                "name": "no_match",
+                "probability": 0.95,
+                "children": [
+                    "face_recognition_end"
+                ],
+                "runtime": 0,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1,
+                        "RAM:any": 1
+                    }
+                ]
+            },
+            {
+                "name": "template_match",
+                "probability": 0.05,
+                "children": [
+                    "mean_shift"
+                ],
+                "runtime": 1600,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 8,
+                        "RAM:any": 10
+                    }
+                ],
+                "comment": "Uses the runtime profile from EfficientDet D7 (postprocess)."
+            },
+            {
+                "name": "mean_shift",
+                "children": [
+                    "face_recognition_end"
+                ],
+                "runtime": 10,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1,
+                        "RAM:any": 3
+                    }
+                ]
+            },
+            {
+                "name": "face_recognition_end",
+                "children": [],
+                "terminal": true,
+                "runtime": 0,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1,
+                        "RAM:any": 1
+                    }
+                ]
+            }
+        ],
+        "release_policy": "poisson",
+        "rate": 0.001,
+        "invocations": 50,
+        "deadline_variance": [5, 5]
+    },
+    {
+        "name": "Toonify",
+        "graph": [
+            {
+                "name": "decode_image",
+                "children": [
+                    "edge_detect"
+                ],
+                "runtime": 800,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1,
+                        "RAM:any": 1
+                    }
+                ],
+                "comment": "Uses the runtime profile from EfficientDet family."
+            },
+            {
+                "name": "edge_detect",
+                "children": [
+                    "bilateral_filter",
+                    "edge_filter"
+                ],
+                "runtime": 50,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 3,
+                        "RAM:any": 7
+                    }
+                ],
+                "comment": "Uses runtime of Blur + CannyEdge in OpenCV."
+            },
+            {
+                "name": "bilateral_filter",
+                "children": [
+                    "encode"
+                ],
+                "runtime": 30,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 3,
+                        "RAM:any": 5
+                    }
+                ],
+                "comment": "Uses runtime from https://docs.opencv.org/4.x/d4/d13/tutorial_py_filtering.html"
+            },
+            {
+                "name": "edge_filter",
+                "children": [
+                    "encode"
+                ],
+                "runtime": 300,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 7,
+                        "RAM:any": 12
+                    }
+                ],
+                "comment": "Uses runtime from cv2.edgePreservingFilter."
+            },
+            {
+                "name": "encode",
+                "children": [],
+                "runtime": 20,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 3,
+                        "RAM:any": 10
+                    }
+                ],
+                "comment": "Uses runtime from cv2.imencode"
+            }
+        ],
+        "release_policy": "poisson",
+        "rate": 0.001,
+        "invocations": 50,
+        "deadline_variance": [5, 5]
+    },
+    {
+        "name": "Synthetic",
+        "graph": [
+            {
+                "name": "decode_image",
+                "children": [
+                    "blur_frame"
+                ],
+                "runtime": 800,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1,
+                        "RAM:any": 1
+                    }
+                ],
+                "comment": "Uses the runtime profile from EfficientDet family."
+            },
+            {
+                "name": "blur_frame",
+                "children": [
+                    "preprocess_image"
+                ],
+                "runtime": 30,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 2,
+                        "RAM:any": 2
+                    }
+                ],
+                "comment": "Uses an approximate runtime from the cv2.GaussianBlur() method, with a kernel size of (133, 133)."
+            },
+            {
+                "name": "preprocess_image",
+                "children": [
+                    "face_recognition"
+                ],
+                "runtime": 40,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 1,
+                        "RAM:any": 1
+                    }
+                ]
+            },
+            {
+                "name": "face_recognition",
+                "children": [],
+                "runtime": 2200,
+                "resource_requirements": [
+                    {
+                        "CPU:any": 6,
+                        "RAM:any": 10
+                    }
+                ],
+                "comment": "Uses the runtime profile from EfficientDet D7 (assuming postprocess time is included here)."
+            }
+        ],
+        "release_policy": "poisson",
+        "rate": 0.001,
+        "invocations": 50,
+        "deadline_variance": [5, 5]
+    }
+]
