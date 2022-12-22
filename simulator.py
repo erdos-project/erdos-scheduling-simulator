@@ -538,22 +538,41 @@ class Simulator(object):
                 self._future_placements[task.id] = placement_event
                 placement_events.append(placement_event)
             else:
-                # Preempt all the tasks first so the resources are cleared.
-                placement_events.append(
-                    Event(
-                        event_type=EventType.TASK_PREEMPT,
-                        time=event.time,
-                        task=task,
+                if task.id in self._future_placements:
+                    # The task was supposed to be placed in the future, and changed
+                    # the Worker assignment, update the placement.
+                    self._logger.info(
+                        "[%s] Changing the Worker of Task %s from %s to %s.",
+                        event.time.to(EventTime.Unit.US).time,
+                        task,
+                        task.worker_pool_id,
+                        worker_pool_id,
                     )
-                )
-                placement_events.append(
-                    Event(
-                        event_type=EventType.TASK_MIGRATION,
-                        time=max(start_time, event.time),
-                        task=task,
-                        placement=worker_pool_id,
+                    task.schedule(
+                        event.time,
+                        expected_start_time=start_time,
+                        worker_pool_id=worker_pool_id,
                     )
-                )
+                    self._future_placements[task.id]._time = start_time
+                    self._future_placements[task.id]._placement = worker_pool_id
+                    reheapify = True
+                else:
+                    # Preempt all the tasks first so the resources are cleared.
+                    placement_events.append(
+                        Event(
+                            event_type=EventType.TASK_PREEMPT,
+                            time=event.time,
+                            task=task,
+                        )
+                    )
+                    placement_events.append(
+                        Event(
+                            event_type=EventType.TASK_MIGRATION,
+                            time=max(start_time, event.time),
+                            task=task,
+                            placement=worker_pool_id,
+                        )
+                    )
 
         # Sort the events so that preemptions and migrations happen first.
         for placement_event in sorted(placement_events):
