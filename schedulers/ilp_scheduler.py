@@ -927,14 +927,17 @@ class ILPScheduler(BaseScheduler):
                         # Either the task is a sink task (i.e., has no children), or
                         # none of its children are included in the currently released
                         # tasks during this invocation of the Scheduler.
-                        is_sink_task = task_graph.is_sink_task(
+                        if self.release_taskgraphs and not task_graph.is_sink_task(
                             task_variable.task
-                        ) or not any(
+                        ):
+                            continue
+
+                        is_sink_task = not any(
                             child.unique_name in tasks_to_variables
                             for child in task_graph.get_children(task_variable.task)
                         )
 
-                        if not is_sink_task:
+                        if not self.release_taskgraphs and not is_sink_task:
                             continue
 
                         # Check if the task is placed.
