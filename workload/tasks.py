@@ -413,8 +413,6 @@ class Task(object):
             f"[{self._completion_time.to(EventTime.Unit.US).time}] Finished "
             f"execution of {self}."
         )
-        # TODO (Sukrit): We should notify the `Job` of the completion of this
-        # particular task, so it can release new tasks to the scheduler.
 
     def cancel(self, time: EventTime) -> None:
         """Cancels the pending execution of the Task.
@@ -647,15 +645,6 @@ class Task(object):
     def terminal(self):
         return self._creating_job.terminal
 
-    def get_release_time(self, unit=EventTime.Unit.US):
-        if unit == EventTime.Unit.US:
-            return self._release_time.time
-        elif unit == EventTime.Unit.MS:
-            # Round up to return a conservative estimate of the exact release time.
-            return math.ceil(self._release_time.time / 1000)
-        else:
-            raise ValueError(f"Unit {unit} not supported")
-
     @property
     def intended_release_time(self):
         return self._intended_release_time
@@ -663,15 +652,6 @@ class Task(object):
     @property
     def deadline(self):
         return self._deadline
-
-    def get_deadline(self, unit=EventTime.Unit.US):
-        if unit == EventTime.Unit.US:
-            return self._deadline.time
-        elif unit == EventTime.Unit.MS:
-            # Round down to return a conservative estimate of the deadline.
-            return math.floor(self._deadline.time / 1000)
-        else:
-            raise ValueError(f"Unit {unit} not supported")
 
     @property
     def job(self):
