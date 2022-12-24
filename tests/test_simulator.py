@@ -286,7 +286,10 @@ def test_simulator_step():
     # Create, release and place a Task.
     task = create_default_task(runtime=3)
     task.release(EventTime(1, EventTime.Unit.US))
-    task.schedule(EventTime(2, EventTime.Unit.US), worker_pool.id)
+    task.schedule(
+        EventTime(2, EventTime.Unit.US),
+        Placement(task, worker_pool.id, EventTime(2, EventTime.Unit.US)),
+    )
     worker_pool.place_task(task)
     task.start(EventTime(2, EventTime.Unit.US))
 
@@ -366,7 +369,10 @@ def test_simulator_handle_event():
 
     # Test the TASK_FINISHED event.
     perception_task.release(EventTime(2, EventTime.Unit.US))
-    perception_task.schedule(EventTime(2, EventTime.Unit.US))
+    perception_task.schedule(
+        EventTime(2, EventTime.Unit.US),
+        Placement(perception_task, worker_pool.id, EventTime(2, EventTime.Unit.US)),
+    )
     perception_task.start(EventTime(3, EventTime.Unit.US))
     perception_task.update_remaining_time(EventTime.zero())
 
@@ -392,7 +398,7 @@ def test_simulator_handle_event():
     assert len(simulator._event_queue) == 4, "Incorrect length of EventQueue."
 
     # Test the SCHEDULER_FINISHED event.
-    simulator._last_task_placement = Placements(
+    simulator._last_scheduler_placements = Placements(
         runtime=EventTime.zero(),
         true_runtime=EventTime.zero(),
         placements=[

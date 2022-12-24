@@ -2,8 +2,6 @@ from typing import Optional, Sequence
 
 from utils import EventTime
 
-from .tasks import Task
-
 
 class Placement(object):
     """A mapping of a particular Task to its executing Worker determined by a Scheduler.
@@ -21,7 +19,7 @@ class Placement(object):
 
     def __init__(
         self,
-        task: Task,
+        task: "Task",  # noqa: F821
         worker_pool_id: Optional[str] = None,
         placement_time: Optional[EventTime] = None,
     ) -> None:
@@ -38,7 +36,7 @@ class Placement(object):
         return self.worker_pool_id is not None
 
     @property
-    def task(self) -> Task:
+    def task(self) -> "Task":  # noqa: F821
         """Returns the `Task` for which this placement was specified."""
         return self._task
 
@@ -52,6 +50,12 @@ class Placement(object):
         """Returns the time at which the `Task` is supposed to be placed
         on the `WorkerPool`."""
         return self._placement_time
+
+    def __str__(self) -> str:
+        return (
+            f"Placement(task={self.task.unique_name}, time={self.placement_time}, "
+            f"worker_pool_id={self.worker_pool_id})"
+        )
 
 
 class Placements(object):
@@ -77,7 +81,7 @@ class Placements(object):
 
     def add_placement(
         self,
-        task: Task,
+        task: "Task",  # noqa: F821
         worker_pool_id: Optional[str] = None,
         placement_time: Optional[EventTime] = None,
     ) -> None:
@@ -92,7 +96,7 @@ class Placements(object):
         """
         self._placements[task.id] = Placement(task, worker_pool_id, placement_time)
 
-    def get_placement(self, task: Task) -> Optional[Placement]:
+    def get_placement(self, task: "Task") -> Optional[Placement]:  # noqa: F821
         """Retrieves the placement for the corresponding task.
 
         Args:

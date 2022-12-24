@@ -12,6 +12,7 @@ from utils import EventTime, fuzz_time, setup_logging
 
 from . import BranchPredictionPolicy
 from .graph import Graph
+from .placement import Placement
 from .resources import Resources
 
 
@@ -137,7 +138,7 @@ class Task(object):
         self._release_time = release_time
         # (RELEASED -> SCHEDULED)
         self._scheduling_time = None
-        self._expected_start_time = None
+        self._scheduler_placement = None
         # (SCHEDULED -> RUNNING)
         self._start_time = start_time
         # (SCHEDULED -> CANCELLED)
@@ -199,18 +200,15 @@ class Task(object):
     def schedule(
         self,
         time: EventTime,
-        expected_start_time: Optional[EventTime] = None,
-        worker_pool_id: Optional[str] = None,
+        placement: Placement,
     ):
         """Schedules the execution of the task at the given simulator time.
 
         Args:
             time (`EventTime`): The simulation time at which the task was
                 scheduled.
-            expected_start_time (`EventTime`): The time at which the task
-                is expected to start.
-            worker_pool_id: The ID of the WorkerPool that the task will be
-                started on.
+            placement (`Placement`): The Placement information returned by the
+                Scheduler.
 
         Raises:
             `ValueError` if Task is not in `VIRTUAL`/`RELEASED`/`PREEMPTED`
@@ -230,13 +228,13 @@ class Task(object):
             )
         self._logger.debug(
             f"[{time.to(EventTime.Unit.US).time}] Transitioning {self} to "
-            f"{TaskState.SCHEDULED} to be started at {expected_start_time} "
-            f"on WorkerPool({worker_pool_id})."
+            f"{TaskState.SCHEDULED} to be started at {placement.placement_time} "
+            f"on WorkerPool({placement.worker_pool_id})."
         )
         self._state = TaskState.SCHEDULED
         self._scheduling_time = time
-        self._worker_pool_id = worker_pool_id
-        self._expected_start_time = expected_start_time
+        self._scheduler_placement = placement
+        self._worker_pool_id = placement.worker_pool_id
 
     def start(
         self,
@@ -671,7 +669,11 @@ class Task(object):
 
     @property
     def expected_start_time(self):
-        return self._expected_start_time
+        return self._scheduler_placement.placement_time
+
+    @property
+    def current_placement(self):
+        return self._scheduler_placement
 
     @property
     def start_time(self):
