@@ -1004,7 +1004,7 @@ class Simulator(object):
         # Add TASK_FINISHED events for all the completed tasks.
         self._simulator_time += step_size
         self._logger.debug(
-            "[%s] The stepping yieled the following completed tasks: %s.",
+            "[%s] The stepping yielded the following completed tasks: %s.",
             self._simulator_time.time,
             [task.unique_name for task in completed_tasks],
         )

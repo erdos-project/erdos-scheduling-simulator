@@ -874,6 +874,11 @@ class TaskGraph(Graph[Task]):
                 [prob <= sys.float_info.epsilon for prob in task_children_probabilities]
             ):
                 # The task was conditional, and no child was available for execution.
+                # Cancel all children tasks since we won't be running them. This issue 
+                # only occurs when we use the resolve_conditionals_at_submission flag, 
+                # since it sets a zero probability of occurrence of some tasks.
+                for child in task_children:
+                    cancelled_tasks.extend(self.cancel(child, finish_time))
                 return (released_tasks, cancelled_tasks)
             if abs(sum(task_children_probabilities) - 1.0) > sys.float_info.epsilon:
                 raise ValueError(
