@@ -288,7 +288,11 @@ def test_simulator_step():
     task.release(EventTime(1, EventTime.Unit.US))
     task.schedule(
         EventTime(2, EventTime.Unit.US),
-        Placement(task, worker_pool.id, EventTime(2, EventTime.Unit.US)),
+        Placement(
+            task=task,
+            worker_pool_id=worker_pool.id,
+            placement_time=EventTime(2, EventTime.Unit.US),
+        ),
     )
     worker_pool.place_task(task)
     task.start(EventTime(2, EventTime.Unit.US))
@@ -371,7 +375,11 @@ def test_simulator_handle_event():
     perception_task.release(EventTime(2, EventTime.Unit.US))
     perception_task.schedule(
         EventTime(2, EventTime.Unit.US),
-        Placement(perception_task, worker_pool.id, EventTime(2, EventTime.Unit.US)),
+        Placement(
+            task=perception_task,
+            worker_pool_id=worker_pool.id,
+            placement_time=EventTime(2, EventTime.Unit.US),
+        ),
     )
     perception_task.start(EventTime(3, EventTime.Unit.US))
     perception_task.update_remaining_time(EventTime.zero())
@@ -402,7 +410,11 @@ def test_simulator_handle_event():
         runtime=EventTime.zero(),
         true_runtime=EventTime.zero(),
         placements=[
-            Placement(planning_task, worker_pool.id, EventTime(6, EventTime.Unit.US))
+            Placement(
+                task=planning_task,
+                worker_pool_id=worker_pool.id,
+                placement_time=EventTime(6, EventTime.Unit.US),
+            )
         ],
     )
     return_value = simulator._Simulator__handle_event(

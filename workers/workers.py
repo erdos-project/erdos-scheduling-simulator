@@ -264,7 +264,7 @@ class WorkerPool(object):
                 self._logger.debug(f"Adding {worker} to {self}")
                 self._workers[worker.id] = worker
 
-    def place_task(self, task: Task) -> bool:
+    def place_task(self, task: Task, worker_id: Optional[str] = None) -> bool:
         """Places the task on this `WorkerPool`.
 
         The caller must ensure that the `WorkerPool` has enough resources to
@@ -273,12 +273,26 @@ class WorkerPool(object):
 
         Args:
             task (`Task`): The task to be placed in this `WorkerPool`.
+            worker_id (`Optional[str]`): The ID of the Worker where the Task
+                is to be placed on this WorkerPool. If `None` and a secondary
+                scheduler is provided, the results from that scheduler are
+                used. Otherwise, the task is placed on the first worker that
+                can accomodate it.
 
         Returns:
             False if the task could not be placed due to insufficient resources.
         """
         placement = None
-        if self._scheduler is not None:
+        if worker_id is not None:
+            # If a WorkerID is provided, ensure that the Worker with that ID
+            # is available on this WorkerPool.
+            if worker_id not in self._workers:
+                raise ValueError(
+                    f"The WorkerID {worker_id} was not found in "
+                    f"the WorkerPool {self.id}."
+                )
+            placement = worker_id
+        elif self._scheduler is not None:
             # If a scheduler was provided, get a task placement from it.
             runtime_us, placement = self._scheduler.schedule(
                 TaskGraph(tasks={task: []})[task], WorkerPools(self._workers)

@@ -51,10 +51,16 @@ class FIFOScheduler(BaseScheduler):
                 if worker_pool.can_accomodate_task(task):
                     worker_pool.place_task(task)
                     task_placed = True
-                    placements.append(Placement(task, worker_pool.id, sim_time))
+                    placements.append(
+                        Placement(
+                            task=task,
+                            worker_pool_id=worker_pool.id,
+                            placement_time=sim_time,
+                        )
+                    )
                     break
             if not task_placed:
-                placements.append(Placement(task))
+                placements.append(Placement(task=task))
 
         end_time = time.time()
 

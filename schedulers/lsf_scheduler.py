@@ -66,7 +66,13 @@ class LSFScheduler(BaseScheduler):
                 if worker_pool.can_accomodate_task(task):
                     worker_pool.place_task(task)
                     is_task_placed = True
-                    placements.append(Placement(task, worker_pool.id, sim_time))
+                    placements.append(
+                        Placement(
+                            task=task,
+                            worker_pool_id=worker_pool.id,
+                            placement_time=sim_time,
+                        )
+                    )
                     break
 
             if not is_task_placed:

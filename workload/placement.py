@@ -11,21 +11,26 @@ class Placement(object):
 
     Args:
         task (`Task`): The task for which the placement is specified.
-        worker_pool_id (`Optional[str]`): The ID of the WorkerPool where the Task is
-            to be placed. If None, the Task was unplaced.
         placement_time (`Optional[EventTime]`): The time at which the placement is
             supposed to be initiated. If None, the Task was unplaced.
+        worker_pool_id (`Optional[str]`): The ID of the WorkerPool where the Task is
+            to be placed. If None, the Task was unplaced.
+        worker_id (`Optional[str]`): The ID of the Worker where the Task is to be
+            placed. If None, the Worker is assigned by the second-level Scheduler used
+            inside the `WorkerPool`.
     """
 
     def __init__(
         self,
         task: "Task",  # noqa: F821
-        worker_pool_id: Optional[str] = None,
         placement_time: Optional[EventTime] = None,
+        worker_pool_id: Optional[str] = None,
+        worker_id: Optional[str] = None,
     ) -> None:
         self._task = task
-        self._worker_pool_id = worker_pool_id
         self._placement_time = placement_time
+        self._worker_pool_id = worker_pool_id
+        self._worker_id = worker_id
 
     def is_placed(self) -> bool:
         """Check if the task associated with this Placement was placed on a WorkerPool.
@@ -41,20 +46,25 @@ class Placement(object):
         return self._task
 
     @property
-    def worker_pool_id(self) -> Optional[str]:
-        """Returns the ID of the `WorkerPool` where the Task is to be placed."""
-        return self._worker_pool_id
-
-    @property
     def placement_time(self) -> Optional[EventTime]:
         """Returns the time at which the `Task` is supposed to be placed
         on the `WorkerPool`."""
         return self._placement_time
 
+    @property
+    def worker_pool_id(self) -> Optional[str]:
+        """Returns the ID of the `WorkerPool` where the Task is to be placed."""
+        return self._worker_pool_id
+
+    @property
+    def worker_id(self) -> Optional[str]:
+        """Returns the ID of the `Worker` where the Task is to be placed."""
+        return self._worker_id
+
     def __str__(self) -> str:
         return (
             f"Placement(task={self.task.unique_name}, time={self.placement_time}, "
-            f"worker_pool_id={self.worker_pool_id})"
+            f"worker_pool_id={self.worker_pool_id}, worker_id={self.worker_id})"
         )
 
 
@@ -65,7 +75,9 @@ class Placements(object):
     Tasks asked to be placed by the Scheduler.
 
     Args:
-        runtime (`EventTime`): The runtime of the Scheduler invocation.
+        runtime (`EventTime`): The runtime of the Scheduler invocation as applied on
+            the Simulator.
+        true_runtime (`EventTime`): The actual runtime of the Scheduler invocation.
         placements (`Sequence[Placement]`): The placements decided by the scheduler.
     """
 

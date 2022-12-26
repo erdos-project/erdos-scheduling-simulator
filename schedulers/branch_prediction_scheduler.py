@@ -93,7 +93,13 @@ class BranchPredictionScheduler(BaseScheduler):
                 if worker_pool.can_accomodate_task(task):
                     worker_pool.place_task(task)
                     is_task_placed = True
-                    placements.append(Placement(task, worker_pool.id, sim_time))
+                    placements.append(
+                        Placement(
+                            task=task,
+                            placement_time=sim_time,
+                            worker_pool_id=worker_pool.id,
+                        )
+                    )
                     self._logger.debug(
                         f"[{sim_time.time}] Placed {task} on WorkerPool "
                         f"({worker_pool.id}) to be started at {sim_time}."
@@ -111,7 +117,7 @@ class BranchPredictionScheduler(BaseScheduler):
                     f"[{sim_time.time}] Failed to place {task} because no worker pool "
                     f"could accomodate the resource requirements."
                 )
-                placements.append(Placement(task))
+                placements.append(Placement(task=task))
 
         end_time = time.time()
 

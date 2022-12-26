@@ -322,9 +322,10 @@ class Z3Scheduler(BaseScheduler):
                     start_time = model[variables.start_time].as_long()
                     placements.append(
                         Placement(
-                            variables.task,
-                            worker_pool_id,
-                            EventTime(start_time, EventTime.Unit.US),
+                            task=variables.task,
+                            placement_time=EventTime(start_time, EventTime.Unit.US),
+                            worker_pool_id=worker_pool_id,
+                            worker_id=worker.id,
                         )
                     )
                     self._logger.debug(

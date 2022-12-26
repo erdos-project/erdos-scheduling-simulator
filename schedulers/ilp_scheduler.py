@@ -49,7 +49,6 @@ class TaskOptimizerVariables:
         optimizer: gp.Model,
         enforce_deadlines: bool = True,
         retract_schedules: bool = False,
-        previous_placements: Mapping[str, str] = {},
     ):
         self._task = task
 
@@ -75,13 +74,16 @@ class TaskOptimizerVariables:
 
             # Find the Worker where the Task was previously placed and add
             # constraints to inform the scheduler of its placement.
-            if task.id not in previous_placements:
+            if (
+                task.current_placement is None
+                or task.current_placement.worker_id is None
+            ):
                 raise ValueError(
-                    f"Task {task.unique_name} in state {task.state} does "
-                    f"not have a cached WorkerID."
+                    f"Task {task.unique_name} in state {task.state} does not have a "
+                    f"cached prior Placement or the Worker ID is empty."
                 )
 
-            previously_placed_worker = previous_placements[task.id]
+            previously_placed_worker = task.current_placement.worker_id
             for worker_id, worker in workers.items():
                 if worker.id == previously_placed_worker:
                     self._placed_on_worker[worker_id] = 1
@@ -111,7 +113,15 @@ class TaskOptimizerVariables:
                 self._start_time.Start = task.expected_start_time.to(
                     EventTime.Unit.US
                 ).time
-                previously_placed_worker = previous_placements[task.id]
+                if (
+                    task.current_placement is None
+                    or task.current_placement.worker_id is None
+                ):
+                    raise ValueError(
+                        f"Task {task.unique_name} in state {task.state} does not have "
+                        f"a cached prior Placement or the Worker ID is empty."
+                    )
+                previously_placed_worker = task.current_placement.worker_id
                 for worker_id, worker in workers.items():
                     worker_placed_on_variable = self._placed_on_worker[worker_id]
                     if worker.id == previously_placed_worker:
@@ -295,13 +305,6 @@ class ILPScheduler(BaseScheduler):
         self._gap_time_limit = time_limit  # In seconds.
         self._log_to_file = log_to_file
 
-        # Cache the prior placement Workers since there is currently a mismatch
-        # between the granularity at which the Scheduler computes the placements
-        # and the granularity at which the Simulator applies them.
-        # We save the mapping between the ID of the Task and the Worker that it
-        # was assigned to.
-        self._previous_placements: Mapping[str, str] = {}
-
     def _initialize_optimizer(self, current_time: EventTime) -> gp.Model:
         """Initializes the Optimizer and sets the required parameters.
 
@@ -457,16 +460,14 @@ class ILPScheduler(BaseScheduler):
                 )
                 meets_deadline = start_time + task.remaining_time <= task.deadline
 
-                # Find the Worker where the Task was placed.
-                # BUG (Sukrit): This should be cached only if we actually return a
-                # placement./
+                # Find the Worker and the WorkerPool where the Task was placed.
+                worker_id = None
                 worker_pool_id = None
                 for worker_id, worker in workers.items():
                     if isinstance(task_variables.placed_on_worker(worker_id), gp.Var):
-                        placement = task_variables.placed_on_worker(worker_id).X
-                        if placement == 1:
+                        if task_variables.placed_on_worker(worker_id).X == 1:
+                            worker_id = worker.id
                             worker_pool_id = worker_to_worker_pool[worker.id]
-                            self._previous_placements[task.id] = worker.id
 
                 # If the task was placed, find the start time.
                 if worker_pool_id is not None:
@@ -478,7 +479,14 @@ class ILPScheduler(BaseScheduler):
                             task.unique_name,
                             start_time,
                         )
-                        placements.append(Placement(task_variables.task))
+                        placements.append(
+                            Placement(
+                                task=task_variables.task,
+                                placement_time=None,
+                                worker_pool_id=None,
+                                worker_id=None,
+                            )
+                        )
                     else:
                         self._logger.debug(
                             "[%s] Placed %s (with deadline %s and remaining time %s) "
@@ -491,7 +499,12 @@ class ILPScheduler(BaseScheduler):
                             start_time,
                         )
                         placements.append(
-                            Placement(task_variables.task, worker_pool_id, start_time)
+                            Placement(
+                                task=task_variables.task,
+                                placement_time=start_time,
+                                worker_pool_id=worker_pool_id,
+                                worker_id=worker_id,
+                            )
                         )
                 else:
                     self._logger.debug(
@@ -500,10 +513,24 @@ class ILPScheduler(BaseScheduler):
                         sim_time.to(EventTime.Unit.US).time,
                         task.unique_name,
                     )
-                    placements.append(Placement(task_variables.task))
+                    placements.append(
+                        Placement(
+                            task=task_variables.task,
+                            placement_time=None,
+                            worker_pool_id=None,
+                            worker_id=None,
+                        )
+                    )
         else:
             for task in tasks_to_be_scheduled:
-                placements.append(Placement(task))
+                placements.append(
+                    Placement(
+                        task=task,
+                        placement_time=None,
+                        worker_pool_id=None,
+                        worker_id=None,
+                    )
+                )
             self._logger.warning(f"[{sim_time.time}] Failed to place any task.")
         scheduler_end_time = time.time()
         scheduler_runtime = EventTime(
@@ -552,7 +579,6 @@ class ILPScheduler(BaseScheduler):
                 optimizer,
                 self.enforce_deadlines,
                 self.retract_schedules,
-                self._previous_placements,
             )
         return tasks_to_variables
 

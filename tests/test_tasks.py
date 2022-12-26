@@ -56,7 +56,10 @@ def test_successful_task_start():
     release_time = EventTime(2, EventTime.Unit.US)
     start_time = EventTime(3, EventTime.Unit.US)
     default_task.release(release_time)
-    default_task.schedule(release_time, Placement(default_task, None, release_time))
+    default_task.schedule(
+        release_time,
+        Placement(task=default_task, placement_time=release_time, worker_pool_id=None),
+    )
     default_task.start(start_time)
     assert default_task.start_time == start_time, "Incorrect start time for Task."
     assert default_task.state == TaskState.RUNNING, "Incorrect state for Task."
@@ -81,7 +84,11 @@ def test_task_runtime_variability():
     ), "Incorrect initial remaining time for the Task."
     default_task.schedule(
         EventTime(3, EventTime.Unit.US),
-        Placement(default_task, None, EventTime(3, EventTime.Unit.US)),
+        Placement(
+            task=default_task,
+            placement_time=EventTime(3, EventTime.Unit.US),
+            worker_pool_id=None,
+        ),
     )
     default_task.start(EventTime(3, EventTime.Unit.US), variance=50)
     assert (
@@ -97,7 +104,11 @@ def test_successful_task_preempt():
     default_task.release(EventTime(2, EventTime.Unit.US))
     default_task.schedule(
         EventTime(3, EventTime.Unit.US),
-        Placement(default_task, None, EventTime(3, EventTime.Unit.US)),
+        Placement(
+            task=default_task,
+            worker_pool_id=None,
+            placement_time=EventTime(3, EventTime.Unit.US),
+        ),
     )
     default_task.start(EventTime(3, EventTime.Unit.US))
     default_task.preempt(EventTime(4, EventTime.Unit.US))
@@ -117,7 +128,11 @@ def test_successful_task_resume():
     default_task.release(EventTime(2, EventTime.Unit.US))
     default_task.schedule(
         EventTime(3, EventTime.Unit.US),
-        Placement(default_task, None, EventTime(3, EventTime.Unit.US)),
+        Placement(
+            task=default_task,
+            worker_pool_id=None,
+            placement_time=EventTime(3, EventTime.Unit.US),
+        ),
     )
     default_task.start(EventTime(3, EventTime.Unit.US))
     default_task.preempt(EventTime(4, EventTime.Unit.US))
@@ -131,7 +146,11 @@ def test_failed_task_resume():
     default_task.release(EventTime(2, EventTime.Unit.US))
     default_task.schedule(
         EventTime(3, EventTime.Unit.US),
-        Placement(default_task, None, EventTime(3, EventTime.Unit.US)),
+        Placement(
+            task=default_task,
+            worker_pool_id=None,
+            placement_time=EventTime(3, EventTime.Unit.US),
+        ),
     )
     default_task.start(EventTime(3, EventTime.Unit.US))
     with pytest.raises(ValueError):
@@ -144,7 +163,11 @@ def test_task_completion():
     default_task.release(EventTime(2, EventTime.Unit.US))
     default_task.schedule(
         EventTime(3, EventTime.Unit.US),
-        Placement(default_task, None, EventTime(3, EventTime.Unit.US)),
+        Placement(
+            task=default_task,
+            worker_pool_id=None,
+            placement_time=EventTime(3, EventTime.Unit.US),
+        ),
     )
     default_task.start(EventTime(3, EventTime.Unit.US))
     default_task._remaining_time = EventTime.zero()
@@ -158,7 +181,11 @@ def test_task_eviction():
     default_task.release(EventTime(2, EventTime.Unit.US))
     default_task.schedule(
         EventTime(3, EventTime.Unit.US),
-        Placement(default_task, None, EventTime(3, EventTime.Unit.US)),
+        Placement(
+            task=default_task,
+            worker_pool_id=None,
+            placement_time=EventTime(3, EventTime.Unit.US),
+        ),
     )
     default_task.start(EventTime(3, EventTime.Unit.US))
     default_task.finish(EventTime(4, EventTime.Unit.US))
@@ -171,7 +198,11 @@ def test_task_step_one():
     default_task.release(EventTime(2, EventTime.Unit.US))
     default_task.schedule(
         EventTime(3, EventTime.Unit.US),
-        Placement(default_task, None, EventTime(3, EventTime.Unit.US)),
+        Placement(
+            task=default_task,
+            worker_pool_id=None,
+            placement_time=EventTime(3, EventTime.Unit.US),
+        ),
     )
     default_task.start(EventTime(3, EventTime.Unit.US))
     assert default_task._remaining_time == EventTime(
@@ -198,7 +229,11 @@ def test_task_step_two():
     default_task.release(EventTime(2, EventTime.Unit.US))
     default_task.schedule(
         EventTime(5, EventTime.Unit.US),
-        Placement(default_task, None, EventTime(3, EventTime.Unit.US)),
+        Placement(
+            task=default_task,
+            worker_pool_id=None,
+            placement_time=EventTime(3, EventTime.Unit.US),
+        ),
     )
     default_task.start(EventTime(5, EventTime.Unit.US))
     assert default_task.remaining_time == EventTime(
@@ -230,7 +265,11 @@ def test_fail_step_non_running():
     default_task.release(EventTime(2, EventTime.Unit.US))
     default_task.schedule(
         EventTime(3, EventTime.Unit.US),
-        Placement(default_task, None, EventTime(3, EventTime.Unit.US)),
+        Placement(
+            task=default_task,
+            worker_pool_id=None,
+            placement_time=EventTime(3, EventTime.Unit.US),
+        ),
     )
     default_task.start(EventTime(3, EventTime.Unit.US))
     default_task.preempt(EventTime(4, EventTime.Unit.US))
@@ -321,7 +360,11 @@ def test_get_schedulable_tasks():
     ), "Incorrect length of schedulable tasks returned."
     default_task.schedule(
         EventTime(3, EventTime.Unit.US),
-        Placement(default_task, None, EventTime(3, EventTime.Unit.US)),
+        Placement(
+            task=default_task,
+            worker_pool_id=None,
+            placement_time=EventTime(3, EventTime.Unit.US),
+        ),
     )
     default_task.start(EventTime(3, EventTime.Unit.US))
     default_task.update_remaining_time(EventTime.zero())
@@ -402,7 +445,11 @@ def test_task_completion_notification():
     assert released_tasks[0] == perception_task, "Incorrect task released."
     perception_task.schedule(
         EventTime(3, EventTime.Unit.US),
-        Placement(prediction_task, None, EventTime(3, EventTime.Unit.US)),
+        Placement(
+            task=prediction_task,
+            worker_pool_id=None,
+            placement_time=EventTime(3, EventTime.Unit.US),
+        ),
     )
     perception_task.start(EventTime(3, EventTime.Unit.US))
     perception_task.update_remaining_time(EventTime.zero())
@@ -415,7 +462,11 @@ def test_task_completion_notification():
     assert released_tasks[0] == prediction_task, "Incorrect tasks released."
     prediction_task.schedule(
         EventTime(4, EventTime.Unit.US),
-        Placement(prediction_task, None, EventTime(3, EventTime.Unit.US)),
+        Placement(
+            task=prediction_task,
+            worker_pool_id=None,
+            placement_time=EventTime(3, EventTime.Unit.US),
+        ),
     )
     prediction_task.start(EventTime(4, EventTime.Unit.US))
     prediction_task.update_remaining_time(EventTime.zero())
@@ -466,7 +517,11 @@ def test_conditional_task_completion_notification():
     # Run and finish the execution of Perception.
     perception_task.schedule(
         EventTime(3, EventTime.Unit.US),
-        Placement(perception_task, None, EventTime(3, EventTime.Unit.US)),
+        Placement(
+            task=perception_task,
+            worker_pool_id=None,
+            placement_time=EventTime(3, EventTime.Unit.US),
+        ),
     )
     perception_task.start(EventTime(3, EventTime.Unit.US))
     perception_task.update_remaining_time(EventTime.zero())
@@ -520,7 +575,11 @@ def test_conditional_weighted_task_completion_notification():
     # Run and finish the execution of Perception.
     perception_task.schedule(
         EventTime(3, EventTime.Unit.US),
-        Placement(perception_task, None, EventTime(3, EventTime.Unit.US)),
+        Placement(
+            task=perception_task,
+            worker_pool_id=None,
+            placement_time=EventTime(3, EventTime.Unit.US),
+        ),
     )
     perception_task.start(EventTime(3, EventTime.Unit.US))
     perception_task.update_remaining_time(EventTime.zero())
@@ -942,7 +1001,10 @@ def test_task_graph_complete():
     # Mark all tasks as complete.
     perception_task_0.release(EventTime.zero())
     perception_task_0.schedule(
-        EventTime.zero(), Placement(perception_task_0, None, EventTime.zero())
+        EventTime.zero(),
+        Placement(
+            task=perception_task_0, worker_pool_id=None, placement_time=EventTime.zero()
+        ),
     )
     perception_task_0.start(EventTime.zero())
     perception_task_0.update_remaining_time(EventTime.zero())
@@ -956,7 +1018,11 @@ def test_task_graph_complete():
     assert released_tasks[0] == prediction_task_0, "Incorrect task released."
     released_tasks[0].schedule(
         EventTime(1, EventTime.Unit.US),
-        Placement(released_tasks[0], None, EventTime(1, EventTime.Unit.US)),
+        Placement(
+            task=released_tasks[0],
+            worker_pool_id=None,
+            placement_time=EventTime(1, EventTime.Unit.US),
+        ),
     )
     released_tasks[0].start(EventTime(1, EventTime.Unit.US))
     released_tasks[0].update_remaining_time(EventTime.zero())
@@ -970,7 +1036,11 @@ def test_task_graph_complete():
     assert released_tasks[0] == planning_task_0, "Incorrect task released."
     released_tasks[0].schedule(
         EventTime(2, EventTime.Unit.US),
-        Placement(released_tasks[0], None, EventTime(2, EventTime.Unit.US)),
+        Placement(
+            task=released_tasks[0],
+            worker_pool_id=None,
+            placement_time=EventTime(2, EventTime.Unit.US),
+        ),
     )
     released_tasks[0].start(EventTime(2, EventTime.Unit.US))
     released_tasks[0].update_remaining_time(EventTime.zero())
@@ -1024,7 +1094,10 @@ def test_conditional_task_graph_complete():
     # Mark all tasks as complete.
     perception_task_0.release(EventTime.zero())
     perception_task_0.schedule(
-        EventTime.zero(), Placement(perception_task_0, None, EventTime.zero())
+        EventTime.zero(),
+        Placement(
+            task=perception_task_0, worker_pool_id=None, placement_time=EventTime.zero()
+        ),
     )
     perception_task_0.start(EventTime.zero())
     perception_task_0.update_remaining_time(EventTime.zero())
@@ -1049,7 +1122,11 @@ def test_conditional_task_graph_complete():
         assert False, "Incorrect task released."
     released_tasks[0].schedule(
         EventTime(1, EventTime.Unit.US),
-        Placement(released_tasks[0], None, EventTime(1, EventTime.Unit.US)),
+        Placement(
+            task=released_tasks[0],
+            worker_pool_id=None,
+            placement_time=EventTime(1, EventTime.Unit.US),
+        ),
     )
     released_tasks[0].start(EventTime(1, EventTime.Unit.US))
     released_tasks[0].update_remaining_time(EventTime.zero())
@@ -1063,7 +1140,11 @@ def test_conditional_task_graph_complete():
     assert released_tasks[0] == final_task_0, "Incorrect task released."
     released_tasks[0].schedule(
         EventTime(2, EventTime.Unit.US),
-        Placement(released_tasks[0], None, EventTime(2, EventTime.Unit.US)),
+        Placement(
+            task=released_tasks[0],
+            worker_pool_id=None,
+            placement_time=EventTime(2, EventTime.Unit.US),
+        ),
     )
     released_tasks[0].start(EventTime(2, EventTime.Unit.US))
     released_tasks[0].update_remaining_time(EventTime.zero())
@@ -1267,7 +1348,10 @@ def test_task_graph_remaining_time_simple():
     # Finish the first task and ensure that the remaining time is correctly computed.
     perception_task.release(EventTime.zero())
     perception_task.schedule(
-        EventTime.zero(), Placement(perception_task, None, EventTime.zero())
+        EventTime.zero(),
+        Placement(
+            task=perception_task, worker_pool_id=None, placement_time=EventTime.zero()
+        ),
     )
     perception_task.start(EventTime.zero())
     perception_task.update_remaining_time(time=EventTime.zero())
@@ -1280,7 +1364,11 @@ def test_task_graph_remaining_time_simple():
     prediction_task.release(EventTime(1, EventTime.Unit.MS))
     prediction_task.schedule(
         EventTime(1, EventTime.Unit.MS),
-        Placement(prediction_task, None, EventTime(1, EventTime.Unit.US)),
+        Placement(
+            task=prediction_task,
+            worker_pool_id=None,
+            placement_time=EventTime(1, EventTime.Unit.US),
+        ),
     )
     prediction_task.start(EventTime(1, EventTime.Unit.MS))
     prediction_task.update_remaining_time(time=EventTime.zero())
@@ -1293,7 +1381,11 @@ def test_task_graph_remaining_time_simple():
     planning_task.release(EventTime(3, EventTime.Unit.MS))
     planning_task.schedule(
         EventTime(3, EventTime.Unit.MS),
-        Placement(planning_task, None, EventTime(3, EventTime.Unit.US)),
+        Placement(
+            task=planning_task,
+            worker_pool_id=None,
+            placement_time=EventTime(3, EventTime.Unit.US),
+        ),
     )
     planning_task.start(EventTime(3, EventTime.Unit.MS))
     planning_task.update_remaining_time(time=EventTime.zero())
@@ -1443,7 +1535,12 @@ def test_task_cancellation():
         == 6
     ), "Incorrect number of currently schedulable tasks."
     detection_start_task.schedule(
-        EventTime.zero(), Placement(detection_start_task, None, EventTime.zero())
+        EventTime.zero(),
+        Placement(
+            task=detection_start_task,
+            worker_pool_id=None,
+            placement_time=EventTime.zero(),
+        ),
     )
     detection_start_task.start(EventTime.zero())
     detection_start_task.update_remaining_time(EventTime.zero())
