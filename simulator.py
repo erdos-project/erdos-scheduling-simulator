@@ -910,7 +910,7 @@ class Simulator(object):
                 )
                 self._csv_logger.debug(
                     f"{event.time.time},TASK_NOT_READY,{task.name},{task.timestamp},"
-                    f"{task.id},{event.placement}"
+                    f"{task.id},{event.placement.worker_pool_id}"
                 )
                 return
         # Initialize the task at the given placement time, and place it on
@@ -923,7 +923,7 @@ class Simulator(object):
         if success:
             task.start(
                 event.time,
-                worker_pool_id=event.placement,
+                worker_pool_id=event.placement.worker_pool_id,
                 variance=self._runtime_variance,
             )
             resource_allocation_str = ",".join(
@@ -935,7 +935,7 @@ class Simulator(object):
 
             self._csv_logger.debug(
                 f"{event.time.time},TASK_PLACEMENT,{task.name},{task.timestamp},"
-                f"{task.id},{event.placement},{resource_allocation_str}"
+                f"{task.id},{event.placement.worker_pool_id},{resource_allocation_str}"
             )
             self._logger.info(
                 "[%s] Placed %s on %s.", event.time.time, task, worker_pool
@@ -960,7 +960,7 @@ class Simulator(object):
             )
             self._csv_logger.debug(
                 f"{event.time.time},WORKER_NOT_READY,{task.name},{task.timestamp},"
-                f"{task.id},{event.placement}"
+                f"{task.id},{event.placement.worker_pool_id}"
             )
 
     def __handle_task_migration(self, event: Event):
@@ -985,14 +985,14 @@ class Simulator(object):
             task.resource_requirements,
         )
 
-        worker_pool = self._worker_pools.get_worker_pool(event.placement)
+        worker_pool = self._worker_pools.get_worker_pool(event.placement.worker_pool_id)
         success = worker_pool.place_task(task)
         if success:
-            task.resume(event.time, worker_pool_id=event.placement)
+            task.resume(event.time, worker_pool_id=event.placement.worker_pool_id)
             self._logger.debug(
                 "[%s] The state of the WorkerPool(%s) is %s.",
                 event.time.time,
-                event.placement,
+                event.placement.worker_pool_id,
                 worker_pool.resources,
             )
             resource_allocation_str = ",".join(
@@ -1003,8 +1003,8 @@ class Simulator(object):
             )
             self._csv_logger.debug(
                 f"{event.time.time},TASK_MIGRATED,{task.name},{task.timestamp},"
-                f"{task.id},{last_preemption.old_worker_pool},{event.placement},"
-                f"{resource_allocation_str}"
+                f"{task.id},{last_preemption.old_worker_pool},"
+                f"{event.placement.worker_pool_id},{resource_allocation_str}"
             )
         else:
             self._logger.warning(

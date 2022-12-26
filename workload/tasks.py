@@ -239,7 +239,7 @@ class Task(object):
     def start(
         self,
         time: Optional[EventTime] = None,
-        worker_pool_id: Optional[int] = None,
+        worker_pool_id: Optional[str] = None,
         variance: Optional[int] = 0,
     ):
         """Begins the execution of the task at the given simulator time.
