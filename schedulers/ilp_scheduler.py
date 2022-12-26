@@ -354,6 +354,7 @@ class ILPScheduler(BaseScheduler):
             retract_schedules=self.retract_schedules,
             worker_pools=worker_pools,
             policy=self.policy,
+            branch_prediction_accuracy=self.branch_prediction_accuracy,
             release_taskgraphs=self.release_taskgraphs,
         )
 

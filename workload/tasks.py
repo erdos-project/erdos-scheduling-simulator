@@ -941,6 +941,7 @@ class TaskGraph(Graph[Task]):
         retract_schedules: bool = False,
         worker_pools: "WorkerPools" = None,  # noqa: F821
         policy: BranchPredictionPolicy = BranchPredictionPolicy.ALL,
+        branch_prediction_accuracy: float = 0.50,
         release_taskgraphs: bool = False,
     ) -> Sequence[Task]:
         """Retrieves all tasks from the given TaskGraph that are expected to be
@@ -972,6 +973,8 @@ class TaskGraph(Graph[Task]):
                 preemption is enabled.
             policy (`BranchPredictionPolicy`): The branch prediction policy to use when
                 deciding what tasks can be considered in the scheduling horizon.
+            branch_prediction_accuracy (`float`): The accuracy with which the branches
+                should be correctly predicted by the TaskGraph.
             release_taskgraphs (`bool`): If `True`, all tasks of the `TaskGraph` are
                 made available for scheduling if any task in the `TaskGraph` fall within
                 the scheduler lookahead. This option uses the `policy` to decide what
@@ -1033,7 +1036,9 @@ class TaskGraph(Graph[Task]):
             # to according to the policy.
             children_tasks = []
             if task.conditional:
-                children_tasks = self.resolve_conditional(task, policy)
+                children_tasks = self.resolve_conditional(
+                    task, policy, branch_prediction_accuracy
+                )
             else:
                 children_tasks = self.get_children(task)
 
@@ -1364,15 +1369,20 @@ class TaskGraph(Graph[Task]):
         return any(task.state == TaskState.CANCELLED for task in self.get_sink_tasks())
 
     def resolve_conditional(
-        self, task: Task, policy: BranchPredictionPolicy
+        self,
+        task: Task,
+        policy: BranchPredictionPolicy,
+        branch_prediction_accuracy: float = 0.50,
     ) -> Sequence[Task]:
         """Resolves the conditional of the given `task` according to the
         specified `policy`.
 
         Args:
             task (`Task`): The Task to resolve the conditional for.
-            policy (`BranchPredictionPolicy`): The policy to use for
-                resolving conditionals.
+            policy (`BranchPredictionPolicy`): The policy to use for resolving the
+                conditionals.
+            branch_prediction_accuracy (`float`): The accuracy with which to predict
+                the branch to be taken if the policy is RANDOM.
 
         Returns:
             A `Sequence[Task]` that specifies the children to be executed
@@ -1405,8 +1415,41 @@ class TaskGraph(Graph[Task]):
                     child_to_release = child
             resolved_tasks.append(child_to_release)
         elif policy == BranchPredictionPolicy.RANDOM:
-            # Choose a branch randomly.
-            resolved_tasks.append(random.choice(children_tasks))
+            # Check if any of the children have already moved to SCHEDULED state, and
+            # just return that for consistency.
+            for child in children_tasks:
+                if child.state >= TaskState.SCHEDULED:
+                    resolved_tasks.append(child)
+                    return resolved_tasks
+
+            # None of the tasks have been SCHEDULED yet, check if the conditionals
+            # were resolved at submission. If yes, use the branch_prediction_accuracy
+            # to decide if we should release that task or something else.
+            if all(
+                abs(child.probability - 1.0) < sys.float_info.epsilon
+                or child.probability < sys.float_info.epsilon
+                for child in children_tasks
+            ):
+                # The tasks were resolved at submission. Find the task that is going
+                # to be released.
+                child_to_release = children_tasks[0]
+                for child in children_tasks[1:]:
+                    if child.probability > child_to_release.probability:
+                        child_to_release = child
+
+                # If the outcome of a biased coin is less than the required probability,
+                # then we release the correct task, and choose a random task otherwise.
+                if random.random() < branch_prediction_accuracy:
+                    resolved_tasks.append(child_to_release)
+                else:
+                    # Collect all the other tasks that will not be released.
+                    other_tasks = []
+                    for child in children_tasks:
+                        if child != child_to_release:
+                            other_tasks.append(child)
+                    resolved_tasks.append(random.choice(other_tasks))
+            else:
+                resolved_tasks.append(random.choice(children_tasks))
         elif policy == BranchPredictionPolicy.ALL:
             # Release all children tasks.
             resolved_tasks.extend(children_tasks)

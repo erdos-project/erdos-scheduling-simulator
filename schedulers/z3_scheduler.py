@@ -266,6 +266,7 @@ class Z3Scheduler(BaseScheduler):
             self.retract_schedules,
             worker_pools,
             self.policy,
+            self.branch_prediction_accuracy,
             self.release_taskgraphs,
         )
         self._logger.debug(

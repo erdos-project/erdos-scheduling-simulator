@@ -296,6 +296,9 @@ class Simulator(object):
         )
         self._runtime_variance = _flags.runtime_variance if _flags else 0
         self._policy = policy
+        self._branch_prediction_accuracy = (
+            _flags.branch_prediction_accuracy if _flags else 0.50
+        )
         self._release_taskgraphs = _flags.release_taskgraphs if _flags else False
         self._retract_schedules = _flags.retract_schedules if _flags else False
         self._drop_skipped_tasks = _flags.drop_skipped_tasks if _flags else False
@@ -410,6 +413,7 @@ class Simulator(object):
             self._retract_schedules,
             self._worker_pools,
             self._policy,
+            self._branch_prediction_accuracy,
             self._release_taskgraphs,
         )
         self._csv_logger.debug(
@@ -1184,6 +1188,7 @@ class Simulator(object):
             retract_schedules=self._retract_schedules,
             worker_pools=self._worker_pools,
             policy=self._policy,
+            branch_prediction_accuracy=self._branch_prediction_accuracy,
             release_taskgraphs=self._release_taskgraphs,
         )
         self._logger.debug(

@@ -1,7 +1,3 @@
-from logging import raiseExceptions
-
-import pytest
-
 from schedulers import BranchPredictionScheduler, EDFScheduler, LSFScheduler
 from tests.utils import create_default_task
 from utils import EventTime

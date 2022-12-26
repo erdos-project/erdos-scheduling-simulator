@@ -46,7 +46,6 @@ class BaseScheduler(object):
         self._enforce_deadlines = enforce_deadlines
         self._policy = policy
         self._retract_schedules = retract_schedules
-        self._release_taskgraphs = _flags.release_taskgraphs if _flags else False
         self._flags = _flags
 
         if self._flags:
@@ -56,8 +55,12 @@ class BaseScheduler(object):
                 log_file=self._flags.log_file_name,
                 log_level=self._flags.log_level,
             )
+            self._release_taskgraphs = _flags.release_taskgraphs
+            self._branch_prediction_accuracy = _flags.branch_prediction_accuracy
         else:
             self._logger = setup_logging(name=self.__class__.__name__)
+            self._release_taskgraphs = False
+            self._branch_prediction_accuracy = 0.50
 
     def schedule(
         self,
@@ -111,6 +114,10 @@ class BaseScheduler(object):
     @property
     def release_taskgraphs(self) -> bool:
         return self._release_taskgraphs
+
+    @property
+    def branch_prediction_accuracy(self) -> float:
+        return self._branch_prediction_accuracy
 
     def verify_schedule(
         self,

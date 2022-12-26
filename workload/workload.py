@@ -178,6 +178,7 @@ class Workload(object):
         retract_schedules: bool = False,
         worker_pools: "WorkerPools" = None,  # noqa: F821
         policy: BranchPredictionPolicy = BranchPredictionPolicy.ALL,
+        branch_prediction_accuracy: float = 0.50,
         release_taskgraphs: bool = False,
     ) -> Sequence[Task]:
         """Retrieves all the tasks expected to be released within the scheduling
@@ -197,6 +198,8 @@ class Workload(object):
                 preemption is enabled.
             policy (`BranchPredictionPolicy`): The branch prediction policy to use when
                 deciding what tasks can be considered in the scheduling horizon.
+            branch_prediction_accuracy (`float`): The accuracy with which the branches
+                should be correctly predicted by the TaskGraph.
             release_taskgraphs (`bool`): If `True`, all tasks of a TaskGraph are made
                 available for scheduling if any task in the TaskGraph falls within the
                 scheduler lookahead.
@@ -214,6 +217,7 @@ class Workload(object):
                     retract_schedules,
                     worker_pools,
                     policy,
+                    branch_prediction_accuracy,
                     release_taskgraphs,
                 )
             )
