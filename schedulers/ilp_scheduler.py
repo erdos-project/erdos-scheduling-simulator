@@ -462,16 +462,16 @@ class ILPScheduler(BaseScheduler):
                 meets_deadline = start_time + task.remaining_time <= task.deadline
 
                 # Find the Worker and the WorkerPool where the Task was placed.
-                worker_id = None
-                worker_pool_id = None
+                placement_worker_id = None
+                placement_worker_pool_id = None
                 for worker_id, worker in workers.items():
                     if isinstance(task_variables.placed_on_worker(worker_id), gp.Var):
                         if task_variables.placed_on_worker(worker_id).X == 1:
-                            worker_id = worker.id
-                            worker_pool_id = worker_to_worker_pool[worker.id]
+                            placement_worker_id = worker.id
+                            placement_worker_pool_id = worker_to_worker_pool[worker.id]
 
                 # If the task was placed, find the start time.
-                if worker_pool_id is not None:
+                if placement_worker_pool_id is not None:
                     if self.enforce_deadlines and not meets_deadline:
                         self._logger.debug(
                             "[%s] Failed to place %s because the deadline "
@@ -496,15 +496,15 @@ class ILPScheduler(BaseScheduler):
                             task.unique_name,
                             task.deadline,
                             task.remaining_time,
-                            worker_pool_id,
+                            placement_worker_pool_id,
                             start_time,
                         )
                         placements.append(
                             Placement(
                                 task=task_variables.task,
                                 placement_time=start_time,
-                                worker_pool_id=worker_pool_id,
-                                worker_id=worker_id,
+                                worker_pool_id=placement_worker_pool_id,
+                                worker_id=placement_worker_id,
                             )
                         )
                 else:
