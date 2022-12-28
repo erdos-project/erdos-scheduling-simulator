@@ -195,13 +195,6 @@ flags.DEFINE_float(
     0.5,
     "The probability with which to correctly guess the branch that is to be taken.",
 )
-flags.register_multi_flags_validator(
-    ["branch_prediction_accuracy", "resolve_conditionals_at_submission"],
-    lambda values: not values["resolve_conditionals_at_submission"]
-    or values["branch_prediction_accuracy"] != 0.50,
-    message="branch_prediction_accuracy can only be set when "
-    "conditionals are resolved at submission time.",
-)
 
 flags.DEFINE_bool(
     "enforce_deadlines",
