@@ -687,10 +687,6 @@ class ILPScheduler(BaseScheduler):
         # each task.
         task_pairs = []
         for task_1_name, task_1_variable in tasks_to_variables.items():
-            if task_1_variable.previously_placed:
-                # If the task was previously placed, we don't need to check for
-                # overlaps and its resource constraints.
-                continue
             for task_2_name in tasks_to_variables.keys():
                 if task_1_name != task_2_name:
                     task_pairs.append((task_1_name, task_2_name))
@@ -703,10 +699,6 @@ class ILPScheduler(BaseScheduler):
         # it is set to 1 if the task's start time overlaps with the execution of the
         # other task, and 0 otherwise.
         for task_1_name, task_1_variable in tasks_to_variables.items():
-            if task_1_variable.previously_placed:
-                # If the task was previously placed, there are no overlap variables.
-                continue
-
             for task_2_name, task_2_variable in tasks_to_variables.items():
                 if task_1_name == task_2_name:
                     continue
@@ -758,10 +750,6 @@ class ILPScheduler(BaseScheduler):
         # requirements for all the tasks running at the start time doesn't end up
         # oversubscribing any Worker's resources.
         for task_1_name, task_1_variable in tasks_to_variables.items():
-            if task_1_variable.previously_placed:
-                # If the task was previously placed, there are no overlap variables.
-                continue
-
             task_dependencies = []
             for task_2_name, task_2_variable in tasks_to_variables.items():
                 if task_1_name != task_2_name:
