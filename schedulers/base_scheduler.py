@@ -4,7 +4,7 @@ from typing import Optional, Sequence
 import absl  # noqa: F401
 
 from utils import EventTime, setup_logging
-from workers import WorkerPools
+from workers import WorkerPool, WorkerPools
 from workload import BranchPredictionPolicy, Placements, Task, TaskState, Workload
 
 
@@ -187,9 +187,10 @@ class BaseScheduler(object):
             task_graph = workload.get_task_graph(placement.task.task_graph)
             parents = task_graph.get_parents(placement.task)
             for parent in parents:
+                any_parent_placed = False
                 parent_placement = placements.get_placement(parent)
                 if parent.state in (
-                    TaskState.VIRTUAl,
+                    TaskState.VIRTUAL,
                     TaskState.RELEASED,
                     TaskState.PREEMPTED,
                 ) or (
@@ -197,7 +198,9 @@ class BaseScheduler(object):
                 ):
                     # If the parent was supposed to be scheduled by this run, ensure
                     # that all the dependencies are being satisfied.
-                    if parent_placement is None or not parent_placement.is_placed():
+                    if (
+                        parent_placement is None or not parent_placement.is_placed()
+                    ) and not placement.task.terminal:
                         self._logger.error(
                             "[%d] The task %s was placed without a valid placement "
                             "for a parent task %s in state %s.",
@@ -211,15 +214,21 @@ class BaseScheduler(object):
                             f"respect the task dependencies."
                         )
 
+                    if placement.task.terminal and (
+                        parent_placement is None or not parent_placement.is_placed()
+                    ):
+                        continue
+
                     if (
                         parent_placement.placement_time + parent.remaining_time
-                        <= placement.placement_time
+                        >= placement.placement_time
                     ):
                         self._logger.error(
                             "[%d] The task %s was placed at %s before the parent %s "
                             "(placed at %s with remaining time of %s) finishes at %s.",
                             sim_time.to(EventTime.Unit.US).time,
                             placement.task.unique_name,
+                            placement.placement_time,
                             parent.unique_name,
                             parent_placement.placement_time,
                             parent.remaining_time,
@@ -229,6 +238,8 @@ class BaseScheduler(object):
                             f"The placement for {placement.task.unique_name} did not "
                             f"respect the task dependencies."
                         )
+                    else:
+                        any_parent_placed = True
                 elif parent.state == TaskState.SCHEDULED and parent_placement is None:
                     # If the task was scheduled previously, and was not reconsidered
                     # for scheduling, use the previously decided start time.
@@ -251,6 +262,8 @@ class BaseScheduler(object):
                             f"The placement for {placement.task.unique_name} did not "
                             f"respect the task dependencies."
                         )
+                    else:
+                        any_parent_placed = True
                 elif parent.state == TaskState.RUNNING:
                     # If the task is currently running, use the remaining time to
                     # ensure that the dependencies were respected.
@@ -264,10 +277,12 @@ class BaseScheduler(object):
                             parent.remaining_time,
                             sim_time + parent.remaining_time,
                         )
+                    else:
+                        any_parent_placed = True
                 elif parent.state == TaskState.COMPLETED:
                     # If the task was finished, this task should be good since its
                     # lower bound was checked correctly.
-                    pass
+                    any_parent_placed = True
                 else:
                     raise ValueError(
                         f"The placement for {placement.task.unique_name} occurred "
@@ -275,12 +290,22 @@ class BaseScheduler(object):
                         f"{parent.state} state."
                     )
 
-        def check_for_oversubscription(task: Task, overlapping_tasks: Sequence[Task]):
+            if placement.task.terminal and not any_parent_placed:
+                self._logger.error(
+                    "[%s] The Task %s was a terminal task that was placed "
+                    "without placing any of its parents: %s.",
+                    sim_time.to(EventTime.Unit.US).time,
+                    placement.task.unique_name,
+                    [parent.unique_name for parent in parents],
+                )
+
+        def check_for_oversubscription(
+            task: Task,
+            task_placed_on_worker_pool: WorkerPool,
+            overlapping_tasks: Sequence[Task],
+        ):
             # For all the resources that are required by the task, ensure that they
             # are not oversubscribed by the overlapping tasks.
-            task_placed_on_worker_pool = worker_pools.get_worker_pool(
-                task.current_placement.worker_pool_id
-            )
             for (
                 resource,
                 quantity,
@@ -300,15 +325,26 @@ class BaseScheduler(object):
                     resource
                 ):
                     self._logger.error(
-                        "[%s] The task %s which was previously placed on %s and "
+                        "[%s] The task %s in state %s which was placed on %s and "
                         "required %s units of %s led to the oversubscription of the "
-                        "resource at the WorkerPool because its overlapping tasks had "
-                        "the following requirements for the resource: %s.",
+                        "%s quantities of resource at the WorkerPool because its "
+                        "overlapping tasks had a cumulative requirement of %s with "
+                        "the following individual requirements for the resource: %s.",
                         sim_time.to(EventTime.Unit.US).time,
-                        task,
+                        task.unique_name,
+                        task.state,
                         task_placed_on_worker_pool.name,
                         quantity,
                         resource,
+                        task_placed_on_worker_pool.resources.get_total_quantity(
+                            resource
+                        ),
+                        sum(
+                            map(
+                                itemgetter(1),
+                                overlapping_task_requirements_for_resource,
+                            )
+                        ),
                         overlapping_task_requirements_for_resource,
                     )
                     raise ValueError(
@@ -361,13 +397,19 @@ class BaseScheduler(object):
                     task.id != scheduled_task.id
                     and worker_pool_id
                     == scheduled_task.current_placement.worker_pool_id
+                    and expected_start_time <= scheduled_task.expected_start_time
                     and expected_start_time + task.remaining_time
                     >= scheduled_task.expected_start_time
                 ):
                     overlapping_tasks.append(task)
 
             # Check for oversubscription.
-            check_for_oversubscription(scheduled_task, overlapping_tasks)
+            task_placed_on_worker_pool = worker_pools.get_worker_pool(
+                scheduled_task.current_placement.worker_pool_id
+            )
+            check_for_oversubscription(
+                scheduled_task, task_placed_on_worker_pool, overlapping_tasks
+            )
 
         # For all the tasks that were placed right now, ensure that their placement
         # did not violate any resource availability.
@@ -379,10 +421,16 @@ class BaseScheduler(object):
                 if (
                     task.id != placement.task.id
                     and worker_pool_id == placement.worker_pool_id
+                    and expected_start_time <= placement.placement_time
                     and expected_start_time + task.remaining_time
                     >= placement.placement_time
                 ):
                     overlapping_tasks.append(task)
 
             # Check for oversubscription.
-            check_for_oversubscription(placement.task, overlapping_tasks)
+            task_placed_on_worker_pool = worker_pools.get_worker_pool(
+                placement.worker_pool_id
+            )
+            check_for_oversubscription(
+                placement.task, task_placed_on_worker_pool, overlapping_tasks
+            )
