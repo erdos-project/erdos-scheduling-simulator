@@ -195,7 +195,7 @@ class Worker(object):
         return str(self._id)
 
     @property
-    def resources(self):
+    def resources(self) -> Resources:
         return self._resources
 
     def __str__(self):

@@ -157,6 +157,12 @@ flags.DEFINE_enum(
     "The scheduler to use for this execution.",
 )
 flags.DEFINE_bool(
+    "verify_schedule",
+    False,
+    "If True, the schedule returned by the scheduler is verified after every call, and"
+    " an error is raised if a consistency check fails.",
+)
+flags.DEFINE_bool(
     "preemption", False, "Enable preemption of running tasks in the scheduler."
 )
 flags.DEFINE_bool(

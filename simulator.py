@@ -302,6 +302,7 @@ class Simulator(object):
         self._release_taskgraphs = _flags.release_taskgraphs if _flags else False
         self._retract_schedules = _flags.retract_schedules if _flags else False
         self._drop_skipped_tasks = _flags.drop_skipped_tasks if _flags else False
+        self._verify_schedule = _flags.verify_schedule if _flags else False
 
         # Statistics about the Task.
         self._finished_tasks = 0
@@ -514,6 +515,14 @@ class Simulator(object):
             f"{num_placed},{num_unplaced},"
             f"{self._last_scheduler_placements.true_runtime.to(EventTime.Unit.US).time}"
         )
+
+        if self._verify_schedule:
+            self._scheduler.verify_schedule(
+                event.time,
+                self._workload,
+                self._worker_pools,
+                self._last_scheduler_placements,
+            )
 
         simulator_events = []
         reheapify = False

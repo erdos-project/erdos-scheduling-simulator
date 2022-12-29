@@ -1,12 +1,11 @@
-import heapq
-from copy import deepcopy
-from typing import Optional
+from operator import itemgetter
+from typing import Optional, Sequence
 
 import absl  # noqa: F401
 
 from utils import EventTime, setup_logging
 from workers import WorkerPools
-from workload import BranchPredictionPolicy, Placements, TaskState, Workload
+from workload import BranchPredictionPolicy, Placements, Task, TaskState, Workload
 
 
 class BaseScheduler(object):
@@ -151,7 +150,7 @@ class BaseScheduler(object):
                 placement.placement_time < sim_time
                 or placement.placement_time < placement.task.release_time
             ):
-                self._logger.warn(
+                self._logger.error(
                     "[%d] The task %s was placed at %s, but was released at %s.",
                     sim_time.to(EventTime.Unit.US).time,
                     placement.task.unique_name,
@@ -170,7 +169,7 @@ class BaseScheduler(object):
                 and placement.placement_time + placement.task.remaining_time
                 >= placement.task.deadline
             ):
-                self._logger.warn(
+                self._logger.error(
                     "[%d] The task %s was placed at %s and has %s remaining time, "
                     "but has a deadline of %s.",
                     sim_time.to(EventTime.Unit.US).time,
@@ -199,7 +198,7 @@ class BaseScheduler(object):
                     # If the parent was supposed to be scheduled by this run, ensure
                     # that all the dependencies are being satisfied.
                     if parent_placement is None or not parent_placement.is_placed():
-                        self._logger.warn(
+                        self._logger.error(
                             "[%d] The task %s was placed without a valid placement "
                             "for a parent task %s in state %s.",
                             sim_time.to(EventTime.Unit.US).time,
@@ -216,7 +215,7 @@ class BaseScheduler(object):
                         parent_placement.placement_time + parent.remaining_time
                         <= placement.placement_time
                     ):
-                        self._logger.warn(
+                        self._logger.error(
                             "[%d] The task %s was placed at %s before the parent %s "
                             "(placed at %s with remaining time of %s) finishes at %s.",
                             sim_time.to(EventTime.Unit.US).time,
@@ -237,7 +236,7 @@ class BaseScheduler(object):
                         parent.expected_start_time + parent.remaining_time
                         <= placement.placement_time
                     ):
-                        self._logger.warn(
+                        self._logger.error(
                             "[%d] The task %s was placed at %s before a previously "
                             "scheduled parent %s (with an expected start time of %s "
                             "and remaining time of %s) finishes at %s.",
@@ -256,7 +255,7 @@ class BaseScheduler(object):
                     # If the task is currently running, use the remaining time to
                     # ensure that the dependencies were respected.
                     if sim_time + parent.remaining_time <= placement.placement_time:
-                        self._logger.warn(
+                        self._logger.error(
                             "[%d] The task %s was placed before a running parent task "
                             "%s (with a remaining time of %s) finishes at %s.",
                             sim_time.to(EventTime.Unit.US).time,
@@ -276,4 +275,114 @@ class BaseScheduler(object):
                         f"{parent.state} state."
                     )
 
-        # TODO (Sukrit): Ensure that the WorkerPools are not oversubscribed.
+        def check_for_oversubscription(task: Task, overlapping_tasks: Sequence[Task]):
+            # For all the resources that are required by the task, ensure that they
+            # are not oversubscribed by the overlapping tasks.
+            task_placed_on_worker_pool = worker_pools.get_worker_pool(
+                task.current_placement.worker_pool_id
+            )
+            for (
+                resource,
+                quantity,
+            ) in task.resource_requirements.get_unique_resource_types().items():
+                overlapping_task_requirements_for_resource = [
+                    (
+                        overlapping_task.unique_name,
+                        overlapping_task.resource_requirements.get_total_quantity(
+                            resource
+                        ),
+                    )
+                    for overlapping_task in overlapping_tasks
+                ]
+                if sum(
+                    map(itemgetter(1), overlapping_task_requirements_for_resource)
+                ) + quantity > task_placed_on_worker_pool.resources.get_total_quantity(
+                    resource
+                ):
+                    self._logger.error(
+                        "[%s] The task %s which was previously placed on %s and "
+                        "required %s units of %s led to the oversubscription of the "
+                        "resource at the WorkerPool because its overlapping tasks had "
+                        "the following requirements for the resource: %s.",
+                        sim_time.to(EventTime.Unit.US).time,
+                        task,
+                        task_placed_on_worker_pool.name,
+                        quantity,
+                        resource,
+                        overlapping_task_requirements_for_resource,
+                    )
+                    raise ValueError(
+                        f"The Placement for {task.unique_name} led to "
+                        f"oversubscription of {resource.name} at "
+                        f"{task_placed_on_worker_pool.name}."
+                    )
+
+        # Find all the required information about all the RUNNING, SCHEDULED and tasks
+        # that were placed in this iteration of the Scheduler.
+        task_placements = []
+        for running_task in workload.filter(lambda t: t.state == TaskState.RUNNING):
+            task_placements.append(
+                (
+                    # A reference to the Task object.
+                    running_task,
+                    # The time at which the Task is expected to start.
+                    sim_time,
+                    # The ID of the WorkerPool where the Task was placed.
+                    running_task.worker_pool_id,
+                )
+            )
+        for scheduled_task in workload.filter(lambda t: t.state == TaskState.SCHEDULED):
+            task_placements.append(
+                (
+                    scheduled_task,
+                    scheduled_task.current_placement.placement_time,
+                    scheduled_task.current_placement.worker_pool_id,
+                )
+            )
+        for placement in placements:
+            if not placement.is_placed():
+                continue
+            task_placements.append(
+                (
+                    placement.task,
+                    placement.placement_time,
+                    placement.worker_pool_id,
+                )
+            )
+
+        # For all the tasks that are to be placed before, ensure that their
+        # placement does not oversubscribe the available resources.
+        for scheduled_task in workload.filter(lambda t: t.state == TaskState.SCHEDULED):
+            # For previously scheduled tasks, ensure that the new placements along with
+            # any previously running tasks don't oversubscribe the resources.
+            overlapping_tasks = []
+            for task, expected_start_time, worker_pool_id in task_placements:
+                if (
+                    task.id != scheduled_task.id
+                    and worker_pool_id
+                    == scheduled_task.current_placement.worker_pool_id
+                    and expected_start_time + task.remaining_time
+                    >= scheduled_task.expected_start_time
+                ):
+                    overlapping_tasks.append(task)
+
+            # Check for oversubscription.
+            check_for_oversubscription(scheduled_task, overlapping_tasks)
+
+        # For all the tasks that were placed right now, ensure that their placement
+        # did not violate any resource availability.
+        for placement in placements:
+            # For tasks scheduled in the current run, ensure that the running and
+            # previously placed tasks do not oversubscribe the resources.
+            overlapping_tasks = []
+            for task, expected_start_time, worker_pool_id in task_placements:
+                if (
+                    task.id != placement.task.id
+                    and worker_pool_id == placement.worker_pool_id
+                    and expected_start_time + task.remaining_time
+                    >= placement.placement_time
+                ):
+                    overlapping_tasks.append(task)
+
+            # Check for oversubscription.
+            check_for_oversubscription(placement.task, overlapping_tasks)
