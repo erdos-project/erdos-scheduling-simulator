@@ -167,7 +167,7 @@ class BaseScheduler(object):
             if (
                 self.enforce_deadlines
                 and placement.placement_time + placement.task.remaining_time
-                >= placement.task.deadline
+                > placement.task.deadline
             ):
                 self._logger.error(
                     "[%d] The task %s was placed at %s and has %s remaining time, "
@@ -368,6 +368,8 @@ class BaseScheduler(object):
                 )
             )
         for scheduled_task in workload.filter(lambda t: t.state == TaskState.SCHEDULED):
+            # TODO (Sukrit): If a previously scheduled task is rescheduled, use the
+            # latest placement.
             task_placements.append(
                 (
                     scheduled_task,
@@ -407,6 +409,11 @@ class BaseScheduler(object):
             task_placed_on_worker_pool = worker_pools.get_worker_pool(
                 scheduled_task.current_placement.worker_pool_id
             )
+            if task_placed_on_worker_pool is None:
+                raise ValueError(
+                    f"A WorkerPool with ID "
+                    f"{scheduled_task.current_placement.worker_pool_id} was not found."
+                )
             check_for_oversubscription(
                 scheduled_task, task_placed_on_worker_pool, overlapping_tasks
             )
@@ -414,6 +421,8 @@ class BaseScheduler(object):
         # For all the tasks that were placed right now, ensure that their placement
         # did not violate any resource availability.
         for placement in placements:
+            if not placement.is_placed():
+                continue
             # For tasks scheduled in the current run, ensure that the running and
             # previously placed tasks do not oversubscribe the resources.
             overlapping_tasks = []
@@ -431,6 +440,11 @@ class BaseScheduler(object):
             task_placed_on_worker_pool = worker_pools.get_worker_pool(
                 placement.worker_pool_id
             )
+            if task_placed_on_worker_pool is None:
+                raise ValueError(
+                    f"A WorkerPool with ID "
+                    f"{scheduled_task.current_placement.worker_pool_id} was not found."
+                )
             check_for_oversubscription(
                 placement.task, task_placed_on_worker_pool, overlapping_tasks
             )
