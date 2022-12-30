@@ -57,9 +57,7 @@ class TaskOptimizerVariables:
         self._placed_on_worker = {}
 
         # Timing characteristics.
-        if task.state == TaskState.RUNNING or (
-            task.state == TaskState.SCHEDULED and not retract_schedules
-        ):
+        if task.state == TaskState.RUNNING:
             # The task is already running, set the start time to the current
             # simulation time, since we use the remaining time to count the
             # time at which this Task will relinquish its resources.
