@@ -60,17 +60,11 @@ class TaskOptimizerVariables:
         if task.state == TaskState.RUNNING or (
             task.state == TaskState.SCHEDULED and not retract_schedules
         ):
+            # The task is already running, set the start time to the current
+            # simulation time, since we use the remaining time to count the
+            # time at which this Task will relinquish its resources.
             self._previously_placed = True
-            if task.state == TaskState.RUNNING:
-                # The task is already running, set the start time to the current
-                # simulation time, since we use the remaining time to count the
-                # time at which this Task will relinquish its resources.
-                self._start_time = current_time.to(EventTime.Unit.US).time
-            else:
-                # The task was scheduled and we are not allowing retractions, set
-                # the start time of the Task to the previously decided start time
-                # to find the time at which the Task will relinquish its resources.
-                self._start_time = task.expected_start_time.to(EventTime.Unit.US).time
+            self._start_time = current_time.to(EventTime.Unit.US).time
 
             # Find the Worker where the Task was previously placed and add
             # constraints to inform the scheduler of its placement.
@@ -89,6 +83,33 @@ class TaskOptimizerVariables:
                     self._placed_on_worker[worker_id] = 1
                 else:
                     self._placed_on_worker[worker_id] = 0
+        elif task.state == TaskState.SCHEDULED and not retract_schedules:
+            # The task was scheduled and we are not allowing retractions, we allow the
+            # start time to be fungible but the task must be placed.
+            self._previously_placed = False
+            self._start_time = optimizer.addVar(
+                lb=max(
+                    current_time.to(EventTime.Unit.US).time,
+                    task.release_time.to(EventTime.Unit.US).time,
+                ),
+                vtype=GRB.INTEGER,
+                name=f"{task.unique_name}_start",
+            )
+            self._start_time.Start = task.expected_start_time.to(EventTime.Unit.US).time
+
+            # Set up variables to signify if the Task was placed on a Worker.
+            previously_placed_worker = task.current_placement.worker_id
+            for worker_id, worker in workers.items():
+                self._placed_on_worker[worker_id] = optimizer.addVar(
+                    vtype=GRB.BINARY, name=f"{task.unique_name}_placed_on_{worker.name}"
+                )
+                if worker.id == previously_placed_worker:
+                    self._placed_on_worker[worker_id].Start = 1
+                else:
+                    self._placed_on_worker[worker_id].Start = 0
+
+            # Initialize the constraints for the variables.
+            self.initialize_constraints(optimizer, enforce_deadlines, retract_schedules)
         else:
             self._previously_placed = False
             # The task's start time has to be decided.
@@ -141,7 +162,7 @@ class TaskOptimizerVariables:
                     )
 
             # Initialize the constraints for the variables.
-            self.initialize_constraints(optimizer, enforce_deadlines)
+            self.initialize_constraints(optimizer, enforce_deadlines, retract_schedules)
 
     @property
     def start_time(self) -> Union[int, gp.Var]:
@@ -223,20 +244,29 @@ class TaskOptimizerVariables:
                 name=f"{self.name}_enforce_deadlines",
             )
 
-    def _initialize_placement_constraints(self, optimizer: gp.Model) -> None:
+    def _initialize_placement_constraints(
+        self, optimizer: gp.Model, retract_schedules: bool
+    ) -> None:
         # Add a constraint to ensure that the task is only placed on a single Worker.
         # We constrain the sum of the individual indicator variables for the placement
         # on a specific Worker to be at most 1.
         # A sum of 0 implies that the task was not placed on any Worker.
-        optimizer.addConstr(
-            gp.quicksum(self._placed_on_worker.values()) <= 1,
-            name=f"{self.name}_consistent_worker_placement",
-        )
+        if self.task.state == TaskState.SCHEDULED and not retract_schedules:
+            optimizer.addConstr(
+                gp.quicksum(self._placed_on_worker.values()) == 1,
+                name=f"{self.name}_previously_scheduled_required_worker_placement",
+            )
+        else:
+            optimizer.addConstr(
+                gp.quicksum(self._placed_on_worker.values()) <= 1,
+                name=f"{self.name}_consistent_worker_placement",
+            )
 
     def initialize_constraints(
         self,
         optimizer: gp.Model,
         enforce_deadlines: bool,
+        retract_schedules: bool,
     ) -> None:
         """Initializes the constraints for the particular `Task`.
 
@@ -245,7 +275,7 @@ class TaskOptimizerVariables:
                 be added.
         """
         self._initialize_timing_constraints(optimizer, enforce_deadlines)
-        self._initialize_placement_constraints(optimizer)
+        self._initialize_placement_constraints(optimizer, retract_schedules)
 
 
 class ILPScheduler(BaseScheduler):
