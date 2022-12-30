@@ -477,8 +477,10 @@ class ILPScheduler(BaseScheduler):
                 f"[{sim_time.to(EventTime.Unit.US).time}] The scheduler returned the "
                 f"objective value {optimizer.objVal}."
             )
-            for task in tasks_to_be_scheduled:
-                task_variables = tasks_to_variables[task.unique_name]
+            for task_variables in tasks_to_variables.values():
+                if task_variables.previously_placed:
+                    continue
+                task = task_variables.task
                 # Find the starting time of the Task.
                 assert type(task_variables.start_time) == gp.Var, (
                     f"Incorrect type retrieved for start time of {task.unique_name}:"
@@ -551,10 +553,12 @@ class ILPScheduler(BaseScheduler):
                         )
                     )
         else:
-            for task in tasks_to_be_scheduled:
+            for task_variables in tasks_to_variables.values():
+                if task_variables.previously_placed:
+                    continue
                 placements.append(
                     Placement(
-                        task=task,
+                        task=task_variables.task,
                         placement_time=None,
                         worker_pool_id=None,
                         worker_id=None,
