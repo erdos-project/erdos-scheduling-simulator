@@ -1414,6 +1414,24 @@ class TaskGraph(Graph[Task]):
                 if child.probability > child_to_release.probability:
                     child_to_release = child
             resolved_tasks.append(child_to_release)
+        elif policy == BranchPredictionPolicy.MAXIMUM:
+            # Choose the branch that has the highest runtime.
+            # TODO (Sukrit): This branch may not have the highest resource requirement.
+            # TODO (Sukrit): The runtime of this branch is calculated as a depth-first
+            # traversal, and not a sum of all branches.
+            maximum_branch_time = EventTime.zero()
+            child_to_release = children_tasks[0]
+            for child in children_tasks:
+                branch_time = EventTime.zero()
+                for node in self.depth_first(child):
+                    if node.terminal:
+                        break
+                    branch_time += node.remaining_time
+
+                if branch_time > maximum_branch_time:
+                    maximum_branch_time = branch_time
+                    child_to_release = child
+            resolved_tasks.append(child_to_release)
         elif policy == BranchPredictionPolicy.RANDOM:
             # Check if any of the children have already moved to SCHEDULED state, and
             # just return that for consistency.

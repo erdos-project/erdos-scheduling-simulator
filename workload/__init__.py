@@ -8,8 +8,9 @@ class BranchPredictionPolicy(Enum):
 
     WORST_CASE = 1  # Always predict the branch that will not be taken.
     BEST_CASE = 2  # Always predict the branch that will be taken.
-    RANDOM = 3  # Randomly choose a branch to be taken.
-    ALL = 4  # Consider all branches in the computation.
+    MAXIMUM = 3  # Always predict the branch that takes the longest.
+    RANDOM = 4  # Randomly choose a branch to be taken.
+    ALL = 5  # Consider all branches in the computation.
 
 
 from .jobs import Job, JobGraph

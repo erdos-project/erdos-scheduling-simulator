@@ -1603,3 +1603,101 @@ def test_task_cancellation():
     assert (
         len(schedulable_tasks_future) == 3
     ), "Incorrect number of schedulable tasks in the future."
+
+
+def test_branch_prediction_policy():
+    """Tests that the BranchPredictionPolicy works correctly."""
+    detection_start_task = create_default_task(
+        name="DetectionStart@0",
+        job=Job(
+            name="DetectionStart",
+            runtime=EventTime(1000, EventTime.Unit.US),
+            conditional=True,
+        ),
+        timestamp=0,
+        runtime=1000,
+    )
+    preprocess_face_task = create_default_task(
+        name="PreprocessFace@0",
+        job=Job(
+            name="PreprocessFace",
+            runtime=EventTime(4000, EventTime.Unit.US),
+            probability=0.95,
+        ),
+        timestamp=0,
+        runtime=4000,
+    )
+    face_recognition_task = create_default_task(
+        name="FaceRecognition",
+        job=Job(name="FaceRecognition", runtime=EventTime(4000, EventTime.Unit.US)),
+        timestamp=0,
+        runtime=4000,
+    )
+    preprocess_car_task = create_default_task(
+        name="PreprocessCar@0",
+        job=Job(
+            name="PreprocessCar",
+            runtime=EventTime(1000, EventTime.Unit.US),
+            probability=0.05,
+        ),
+        timestamp=0,
+        runtime=1000,
+    )
+    car_recognition_task = create_default_task(
+        name="CarRecognition@0",
+        job=Job(name="CarRecognition", runtime=EventTime(1000, EventTime.Unit.US)),
+        timestamp=0,
+    )
+    detection_end_task = create_default_task(
+        name="DetectionEnd@0",
+        job=Job(
+            name="DetectionEnd",
+            runtime=EventTime(1000, EventTime.Unit.US),
+            terminal=True,
+        ),
+        timestamp=0,
+        runtime=1000,
+    )
+    task_graph = TaskGraph(
+        name="TestTaskGraph",
+        tasks={
+            detection_start_task: [preprocess_face_task, preprocess_car_task],
+            preprocess_face_task: [face_recognition_task],
+            preprocess_car_task: [car_recognition_task],
+            face_recognition_task: [detection_end_task],
+            car_recognition_task: [detection_end_task],
+        },
+    )
+
+    # Test that the WORST_CASE policy works.
+    released_tasks = task_graph.resolve_conditional(
+        detection_start_task, BranchPredictionPolicy.WORST_CASE
+    )
+    assert (
+        len(released_tasks) == 1
+    ), "Incorrect number of tasks released for WORST_CASE prediction policy."
+    assert (
+        released_tasks[0] == preprocess_car_task
+    ), "Incorrect task released for WORST_CASE prediction policy."
+
+    # Test that the BEST_CASE policy works.
+    released_tasks = task_graph.resolve_conditional(
+        detection_start_task, BranchPredictionPolicy.BEST_CASE
+    )
+    assert (
+        len(released_tasks) == 1
+    ), "Incorrect number of tasks released for BEST_CASE prediction policy."
+    assert (
+        released_tasks[0] == preprocess_face_task
+    ), "Incorrect task released for BEST_CASE prediction policy."
+
+    # Test that the MAXIMUM policy works.
+    released_tasks = task_graph.resolve_conditional(
+        detection_start_task, BranchPredictionPolicy.MAXIMUM
+    )
+    assert (
+        len(released_tasks) == 1
+    ), "Incorrect number of tasks released for MAXIMUM prediction policy."
+    assert (
+        released_tasks[0] == preprocess_face_task
+    ), "Incorrect task released for MAXIMUM prediction policy."

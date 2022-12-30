@@ -193,7 +193,7 @@ flags.DEFINE_integer(
 flags.DEFINE_enum(
     "scheduler_policy",
     "worst",
-    ["best", "worst", "random"],
+    ["best", "worst", "max", "random"],
     "The policy to be used for the BranchPredictionScheduler.",
 )
 flags.DEFINE_float(
@@ -316,6 +316,8 @@ def main(args):
         branch_prediction_policy = BranchPredictionPolicy.BEST_CASE
     elif FLAGS.scheduler_policy == "worst":
         branch_prediction_policy = BranchPredictionPolicy.WORST_CASE
+    elif FLAGS.scheduler_policy == "max":
+        branch_prediction_policy = BranchPredictionPolicy.MAXIMUM
     elif FLAGS.scheduler_policy == "random":
         branch_prediction_policy = BranchPredictionPolicy.RANDOM
     else:
