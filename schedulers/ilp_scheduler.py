@@ -87,7 +87,7 @@ class TaskOptimizerVariables:
             self._previously_placed = False
             self._start_time = optimizer.addVar(
                 lb=max(
-                    current_time.to(EventTime.Unit.US).time,
+                    current_time.to(EventTime.Unit.US).time + 1,
                     task.release_time.to(EventTime.Unit.US).time,
                 ),
                 vtype=GRB.INTEGER,
@@ -113,7 +113,7 @@ class TaskOptimizerVariables:
             # The task's start time has to be decided.
             self._start_time = optimizer.addVar(
                 lb=max(
-                    current_time.to(EventTime.Unit.US).time,
+                    current_time.to(EventTime.Unit.US).time + 1,
                     task.release_time.to(EventTime.Unit.US).time,
                 ),
                 vtype=GRB.INTEGER,
@@ -1119,13 +1119,11 @@ class ILPScheduler(BaseScheduler):
             # to compute the Gap between the solution according to the formula.
             best_objective_bound = optimizer.cbGet(GRB.Callback.MIPNODE_OBJBND)
             incumbent_objective = optimizer.cbGet(GRB.Callback.MIPNODE_OBJBST)
-            if abs(incumbent_objective) < sys.float_info.epsilon:
+            if incumbent_objective < sys.float_info.epsilon:
                 # If we have no solution, assume the gap is infinity.
                 gap = float("inf")
             else:
-                gap = abs(best_objective_bound - incumbent_objective) / abs(
-                    incumbent_objective
-                )
+                gap = best_objective_bound - incumbent_objective / incumbent_objective
 
             # If the gap changed, update the time at which it changed.
             if abs(gap - optimizer._current_gap) > sys.float_info.epsilon:

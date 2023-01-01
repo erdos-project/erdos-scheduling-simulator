@@ -1,5 +1,3 @@
-import pytest
-
 from schedulers import ILPScheduler
 from tests.utils import create_default_task
 from utils import EventTime
@@ -723,7 +721,7 @@ def test_ilp_not_work_conserving():
     camera_task_1_placement = placements.get_placement(camera_task_1)
     assert camera_task_1_placement is not None, "Placement for camera_task_1 not found."
     assert (
-        camera_task_1_placement.placement_time == EventTime.zero()
+        camera_task_1_placement.placement_time == EventTime(1, EventTime.Unit.US)
     ), "Incorrect placement time for camera_task_1."
 
     perception_task_1_placement = placements.get_placement(perception_task_1)
@@ -731,11 +729,11 @@ def test_ilp_not_work_conserving():
         perception_task_1_placement is not None
     ), "Placement for perception_task_1 not found."
     assert perception_task_1_placement.placement_time == EventTime(
-        11, EventTime.Unit.US
+        12, EventTime.Unit.US
     ), "Incorrect placement time for perception_task_1."
 
     camera_task_2_placement = placements.get_placement(camera_task_2)
     assert camera_task_2_placement is not None, "Placement for camera_task_2 not found."
     assert camera_task_2_placement.placement_time == EventTime(
-        20, EventTime.Unit.US
+        21, EventTime.Unit.US
     ), "Incorrect placement time for camera_task_2."
