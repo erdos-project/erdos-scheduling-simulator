@@ -472,7 +472,9 @@ class ILPScheduler(BaseScheduler):
 
         # Collect the placement results.
         placements = []
-        if optimizer.Status in (GRB.OPTIMAL, GRB.INTERRUPTED):
+        if optimizer.Status == GRB.OPTIMAL or (
+            optimizer.Status == GRB.INTERRUPTED and optimizer._solution_found
+        ):
             self._logger.debug(
                 f"[{sim_time.to(EventTime.Unit.US).time}] The scheduler returned the "
                 f"objective value {optimizer.objVal}."
@@ -1100,6 +1102,7 @@ class ILPScheduler(BaseScheduler):
             raise ValueError(f"The goal {self._goal} is not supported.")
 
         # Update the time at which the gap was updated and the gap itself.
+        optimizer._solution_found = False
         optimizer._current_gap = float("inf")
         optimizer._last_gap_update = time.time()
 
@@ -1136,15 +1139,28 @@ class ILPScheduler(BaseScheduler):
                     optimizer._current_gap,
                     gap,
                 )
+                optimizer._solution_found = True
                 optimizer._current_gap = gap
                 optimizer._last_gap_update = time.time()
 
         # If the gap hasn't changed in the predefined time, terminate the model.
         solver_time = time.time()
-        if solver_time - optimizer._last_gap_update > self._gap_time_limit:
+        if (
+            solver_time - optimizer._last_gap_update > self._gap_time_limit
+        ) and optimizer._solution_found:
             self._logger.debug(
                 "[%s] The gap between the incumbent and best bound hasn't "
-                "changed in %f seconds. Terminating.",
+                "changed in %f seconds, and there is a valid solution. "
+                "Terminating.",
+                sim_time.to(EventTime.Unit.US).time,
+                solver_time - optimizer._last_gap_update,
+            )
+            optimizer.terminate()
+        elif solver_time - optimizer._last_gap_update > 2 * self._gap_time_limit:
+            self._logger.debug(
+                "[%s] The gap between the incumbent and best bound hasn't "
+                "changed in %f seconds, and no valid solution has yet been "
+                "found. Terminating.",
                 sim_time.to(EventTime.Unit.US).time,
                 solver_time - optimizer._last_gap_update,
             )
