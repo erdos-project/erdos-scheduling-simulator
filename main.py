@@ -233,6 +233,12 @@ flags.DEFINE_float(
     "Override the Poisson arrival rate for all TaskGraphs defined"
     "in the JSON workload definition.",
 )
+flags.DEFINE_integer(
+    "override_arrival_period",
+    0,
+    "Override the arrival period for all Taskgraphs defined in "
+    "the JSON workload definition.",
+)
 
 
 def main(args):

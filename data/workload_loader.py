@@ -37,10 +37,16 @@ class WorkloadLoader(object):
                 if _flags.override_poisson_arrival_rate > sys.float_info.epsilon
                 else None
             )
+            self._arrival_period = (
+                _flags.override_arrival_period
+                if _flags.override_arrival_period > 0
+                else None
+            )
         else:
             self._logger = setup_logging(name=self.__class__.__name__)
             self._resource_logger = setup_logging(name="Resources")
             self._poisson_arrival_rate = None
+            self._arrival_period = None
 
         # Read the JSON file for applications and create a JobGraph for
         # each application.
@@ -85,7 +91,12 @@ class WorkloadLoader(object):
                         f'`period` was not defined for the JobGraph ("{job_name}").'
                     )
                 release_policy = JobGraph.ReleasePolicy.periodic(
-                    period=EventTime(job["period"], EventTime.Unit.US),
+                    period=EventTime(
+                        job["period"]
+                        if self._arrival_period is None
+                        else self._arrival_period,
+                        EventTime.Unit.US,
+                    ),
                     start=start_time,
                 )
             elif job["release_policy"] == "fixed":
@@ -96,7 +107,12 @@ class WorkloadLoader(object):
                         f'JobGraph ("{job_name}").'
                     )
                 release_policy = JobGraph.ReleasePolicy.fixed(
-                    period=EventTime(job["period"], EventTime.Unit.US),
+                    period=EventTime(
+                        job["period"]
+                        if self._arrival_period is None
+                        else self._arrival_period,
+                        EventTime.Unit.US,
+                    ),
                     num_invocations=job["invocations"],
                     start=start_time,
                 )
