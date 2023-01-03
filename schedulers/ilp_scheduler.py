@@ -432,85 +432,128 @@ class ILPScheduler(BaseScheduler):
 
         # Construct the model and the variables for each of the tasks.
         scheduler_start_time = time.time()
-        optimizer = self._initialize_optimizer(sim_time)
-        tasks_to_variables = self._add_variables(
-            sim_time,
-            optimizer,
-            tasks_to_be_scheduled + previously_placed_tasks,
-            workers,
-        )
-        assert all(
-            not tasks_to_variables[task.unique_name].previously_placed
-            for task in tasks_to_be_scheduled
-        ), (
-            "The tasks to be scheduled were incorrectly assumed to"
-            "be previously scheduled by the Optimizer."
-        )
-        assert all(
-            tasks_to_variables[task.unique_name] for task in previously_placed_tasks
-        ), (
-            "The previously placed tasks were incorrectly assumed "
-            "to be schedulable by the Optimizer."
-        )
-
-        # Add the constraints to ensure that dependency constraints are met and
-        # resources are not oversubscribed.
-        self._add_task_dependency_constraints(optimizer, tasks_to_variables, workload)
-        self._add_resource_constraints(optimizer, tasks_to_variables, workload, workers)
-
-        # Add the objectives and optimize the model.
-        self._add_objective(optimizer, tasks_to_variables, workload)
-        optimizer.optimize(
-            callback=lambda optimizer, where: self._termination_check_callback(
-                sim_time, optimizer, where
-            )
-        )
-        self._logger.debug(
-            f"[{sim_time.to(EventTime.Unit.US).time}] The scheduler returned the "
-            f"status {optimizer.status}."
-        )
-
-        # Collect the placement results.
         placements = []
-        if optimizer.Status == GRB.OPTIMAL or (
-            optimizer.Status == GRB.INTERRUPTED and optimizer._solution_found
-        ):
+        if len(tasks_to_be_scheduled) != 0:
+            optimizer = self._initialize_optimizer(sim_time)
+            tasks_to_variables = self._add_variables(
+                sim_time,
+                optimizer,
+                tasks_to_be_scheduled + previously_placed_tasks,
+                workers,
+            )
+            assert all(
+                not tasks_to_variables[task.unique_name].previously_placed
+                for task in tasks_to_be_scheduled
+            ), (
+                "The tasks to be scheduled were incorrectly assumed to"
+                "be previously scheduled by the Optimizer."
+            )
+            assert all(
+                tasks_to_variables[task.unique_name] for task in previously_placed_tasks
+            ), (
+                "The previously placed tasks were incorrectly assumed "
+                "to be schedulable by the Optimizer."
+            )
+
+            # Add the constraints to ensure that dependency constraints are met and
+            # resources are not oversubscribed.
+            self._add_task_dependency_constraints(
+                optimizer, tasks_to_variables, workload
+            )
+            self._add_resource_constraints(
+                optimizer, tasks_to_variables, workload, workers
+            )
+
+            # Add the objectives and optimize the model.
+            self._add_objective(optimizer, tasks_to_variables, workload)
+            optimizer.optimize(
+                callback=lambda optimizer, where: self._termination_check_callback(
+                    sim_time, optimizer, where
+                )
+            )
             self._logger.debug(
                 f"[{sim_time.to(EventTime.Unit.US).time}] The scheduler returned the "
-                f"objective value {optimizer.objVal}."
+                f"status {optimizer.status}."
             )
-            for task_variables in tasks_to_variables.values():
-                if task_variables.previously_placed:
-                    continue
-                task = task_variables.task
-                # Find the starting time of the Task.
-                assert type(task_variables.start_time) == gp.Var, (
-                    f"Incorrect type retrieved for start time of {task.unique_name}:"
-                    f"{type(task_variables.start_time)}"
-                )
-                start_time = EventTime(
-                    int(task_variables.start_time.X), EventTime.Unit.US
-                )
-                meets_deadline = start_time + task.remaining_time <= task.deadline
 
-                # Find the Worker and the WorkerPool where the Task was placed.
-                placement_worker_id = None
-                placement_worker_pool_id = None
-                for worker_id, worker in workers.items():
-                    if isinstance(task_variables.placed_on_worker(worker_id), gp.Var):
-                        if task_variables.placed_on_worker(worker_id).X == 1:
-                            placement_worker_id = worker.id
-                            placement_worker_pool_id = worker_to_worker_pool[worker.id]
+            # Collect the placement results.
+            if optimizer.Status == GRB.OPTIMAL or (
+                optimizer.Status == GRB.INTERRUPTED and optimizer._solution_found
+            ):
+                self._logger.debug(
+                    f"[{sim_time.to(EventTime.Unit.US).time}] The scheduler returned "
+                    f"the objective value {optimizer.objVal}."
+                )
+                for task_variables in tasks_to_variables.values():
+                    if task_variables.previously_placed:
+                        continue
+                    task = task_variables.task
+                    # Find the starting time of the Task.
+                    assert type(task_variables.start_time) == gp.Var, (
+                        f"Incorrect type retrieved for start time of "
+                        f"{task.unique_name}: {type(task_variables.start_time)}"
+                    )
+                    start_time = EventTime(
+                        int(task_variables.start_time.X), EventTime.Unit.US
+                    )
+                    meets_deadline = start_time + task.remaining_time <= task.deadline
 
-                # If the task was placed, find the start time.
-                if placement_worker_pool_id is not None:
-                    if self.enforce_deadlines and not meets_deadline:
+                    # Find the Worker and the WorkerPool where the Task was placed.
+                    placement_worker_id = None
+                    placement_worker_pool_id = None
+                    for worker_id, worker in workers.items():
+                        if isinstance(
+                            task_variables.placed_on_worker(worker_id), gp.Var
+                        ):
+                            if task_variables.placed_on_worker(worker_id).X == 1:
+                                placement_worker_id = worker.id
+                                placement_worker_pool_id = worker_to_worker_pool[
+                                    worker.id
+                                ]
+
+                    # If the task was placed, find the start time.
+                    if placement_worker_pool_id is not None:
+                        if self.enforce_deadlines and not meets_deadline:
+                            self._logger.debug(
+                                "[%s] Failed to place %s because the deadline "
+                                "could not be met with the suggested start time of %s.",
+                                sim_time.to(EventTime.Unit.US).time,
+                                task.unique_name,
+                                start_time,
+                            )
+                            placements.append(
+                                Placement(
+                                    task=task_variables.task,
+                                    placement_time=None,
+                                    worker_pool_id=None,
+                                    worker_id=None,
+                                )
+                            )
+                        else:
+                            self._logger.debug(
+                                "[%s] Placed %s (with deadline %s and remaining time "
+                                "%s) on WorkerPool(%s) to be started at %s.",
+                                sim_time.to(EventTime.Unit.US).time,
+                                task.unique_name,
+                                task.deadline,
+                                task.remaining_time,
+                                placement_worker_pool_id,
+                                start_time,
+                            )
+                            placements.append(
+                                Placement(
+                                    task=task_variables.task,
+                                    placement_time=start_time,
+                                    worker_pool_id=placement_worker_pool_id,
+                                    worker_id=placement_worker_id,
+                                )
+                            )
+                    else:
                         self._logger.debug(
-                            "[%s] Failed to place %s because the deadline "
-                            "could not be met with the suggested start time of %s.",
+                            "[%s] Failed to place %s because no WorkerPool "
+                            "could accomodate the resource requirements.",
                             sim_time.to(EventTime.Unit.US).time,
                             task.unique_name,
-                            start_time,
                         )
                         placements.append(
                             Placement(
@@ -520,32 +563,10 @@ class ILPScheduler(BaseScheduler):
                                 worker_id=None,
                             )
                         )
-                    else:
-                        self._logger.debug(
-                            "[%s] Placed %s (with deadline %s and remaining time %s) "
-                            "on WorkerPool(%s) to be started at %s.",
-                            sim_time.to(EventTime.Unit.US).time,
-                            task.unique_name,
-                            task.deadline,
-                            task.remaining_time,
-                            placement_worker_pool_id,
-                            start_time,
-                        )
-                        placements.append(
-                            Placement(
-                                task=task_variables.task,
-                                placement_time=start_time,
-                                worker_pool_id=placement_worker_pool_id,
-                                worker_id=placement_worker_id,
-                            )
-                        )
-                else:
-                    self._logger.debug(
-                        "[%s] Failed to place %s because no WorkerPool "
-                        "could accomodate the resource requirements.",
-                        sim_time.to(EventTime.Unit.US).time,
-                        task.unique_name,
-                    )
+            else:
+                for task_variables in tasks_to_variables.values():
+                    if task_variables.previously_placed:
+                        continue
                     placements.append(
                         Placement(
                             task=task_variables.task,
@@ -554,19 +575,7 @@ class ILPScheduler(BaseScheduler):
                             worker_id=None,
                         )
                     )
-        else:
-            for task_variables in tasks_to_variables.values():
-                if task_variables.previously_placed:
-                    continue
-                placements.append(
-                    Placement(
-                        task=task_variables.task,
-                        placement_time=None,
-                        worker_pool_id=None,
-                        worker_id=None,
-                    )
-                )
-            self._logger.warning(f"[{sim_time.time}] Failed to place any task.")
+                self._logger.warning(f"[{sim_time.time}] Failed to place any task.")
         scheduler_end_time = time.time()
         scheduler_runtime = EventTime(
             int((scheduler_end_time - scheduler_start_time) * 1e6), EventTime.Unit.US
