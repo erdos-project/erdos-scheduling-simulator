@@ -251,6 +251,14 @@ class Workload(object):
             if task_graph.is_cancelled():
                 self._logger.debug("The TaskGraph %s was cancelled.", task_graph.name)
                 cancelled_task_graphs.append(task_graph)
+            elif task_graph.completion_time > task_graph.deadline:
+                self._logger.debug(
+                    "The TaskGraph %s was not cancelled, but missed its deadline %s "
+                    "since it completed at %s.",
+                    task_graph.name,
+                    task_graph.deadline,
+                    task_graph.completion_time,
+                )
             else:
                 self._logger.debug(
                     "The TaskGraph %s was not cancelled.", task_graph.name

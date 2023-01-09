@@ -112,7 +112,7 @@ class CSVReader(object):
                     )
                 elif reading[1] == "TASK_PLACEMENT":
                     # Update the task with the placement event data.
-                    tasks[reading[4]].update_placement(reading, worker_pools)
+                    tasks[reading[5]].update_placement(reading, worker_pools)
                 elif reading[1] == "TASK_SKIP" and reading[4] in tasks:
                     # Update the task with the skip data.
                     tasks[reading[4]].update_skip(reading)

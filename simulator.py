@@ -943,8 +943,9 @@ class Simulator(object):
             )
 
             self._csv_logger.debug(
-                f"{event.time.time},TASK_PLACEMENT,{task.name},{task.timestamp},"
-                f"{task.id},{event.placement.worker_pool_id},{resource_allocation_str}"
+                f"{event.time.time},TASK_PLACEMENT,{task.name},{task.task_graph},"
+                f"{task.timestamp},{task.id},{event.placement.worker_pool_id},"
+                f"{resource_allocation_str}"
             )
             self._logger.info(
                 "[%s] Placed %s on %s.", event.time.time, task, worker_pool
