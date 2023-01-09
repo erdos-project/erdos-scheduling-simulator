@@ -51,6 +51,7 @@ class TaskOptimizerVariables:
         retract_schedules: bool = False,
     ):
         self._task = task
+        self._enforce_deadlines = enforce_deadlines
 
         # Placement characteristics
         # Set up individual variables to signify where the task is placed.
@@ -182,6 +183,10 @@ class TaskOptimizerVariables:
         """Returns a Boolean indicating whether the task denoted by this instance
         has been previously placed or not."""
         return self._previously_placed
+
+    @property
+    def enforce_deadlines(self) -> bool:
+        return self._enforce_deadlines
 
     def placed_on_worker(self, worker_id: int) -> Optional[Union[int, gp.Var]]:
         """Check if the Task was placed on a particular Worker.
@@ -332,6 +337,7 @@ class ILPScheduler(BaseScheduler):
         self._goal = goal
         self._gap_time_limit = time_limit  # In seconds.
         self._log_to_file = log_to_file
+        self._allowed_to_miss_deadlines = set()
 
     def _initialize_optimizer(self, current_time: EventTime) -> gp.Model:
         """Initializes the Optimizer and sets the required parameters.
@@ -438,6 +444,7 @@ class ILPScheduler(BaseScheduler):
             tasks_to_variables = self._add_variables(
                 sim_time,
                 optimizer,
+                workload,
                 tasks_to_be_scheduled + previously_placed_tasks,
                 workers,
             )
@@ -511,15 +518,51 @@ class ILPScheduler(BaseScheduler):
                                     worker.id
                                 ]
 
+                    # Check if all the tasks from this TaskGraph were placed.
+                    all_tasks_placed = True
+                    task_not_placed = None
+                    task_graph = workload.get_task_graph(task.task_graph)
+                    for other_task in task_graph.get_nodes():
+                        if other_task.unique_name in tasks_to_variables:
+                            placed_on_worker = []
+                            for val in tasks_to_variables[
+                                other_task.unique_name
+                            ].placed_on_workers:
+                                if isinstance(val, gp.Var):
+                                    placed_on_worker.append(val.X)
+                                else:
+                                    placed_on_worker.append(val)
+                            if sum(placed_on_worker) == 0:
+                                all_tasks_placed = False
+                                task_not_placed = other_task.unique_name
+                                break
+
                     # If the task was placed, find the start time.
                     if placement_worker_pool_id is not None:
-                        if self.enforce_deadlines and not meets_deadline:
+                        if task_variables.enforce_deadlines and not meets_deadline:
                             self._logger.debug(
                                 "[%s] Failed to place %s because the deadline "
                                 "could not be met with the suggested start time of %s.",
                                 sim_time.to(EventTime.Unit.US).time,
                                 task.unique_name,
                                 start_time,
+                            )
+                            placements.append(
+                                Placement(
+                                    task=task_variables.task,
+                                    placement_time=None,
+                                    worker_pool_id=None,
+                                    worker_id=None,
+                                )
+                            )
+                        elif self.release_taskgraphs and not all_tasks_placed:
+                            self._logger.debug(
+                                "[%s] Failed to place %s because the task %s from the "
+                                "TaskGraph %s could not be placed.",
+                                sim_time.to(EventTime.Unit.US).time,
+                                task.unique_name,
+                                task_not_placed,
+                                task.task_graph,
                             )
                             placements.append(
                                 Placement(
@@ -564,18 +607,21 @@ class ILPScheduler(BaseScheduler):
                             )
                         )
             else:
-                for task_variables in tasks_to_variables.values():
-                    if task_variables.previously_placed:
-                        continue
+                # No feasible solution was found, cancel the tasks that were required
+                # to be scheduled, and assume the prior placement for all the other
+                # tasks.
+                for task in tasks_to_be_scheduled:
                     placements.append(
                         Placement(
-                            task=task_variables.task,
+                            task=task,
                             placement_time=None,
                             worker_pool_id=None,
                             worker_id=None,
                         )
                     )
-                self._logger.warning(f"[{sim_time.time}] Failed to place any task.")
+                self._logger.warning(
+                    f"[{sim_time.time}] Failed to place any task."
+                )
         scheduler_end_time = time.time()
         scheduler_runtime = EventTime(
             int((scheduler_end_time - scheduler_start_time) * 1e6), EventTime.Unit.US
@@ -596,6 +642,7 @@ class ILPScheduler(BaseScheduler):
         self,
         sim_time: EventTime,
         optimizer: gp.Model,
+        workload: Workload,
         tasks_to_be_scheduled: Sequence[Task],
         workers: Mapping[int, Worker],
     ) -> Mapping[str, TaskOptimizerVariables]:
@@ -616,12 +663,43 @@ class ILPScheduler(BaseScheduler):
         """
         tasks_to_variables = {}
         for task in tasks_to_be_scheduled:
+            # Retrieve the TaskGraph for all the tasks that are to be scheduled.
+            task_graph = workload.get_task_graph(task.task_graph)
+            if task_graph in self._allowed_to_miss_deadlines:
+                continue
+
+            # If the Task is not already SCHEDULED / RUNNING, and all of its parents
+            # are not in the set of Tasks to be scheduled, then this TaskGraph has
+            # suffered a branch misprediction, and should be allowed to miss its
+            # deadline.
+            all_sources_present = all(
+                source in tasks_to_be_scheduled for source in task_graph.get_sources()
+            )
+            if (
+                task.state not in (TaskState.SCHEDULED, TaskState.RUNNING)
+                and not all_sources_present
+            ):
+                self._allowed_to_miss_deadlines.add(task.task_graph)
+
+        self._logger.debug(
+            "[%s] The deadlines will not be enforced on TaskGraphs: %s",
+            sim_time.to(EventTime.Unit.US).time,
+            self._allowed_to_miss_deadlines,
+        )
+
+        for task in tasks_to_be_scheduled:
+            enforce_deadlines = self.enforce_deadlines
+            if (
+                self.release_taskgraphs
+                and task.task_graph in self._allowed_to_miss_deadlines
+            ):
+                enforce_deadlines = False
             tasks_to_variables[task.unique_name] = TaskOptimizerVariables(
                 sim_time,
                 task,
                 workers,
                 optimizer,
-                self.enforce_deadlines,
+                enforce_deadlines,
                 self.retract_schedules,
             )
         return tasks_to_variables
@@ -1165,7 +1243,7 @@ class ILPScheduler(BaseScheduler):
                 solver_time - optimizer._last_gap_update,
             )
             optimizer.terminate()
-        elif solver_time - optimizer._last_gap_update > 2 * self._gap_time_limit:
+        elif solver_time - optimizer._last_gap_update > self._gap_time_limit:
             self._logger.debug(
                 "[%s] The gap between the incumbent and best bound hasn't "
                 "changed in %f seconds, and no valid solution has yet been "
