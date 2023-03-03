@@ -619,9 +619,7 @@ class ILPScheduler(BaseScheduler):
                             worker_id=None,
                         )
                     )
-                self._logger.warning(
-                    f"[{sim_time.time}] Failed to place any task."
-                )
+                self._logger.warning(f"[{sim_time.time}] Failed to place any task.")
         scheduler_end_time = time.time()
         scheduler_runtime = EventTime(
             int((scheduler_end_time - scheduler_start_time) * 1e6), EventTime.Unit.US
