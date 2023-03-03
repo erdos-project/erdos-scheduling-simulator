@@ -153,7 +153,7 @@ class Resources(object):
         """
         allocated_tasks = []
         for task, allocations in self._current_allocations.items():
-            for (allocated_resource, allocated_quantity) in allocations:
+            for allocated_resource, allocated_quantity in allocations:
                 if resource == allocated_resource:
                     allocated_tasks.append((task, allocated_quantity))
         return allocated_tasks
