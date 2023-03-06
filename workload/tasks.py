@@ -1531,6 +1531,23 @@ class TaskGraph(Graph[Task]):
         return max(task.deadline for task in self.get_nodes())
 
     @property
+    def completion_time(self) -> EventTime:
+        """Retrieve the completion time of the TaskGraph.
+
+        The completion time of the TaskGraph is the maximum of the completion time
+        of all of its sink nodes. If the sink nodes haven't been completed yet, then
+        this method will raise a RuntimeError.
+
+        Returns:
+            An `EventTime` representation of the completion time of the TaskGraph.
+        """
+        if not self.is_complete():
+            raise RuntimeError(
+                f"The tasks of the Graph {self.name} are not complete yet."
+            )
+        return max(sink_task.completion_time for sink_task in self.get_sink_tasks())
+
+    @property
     def name(self) -> str:
         """Retrieves the name of the TaskGraph.
 
