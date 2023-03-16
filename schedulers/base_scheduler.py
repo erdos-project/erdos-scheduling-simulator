@@ -22,9 +22,13 @@ class BaseScheduler(object):
             `schedule()` will return None.
         policy (`BranchPredictionPolicy`): The branch prediction policy to use for the
             scheduler if it schedules future tasks.
+        branch_prediction_accuracy (`float`): The accuracy of the branch prediction
+            policy used by the scheduler.
         retract_schedules (`bool`): If the scheduler schedules future tasks, then
             setting this to `True` enables the scheduler to retract prior scheduling
             decisions before they are actually placed on the WorkerPools.
+        release_taskgraphs (`bool`): If `True`, the scheduler is given access to the
+            entire TaskGraph for any Task that falls within the lookahead defined above.
         _flags (`Optional[absl.flags]`): The runtime flags that are used to initialize
             a logger instance.
     """
@@ -36,7 +40,9 @@ class BaseScheduler(object):
         lookahead: EventTime = EventTime.zero(),
         enforce_deadlines: bool = False,
         policy: BranchPredictionPolicy = BranchPredictionPolicy.RANDOM,
+        branch_prediction_accuracy: float = 0.50,
         retract_schedules: bool = False,
+        release_taskgraphs: bool = False,
         _flags: Optional["absl.flags"] = None,
     ) -> None:
         self._preemptive = preemptive
@@ -44,7 +50,9 @@ class BaseScheduler(object):
         self._lookahead = lookahead
         self._enforce_deadlines = enforce_deadlines
         self._policy = policy
+        self._branch_prediction_accuracy = branch_prediction_accuracy
         self._retract_schedules = retract_schedules
+        self._release_taskgraphs = release_taskgraphs
         self._flags = _flags
 
         if self._flags:
@@ -54,12 +62,8 @@ class BaseScheduler(object):
                 log_file=self._flags.log_file_name,
                 log_level=self._flags.log_level,
             )
-            self._release_taskgraphs = _flags.release_taskgraphs
-            self._branch_prediction_accuracy = _flags.branch_prediction_accuracy
         else:
             self._logger = setup_logging(name=self.__class__.__name__)
-            self._release_taskgraphs = False
-            self._branch_prediction_accuracy = 0.50
 
     def schedule(
         self,

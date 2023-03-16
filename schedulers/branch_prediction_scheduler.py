@@ -27,10 +27,17 @@ class BranchPredictionScheduler(BaseScheduler):
         preemptive: bool = False,
         runtime: EventTime = EventTime(-1, EventTime.Unit.US),
         policy: BranchPredictionPolicy = BranchPredictionPolicy.RANDOM,
+        branch_prediction_accuracy: float = 0.50,
+        release_taskgraphs: bool = False,
         _flags: Optional["absl.flags"] = None,
     ) -> None:
         super(BranchPredictionScheduler, self).__init__(
-            preemptive=preemptive, runtime=runtime, policy=policy, _flags=_flags
+            preemptive=preemptive,
+            runtime=runtime,
+            policy=policy,
+            branch_prediction_accuracy=branch_prediction_accuracy,
+            release_taskgraphs=release_taskgraphs,
+            _flags=_flags,
         )
 
     def schedule(

@@ -4,7 +4,6 @@ import pickle
 import sys
 import time
 from collections import defaultdict
-from operator import attrgetter
 from typing import Optional
 
 import absl  # noqa: F401
@@ -13,7 +12,7 @@ import gurobipy as gp
 from schedulers import BaseScheduler
 from utils import EventTime
 from workers import WorkerPools
-from workload import Resource, Resources, TaskGraph, TaskState
+from workload import Resource, TaskGraph
 
 
 class GurobiBaseScheduler(BaseScheduler):

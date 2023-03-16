@@ -209,7 +209,6 @@ class Simulator(object):
         workload: Workload,
         loop_timeout: EventTime = EventTime(time=sys.maxsize, unit=EventTime.Unit.US),
         scheduler_frequency: EventTime = EventTime(time=-1, unit=EventTime.Unit.US),
-        policy: BranchPredictionPolicy = BranchPredictionPolicy.ALL,
         _flags: Optional["absl.flags"] = None,
     ):
         if not isinstance(scheduler, BaseScheduler):
@@ -295,12 +294,6 @@ class Simulator(object):
             _flags.scheduler_delay if _flags else 1, EventTime.Unit.US
         )
         self._runtime_variance = _flags.runtime_variance if _flags else 0
-        self._policy = policy
-        self._branch_prediction_accuracy = (
-            _flags.branch_prediction_accuracy if _flags else 0.50
-        )
-        self._release_taskgraphs = _flags.release_taskgraphs if _flags else False
-        self._retract_schedules = _flags.retract_schedules if _flags else False
         self._drop_skipped_tasks = _flags.drop_skipped_tasks if _flags else False
         self._verify_schedule = _flags.verify_schedule if _flags else False
 
@@ -411,11 +404,11 @@ class Simulator(object):
             event.time,
             self._scheduler.lookahead,
             self._scheduler.preemptive,
-            self._retract_schedules,
+            self._scheduler.retract_schedules,
             self._worker_pools,
-            self._policy,
-            self._branch_prediction_accuracy,
-            self._release_taskgraphs,
+            self._scheduler.policy,
+            self._scheduler.branch_prediction_accuracy,
+            self._scheduler.release_taskgraphs,
         )
         self._csv_logger.debug(
             f"{event.time.time},SCHEDULER_START,{len(schedulable_tasks)},"
@@ -1195,11 +1188,11 @@ class Simulator(object):
             time=event.time,
             lookahead=self._scheduler.lookahead,
             preemption=self._scheduler.preemptive,
-            retract_schedules=self._retract_schedules,
+            retract_schedules=self._scheduler.retract_schedules,
             worker_pools=self._worker_pools,
-            policy=self._policy,
-            branch_prediction_accuracy=self._branch_prediction_accuracy,
-            release_taskgraphs=self._release_taskgraphs,
+            policy=self._scheduler.policy,
+            branch_prediction_accuracy=self._scheduler.branch_prediction_accuracy,
+            release_taskgraphs=self._scheduler.release_taskgraphs,
         )
         self._logger.debug(
             "[%s] The schedulable tasks are %s, and the running tasks are %s.",

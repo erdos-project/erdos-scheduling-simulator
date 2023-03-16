@@ -2,7 +2,6 @@ import multiprocessing
 import sys
 import time
 from copy import copy, deepcopy
-from itertools import combinations
 from typing import Mapping, Optional, Sequence, Union
 
 import absl  # noqa: F401
@@ -295,6 +294,8 @@ class ILPScheduler(BaseScheduler):
             `schedule()` will return None.
         policy (`BranchPredictionPolicy`): The branch prediction policy to use for the
             scheduler if it schedules future tasks.
+        branch_prediction_accuracy (`float`): The accuracy of the branch prediction
+            policy used by the scheduler.
         retract_schedules (`bool`): If the scheduler schedules future tasks, then
             setting this to `True` enables the scheduler to retract prior scheduling
             decisions before they are actually placed on the WorkerPools.
@@ -314,7 +315,9 @@ class ILPScheduler(BaseScheduler):
         lookahead: EventTime = EventTime(time=0, unit=EventTime.Unit.US),
         enforce_deadlines: bool = False,
         policy: BranchPredictionPolicy = BranchPredictionPolicy.RANDOM,
+        branch_prediction_accuracy: float = 0.50,
         retract_schedules: bool = False,
+        release_taskgraphs: bool = False,
         goal: str = "max_goodput",
         time_limit: int = 20,
         log_to_file: bool = False,
@@ -331,7 +334,9 @@ class ILPScheduler(BaseScheduler):
             lookahead=lookahead,
             enforce_deadlines=enforce_deadlines,
             policy=policy,
+            branch_prediction_accuracy=branch_prediction_accuracy,
             retract_schedules=retract_schedules,
+            release_taskgraphs=release_taskgraphs,
             _flags=_flags,
         )
         self._goal = goal

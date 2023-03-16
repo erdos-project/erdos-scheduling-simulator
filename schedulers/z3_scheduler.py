@@ -239,7 +239,9 @@ class Z3Scheduler(BaseScheduler):
         lookahead: int = EventTime.zero(),
         enforce_deadlines: bool = False,
         policy: BranchPredictionPolicy = BranchPredictionPolicy.RANDOM,
+        branch_prediction_accuracy: float = 0.50,
         retract_schedules: bool = False,
+        release_taskgraphs: bool = False,
         goal: str = "max_slack",
         _flags: Optional["absl.flags"] = None,
     ):
@@ -249,7 +251,9 @@ class Z3Scheduler(BaseScheduler):
             lookahead=lookahead,
             enforce_deadlines=enforce_deadlines,
             policy=policy,
+            branch_prediction_accuracy=branch_prediction_accuracy,
             retract_schedules=retract_schedules,
+            release_taskgraphs=release_taskgraphs,
             _flags=_flags,
         )
         self._goal = goal

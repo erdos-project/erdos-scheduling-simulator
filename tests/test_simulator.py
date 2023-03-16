@@ -22,23 +22,15 @@ class MockScheduler(BaseScheduler):
     """A MockScheduler that enables the testing of the Simulator."""
 
     def __init__(self, runtime: EventTime, placement=[]):
-        self._runtime = runtime
+        super(MockScheduler, self).__init__(
+            preemptive=False, runtime=runtime, lookahead=EventTime.zero()
+        )
         self._task_placement = placement
-        self._preemptive = False
-        self._lookahead = EventTime.zero()
 
     def schedule(
         self, sim_time=None, released_tasks=None, task_graph=None, worker_pools=None
     ) -> Placements:
         return Placements(self._runtime, self._task_placement)
-
-    @property
-    def preemptive(self):
-        return self._preemptive
-
-    @property
-    def lookahead(self):
-        return self._lookahead
 
 
 def __create_default_worker_pool(

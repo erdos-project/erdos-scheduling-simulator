@@ -358,15 +358,19 @@ def main(args):
             lookahead=EventTime(FLAGS.scheduler_lookahead, EventTime.Unit.US),
             enforce_deadlines=FLAGS.enforce_deadlines,
             policy=branch_prediction_policy,
+            branch_prediction_accuracy=FLAGS.branch_prediction_accuracy,
             retract_schedules=FLAGS.retract_schedules,
+            release_taskgraphs=FLAGS.release_taskgraphs,
             goal=FLAGS.ilp_goal,
             _flags=FLAGS,
         )
     elif FLAGS.scheduler == "BranchPrediction":
         scheduler = BranchPredictionScheduler(
-            policy=branch_prediction_policy,
             preemptive=FLAGS.preemption,
             runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
+            policy=branch_prediction_policy,
+            branch_prediction_accuracy=FLAGS.branch_prediction_accuracy,
+            release_taskgraphs=FLAGS.release_taskgraphs,
             _flags=FLAGS,
         )
     elif FLAGS.scheduler == "ILP":
@@ -376,7 +380,9 @@ def main(args):
             lookahead=EventTime(FLAGS.scheduler_lookahead, EventTime.Unit.US),
             enforce_deadlines=FLAGS.enforce_deadlines,
             policy=branch_prediction_policy,
+            branch_prediction_accuracy=FLAGS.branch_prediction_accuracy,
             retract_schedules=FLAGS.retract_schedules,
+            release_taskgraphs=FLAGS.release_taskgraphs,
             goal=FLAGS.ilp_goal,
             time_limit=FLAGS.scheduler_time_limit,
             log_to_file=FLAGS.scheduler_log_to_file,
