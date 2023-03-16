@@ -1,5 +1,5 @@
 absl-py
-gurobipy==9.5.1
+gurobipy==10.0.0
 numpy
 pydot
 pytest
