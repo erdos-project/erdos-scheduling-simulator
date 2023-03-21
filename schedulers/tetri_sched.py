@@ -1,28 +1,19 @@
-from collections import defaultdict
 import itertools
 import multiprocessing
 import sys
 import time
+from collections import defaultdict
 from copy import copy, deepcopy
-from itertools import combinations
-from typing import Mapping, MutableSet, Optional, Sequence, Tuple, Union
-from uuid import UUID
+from typing import Mapping, Optional, Sequence, Tuple, Union
 
 import absl  # noqa: F401
 import gurobipy as gp
 from gurobipy import GRB
-
-from schedulers import BaseScheduler
 from utils import EventTime
 from workers import Worker, WorkerPools
-from workload import (
-    Placement,
-    Placements,
-    Task,
-    TaskState,
-    Workload,
-)
-from workload.resources import Resources
+from workload import Placement, Placements, Task, TaskState, Workload
+
+from schedulers import BaseScheduler
 
 
 class SpaceTimeMatrix:
