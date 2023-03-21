@@ -105,6 +105,9 @@ class EventTime:
     def __lt__(self, other) -> bool:
         return (self - other).time < 0
 
+    def __hash__(self) -> int:
+        return self.to(EventTime.Unit.US).time
+
     @property
     def time(self) -> int:
         return self._time
