@@ -406,7 +406,10 @@ class TaskOptimizerVariables:
             for worker_idx, worker in workers.items():
                 partition_var = optimizer.addVar(
                     vtype=GRB.BINARY,
-                    name=f"{self.task.unique_name}_placed_on_{worker.name}_start_{start_time_int}",
+                    name=(
+                        f"{self.task.unique_name}_placed_on_{worker.name}"
+                        "_start_{start_time_int}"
+                    ),
                 )
                 matrix[
                     worker_idx, start_time : start_time + self.task.remaining_time
