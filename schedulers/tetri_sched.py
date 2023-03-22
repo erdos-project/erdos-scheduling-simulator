@@ -86,7 +86,8 @@ class SpaceTimeMatrix:
     def _parse_key(
         self,
         key: Tuple[
-            int | Sequence[int] | slice, EventTime | Sequence[EventTime] | slice
+            Union[int, Sequence[int], slice],
+            Union[EventTime, Sequence[EventTime], slice],
         ],
     ) -> Tuple[Sequence[int], Sequence[EventTime]]:
         worker_idxs, event_times = key
@@ -144,9 +145,10 @@ class SpaceTimeMatrix:
     def __getitem__(
         self,
         key: Tuple[
-            int | Sequence[int] | slice, EventTime | Sequence[EventTime] | slice
+            Union[int, Sequence[int], slice],
+            Union[EventTime, Sequence[EventTime], slice],
         ],
-    ) -> int | gp.Var | Sequence[int | gp.Var]:
+    ) -> Union[int, gp.Var, Sequence[Union[int, gp.Var]]]:
         worker_idxs, event_times = self._parse_key(key)
         event_time_buckets = list(map(self._event_time_to_time_bucket, event_times))
         results = {
@@ -162,7 +164,7 @@ class SpaceTimeMatrix:
             results = results[key[0]]
         return results
 
-    def __setitem__(self, key, value: int | gp.Var):
+    def __setitem__(self, key, value: Union[int, gp.Var]):
         if not isinstance(value, (int, gp.Var)):
             raise ValueError(f"Assigning to {type(value)} is not supported")
         worker_idxs, event_times = self._parse_key(key)
@@ -348,12 +350,12 @@ class TaskOptimizerVariables:
         return self._matrices
 
     @property
-    def start_time_indicators(self) -> Mapping[EventTime, int | gp.Var]:
+    def start_time_indicators(self) -> Mapping[EventTime, Union[int, gp.Var]]:
         """Mapping from start time to indicator whether the start time is chosen."""
         return self._start_time_indicators
 
     @property
-    def is_placed(self) -> int | gp.Var:
+    def is_placed(self) -> Union[int, gp.Var]:
         """Check if the scheduler found a placement for the task."""
         if self.can_be_placed:
             return self._is_placed
