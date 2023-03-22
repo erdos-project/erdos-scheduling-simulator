@@ -155,3 +155,113 @@ def test_tetri_sched_limited_resources():
     assert not (
         task_one_placement.is_placed() and task_two_placement.is_placed()
     ), "Only one task should be placed."
+
+
+def test_ilp_scheduling_deadline_enforcement():
+    """Tests that ILP tries to schedule the task under soft deadline enforcement."""
+    # Create the tasks and the graph.
+    camera_task_1 = create_default_task(
+        name="Camera_1",
+        job=Job(name="Camera_1", runtime=EventTime(1000, EventTime.Unit.US)),
+        timestamp=0,
+        runtime=5,
+        deadline=2,
+    )
+    task_graph = TaskGraph(name="TestTaskGraph", tasks={camera_task_1: []})
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
+    camera_task_1.release(EventTime.zero())
+
+    # Create the workers.
+    worker_1 = Worker(
+        name="Worker_1",
+        resources=Resources({Resource(name="CPU"): 2}),
+    )
+    worker_pool_1 = WorkerPool(name="WorkerPool_1", workers=[worker_1])
+    worker_pools = WorkerPools(worker_pools=[worker_pool_1])
+
+    # Create the enforce deadlines scheduler.
+    scheduler = TetriSched(
+        preemptive=False,
+        runtime=EventTime.zero(),
+        enforce_deadlines=True,
+        goal="tetri_sched_naive",
+    )
+    placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
+
+    assert len(placements) == 1, "Incorrect length of placements retrieved."
+    camera_task_placement = placements.get_placement(camera_task_1)
+    assert camera_task_placement is not None, "The task was not found in placements."
+    assert not camera_task_placement.is_placed(), "Incorrect WorkerPoolID retrieved."
+
+    # Create the softly enforce deadlines scheduler.
+    scheduler = TetriSched(
+        preemptive=False,
+        runtime=EventTime.zero(),
+        enforce_deadlines=False,
+        goal="tetri_sched_naive",
+    )
+    placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
+
+    assert len(placements) == 1, "Incorrect length of placements retrieved."
+    camera_task_placement = placements.get_placement(camera_task_1)
+    assert camera_task_placement is not None, "The task was not found in placements."
+    assert (
+        camera_task_placement.worker_pool_id == worker_pool_1.id
+    ), "Incorrect WorkerPoolID retrieved."
+    assert (
+        camera_task_placement.placement_time <= camera_task_1.deadline
+    ), "Incorrect start time retrieved."
+
+
+def test_ilp_delays_scheduling_under_constrained_resources():
+    """Tests that if the resources are constrained, ILP delays the execution of some
+    tasks instead of skipping their execution."""
+    # Create the tasks and the graph.
+    camera_task_1 = create_default_task(
+        name="Camera_1", timestamp=0, runtime=5, deadline=10
+    )
+    camera_task_2 = create_default_task(
+        name="Camera_2", timestamp=0, runtime=5, deadline=20
+    )
+    task_graph = TaskGraph(
+        name="TestTaskGraph", tasks={camera_task_1: [], camera_task_2: []}
+    )
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
+    camera_task_1.release(EventTime.zero())
+    camera_task_2.release(EventTime.zero())
+
+    # Create the workers.
+    worker_1 = Worker(name="Worker_1", resources=Resources({Resource(name="CPU"): 1}))
+    worker_pool_1 = WorkerPool(name="WorkerPool_1", workers=[worker_1])
+    worker_pools = WorkerPools(worker_pools=[worker_pool_1])
+
+    # Create the scheduler.
+    scheduler = TetriSched(
+        preemptive=False,
+        runtime=EventTime(-1, EventTime.Unit.US),
+        enforce_deadlines=True,
+        goal="tetri_sched_naive",
+    )
+    placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
+
+    assert len(placements) == 2, "Incorrect length of placements retrieved."
+
+    camera_task_placement = placements.get_placement(camera_task_1)
+    assert camera_task_placement is not None, "The task was expected in placements."
+    assert (
+        camera_task_placement.worker_pool_id == worker_pool_1.id
+    ), "Incorrect WorkerPoolID retrieved."
+    assert (
+        camera_task_placement.placement_time + camera_task_1.remaining_time
+        <= camera_task_1.deadline
+    ), "Incorrect start time retrieved."
+
+    camera_task_2_placement = placements.get_placement(camera_task_2)
+    assert camera_task_2_placement is not None, "The task was expected in placements."
+    assert (
+        camera_task_2_placement.worker_pool_id == worker_pool_1.id
+    ), "Incorrect WorkerPoolID retrieved."
+    assert (
+        camera_task_2_placement.placement_time + camera_task_2.remaining_time
+        <= camera_task_2.deadline
+    ), "Incorrect start time retrieved."

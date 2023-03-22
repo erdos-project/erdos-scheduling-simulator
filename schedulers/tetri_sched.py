@@ -131,6 +131,14 @@ class SpaceTimeMatrix:
                 event_times.append(event_times[-1] + step)
         else:
             raise ValueError(f"Event times cannot be of type {type(event_times)}")
+
+        # Verify that values are in range.
+        for worker_idx in worker_idxs:
+            if worker_idx not in worker_idxs:
+                raise IndexError("worker index is out of range")
+        for event_time in event_times:
+            if event_time < self.start_time or event_time >= self.end_time:
+                raise IndexError(f"event time is out of range")
         return worker_idxs, event_times
 
     def __getitem__(
@@ -162,6 +170,13 @@ class SpaceTimeMatrix:
             for time_bucket in map(self._event_time_to_time_bucket, event_times):
                 self._matrix[worker_idx][time_bucket] = value
 
+    def get(self, worker_idx: int, event_time: EventTime, default=None):
+        if worker_idx not in self._matrix:
+            return default
+        if event_time < self.start_time or event_time >= self.end_time:
+            return default
+        return self[worker_idx, event_time]
+
 
 class TaskOptimizerVariables:
     """TaskOptimizerVariables is used to represent the optimizer variables for
@@ -174,7 +189,8 @@ class TaskOptimizerVariables:
         current_time (`EventTime`): The time at which the scheduler was invoked.
             This is used to set a lower bound on the placement time of the tasks.
         plan_ahead (`EventTime`): The time frame to consider for scheduling decisions.
-            If -1, uses the greatest deadline.
+            If -1, uses whichever is greater: the greatest deadline or the greatest,
+            remaining time across all tasks.
         time_discretization (`EventTime`): Assigns time to buckets to reduce the
             number of constraints. Defaults to 1 us.
         task (`Task`): The Task instance for which the variables are generated.
@@ -317,6 +333,12 @@ class TaskOptimizerVariables:
         return self._previously_placed
 
     @property
+    def can_be_placed(self) -> bool:
+        """Returns a Boolean indicating whether the task with the provided deadline
+        can be placed on the resources with the provided plan-ahead."""
+        return len(self.space_time_matrices) > 0
+
+    @property
     def enforce_deadlines(self) -> bool:
         return self._enforce_deadlines
 
@@ -333,7 +355,20 @@ class TaskOptimizerVariables:
     @property
     def is_placed(self) -> int | gp.Var:
         """Check if the scheduler found a placement for the task."""
-        return self._is_placed
+        if self.can_be_placed:
+            return self._is_placed
+        return 0
+
+    def partition_variables_at(
+        self,
+        worker_id: int,
+        event_time: EventTime,
+    ) -> Sequence[Union[int, gp.Var]]:
+        """Returns all partition variables for the worker at the event time."""
+        return [
+            matrix.get(worker_id, event_time, 0)
+            for matrix in self.space_time_matrices.values()
+        ]
 
     def placed_on_worker(self, worker_id: int) -> Optional[Union[int, gp.Var]]:
         """Check if the Task was placed on a particular Worker.
@@ -376,18 +411,15 @@ class TaskOptimizerVariables:
             vtype=GRB.BINARY, name=f"{self.name}_is_placed"
         )
         if enforce_deadlines:
-            end_time = self.task.deadline
-        else:
-            assert plan_ahead > self.task.remaining_time, (
-                f"Cannot schedule task because plan-ahead {plan_ahead} is shorter than"
-                f" the task's remaining time {self.task.remaining_time}."
-                " Set a larger plan-ahead."
-            )
+            end_time = min(self.task.deadline, current_time + plan_ahead)
+        elif plan_ahead <= self.task.remaining_time:
             end_time = current_time + plan_ahead
+        else:
+            return
 
         # Begin STRL max expression to consider task placements in time.
         start_time = current_time
-        while start_time < end_time - self.task.remaining_time:
+        while start_time <= end_time - self.task.remaining_time:
             # Set up space-time matrix for the start time.
             matrix = SpaceTimeMatrix(
                 workers, current_time, end_time, time_discretization
@@ -809,16 +841,33 @@ class TetriSched(BaseScheduler):
             self._allowed_to_miss_deadlines,
         )
 
-        if self._plan_ahead is not None:
+        if self._plan_ahead.time > 0:
             plan_ahead = sim_time + self._plan_ahead
         else:
             # Get most lax deadline.
             max_deadline = max(map(lambda t: t.deadline, tasks_to_be_scheduled))
+            max_remaining_time = max(
+                map(lambda t: t.remaining_time, tasks_to_be_scheduled)
+            )
             plan_ahead = sim_time
-            while plan_ahead < max_deadline:
+            while plan_ahead < max(max_deadline, sim_time + max_remaining_time):
                 plan_ahead += self._time_discretization
+        self._logger.debug(
+            "[%s] Setting plan-ahead to %s",
+            sim_time.to(EventTime.Unit.US).time,
+            plan_ahead,
+        )
 
         for task in tasks_to_be_scheduled:
+            if plan_ahead < sim_time + task.remaining_time:
+                self._logger.warning(
+                    (
+                        f"Unable to place task {task.name} with "
+                        f"remaining time {task.remaining_time} for "
+                        f"plan ahead of {plan_ahead - sim_time}."
+                        " Consider increasing the plan ahead."
+                    )
+                )
             tasks_to_variables[task.unique_name] = TaskOptimizerVariables(
                 sim_time,
                 plan_ahead,
@@ -853,8 +902,17 @@ class TetriSched(BaseScheduler):
                 Worker to its instance.
         """
         # Supply: ensure usage <= available resources.
-        task = next(iter(tasks_to_variables.values()))
-        time_slices = next(iter(task.space_time_matrices.values())).time_slices
+        matrices = list(
+            itertools.chain(
+                *map(
+                    lambda t: t.space_time_matrices.values(),
+                    tasks_to_variables.values(),
+                )
+            )
+        )
+        if not matrices:
+            return
+        time_slices = matrices[0].time_slices
         for time_slice in time_slices:
             time_slice_us = time_slice.to(EventTime.Unit.US).time
             for worker_idx, worker in workers.items():
@@ -864,9 +922,10 @@ class TetriSched(BaseScheduler):
                     resource_requirements = task_variables.task.resource_requirements
                     task_demand = resource_requirements.get_unique_resource_types()
                     for resource, quantity in task_demand.items():
-                        total_demand[
-                            resource
-                        ] += quantity * task_variables.placed_on_worker(worker_idx)
+                        partition_vars = task_variables.partition_variables_at(
+                            worker_idx, time_slice
+                        )
+                        total_demand[resource] += quantity * gp.quicksum(partition_vars)
                 worker_supply = worker.resources.get_unique_resource_types()
                 for resource, expression in total_demand.items():
                     optimizer.addConstr(
