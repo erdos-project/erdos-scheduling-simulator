@@ -265,3 +265,108 @@ def test_ilp_delays_scheduling_under_constrained_resources():
         camera_task_2_placement.placement_time + camera_task_2.remaining_time
         <= camera_task_2.deadline
     ), "Incorrect start time retrieved."
+
+
+def test_ilp_respects_worker_resource_constraints():
+    """Tests that the scheduler respects the maximum resources in the worker."""
+    # Create the tasks and the graph.
+    camera_task_1 = create_default_task(
+        name="Camera_1", timestamp=0, runtime=10, deadline=10
+    )
+    camera_task_2 = create_default_task(
+        name="Camera_2",
+        timestamp=0,
+        resource_requirements=Resources(
+            resource_vector={
+                Resource(name="CPU", _id="any"): 1,
+                Resource(name="GPU", _id="any"): 1,
+            }
+        ),
+        runtime=10,
+        deadline=10,
+    )
+
+    task_graph = TaskGraph(
+        name="TestTaskGraph", tasks={camera_task_1: [], camera_task_2: []}
+    )
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
+    camera_task_1.release(EventTime.zero())
+    camera_task_2.release(EventTime.zero())
+
+    # Create the workers.
+    worker_1 = Worker(
+        name="Worker_1",
+        resources=Resources({Resource(name="CPU"): 1, Resource(name="GPU"): 1}),
+    )
+    worker_pool_1 = WorkerPool(name="WorkerPool_1", workers=[worker_1])
+    worker_pools = WorkerPools(worker_pools=[worker_pool_1])
+
+    # Create the scheduler.
+    scheduler = TetriSched(
+        preemptive=False,
+        runtime=EventTime(-1, EventTime.Unit.US),
+        enforce_deadlines=True,
+        goal="tetri_sched_naive",
+    )
+    placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
+    assert len(placements) == 2, "Incorrect length of placements retrieved."
+    assert not (
+        placements.get_placement(camera_task_1).is_placed()
+        and placements.get_placement(camera_task_2).is_placed()
+    ), "One of the tasks should not be placed."
+
+
+def test_ilp_does_not_schedule_across_workers():
+    """Tests that the scheduler restricts the allocation to individual workers."""
+    # Create the tasks and the graph.
+    camera_task_1 = create_default_task(
+        name="Camera_1", timestamp=0, runtime=10, deadline=10
+    )
+    camera_task_2 = create_default_task(
+        name="Camera_2",
+        timestamp=0,
+        resource_requirements=Resources(
+            resource_vector={
+                Resource(name="CPU", _id="any"): 1,
+                Resource(name="GPU", _id="any"): 1,
+            }
+        ),
+        runtime=10,
+        deadline=10,
+    )
+
+    task_graph = TaskGraph(
+        name="TestTaskGraph", tasks={camera_task_1: [], camera_task_2: []}
+    )
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
+    camera_task_1.release(EventTime.zero())
+    camera_task_2.release(EventTime.zero())
+
+    # Create the workers.
+    worker_1 = Worker(
+        name="Worker_1",
+        resources=Resources({Resource(name="CPU"): 1}),
+    )
+    worker_2 = Worker(
+        name="Worker_2",
+        resources=Resources({Resource(name="GPU"): 1}),
+    )
+    worker_pool_1 = WorkerPool(name="WorkerPool_1", workers=[worker_1, worker_2])
+    worker_pools = WorkerPools(worker_pools=[worker_pool_1])
+
+    # Create the scheduler.
+    scheduler = TetriSched(
+        preemptive=False,
+        runtime=EventTime(-1, EventTime.Unit.US),
+        enforce_deadlines=True,
+        goal="tetri_sched_naive",
+    )
+    placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
+    assert len(placements) == 2, "Incorrect length of placements retrieved."
+
+    camera_task_1_placement = placements.get_placement(camera_task_1)
+    assert camera_task_1_placement is not None, "The task was not found in placements."
+
+    camera_task_2_placement = placements.get_placement(camera_task_2)
+    assert camera_task_2_placement is not None, "The task was not found in placements."
+    assert not camera_task_2_placement.is_placed(), "Incorrect WorkerPoolID retrieved."
