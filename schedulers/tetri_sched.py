@@ -458,7 +458,7 @@ class TaskOptimizerVariables:
 
         # Select at most 1 of the possible start times.
         optimizer.addConstr(
-            gp.quicksum(self._start_time_indicators.values()) <= self._is_placed
+            gp.quicksum(self._start_time_indicators.values()) == self._is_placed
         )
 
         # Populate _placed_on_worker for placement constraints.
@@ -957,12 +957,11 @@ class TetriSched(BaseScheduler):
                     ub=GRB.INFINITY,
                 )
         if self._goal == "tetri_sched_naive":
-            is_placed_at_time_indicators = [
-                task.start_time_indicators.values()
-                for task in tasks_to_variables.values()
+            is_placed_indicators = [
+                task.is_placed for task in tasks_to_variables.values()
             ]
             optimizer.setObjective(
-                gp.quicksum(itertools.chain(*is_placed_at_time_indicators)),
+                gp.quicksum(is_placed_indicators),
                 sense=GRB.MAXIMIZE,
             )
 
