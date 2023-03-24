@@ -300,8 +300,8 @@ class ILPScheduler(BaseScheduler):
             setting this to `True` enables the scheduler to retract prior scheduling
             decisions before they are actually placed on the WorkerPools.
         goal (`str`): The goal to use as the optimization objective.
-        time_limit (`int`): The time (in seconds) to keep searching for new solutions
-            without any changes to either the incumbent or the best bound.
+        time_limit (`EventTime`): The time (in seconds) to keep searching for new
+            solutions without any changes to either the incumbent or the best bound.
         log_to_file (`bool`): If `True`, the scheduler writes the Gurobi search
             log to files with the format "gurobi_{sim_time}.log".
         _flags (`Optional[absl.flags]`): The runtime flags that are used to initialize
@@ -319,7 +319,7 @@ class ILPScheduler(BaseScheduler):
         retract_schedules: bool = False,
         release_taskgraphs: bool = False,
         goal: str = "max_goodput",
-        time_limit: int = 20,
+        time_limit: EventTime = EventTime(20, EventTime.Unit.S),
         log_to_file: bool = False,
         _flags: Optional["absl.flags"] = None,
     ):
@@ -340,7 +340,7 @@ class ILPScheduler(BaseScheduler):
             _flags=_flags,
         )
         self._goal = goal
-        self._gap_time_limit = time_limit  # In seconds.
+        self._gap_time_limit = time_limit.to(EventTime.Unit.S).time
         self._log_to_file = log_to_file
         self._allowed_to_miss_deadlines = set()
 
