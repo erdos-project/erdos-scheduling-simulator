@@ -139,7 +139,7 @@ class SpaceTimeMatrix:
                 raise IndexError("worker index is out of range")
         for event_time in event_times:
             if event_time < self.start_time or event_time >= self.end_time:
-                raise IndexError(f"event time is out of range")
+                raise IndexError("event time is out of range")
         return worker_idxs, event_times
 
     def __getitem__(
