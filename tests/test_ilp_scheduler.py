@@ -25,7 +25,7 @@ from workload import Job, Resource, Resources, TaskGraph, Workload
                 time_discretization=EventTime(10, EventTime.Unit.US),
             ),
             marks=pytest.mark.skipif(
-                os.getenv("GITHUB_ACTIONS"),
+                os.getenv("GITHUB_ACTIONS") == "true",
                 reason="CPLEX is not available in Github Actions.",
             ),
         ),
@@ -85,7 +85,7 @@ def test_ilp_scheduling_success_basic(scheduler):
                 time_discretization=EventTime(10, EventTime.Unit.US),
             ),
             marks=pytest.mark.skipif(
-                os.getenv("GITHUB_ACTIONS"),
+                os.getenv("GITHUB_ACTIONS") == "true",
                 reason="CPLEX is not available in Github Actions.",
             ),
         ),
@@ -173,7 +173,7 @@ def test_ilp_scheduling_multiple_tasks_different_resources(scheduler):
                 time_discretization=EventTime(10, EventTime.Unit.US),
             ),
             marks=pytest.mark.skipif(
-                os.getenv("GITHUB_ACTIONS"),
+                os.getenv("GITHUB_ACTIONS") == "true",
                 reason="CPLEX is not available in Github Actions.",
             ),
         ),
@@ -229,7 +229,7 @@ def test_ilp_scheduler_limited_resources(scheduler):
                 time_discretization=EventTime(10, EventTime.Unit.US),
             ),
             marks=pytest.mark.skipif(
-                os.getenv("GITHUB_ACTIONS"),
+                os.getenv("GITHUB_ACTIONS") == "true",
                 reason="CPLEX is not available in Github Actions.",
             ),
         ),
@@ -297,7 +297,7 @@ def test_ilp_scheduling_deadline_enforcement(scheduler):
                 time_discretization=EventTime(10, EventTime.Unit.US),
             ),
             marks=pytest.mark.skipif(
-                os.getenv("GITHUB_ACTIONS"),
+                os.getenv("GITHUB_ACTIONS") == "true",
                 reason="CPLEX is not available in Github Actions.",
             ),
         ),
@@ -440,7 +440,7 @@ def test_ilp_skip_taskgraphs_under_enforce_deadlines(scheduler):
                 time_discretization=EventTime(10, EventTime.Unit.US),
             ),
             marks=pytest.mark.skipif(
-                os.getenv("GITHUB_ACTIONS"),
+                os.getenv("GITHUB_ACTIONS") == "true",
                 reason="CPLEX is not available in Github Actions.",
             ),
         ),
@@ -689,7 +689,7 @@ def test_ilp_respects_dependencies_under_constrained_resources():
                 time_discretization=EventTime(10, EventTime.Unit.US),
             ),
             marks=pytest.mark.skipif(
-                os.getenv("GITHUB_ACTIONS"),
+                os.getenv("GITHUB_ACTIONS") == "true",
                 reason="CPLEX is not available in Github Actions.",
             ),
         ),
@@ -755,7 +755,7 @@ def test_ilp_respects_worker_resource_constraints(scheduler):
                 time_discretization=EventTime(10, EventTime.Unit.US),
             ),
             marks=pytest.mark.skipif(
-                os.getenv("GITHUB_ACTIONS"),
+                os.getenv("GITHUB_ACTIONS") == "true",
                 reason="CPLEX is not available in Github Actions.",
             ),
         ),
