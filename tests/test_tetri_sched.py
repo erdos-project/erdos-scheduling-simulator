@@ -1,4 +1,4 @@
-from schedulers import TetriSched
+from schedulers import TetriSchedGurobiScheduler
 from tests.utils import create_default_task
 from utils import EventTime
 from workers import Worker, WorkerPool, WorkerPools
@@ -28,7 +28,7 @@ def test_tetri_sched_success_basic():
     worker_pools = WorkerPools(worker_pools=[worker_pool_1])
 
     # Create the scheduler.
-    scheduler = TetriSched(
+    scheduler = TetriSchedGurobiScheduler(
         preemptive=False,
         runtime=EventTime.zero(),
         enforce_deadlines=True,
@@ -48,7 +48,7 @@ def test_tetri_sched_success_basic():
 
 
 def test_tetri_sched_scheduling_multiple_tasks_different_resources():
-    """Test that TetriSched schedules multiple tasks requiring different
+    """Test that TetriSchedGurobiScheduler schedules multiple tasks requiring different
     resources correctly."""
     # Create the tasks and the graph.
     cpu_task = create_default_task(
@@ -88,7 +88,7 @@ def test_tetri_sched_scheduling_multiple_tasks_different_resources():
     worker_pools = WorkerPools(worker_pools=[worker_pool_1, worker_pool_2])
 
     # Create the scheduler.
-    scheduler = TetriSched(
+    scheduler = TetriSchedGurobiScheduler(
         preemptive=False,
         runtime=EventTime.zero(),
         enforce_deadlines=True,
@@ -118,7 +118,7 @@ def test_tetri_sched_scheduling_multiple_tasks_different_resources():
 
 
 def test_tetri_sched_limited_resources():
-    """Test that TetriSched recognizes that the Workload is not schedulable."""
+    """Test that TetriSchedGurobiScheduler recognizes that the Workload is not schedulable."""
     # Create the tasks and the graph.
     task_one = create_default_task(name="Task 1", deadline=200, runtime=100)
     task_two = create_default_task(name="Task 2", deadline=220, runtime=150)
@@ -139,7 +139,7 @@ def test_tetri_sched_limited_resources():
     worker_pools = WorkerPools(worker_pools=[worker_pool_1])
 
     # Create the scheduler.
-    scheduler = TetriSched(
+    scheduler = TetriSchedGurobiScheduler(
         preemptive=False,
         runtime=EventTime.zero(),
         enforce_deadlines=True,
@@ -155,7 +155,7 @@ def test_tetri_sched_limited_resources():
 
 
 def test_tetri_sched_scheduling_deadline_enforcement():
-    """Tests that TetriSched tries to schedule the task under soft deadline
+    """Tests that TetriSchedGurobiScheduler tries to schedule the task under soft deadline
     enforcement."""
     # Create the tasks and the graph.
     camera_task_1 = create_default_task(
@@ -178,7 +178,7 @@ def test_tetri_sched_scheduling_deadline_enforcement():
     worker_pools = WorkerPools(worker_pools=[worker_pool_1])
 
     # Create the enforce deadlines scheduler.
-    scheduler = TetriSched(
+    scheduler = TetriSchedGurobiScheduler(
         preemptive=False,
         runtime=EventTime.zero(),
         enforce_deadlines=True,
@@ -191,7 +191,7 @@ def test_tetri_sched_scheduling_deadline_enforcement():
     assert not camera_task_placement.is_placed(), "Incorrect WorkerPoolID retrieved."
 
     # Create the softly enforce deadlines scheduler.
-    scheduler = TetriSched(
+    scheduler = TetriSchedGurobiScheduler(
         preemptive=False,
         runtime=EventTime.zero(),
         enforce_deadlines=False,
@@ -211,7 +211,7 @@ def test_tetri_sched_scheduling_deadline_enforcement():
 
 
 def test_tetri_sched_delays_scheduling_under_constrained_resources():
-    """Tests that if the resources are constrained, TetriSched delays the execution of
+    """Tests that if the resources are constrained, TetriSchedGurobiScheduler delays the execution of
     some tasks instead of skipping their execution."""
     # Create the tasks and the graph.
     camera_task_1 = create_default_task(
@@ -233,7 +233,7 @@ def test_tetri_sched_delays_scheduling_under_constrained_resources():
     worker_pools = WorkerPools(worker_pools=[worker_pool_1])
 
     # Create the scheduler.
-    scheduler = TetriSched(
+    scheduler = TetriSchedGurobiScheduler(
         preemptive=False,
         runtime=EventTime(-1, EventTime.Unit.US),
         enforce_deadlines=True,
@@ -298,7 +298,7 @@ def test_ilp_respects_worker_resource_constraints():
     worker_pools = WorkerPools(worker_pools=[worker_pool_1])
 
     # Create the scheduler.
-    scheduler = TetriSched(
+    scheduler = TetriSchedGurobiScheduler(
         preemptive=False,
         runtime=EventTime(-1, EventTime.Unit.US),
         enforce_deadlines=True,
@@ -350,7 +350,7 @@ def test_tetri_sched_does_not_schedule_across_workers():
     worker_pools = WorkerPools(worker_pools=[worker_pool_1])
 
     # Create the scheduler.
-    scheduler = TetriSched(
+    scheduler = TetriSchedGurobiScheduler(
         preemptive=False,
         runtime=EventTime(-1, EventTime.Unit.US),
         enforce_deadlines=True,

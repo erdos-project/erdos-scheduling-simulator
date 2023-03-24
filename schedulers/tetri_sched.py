@@ -496,8 +496,9 @@ class TaskOptimizerVariables:
         self._meets_deadline = gp.quicksum(meets_deadline_indicators)
 
 
-class TetriSched(BaseScheduler):
-    """Implements an TetriSched formulation of the scheduling problem for the Simulator.
+class TetriSchedGurobiScheduler(BaseScheduler):
+    """Implements an TetriSched formulation of the scheduling problem for the Simulator
+    using Gurobi.
 
     Args:
         preemptive (`bool`): If `True`, the ILP scheduler can preempt the tasks
@@ -535,7 +536,7 @@ class TetriSched(BaseScheduler):
         log_to_file: bool = False,
         _flags: Optional["absl.flags"] = None,
     ):
-        super(TetriSched, self).__init__(
+        super(TetriSchedGurobiScheduler, self).__init__(
             preemptive=preemptive,
             runtime=runtime,
             enforce_deadlines=enforce_deadlines,
