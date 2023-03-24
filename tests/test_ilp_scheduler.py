@@ -1,11 +1,30 @@
-from schedulers import ILPScheduler
+import pytest
+
+from schedulers import ILPScheduler, TetriSchedCPLEXScheduler
 from tests.utils import create_default_task
 from utils import EventTime
 from workers import Worker, WorkerPool, WorkerPools
 from workload import Job, Resource, Resources, TaskGraph, Workload
 
 
-def test_ilp_scheduling_success_basic():
+@pytest.mark.parametrize(
+    "scheduler",
+    [
+        ILPScheduler(
+            preemptive=False,
+            runtime=EventTime.zero(),
+            lookahead=EventTime.zero(),
+            enforce_deadlines=True,
+        ),
+        TetriSchedCPLEXScheduler(
+            runtime=EventTime.zero(),
+            enforce_deadlines=True,
+            time_discretization=EventTime(10, EventTime.Unit.US),
+        ),
+    ],
+    ids=["ILP", "TetriSchedCPLEX"],
+)
+def test_ilp_scheduling_success_basic(scheduler):
     """Test that a single task can be successfully scheduled with enough resources."""
     # Create the tasks and the graph.
     camera_task_1 = create_default_task(
@@ -28,12 +47,6 @@ def test_ilp_scheduling_success_basic():
     worker_pools = WorkerPools(worker_pools=[worker_pool_1])
 
     # Create the scheduler.
-    scheduler = ILPScheduler(
-        preemptive=False,
-        runtime=EventTime.zero(),
-        lookahead=EventTime.zero(),
-        enforce_deadlines=True,
-    )
     placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
 
     assert len(placements) == 1, "Incorrect length of placements retrieved."
@@ -48,7 +61,24 @@ def test_ilp_scheduling_success_basic():
     ), "Incorrect start time retrieved."
 
 
-def test_ilp_scheduling_multiple_tasks_different_resources():
+@pytest.mark.parametrize(
+    "scheduler",
+    [
+        ILPScheduler(
+            preemptive=False,
+            runtime=EventTime.zero(),
+            lookahead=EventTime.zero(),
+            enforce_deadlines=True,
+        ),
+        TetriSchedCPLEXScheduler(
+            runtime=EventTime.zero(),
+            enforce_deadlines=True,
+            time_discretization=EventTime(10, EventTime.Unit.US),
+        ),
+    ],
+    ids=["ILP", "TetriSchedCPLEX"],
+)
+def test_ilp_scheduling_multiple_tasks_different_resources(scheduler):
     """Test that the ILPScheduler schedules multiple tasks requiring different
     resources correctly."""
     # Create the tasks and the graph.
@@ -89,12 +119,6 @@ def test_ilp_scheduling_multiple_tasks_different_resources():
     worker_pools = WorkerPools(worker_pools=[worker_pool_1, worker_pool_2])
 
     # Create the scheduler.
-    scheduler = ILPScheduler(
-        preemptive=False,
-        runtime=EventTime.zero(),
-        lookahead=EventTime.zero(),
-        enforce_deadlines=True,
-    )
     placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
 
     assert len(placements) == 2, "Incorrect length of placements retrieved."
@@ -119,7 +143,24 @@ def test_ilp_scheduling_multiple_tasks_different_resources():
     ), "Incorrect start time retrieved."
 
 
-def test_ilp_scheduler_limited_resources():
+@pytest.mark.parametrize(
+    "scheduler",
+    [
+        ILPScheduler(
+            preemptive=False,
+            runtime=EventTime.zero(),
+            lookahead=EventTime.zero(),
+            enforce_deadlines=True,
+        ),
+        TetriSchedCPLEXScheduler(
+            runtime=EventTime.zero(),
+            enforce_deadlines=True,
+            time_discretization=EventTime(10, EventTime.Unit.US),
+        ),
+    ],
+    ids=["ILP", "TetriSchedCPLEX"],
+)
+def test_ilp_scheduler_limited_resources(scheduler):
     """Test that the ILPScheduler recognizes that the Workload is not schedulable."""
     # Create the tasks and the graph.
     task_one = create_default_task(name="Task 1", deadline=200, runtime=100)
@@ -141,12 +182,6 @@ def test_ilp_scheduler_limited_resources():
     worker_pools = WorkerPools(worker_pools=[worker_pool_1])
 
     # Create the scheduler.
-    scheduler = ILPScheduler(
-        preemptive=False,
-        runtime=EventTime.zero(),
-        lookahead=EventTime.zero(),
-        enforce_deadlines=True,
-    )
     placements = scheduler.schedule(release_time, workload, worker_pools)
 
     assert len(placements) == 2, "Incorrect length of placements retrieved."
@@ -157,7 +192,25 @@ def test_ilp_scheduler_limited_resources():
     ), "Only one task should be placed."
 
 
-def test_ilp_scheduling_deadline_enforcement():
+@pytest.mark.parametrize(
+    "scheduler",
+    [
+        ILPScheduler(
+            preemptive=False,
+            runtime=EventTime.zero(),
+            lookahead=EventTime.zero(),
+            enforce_deadlines=True,
+            goal="max_slack",
+        ),
+        TetriSchedCPLEXScheduler(
+            runtime=EventTime.zero(),
+            enforce_deadlines=True,
+            time_discretization=EventTime(10, EventTime.Unit.US),
+        ),
+    ],
+    ids=["ILP", "TetriSchedCPLEX"],
+)
+def test_ilp_scheduling_deadline_enforcement(scheduler):
     """Tests that ILP tries to schedule the task under soft deadline enforcement."""
     # Create the tasks and the graph.
     camera_task_1 = create_default_task(
@@ -180,13 +233,6 @@ def test_ilp_scheduling_deadline_enforcement():
     worker_pools = WorkerPools(worker_pools=[worker_pool_1])
 
     # Create the enforce deadlines scheduler.
-    scheduler = ILPScheduler(
-        preemptive=False,
-        runtime=EventTime.zero(),
-        lookahead=EventTime.zero(),
-        enforce_deadlines=True,
-        goal="max_slack",
-    )
     placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
 
     assert len(placements) == 1, "Incorrect length of placements retrieved."
@@ -195,13 +241,7 @@ def test_ilp_scheduling_deadline_enforcement():
     assert not camera_task_placement.is_placed(), "Incorrect WorkerPoolID retrieved."
 
     # Create the softly enforce deadlines scheduler.
-    scheduler = ILPScheduler(
-        preemptive=False,
-        runtime=EventTime.zero(),
-        lookahead=EventTime.zero(),
-        enforce_deadlines=False,
-        goal="max_slack",
-    )
+    scheduler._enforce_deadlines = False
     placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
 
     assert len(placements) == 1, "Incorrect length of placements retrieved."
@@ -215,7 +255,24 @@ def test_ilp_scheduling_deadline_enforcement():
     ), "Incorrect start time retrieved."
 
 
-def test_ilp_scheduling_dependency():
+@pytest.mark.parametrize(
+    "scheduler",
+    [
+        ILPScheduler(
+            preemptive=False,
+            runtime=EventTime.zero(),
+            lookahead=EventTime.zero(),
+            enforce_deadlines=True,
+        ),
+        TetriSchedCPLEXScheduler(
+            runtime=EventTime.zero(),
+            enforce_deadlines=True,
+            time_discretization=EventTime(10, EventTime.Unit.US),
+        ),
+    ],
+    ids=["ILP", "TetriSchedCPLEX"],
+)
+def test_ilp_scheduling_dependency(scheduler):
     """Ensure that the dependencies are correctly scheduled."""
     # Create the tasks and the graph.
     camera_task_1 = create_default_task(name="Camera_1", timestamp=0, runtime=5)
@@ -247,12 +304,6 @@ def test_ilp_scheduling_dependency():
     worker_pools = WorkerPools(worker_pools=[worker_pool_1])
 
     # Create the scheduler.
-    scheduler = ILPScheduler(
-        preemptive=False,
-        runtime=EventTime.zero(),
-        lookahead=EventTime.zero(),
-        enforce_deadlines=True,
-    )
     placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
 
     assert len(placements) == 2, "Incorrect length of placements retrieved."
@@ -280,7 +331,20 @@ def test_ilp_scheduling_dependency():
     ), "Incorrect start time retrieved."
 
 
-def test_ilp_skip_taskgraphs_under_enforce_deadlines():
+@pytest.mark.parametrize(
+    "scheduler",
+    [
+        ILPScheduler(
+            preemptive=False,
+            runtime=EventTime.zero(),
+            lookahead=EventTime.zero(),
+            enforce_deadlines=True,
+            release_taskgraphs=True,
+        ),
+    ],
+    ids=["ILP"],
+)
+def test_ilp_skip_taskgraphs_under_enforce_deadlines(scheduler):
     """Test that if some task deadlines cannot be met, the remainder are scheduled
     instead of not placing any task in the system."""
     # Create the tasks and the graph.
@@ -304,7 +368,6 @@ def test_ilp_skip_taskgraphs_under_enforce_deadlines():
     )
     workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
     camera_task_1.release(EventTime.zero())
-    perception_task_1.release(EventTime.zero())
 
     # Create the workers.
     worker_1 = Worker(
@@ -315,12 +378,6 @@ def test_ilp_skip_taskgraphs_under_enforce_deadlines():
     worker_pools = WorkerPools(worker_pools=[worker_pool_1])
 
     # Create the scheduler.
-    scheduler = ILPScheduler(
-        preemptive=False,
-        runtime=EventTime(-1, EventTime.Unit.US),
-        lookahead=EventTime.zero(),
-        enforce_deadlines=True,
-    )
     placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
     assert len(placements) == 2, "Incorrect length of placements retrieved."
 
@@ -335,7 +392,24 @@ def test_ilp_skip_taskgraphs_under_enforce_deadlines():
     ), "The tasks were not expected to be placed."
 
 
-def test_ilp_delays_scheduling_under_constrained_resources():
+@pytest.mark.parametrize(
+    "scheduler",
+    [
+        ILPScheduler(
+            preemptive=False,
+            runtime=EventTime.zero(),
+            lookahead=EventTime.zero(),
+            enforce_deadlines=True,
+        ),
+        TetriSchedCPLEXScheduler(
+            runtime=EventTime.zero(),
+            enforce_deadlines=True,
+            time_discretization=EventTime(10, EventTime.Unit.US),
+        ),
+    ],
+    ids=["ILP", "TetriSchedCPLEX"],
+)
+def test_ilp_delays_scheduling_under_constrained_resources(scheduler):
     """Tests that if the resources are constrained, ILP delays the execution of some
     tasks instead of skipping their execution."""
     # Create the tasks and the graph.
@@ -358,12 +432,6 @@ def test_ilp_delays_scheduling_under_constrained_resources():
     worker_pools = WorkerPools(worker_pools=[worker_pool_1])
 
     # Create the scheduler.
-    scheduler = ILPScheduler(
-        preemptive=False,
-        runtime=EventTime(-1, EventTime.Unit.US),
-        lookahead=EventTime.zero(),
-        enforce_deadlines=True,
-    )
     placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
 
     assert len(placements) == 2, "Incorrect length of placements retrieved."
@@ -389,7 +457,19 @@ def test_ilp_delays_scheduling_under_constrained_resources():
     ), "Incorrect start time retrieved."
 
 
-def test_ilp_respects_dependencies_under_delayed_scheduling():
+@pytest.mark.parametrize(
+    "scheduler",
+    [
+        ILPScheduler(
+            preemptive=False,
+            runtime=EventTime.zero(),
+            lookahead=EventTime.zero(),
+            enforce_deadlines=True,
+        ),
+    ],
+    ids=["ILP"],
+)
+def test_ilp_respects_dependencies_under_delayed_scheduling(scheduler):
     """Tests that if the resources are constrained, ILP still respects dependencies
     amongst the tasks."""
     # Create the tasks and the graph.
@@ -428,12 +508,6 @@ def test_ilp_respects_dependencies_under_delayed_scheduling():
     worker_pools = WorkerPools(worker_pools=[worker_pool_1])
 
     # Create the scheduler.
-    scheduler = ILPScheduler(
-        preemptive=False,
-        runtime=EventTime(-1, EventTime.Unit.US),
-        lookahead=EventTime.zero(),
-        enforce_deadlines=True,
-    )
     placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
     assert len(placements) == 3, "Incorrect length of placements retrieved."
 
@@ -561,7 +635,24 @@ def test_ilp_respects_dependencies_under_constrained_resources():
     ), "No placement found for perception_task_2."
 
 
-def test_ilp_respects_worker_resource_constraints():
+@pytest.mark.parametrize(
+    "scheduler",
+    [
+        ILPScheduler(
+            preemptive=False,
+            runtime=EventTime.zero(),
+            lookahead=EventTime.zero(),
+            enforce_deadlines=True,
+        ),
+        TetriSchedCPLEXScheduler(
+            runtime=EventTime.zero(),
+            enforce_deadlines=True,
+            time_discretization=EventTime(10, EventTime.Unit.US),
+        ),
+    ],
+    ids=["ILP", "TetriSchedCPLEX"],
+)
+def test_ilp_respects_worker_resource_constraints(scheduler):
     """Tests that the scheduler respects the maximum resources in the worker."""
     # Create the tasks and the graph.
     camera_task_1 = create_default_task(
@@ -596,12 +687,6 @@ def test_ilp_respects_worker_resource_constraints():
     worker_pools = WorkerPools(worker_pools=[worker_pool_1])
 
     # Create the scheduler.
-    scheduler = ILPScheduler(
-        preemptive=False,
-        runtime=EventTime(-1, EventTime.Unit.US),
-        lookahead=EventTime.zero(),
-        enforce_deadlines=True,
-    )
     placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
     assert len(placements) == 2, "Incorrect length of placements retrieved."
     assert not (
@@ -610,7 +695,24 @@ def test_ilp_respects_worker_resource_constraints():
     ), "One of the tasks should not be placed."
 
 
-def test_ilp_does_not_schedule_across_workers():
+@pytest.mark.parametrize(
+    "scheduler",
+    [
+        ILPScheduler(
+            preemptive=False,
+            runtime=EventTime.zero(),
+            lookahead=EventTime.zero(),
+            enforce_deadlines=True,
+        ),
+        TetriSchedCPLEXScheduler(
+            runtime=EventTime.zero(),
+            enforce_deadlines=True,
+            time_discretization=EventTime(10, EventTime.Unit.US),
+        ),
+    ],
+    ids=["ILP", "TetriSchedCPLEX"],
+)
+def test_ilp_does_not_schedule_across_workers(scheduler):
     """Tests that the scheduler restricts the allocation to individual workers."""
     # Create the tasks and the graph.
     camera_task_1 = create_default_task(
@@ -649,12 +751,6 @@ def test_ilp_does_not_schedule_across_workers():
     worker_pools = WorkerPools(worker_pools=[worker_pool_1])
 
     # Create the scheduler.
-    scheduler = ILPScheduler(
-        preemptive=False,
-        runtime=EventTime(-1, EventTime.Unit.US),
-        lookahead=EventTime.zero(),
-        enforce_deadlines=True,
-    )
     placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
     assert len(placements) == 2, "Incorrect length of placements retrieved."
 

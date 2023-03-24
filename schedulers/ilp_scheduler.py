@@ -655,6 +655,8 @@ class ILPScheduler(BaseScheduler):
             sim_time (`EventTime`): The time at which the scheduler was invoked.
             optimizer (`gp.Model`): The instance of the Gurobi model to which the
                 variables and constraints must be added.
+            workload (`Workload`): The workload definition provided to this invocation
+                of the scheduler.
             tasks_to_be_scheduled (`Sequence[Task]`): The tasks to be scheduled
                 in this scheduling run.
             workers (`Mapping[int, Worker]`): The collection of Workers to schedule
@@ -900,7 +902,7 @@ class ILPScheduler(BaseScheduler):
                     )
                     if quantity == 0 or task_1_request_for_resource == 0:
                         # We ensure earlier that the Worker has enough space to
-                        # accomodate # each task. If the quantity of the resource is
+                        # accomodate each task. If the quantity of the resource is
                         # 0 or the task does not need this resource, then we can
                         # skip the addition of a constraint since the task would not
                         # have been placed on this worker or taken up this resource.
