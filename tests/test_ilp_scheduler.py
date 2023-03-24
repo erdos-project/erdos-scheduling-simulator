@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 from schedulers import ILPScheduler, TetriSchedCPLEXScheduler
@@ -16,10 +18,16 @@ from workload import Job, Resource, Resources, TaskGraph, Workload
             lookahead=EventTime.zero(),
             enforce_deadlines=True,
         ),
-        TetriSchedCPLEXScheduler(
-            runtime=EventTime.zero(),
-            enforce_deadlines=True,
-            time_discretization=EventTime(10, EventTime.Unit.US),
+        pytest.param(
+            TetriSchedCPLEXScheduler(
+                runtime=EventTime.zero(),
+                enforce_deadlines=True,
+                time_discretization=EventTime(10, EventTime.Unit.US),
+            ),
+            marks=pytest.mark.skipif(
+                os.getenv("GITHUB_ACTIONS"),
+                reason="CPLEX is not available in Github Actions.",
+            ),
         ),
     ],
     ids=["ILP", "TetriSchedCPLEX"],
@@ -70,10 +78,16 @@ def test_ilp_scheduling_success_basic(scheduler):
             lookahead=EventTime.zero(),
             enforce_deadlines=True,
         ),
-        TetriSchedCPLEXScheduler(
-            runtime=EventTime.zero(),
-            enforce_deadlines=True,
-            time_discretization=EventTime(10, EventTime.Unit.US),
+        pytest.param(
+            TetriSchedCPLEXScheduler(
+                runtime=EventTime.zero(),
+                enforce_deadlines=True,
+                time_discretization=EventTime(10, EventTime.Unit.US),
+            ),
+            marks=pytest.mark.skipif(
+                os.getenv("GITHUB_ACTIONS"),
+                reason="CPLEX is not available in Github Actions.",
+            ),
         ),
     ],
     ids=["ILP", "TetriSchedCPLEX"],
@@ -152,10 +166,16 @@ def test_ilp_scheduling_multiple_tasks_different_resources(scheduler):
             lookahead=EventTime.zero(),
             enforce_deadlines=True,
         ),
-        TetriSchedCPLEXScheduler(
-            runtime=EventTime.zero(),
-            enforce_deadlines=True,
-            time_discretization=EventTime(10, EventTime.Unit.US),
+        pytest.param(
+            TetriSchedCPLEXScheduler(
+                runtime=EventTime.zero(),
+                enforce_deadlines=True,
+                time_discretization=EventTime(10, EventTime.Unit.US),
+            ),
+            marks=pytest.mark.skipif(
+                os.getenv("GITHUB_ACTIONS"),
+                reason="CPLEX is not available in Github Actions.",
+            ),
         ),
     ],
     ids=["ILP", "TetriSchedCPLEX"],
@@ -202,10 +222,16 @@ def test_ilp_scheduler_limited_resources(scheduler):
             enforce_deadlines=True,
             goal="max_slack",
         ),
-        TetriSchedCPLEXScheduler(
-            runtime=EventTime.zero(),
-            enforce_deadlines=True,
-            time_discretization=EventTime(10, EventTime.Unit.US),
+        pytest.param(
+            TetriSchedCPLEXScheduler(
+                runtime=EventTime.zero(),
+                enforce_deadlines=True,
+                time_discretization=EventTime(10, EventTime.Unit.US),
+            ),
+            marks=pytest.mark.skipif(
+                os.getenv("GITHUB_ACTIONS"),
+                reason="CPLEX is not available in Github Actions.",
+            ),
         ),
     ],
     ids=["ILP", "TetriSchedCPLEX"],
@@ -264,10 +290,16 @@ def test_ilp_scheduling_deadline_enforcement(scheduler):
             lookahead=EventTime.zero(),
             enforce_deadlines=True,
         ),
-        TetriSchedCPLEXScheduler(
-            runtime=EventTime.zero(),
-            enforce_deadlines=True,
-            time_discretization=EventTime(10, EventTime.Unit.US),
+        pytest.param(
+            TetriSchedCPLEXScheduler(
+                runtime=EventTime.zero(),
+                enforce_deadlines=True,
+                time_discretization=EventTime(10, EventTime.Unit.US),
+            ),
+            marks=pytest.mark.skipif(
+                os.getenv("GITHUB_ACTIONS"),
+                reason="CPLEX is not available in Github Actions.",
+            ),
         ),
     ],
     ids=["ILP", "TetriSchedCPLEX"],
@@ -401,10 +433,16 @@ def test_ilp_skip_taskgraphs_under_enforce_deadlines(scheduler):
             lookahead=EventTime.zero(),
             enforce_deadlines=True,
         ),
-        TetriSchedCPLEXScheduler(
-            runtime=EventTime.zero(),
-            enforce_deadlines=True,
-            time_discretization=EventTime(10, EventTime.Unit.US),
+        pytest.param(
+            TetriSchedCPLEXScheduler(
+                runtime=EventTime.zero(),
+                enforce_deadlines=True,
+                time_discretization=EventTime(10, EventTime.Unit.US),
+            ),
+            marks=pytest.mark.skipif(
+                os.getenv("GITHUB_ACTIONS"),
+                reason="CPLEX is not available in Github Actions.",
+            ),
         ),
     ],
     ids=["ILP", "TetriSchedCPLEX"],
@@ -644,10 +682,16 @@ def test_ilp_respects_dependencies_under_constrained_resources():
             lookahead=EventTime.zero(),
             enforce_deadlines=True,
         ),
-        TetriSchedCPLEXScheduler(
-            runtime=EventTime.zero(),
-            enforce_deadlines=True,
-            time_discretization=EventTime(10, EventTime.Unit.US),
+        pytest.param(
+            TetriSchedCPLEXScheduler(
+                runtime=EventTime.zero(),
+                enforce_deadlines=True,
+                time_discretization=EventTime(10, EventTime.Unit.US),
+            ),
+            marks=pytest.mark.skipif(
+                os.getenv("GITHUB_ACTIONS"),
+                reason="CPLEX is not available in Github Actions.",
+            ),
         ),
     ],
     ids=["ILP", "TetriSchedCPLEX"],
@@ -704,10 +748,16 @@ def test_ilp_respects_worker_resource_constraints(scheduler):
             lookahead=EventTime.zero(),
             enforce_deadlines=True,
         ),
-        TetriSchedCPLEXScheduler(
-            runtime=EventTime.zero(),
-            enforce_deadlines=True,
-            time_discretization=EventTime(10, EventTime.Unit.US),
+        pytest.param(
+            TetriSchedCPLEXScheduler(
+                runtime=EventTime.zero(),
+                enforce_deadlines=True,
+                time_discretization=EventTime(10, EventTime.Unit.US),
+            ),
+            marks=pytest.mark.skipif(
+                os.getenv("GITHUB_ACTIONS"),
+                reason="CPLEX is not available in Github Actions.",
+            ),
         ),
     ],
     ids=["ILP", "TetriSchedCPLEX"],
