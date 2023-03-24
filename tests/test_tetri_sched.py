@@ -32,7 +32,6 @@ def test_tetri_sched_success_basic():
         preemptive=False,
         runtime=EventTime.zero(),
         enforce_deadlines=True,
-        goal="tetri_sched_naive",
     )
     placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
 
@@ -48,7 +47,7 @@ def test_tetri_sched_success_basic():
     ), "Incorrect start time retrieved."
 
 
-def test_ilp_scheduling_multiple_tasks_different_resources():
+def test_tetri_sched_scheduling_multiple_tasks_different_resources():
     """Test that TetriSched schedules multiple tasks requiring different
     resources correctly."""
     # Create the tasks and the graph.
@@ -93,7 +92,6 @@ def test_ilp_scheduling_multiple_tasks_different_resources():
         preemptive=False,
         runtime=EventTime.zero(),
         enforce_deadlines=True,
-        goal="tetri_sched_naive",
     )
     placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
 
@@ -145,7 +143,6 @@ def test_tetri_sched_limited_resources():
         preemptive=False,
         runtime=EventTime.zero(),
         enforce_deadlines=True,
-        goal="tetri_sched_naive",
     )
     placements = scheduler.schedule(release_time, workload, worker_pools)
 
@@ -157,8 +154,9 @@ def test_tetri_sched_limited_resources():
     ), "Only one task should be placed."
 
 
-def test_ilp_scheduling_deadline_enforcement():
-    """Tests that ILP tries to schedule the task under soft deadline enforcement."""
+def test_tetri_sched_scheduling_deadline_enforcement():
+    """Tests that TetriSched tries to schedule the task under soft deadline
+    enforcement."""
     # Create the tasks and the graph.
     camera_task_1 = create_default_task(
         name="Camera_1",
@@ -184,7 +182,6 @@ def test_ilp_scheduling_deadline_enforcement():
         preemptive=False,
         runtime=EventTime.zero(),
         enforce_deadlines=True,
-        goal="tetri_sched_naive",
     )
     placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
 
@@ -198,7 +195,6 @@ def test_ilp_scheduling_deadline_enforcement():
         preemptive=False,
         runtime=EventTime.zero(),
         enforce_deadlines=False,
-        goal="tetri_sched_naive",
     )
     placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
 
@@ -213,9 +209,9 @@ def test_ilp_scheduling_deadline_enforcement():
     ), "Incorrect start time retrieved."
 
 
-def test_ilp_delays_scheduling_under_constrained_resources():
-    """Tests that if the resources are constrained, ILP delays the execution of some
-    tasks instead of skipping their execution."""
+def test_tetri_sched_delays_scheduling_under_constrained_resources():
+    """Tests that if the resources are constrained, TetriSched delays the execution of
+    some tasks instead of skipping their execution."""
     # Create the tasks and the graph.
     camera_task_1 = create_default_task(
         name="Camera_1", timestamp=0, runtime=5, deadline=10
@@ -240,7 +236,6 @@ def test_ilp_delays_scheduling_under_constrained_resources():
         preemptive=False,
         runtime=EventTime(-1, EventTime.Unit.US),
         enforce_deadlines=True,
-        goal="tetri_sched_naive",
     )
     placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
 
@@ -306,7 +301,6 @@ def test_ilp_respects_worker_resource_constraints():
         preemptive=False,
         runtime=EventTime(-1, EventTime.Unit.US),
         enforce_deadlines=True,
-        goal="tetri_sched_naive",
     )
     placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
     assert len(placements) == 2, "Incorrect length of placements retrieved."
@@ -316,7 +310,7 @@ def test_ilp_respects_worker_resource_constraints():
     ), "One of the tasks should not be placed."
 
 
-def test_ilp_does_not_schedule_across_workers():
+def test_tetri_sched_does_not_schedule_across_workers():
     """Tests that the scheduler restricts the allocation to individual workers."""
     # Create the tasks and the graph.
     camera_task_1 = create_default_task(
@@ -359,7 +353,6 @@ def test_ilp_does_not_schedule_across_workers():
         preemptive=False,
         runtime=EventTime(-1, EventTime.Unit.US),
         enforce_deadlines=True,
-        goal="tetri_sched_naive",
     )
     placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
     assert len(placements) == 2, "Incorrect length of placements retrieved."
