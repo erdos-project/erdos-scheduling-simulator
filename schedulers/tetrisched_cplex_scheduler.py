@@ -612,6 +612,19 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
         tasks_to_variables: Mapping[str, TaskOptimizerVariables],
         workers: Mapping[int, Worker],
     ):
+        """Generates the linear constraints that ensure that none of the `Resource`
+        types available on any `Worker` are oversubscribed in any time discretization.
+
+        Args:
+            sim_time (`EventTime`): The time at which the scheduler was invoked.
+            optimizer (`cpx.Model`): The optimization model to which the constraints
+                are to be added.
+            tasks_to_variables (`Mapping[str, TaskOptimizerVariables]`): The mapping
+                from the task names to the `TaskOptimizerVariables` instance that
+                contains its representation of the space-time matrix.
+            workers (`Mapping[int, Worker]`): A Mapping from the index assigned to each
+                Worker in this scheduling run to a reference to the `Worker` itself.
+        """
         plan_ahead = self._plan_ahead
         if plan_ahead == EventTime(-1, EventTime.Unit.US):
             for task_variable in tasks_to_variables.values():
@@ -672,6 +685,16 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
         optimizer: cpx.Model,
         tasks_to_variables: Mapping[str, TaskOptimizerVariables],
     ):
+        """Generates the constraints for the optimization objective as specified by
+        the `goal` parameter to this instantiation of the Scheduler.
+
+        Args:
+            optimizer (`cpx.Model`): The optimization model to which the constraints
+                are to be added.
+            tasks_to_variables (`Mapping[str, TaskOptimizerVariables]`): The mapping
+                from the task names to the `TaskOptimizerVariables` instance that
+                contains its representation of the space-time matrix.
+        """
         if self._goal == "max_goodput":
             # Define reward variables for each of the tasks, that is a sum of their
             # space-time matrices. Maximizing the sum of these rewards is the goal of
