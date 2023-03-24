@@ -329,7 +329,7 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
     ) -> None:
         if preemptive:
             raise ValueError(
-                f"The TetriSched scheduler does not allow tasks to be preempted."
+                "The TetriSched scheduler does not allow tasks to be preempted."
             )
         super(TetriSchedCPLEXScheduler, self).__init__(
             preemptive=preemptive,
