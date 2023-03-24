@@ -17,6 +17,7 @@ from schedulers import (
     FIFOScheduler,
     ILPScheduler,
     LSFScheduler,
+    TetriSchedCPLEXScheduler,
     Z3Scheduler,
 )
 from simulator import Simulator
@@ -153,7 +154,7 @@ flags.DEFINE_bool(
 flags.DEFINE_enum(
     "scheduler",
     "EDF",
-    ["FIFO", "EDF", "LSF", "Z3", "BranchPrediction", "ILP"],
+    ["FIFO", "EDF", "LSF", "Z3", "BranchPrediction", "ILP", "TetriSched_CPLEX"],
     "The scheduler to use for this execution.",
 )
 flags.DEFINE_bool(
@@ -190,6 +191,21 @@ flags.DEFINE_integer(
     "The scheduler places tasks that are estimated to be released "
     "within the scheduling lookahead (in µs).",
 )
+flags.DEFINE_integer(
+    "scheduler_plan_ahead",
+    -1,
+    "The length of the space-time matrix to construct in the future to consider packing"
+    "the available tasks (in µs). The default value is to pack until the maximum "
+    "deadline for each batch of available tasks.",
+)
+flags.DEFINE_integer(
+    "scheduler_time_discretization",
+    1,
+    "The length of each slot in the space-time matrix to consider for scheduling the "
+    "tasks (in µs). The default value is 1µs, and a higher value can lead to faster "
+    "solutions but a potentially lower goodput due to resources being blocked for the "
+    "entirety of the slot.",
+)
 flags.DEFINE_enum(
     "scheduler_policy",
     "worst",
@@ -201,7 +217,6 @@ flags.DEFINE_float(
     0.5,
     "The probability with which to correctly guess the branch that is to be taken.",
 )
-
 flags.DEFINE_bool(
     "enforce_deadlines",
     False,
@@ -384,7 +399,22 @@ def main(args):
             retract_schedules=FLAGS.retract_schedules,
             release_taskgraphs=FLAGS.release_taskgraphs,
             goal=FLAGS.ilp_goal,
-            time_limit=FLAGS.scheduler_time_limit,
+            time_limit=EventTime(FLAGS.scheduler_time_limit, EventTime.Unit.S),
+            log_to_file=FLAGS.scheduler_log_to_file,
+            _flags=FLAGS,
+        )
+    elif FLAGS.scheduler == "TetriSched_CPLEX":
+        scheduler = TetriSchedCPLEXScheduler(
+            preemptive=FLAGS.preemption,
+            runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
+            enforce_deadlines=FLAGS.enforce_deadlines,
+            retract_schedules=FLAGS.retract_schedules,
+            goal=FLAGS.ilp_goal,
+            time_limit=EventTime(FLAGS.scheduler_time_limit, EventTime.Unit.S),
+            time_discretization=EventTime(
+                FLAGS.scheduler_time_discretization, EventTime.Unit.US
+            ),
+            plan_ahead=EventTime(FLAGS.scheduler_plan_ahead, EventTime.Unit.US),
             log_to_file=FLAGS.scheduler_log_to_file,
             _flags=FLAGS,
         )
