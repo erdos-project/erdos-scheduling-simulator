@@ -215,6 +215,7 @@ class TaskOptimizerVariables:
         enforce_deadlines: bool = True,
         retract_schedules: bool = False,
     ):
+        # TODO: implement lookahead.
         self._task = task
         self._enforce_deadlines = enforce_deadlines
         self._start_time = None
@@ -238,6 +239,9 @@ class TaskOptimizerVariables:
             self._is_placed = 1
             self._start_time = current_time.to(EventTime.Unit.US).time
             self._start_time_indicators[current_time] = 1
+            self._meets_deadline = int(
+                current_time + task.remaining_time <= task.deadline
+            )
 
             # Find the Worker where the Task was previously placed and add
             # constraints to inform the scheduler of its placement.
@@ -272,7 +276,6 @@ class TaskOptimizerVariables:
                 time_discretization,
                 plan_ahead,
             )
-
             if task.state == TaskState.SCHEDULED:
                 # Set up variables to signify if the Task was placed on a Worker.
                 previously_placed_worker = task.current_placement.worker_id
@@ -360,6 +363,12 @@ class TaskOptimizerVariables:
         if self.can_be_placed:
             return self._is_placed
         return 0
+
+    @property
+    def meets_deadline(self) -> Union[int, gp.LinExpr]:
+        """Check whether the scheduler found a placement that meets the task's
+        deadline."""
+        return self._meets_deadline
 
     def partition_variables_at(
         self,
@@ -479,6 +488,13 @@ class TaskOptimizerVariables:
             )
             self._placed_on_worker[worker_idx] = placed_on_worker
 
+        # Indicate whether the task meets its deadline.
+        meets_deadline_indicators = []
+        for start_time, meets_deadline_indicator in self.start_time_indicators.items():
+            if start_time + self.task.remaining_time <= self.task.deadline:
+                meets_deadline_indicators.append(meets_deadline_indicator)
+        self._meets_deadline = gp.quicksum(meets_deadline_indicators)
+
 
 class TetriSched(BaseScheduler):
     """Implements an TetriSched formulation of the scheduling problem for the Simulator.
@@ -553,9 +569,9 @@ class TetriSched(BaseScheduler):
                 f"./gurobi_{current_time.to(EventTime.Unit.US).time}.log"
             )
 
-        # # If the goal is goodput, set the MIPGap to 0.1.
-        # if self._goal == "max_goodput":
-        #     optimizer.Params.MIPGap = 0.1
+        # If the goal is goodput, set the MIPGap to 0.1.
+        if self._goal == "max_goodput":
+            optimizer.Params.MIPGap = 0.1
 
         # Always decide between INFINITE or UNBOUNDED.
         optimizer.Params.DualReductions = 0
@@ -964,10 +980,7 @@ class TetriSched(BaseScheduler):
                 gp.quicksum(is_placed_indicators),
                 sense=GRB.MAXIMIZE,
             )
-
         elif self._goal == "max_goodput":
-            raise NotImplementedError
-
             for (
                 task_graph_name,
                 task_graph_reward_variable,
@@ -999,65 +1012,37 @@ class TetriSched(BaseScheduler):
                         if not self.release_taskgraphs and not is_sink_task:
                             continue
 
-                        # Check if the task is placed.
-                        is_placed = optimizer.addVar(
-                            vtype=GRB.BINARY,
-                            name=f"{task_variable.name}_is_placed_reward",
-                        )
-                        optimizer.addGenConstrIndicator(
-                            is_placed,
-                            0,
-                            gp.quicksum(task_variable.placed_on_workers),
-                            GRB.EQUAL,
-                            0,
-                            name=f"{task_variable.name}_is_placed_reward_FALSE",
-                        )
-                        optimizer.addGenConstrIndicator(
-                            is_placed,
-                            1,
-                            gp.quicksum(task_variable.placed_on_workers),
-                            GRB.EQUAL,
-                            1,
-                            name=f"{task_variable.name}_is_placed_reward_TRUE",
-                        )
-
                         # Check if the task meets its deadline.
                         meets_deadline = optimizer.addVar(
                             vtype=GRB.BINARY,
                             name=f"{task_variable.name}_meets_deadline",
                         )
-                        optimizer.addGenConstrIndicator(
-                            meets_deadline,
-                            0,
-                            task_variable.start_time
-                            + task_variable.task.remaining_time.to(
-                                EventTime.Unit.US
-                            ).time,
-                            GRB.GREATER_EQUAL,
-                            task_variable.task.deadline.to(EventTime.Unit.US).time + 1,
-                            name=f"{task_variable.name}_meets_deadline_FALSE",
-                        )
-                        optimizer.addGenConstrIndicator(
-                            meets_deadline,
-                            1,
-                            task_variable.start_time
-                            + task_variable.task.remaining_time.to(
-                                EventTime.Unit.US
-                            ).time,
-                            GRB.LESS_EQUAL,
-                            task_variable.task.deadline.to(EventTime.Unit.US).time,
-                            name=f"{task_variable.name}_meets_deadline_TRUE",
+                        optimizer.addConstr(
+                            meets_deadline == task_variable.meets_deadline,
+                            name=f"{task_variable.name}_meets_deadline_constraint",
                         )
 
                         # Compute the reward.
                         task_reward = optimizer.addVar(
                             vtype=GRB.BINARY, name=f"{task_variable.name}_reward"
                         )
-                        optimizer.addGenConstrAnd(
-                            task_reward,
-                            [is_placed, meets_deadline],
-                            name=f"{task_variable.name}_reward_constraint",
-                        )
+                        if isinstance(task_variable.is_placed, gp.Var):
+                            optimizer.addGenConstrAnd(
+                                task_reward,
+                                [task_variable.is_placed, meets_deadline],
+                            )
+                        elif task_variable.is_placed == 0:
+                            optimizer.addConstr(
+                                task_reward == 0,
+                            )
+                        elif task_variable.is_placed == 1:
+                            optimizer.addConstr(
+                                task_reward == meets_deadline,
+                            )
+                        else:
+                            raise ValueError(
+                                "Unexpected value for TaskOptimizerVariables.is_placed"
+                            )
                         task_reward_variables.append(task_reward)
 
                 # Now that we have all the rewards for the individual task, compute
@@ -1071,6 +1056,8 @@ class TetriSched(BaseScheduler):
             optimizer.setObjective(
                 gp.quicksum(task_graph_reward_variables.values()), sense=GRB.MAXIMIZE
             )
+        elif self._goal == "max_slack":
+            raise NotImplementedError
         else:
             raise ValueError(f"The goal {self._goal} is not supported.")
 
