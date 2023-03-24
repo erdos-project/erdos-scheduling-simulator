@@ -456,7 +456,19 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
             self._add_objective(
                 optimizer=optimizer, tasks_to_variables=tasks_to_variables
             )
-            # TODO (Sukrit): Add the Warm Start caches to the problem.
+            # Add the Warm Start caches to the problem.
+            warm_start = {}
+            for task_variable in tasks_to_variables.values():
+                warm_start |= task_variable.warm_start_cache
+
+            if len(warm_start) > 0:
+                optimizer.add_mip_start(
+                    mip_start_sol=SolveSolution(
+                        model=optimizer,
+                        var_value_map=warm_start,
+                        name="tetrisched_warm_start",
+                    )
+                )
             if self._log_to_file:
                 with open(
                     f"./tetrisched_cplex_{sim_time.to(EventTime.Unit.US).time}.lp", "w"
