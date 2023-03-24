@@ -195,6 +195,7 @@ def test_tetri_sched_scheduling_deadline_enforcement():
         preemptive=False,
         runtime=EventTime.zero(),
         enforce_deadlines=False,
+        goal="tetri_sched_naive",
     )
     placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
 
