@@ -213,7 +213,6 @@ class TaskOptimizerVariables:
         workers: Mapping[int, Worker],
         optimizer: gp.Model,
         enforce_deadlines: bool = True,
-        retract_schedules: bool = False,
     ):
         # TODO: implement lookahead.
         self._task = task
@@ -285,7 +284,7 @@ class TaskOptimizerVariables:
                     else:
                         self._placed_on_worker[worker_id].Start = 0
 
-            if task.state == TaskState.SCHEDULED and not retract_schedules:
+            if task.state == TaskState.SCHEDULED:
                 # Add constraint that the task must be placed.
                 optimizer.addConstr(
                     self.is_placed == 1, name=f"{task.unique_name}_must_be_placed"
@@ -501,8 +500,6 @@ class TetriSchedGurobiScheduler(BaseScheduler):
     using Gurobi.
 
     Args:
-        preemptive (`bool`): If `True`, the ILP scheduler can preempt the tasks
-            that are currently running.
         runtime (`EventTime`): The runtime to return to the Simulator (in us).
             If -1, the scheduler returns the actual runtime.
         enforce_deadlines (`bool`): If True then deadlines must be met or else the
@@ -511,8 +508,8 @@ class TetriSchedGurobiScheduler(BaseScheduler):
             setting this to `True` enables the scheduler to retract prior scheduling
             decisions before they are actually placed on the WorkerPools.
         goal (`str`): The goal to use as the optimization objective.
-        time_limit (`int`): The time (in seconds) to keep searching for new solutions
-            without any changes to either the incumbent or the best bound.
+        time_limit (`EventTime`): The time to keep searching for new solutions without
+            any changes to either the incumbent or the best bound.
         time_discretization (`EventTime`): Assigns time to buckets to reduce the
             number of constraints. Defaults to 1 us.
         plan_ahead (`EventTime`): The time frame to consider for scheduling decisions.
@@ -525,30 +522,27 @@ class TetriSchedGurobiScheduler(BaseScheduler):
 
     def __init__(
         self,
-        preemptive: bool = False,
         runtime: EventTime = EventTime(time=-1, unit=EventTime.Unit.US),
         enforce_deadlines: bool = False,
         retract_schedules: bool = True,
         goal: str = "max_goodput",
-        time_limit: int = 20,
+        time_limit: EventTime = EventTime(time=20, unit=EventTime.Unit.S),
         time_discretization: EventTime = EventTime(time=1, unit=EventTime.Unit.US),
         plan_ahead: EventTime = EventTime(time=-1, unit=EventTime.Unit.US),
         log_to_file: bool = False,
         _flags: Optional["absl.flags"] = None,
     ):
         super(TetriSchedGurobiScheduler, self).__init__(
-            preemptive=preemptive,
             runtime=runtime,
             enforce_deadlines=enforce_deadlines,
             retract_schedules=retract_schedules,
             _flags=_flags,
         )
         self._goal = goal
-        self._gap_time_limit = time_limit  # In seconds.
+        self._gap_time_limit = time_limit
         self._time_discretization = time_discretization
         self._plan_ahead = plan_ahead
         self._log_to_file = log_to_file
-        self._allowed_to_miss_deadlines = set()
 
     def _initialize_optimizer(self, current_time: EventTime) -> gp.Model:
         """Initializes the Optimizer and sets the required parameters.
@@ -567,7 +561,7 @@ class TetriSchedGurobiScheduler(BaseScheduler):
         optimizer.Params.LogToConsole = 0
         if self._log_to_file:
             optimizer.Params.LogFile = (
-                f"./gurobi_{current_time.to(EventTime.Unit.US).time}.log"
+                f"./tetrisched_gurobi_{current_time.to(EventTime.Unit.US).time}.log"
             )
 
         # If the goal is goodput, set the MIPGap to 0.1.
@@ -617,12 +611,8 @@ class TetriSchedGurobiScheduler(BaseScheduler):
             )
         previously_placed_tasks = workload.filter(filter_fn)
 
-        if self.preemptive:
-            # Restart the state of the WorkerPool.
-            schedulable_worker_pools = deepcopy(worker_pools)
-        else:
-            # Create a virtual WorkerPool set to try scheduling decisions on.
-            schedulable_worker_pools = copy(worker_pools)
+        # Create a virtual WorkerPool set to try scheduling decisions on.
+        schedulable_worker_pools = copy(worker_pools)
 
         # Construct a mapping of the index of a Worker to the Worker itself, and
         # a mapping from the Worker to the WorkerPool to which it belongs.
@@ -654,7 +644,6 @@ class TetriSchedGurobiScheduler(BaseScheduler):
             tasks_to_variables = self._add_variables(
                 sim_time,
                 optimizer,
-                workload,
                 tasks_to_be_scheduled + previously_placed_tasks,
                 workers,
             )
@@ -727,45 +716,24 @@ class TetriSchedGurobiScheduler(BaseScheduler):
                                 start_time = event_time
                                 break
 
-                        meets_deadline = (
-                            start_time + task.remaining_time <= task.deadline
+                        self._logger.debug(
+                            "[%s] Placed %s (with deadline %s and remaining time "
+                            "%s) on %s to be started at %s.",
+                            sim_time.to(EventTime.Unit.US).time,
+                            task.unique_name,
+                            task.deadline,
+                            task.remaining_time,
+                            worker_pools.get_worker_pool(placement_worker_pool_id),
+                            start_time,
                         )
-
-                        if task_variables.enforce_deadlines and not meets_deadline:
-                            self._logger.debug(
-                                "[%s] Failed to place %s because the deadline "
-                                "could not be met with the suggested start time of %s.",
-                                sim_time.to(EventTime.Unit.US).time,
-                                task.unique_name,
-                                start_time,
+                        placements.append(
+                            Placement(
+                                task=task_variables.task,
+                                placement_time=start_time,
+                                worker_pool_id=placement_worker_pool_id,
+                                worker_id=placement_worker_id,
                             )
-                            placements.append(
-                                Placement(
-                                    task=task_variables.task,
-                                    placement_time=None,
-                                    worker_pool_id=None,
-                                    worker_id=None,
-                                )
-                            )
-                        else:
-                            self._logger.debug(
-                                "[%s] Placed %s (with deadline %s and remaining time "
-                                "%s) on %s to be started at %s.",
-                                sim_time.to(EventTime.Unit.US).time,
-                                task.unique_name,
-                                task.deadline,
-                                task.remaining_time,
-                                worker_pools.get_worker_pool(placement_worker_pool_id),
-                                start_time,
-                            )
-                            placements.append(
-                                Placement(
-                                    task=task_variables.task,
-                                    placement_time=start_time,
-                                    worker_pool_id=placement_worker_pool_id,
-                                    worker_id=placement_worker_id,
-                                )
-                            )
+                        )
                     else:
                         self._logger.debug(
                             "[%s] Failed to place %s because no WorkerPool "
@@ -815,7 +783,6 @@ class TetriSchedGurobiScheduler(BaseScheduler):
         self,
         sim_time: EventTime,
         optimizer: gp.Model,
-        workload: Workload,
         tasks_to_be_scheduled: Sequence[Task],
         workers: Mapping[int, Worker],
     ) -> Mapping[str, TaskOptimizerVariables]:
@@ -835,39 +802,15 @@ class TetriSchedGurobiScheduler(BaseScheduler):
             its optimization objective.
         """
         tasks_to_variables = {}
-        for task in tasks_to_be_scheduled:
-            # Retrieve the TaskGraph for all the tasks that are to be scheduled.
-            task_graph = workload.get_task_graph(task.task_graph)
-            if task_graph in self._allowed_to_miss_deadlines:
-                continue
 
-            # If the Task is not already SCHEDULED / RUNNING, and all of its parents
-            # are not in the set of Tasks to be scheduled, then this TaskGraph has
-            # suffered a branch misprediction, and should be allowed to miss its
-            # deadline.
-            all_sources_present = all(
-                source in tasks_to_be_scheduled for source in task_graph.get_sources()
-            )
-            if (
-                task.state not in (TaskState.SCHEDULED, TaskState.RUNNING)
-                and not all_sources_present
-            ):
-                self._allowed_to_miss_deadlines.add(task.task_graph)
-
-        self._logger.debug(
-            "[%s] The deadlines will not be enforced on TaskGraphs: %s",
-            sim_time.to(EventTime.Unit.US).time,
-            self._allowed_to_miss_deadlines,
-        )
-
-        if self._plan_ahead.time > 0:
+        if self._plan_ahead > EventTime.zero():
             plan_ahead = sim_time + self._plan_ahead
         else:
             # Get most lax deadline.
-            max_deadline = max(map(lambda t: t.deadline, tasks_to_be_scheduled))
+            max_deadline = max(tasks_to_be_scheduled, key=lambda t: t.deadline).deadline
             max_remaining_time = max(
-                map(lambda t: t.remaining_time, tasks_to_be_scheduled)
-            )
+                tasks_to_be_scheduled, key=lambda t: t.remaining_time
+            ).remaining_time
             plan_ahead = sim_time
             while plan_ahead < max(max_deadline, sim_time + max_remaining_time):
                 plan_ahead += self._time_discretization
@@ -878,15 +821,6 @@ class TetriSchedGurobiScheduler(BaseScheduler):
         )
 
         for task in tasks_to_be_scheduled:
-            if plan_ahead < sim_time + task.remaining_time:
-                self._logger.warning(
-                    (
-                        f"Unable to place task {task.name} with "
-                        f"remaining time {task.remaining_time} for "
-                        f"plan ahead of {plan_ahead - sim_time}."
-                        " Consider increasing the plan ahead."
-                    )
-                )
             tasks_to_variables[task.unique_name] = TaskOptimizerVariables(
                 sim_time,
                 plan_ahead,
@@ -961,18 +895,6 @@ class TetriSchedGurobiScheduler(BaseScheduler):
         tasks_to_variables: Mapping[str, TaskOptimizerVariables],
         workload: Workload,
     ):
-        # Construct the reward variables for each of the TaskGraphs were
-        # made available for scheduling.
-        task_graph_reward_variables = {}
-        for task_variable in tasks_to_variables.values():
-            task_graph = workload.get_task_graph(task_variable.task.task_graph)
-            if task_graph.name not in task_graph_reward_variables:
-                task_graph_reward_variables[task_graph.name] = optimizer.addVar(
-                    vtype=GRB.INTEGER,
-                    name=f"{task_graph.name}_reward",
-                    lb=-GRB.INFINITY,
-                    ub=GRB.INFINITY,
-                )
         if self._goal == "tetri_sched_naive":
             is_placed_indicators = [
                 task.is_placed for task in tasks_to_variables.values()
@@ -982,83 +904,43 @@ class TetriSchedGurobiScheduler(BaseScheduler):
                 sense=GRB.MAXIMIZE,
             )
         elif self._goal == "max_goodput":
-            for (
-                task_graph_name,
-                task_graph_reward_variable,
-            ) in task_graph_reward_variables.items():
-                task_graph = workload.get_task_graph(task_graph_name)
-
-                # Define reward variables for the deepest tasks released during this
-                # invocation. A `deep` task is defined as one whose children either
-                # do not exist (sink task) or that they were not released during
-                # this invocation. If the `release_taskgraphs` option was set, this
-                # defaults to checking the status of the sink nodes in a TaskGraph.
-                task_reward_variables = []
-                for task_variable in tasks_to_variables.values():
-                    if task_variable.task.task_graph == task_graph_name:
-                        # Check if the task is a sink task.
-                        # Either the task is a sink task (i.e., has no children), or
-                        # none of its children are included in the currently released
-                        # tasks during this invocation of the Scheduler.
-                        if self.release_taskgraphs and not task_graph.is_sink_task(
-                            task_variable.task
-                        ):
-                            continue
-
-                        is_sink_task = not any(
-                            child.unique_name in tasks_to_variables
-                            for child in task_graph.get_children(task_variable.task)
-                        )
-
-                        if not self.release_taskgraphs and not is_sink_task:
-                            continue
-
-                        # Check if the task meets its deadline.
-                        meets_deadline = optimizer.addVar(
-                            vtype=GRB.BINARY,
-                            name=f"{task_variable.name}_meets_deadline",
-                        )
-                        optimizer.addConstr(
-                            meets_deadline == task_variable.meets_deadline,
-                            name=f"{task_variable.name}_meets_deadline_constraint",
-                        )
-
-                        # Compute the reward.
-                        task_reward = optimizer.addVar(
-                            vtype=GRB.BINARY, name=f"{task_variable.name}_reward"
-                        )
-                        if isinstance(task_variable.is_placed, gp.Var):
-                            optimizer.addGenConstrAnd(
-                                task_reward,
-                                [task_variable.is_placed, meets_deadline],
-                            )
-                        elif task_variable.is_placed == 0:
-                            optimizer.addConstr(
-                                task_reward == 0,
-                            )
-                        elif task_variable.is_placed == 1:
-                            optimizer.addConstr(
-                                task_reward == meets_deadline,
-                            )
-                        else:
-                            raise ValueError(
-                                "Unexpected value for TaskOptimizerVariables.is_placed"
-                            )
-                        task_reward_variables.append(task_reward)
-
-                # Now that we have all the rewards for the individual task, compute
-                # the final reward as an AND of all these rewards.
-                optimizer.addGenConstrAnd(
-                    task_graph_reward_variable,
-                    task_reward_variables,
-                    name=f"{task_graph_name}_reward_constraint",
+            task_reward_variables = []
+            for task_variable in tasks_to_variables.values():
+                # Check if the task meets its deadline.
+                meets_deadline = optimizer.addVar(
+                    vtype=GRB.BINARY,
+                    name=f"{task_variable.name}_meets_deadline",
                 )
+                optimizer.addConstr(
+                    meets_deadline == task_variable.meets_deadline,
+                    name=f"{task_variable.name}_meets_deadline_constraint",
+                )
+                # Compute the reward.
+                task_reward = optimizer.addVar(
+                    vtype=GRB.BINARY, name=f"{task_variable.name}_reward"
+                )
+                if isinstance(task_variable.is_placed, gp.Var):
+                    optimizer.addGenConstrAnd(
+                        task_reward,
+                        [task_variable.is_placed, meets_deadline],
+                    )
+                elif task_variable.is_placed == 0:
+                    optimizer.addConstr(
+                        task_reward == 0,
+                    )
+                elif task_variable.is_placed == 1:
+                    optimizer.addConstr(
+                        task_reward == meets_deadline,
+                    )
+                else:
+                    raise ValueError(
+                        "Unexpected value for TaskOptimizerVariables.is_placed"
+                    )
+                task_reward_variables.append(task_reward)
 
             optimizer.setObjective(
-                gp.quicksum(task_graph_reward_variables.values()), sense=GRB.MAXIMIZE
+                gp.quicksum(task_reward_variables), sense=GRB.MAXIMIZE
             )
-        elif self._goal == "max_slack":
-            raise NotImplementedError
         else:
             raise ValueError(f"The goal {self._goal} is not supported.")
 
@@ -1106,8 +988,9 @@ class TetriSchedGurobiScheduler(BaseScheduler):
 
         # If the gap hasn't changed in the predefined time, terminate the model.
         solver_time = time.time()
+        gap_time_limit_s = self._gap_time_limit.to(EventTime.Unit.S).time
         if (
-            solver_time - optimizer._last_gap_update > self._gap_time_limit
+            solver_time - optimizer._last_gap_update > gap_time_limit_s
         ) and optimizer._solution_found:
             self._logger.debug(
                 "[%s] The gap between the incumbent and best bound hasn't "
@@ -1117,7 +1000,7 @@ class TetriSchedGurobiScheduler(BaseScheduler):
                 solver_time - optimizer._last_gap_update,
             )
             optimizer.terminate()
-        elif solver_time - optimizer._last_gap_update > self._gap_time_limit:
+        elif solver_time - optimizer._last_gap_update > gap_time_limit_s:
             self._logger.debug(
                 "[%s] The gap between the incumbent and best bound hasn't "
                 "changed in %f seconds, and no valid solution has yet been "
