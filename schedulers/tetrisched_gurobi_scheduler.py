@@ -121,7 +121,11 @@ class SpaceTimeMatrix:
             event_times = list(event_times)
         elif isinstance(event_times, slice):
             start = self.start_time if event_times.start is None else event_times.start
-            stop = self.end_time if event_times.stop is None else event_times.stop
+            stop = (
+                self.end_time
+                if event_times.stop is None
+                else min(event_times.stop, self.end_time)
+            )
             step = (
                 self.time_discretization
                 if event_times.step is None
@@ -420,19 +424,18 @@ class TaskOptimizerVariables:
         self._is_placed = optimizer.addVar(
             vtype=GRB.BINARY, name=f"{self.name}_is_placed"
         )
+        latest_start_time = current_time + plan_ahead - time_discretization
         if enforce_deadlines:
-            end_time = min(self.task.deadline, current_time + plan_ahead)
-        elif plan_ahead <= self.task.remaining_time:
-            end_time = current_time + plan_ahead
-        else:
-            return
+            latest_start_time = min(
+                latest_start_time, self.task.deadline - self.task.remaining_time
+            )
 
         # Begin STRL max expression to consider task placements in time.
         start_time = current_time
-        while start_time <= end_time - self.task.remaining_time:
+        while start_time <= latest_start_time:
             # Set up space-time matrix for the start time.
             matrix = SpaceTimeMatrix(
-                workers, current_time, end_time, time_discretization
+                workers, current_time, current_time + plan_ahead, time_discretization
             )
             self._matrices[start_time] = matrix
             # Set up start time indicator.
