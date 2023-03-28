@@ -17,5 +17,6 @@ from .jobs import Job, JobGraph
 from .placement import Placement, Placements
 from .resource import Resource
 from .resources import Resources
+from .strategy import ExecutionStrategies, ExecutionStrategy
 from .tasks import Task, TaskGraph, TaskState
 from .workload import Workload
