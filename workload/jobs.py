@@ -159,11 +159,16 @@ class JobGraph(Graph[Job]):
     different `Job`s of the application.
 
     Args:
-        jobs: A Mapping from a set of `Job`s to their children that needs to be
-            initialized into a `JobGraph`.
+        name (`str`): The name to assign to this `JobGraph`.
+        jobs (`Optional[Mapping[Job, Sequence[Job]]]`): A Mapping from a set of `Job`s
+            to their children that needs to be initialized into a `JobGraph`.
+        release_policy (`Optional[ReleasePolicy]`): The policy to use to generate
+            `TaskGraph`s from this `JobGraph`.
         completion_time: The completion time to assign to this `JobGraph`. If `None`,
             the completion time will be computed as the sum of the runtime of the
             longest path in the graph.
+        deadline_variance (`Optional[Tuple[int, int]]`): The variance by which the
+            deadline can be dithered on top of the actual execution time.
     """
 
     class ReleasePolicyType(Enum):
