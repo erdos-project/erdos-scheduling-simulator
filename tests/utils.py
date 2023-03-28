@@ -1,10 +1,30 @@
 from utils import EventTime
-from workload import Job, Resource, Resources, Task
+from workload import (
+    ExecutionStrategies,
+    ExecutionStrategy,
+    Job,
+    Resource,
+    Resources,
+    Task,
+)
 
 
 def create_default_task(
     name=None,
-    job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
+    job=Job(
+        name="Perception",
+        execution_strategies=ExecutionStrategies(
+            strategies=[
+                ExecutionStrategy(
+                    resources=Resources(
+                        resource_vector={Resource(name="CPU", _id="any"): 1}
+                    ),
+                    batch_size=1,
+                    runtime=EventTime(1000, EventTime.Unit.US),
+                )
+            ]
+        ),
+    ),
     resource_requirements=Resources(
         resource_vector={Resource(name="CPU", _id="any"): 1}
     ),
@@ -21,8 +41,15 @@ def create_default_task(
         name=name if name else f"{job.name}_Task",
         task_graph=task_graph_name,
         job=job,
-        resource_requirements=resource_requirements,
-        runtime=EventTime(runtime, EventTime.Unit.US),
+        available_execution_strategies=ExecutionStrategies(
+            strategies=[
+                ExecutionStrategy(
+                    resources=resource_requirements,
+                    batch_size=1,
+                    runtime=EventTime(runtime, EventTime.Unit.US),
+                )
+            ]
+        ),
         deadline=EventTime(deadline, EventTime.Unit.US),
         timestamp=timestamp,
         release_time=EventTime(release_time, EventTime.Unit.US),

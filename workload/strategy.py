@@ -85,6 +85,17 @@ class ExecutionStrategies(object):
             return None
         return min(self._strategies, key=lambda s: s.runtime)
 
+    def get_slowest_strategy(self) -> Optional[ExecutionStrategy]:
+        """Get the strategy that executes in the highest amount of time.
+
+        Returns:
+            A reference to the `ExecutionStrategy` that executes in the highest amount
+            of time. If there are no available strategies, the function returns `None`.
+        """
+        if len(self) == 0:
+            return None
+        return max(self._strategies, key=lambda s: s.runtime)
+
     def __getitem__(self, index):
         return self._strategies[index]
 

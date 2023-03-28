@@ -1,5 +1,4 @@
 import logging
-import math
 import random
 import sys
 import uuid
@@ -13,7 +12,7 @@ from utils import EventTime, fuzz_time, setup_logging
 from . import BranchPredictionPolicy
 from .graph import Graph
 from .placement import Placement
-from .resources import Resources
+from .strategy import ExecutionStrategies
 
 
 @total_ordering
@@ -84,9 +83,8 @@ class Task(object):
         name: str,
         task_graph: str,
         job: "Job",  # noqa: F821
-        runtime: EventTime,
         deadline: EventTime,
-        resource_requirements: Optional[Resources] = None,
+        available_execution_strategies: ExecutionStrategies = None,
         timestamp: int = None,
         release_time: Optional[EventTime] = EventTime(-1, EventTime.Unit.US),
         start_time: Optional[EventTime] = EventTime(-1, EventTime.Unit.US),
@@ -94,24 +92,14 @@ class Task(object):
         probability: float = None,
         _logger: Optional[logging.Logger] = None,
     ):
-        # Check the types of the arguments.
-        if type(runtime) != EventTime:
-            raise ValueError(f"Invalid type received for runtime: {type(runtime)}")
-        if type(deadline) != EventTime:
-            raise ValueError(f"Invalid type received for deadline: {type(deadline)}")
-        if type(release_time) != EventTime:
-            raise ValueError(
-                f"Invalid type received for release_time: {type(release_time)}"
+        if (
+            completion_time == EventTime(-1, EventTime.Unit.US)
+            and len(available_execution_strategies) != 1
+        ):
+            raise RuntimeError(
+                "Execution of TaskGraphs with multiple strategies and a "
+                "fixed completion time is not supported."
             )
-        if type(start_time) != EventTime:
-            raise ValueError(
-                f"Invalid type received for start_time: {type(start_time)}"
-            )
-        if type(completion_time) != EventTime:
-            raise ValueError(
-                f"Invalid type received for completion_time: {type(completion_time)}"
-            )
-
         # Set up the logger.
         if _logger:
             self._logger = _logger
@@ -124,10 +112,11 @@ class Task(object):
         self._probability = (
             self._creating_job.probability if probability is None else probability
         )
-        if resource_requirements is None:
-            resource_requirements = random.choice(job.resource_requirements)
-        self._resource_reqs = resource_requirements
-        self._expected_runtime = runtime
+        self._available_execution_strategies = (
+            available_execution_strategies
+            if available_execution_strategies
+            else job.execution_strategies
+        )
         self._deadline = deadline
         self._timestamp = timestamp
         self._id = uuid.UUID(int=random.getrandbits(128), version=4)
@@ -149,7 +138,7 @@ class Task(object):
         self._preemptions = []
 
         # The data required for managing the execution of a particular task.
-        self._remaining_time = runtime
+        self._remaining_time = None
         self._last_step_time = -1  # Time when this task was stepped through.
         self._state = TaskState.VIRTUAL
         # ID of the worker pool on which the task is running.
@@ -235,6 +224,7 @@ class Task(object):
         self._scheduling_time = time
         self._scheduler_placement = placement
         self._worker_pool_id = placement.worker_pool_id
+        self.update_remaining_time(placement.execution_strategy.runtime)
 
     def start(
         self,
@@ -620,10 +610,6 @@ class Task(object):
         return str(self._id)
 
     @property
-    def resource_requirements(self):
-        return self._resource_reqs
-
-    @property
     def runtime(self):
         return self._expected_runtime
 
@@ -680,6 +666,10 @@ class Task(object):
         return self._start_time
 
     @property
+    def available_execution_strategies(self) -> Optional[ExecutionStrategies]:
+        return self._available_execution_strategies
+
+    @property
     def preemption_time(self):
         return (
             self.last_preemption.preemption_time
@@ -692,8 +682,21 @@ class Task(object):
         return None if len(self._preemptions) == 0 else self._preemptions[-1]
 
     @property
-    def remaining_time(self):
-        return self._remaining_time
+    def remaining_time(self) -> EventTime:
+        """Retrieves the estimated remaining time according to the state that the Task
+        is currently in. The method assumes that the slowest strategy is going to
+        execute."""
+        if self.state in [TaskState.COMPLETED, TaskState.CANCELLED]:
+            return EventTime.zero()
+        elif self.state in [
+            TaskState.RUNNING,
+            TaskState.PREEMPTED,
+            TaskState.EVICTED,
+            TaskState.SCHEDULED,
+        ]:
+            return self._remaining_time
+        else:
+            return self._available_execution_strategies.get_slowest_strategy().runtime
 
     @property
     def completion_time(self):
@@ -1003,7 +1006,10 @@ class TaskGraph(Graph[Task]):
             elif task.state == TaskState.SCHEDULED:
                 if retract_schedules:
                     # Assume that the task will be placed again now.
-                    estimated_completion_time[task] = time + task.remaining_time
+                    slowest_strategy = (
+                        task.available_execution_strategies.get_slowest_strategy()
+                    )
+                    estimated_completion_time[task] = time + slowest_strategy.runtime
                 else:
                     estimated_completion_time[task] = (
                         task.expected_start_time + task.remaining_time
@@ -1055,11 +1061,14 @@ class TaskGraph(Graph[Task]):
                 # Compute the estimated completion time of the child task.
                 # If the child task was provided with a specific release time, and
                 # that time leads to a later completion time, use that completion time.
-                child_completion_time = completion_time + child_task.remaining_time
+                slowest_strategy = (
+                    child_task.available_execution_strategies.get_slowest_strategy()
+                )
+                child_completion_time = completion_time + slowest_strategy.runtime
                 if child_task.release_time:
                     child_completion_time = max(
                         child_completion_time,
-                        child_task.release_time + child_task.remaining_time,
+                        child_task.release_time + slowest_strategy.runtime,
                     )
 
                 # Update the completion time of the child.
@@ -1126,7 +1135,9 @@ class TaskGraph(Graph[Task]):
                 and (
                     (any_released and release_taskgraphs)
                     or estimated_completion_time[task]
-                    <= time + lookahead + task.remaining_time
+                    <= time
+                    + lookahead
+                    + task.available_execution_strategies.get_slowest_strategy().runtime
                 )
             ):
                 # A SCHEDULED task that is being reconsidered for scheduling.
