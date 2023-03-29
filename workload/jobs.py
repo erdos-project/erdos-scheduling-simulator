@@ -488,7 +488,6 @@ class JobGraph(Graph[Job]):
                 if self.is_source(job)
                 else EventTime(-1, EventTime.Unit.US)
             )
-            task_runtime = fuzz_time(job.runtime, runtime_variance)
             task_deadline = release_time + fuzz_time(
                 self.__get_completion_time(),
                 deadline_variance,
@@ -497,8 +496,8 @@ class JobGraph(Graph[Job]):
                 name=job.name,
                 task_graph=task_graph_name,
                 job=job,
-                runtime=task_runtime,
                 deadline=task_deadline,
+                available_execution_strategies=job.execution_strategies,
                 timestamp=timestamp,
                 release_time=task_release_time,
                 _logger=task_logger,
