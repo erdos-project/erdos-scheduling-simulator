@@ -29,8 +29,8 @@ def test_worker_task_accomodation():
             resource_vector={Resource(name="CPU", _id="any"): 1}
         )
     )
-    assert worker.can_accomodate_task(
-        task
+    assert worker.can_accomodate_strategy(
+        task.available_execution_strategies[0]
     ), "Worker should have been able to accomodate the task."
 
 
@@ -45,8 +45,8 @@ def test_worker_task_accomodation_fail():
             resource_vector={Resource(name="CPU", _id="any"): 2}
         )
     )
-    assert not worker.can_accomodate_task(
-        task
+    assert not worker.can_accomodate_strategy(
+        task.available_execution_strategies[0]
     ), "Worker should not have been able to accomodate the task."
 
 
@@ -66,7 +66,7 @@ def test_worker_place_task():
     )
 
     # Place the task.
-    worker.place_task(task)
+    worker.place_task(task, task.available_execution_strategies[0])
     placed_tasks = worker.get_placed_tasks()
 
     assert len(placed_tasks) == 1, "Incorrect number of placed tasks."
@@ -95,7 +95,7 @@ def test_worker_copy():
     )
 
     # Place the task.
-    worker.place_task(task)
+    worker.place_task(task, task.available_execution_strategies[0])
     placed_tasks = worker.get_placed_tasks()
 
     assert len(placed_tasks) == 1, "Incorrect number of placed tasks."
@@ -132,7 +132,7 @@ def test_worker_deepcopy():
     )
 
     # Place the task.
-    worker.place_task(task)
+    worker.place_task(task, task.available_execution_strategies[0])
     placed_tasks = worker.get_placed_tasks()
 
     assert len(placed_tasks) == 1, "Incorrect number of placed tasks."
@@ -189,7 +189,7 @@ def test_worker_remove_task_success():
     )
 
     # Place the task.
-    worker.place_task(task)
+    worker.place_task(task, task.available_execution_strategies[0])
     assert len(worker.get_placed_tasks()) == 1, "Incorrect number of placed tasks."
     assert (
         worker.resources.get_available_quantity(Resource(name="CPU", _id="any")) == 0
@@ -206,6 +206,7 @@ def test_worker_remove_task_success():
             task=task,
             placement_time=EventTime(2, EventTime.Unit.US),
             worker_pool_id=worker.id,
+            execution_strategy=task.available_execution_strategies[0],
         ),
     )
     task.start(EventTime(2, EventTime.Unit.US))
@@ -242,8 +243,8 @@ def test_worker_step_tasks():
     )
 
     # Place the tasks.
-    worker.place_task(task_one)
-    worker.place_task(task_two)
+    worker.place_task(task_one, task_one.available_execution_strategies[0])
+    worker.place_task(task_two, task_two.available_execution_strategies[0])
 
     # Release and start the tasks.
     task_one.release(EventTime(2, EventTime.Unit.US))
@@ -253,6 +254,7 @@ def test_worker_step_tasks():
             task=task_one,
             placement_time=EventTime(3, EventTime.Unit.US),
             worker_pool_id=worker.id,
+            execution_strategy=task_one.available_execution_strategies[0],
         ),
     )
     task_one.start(EventTime(3, EventTime.Unit.US))
@@ -263,6 +265,7 @@ def test_worker_step_tasks():
             task=task_two,
             placement_time=EventTime(3, EventTime.Unit.US),
             worker_pool_id=worker.id,
+            execution_strategy=task_two.available_execution_strategies[0],
         ),
     )
     task_two.start(EventTime(3, EventTime.Unit.US))
@@ -332,7 +335,9 @@ def test_place_task_on_worker_pool():
             resource_vector={Resource(name="CPU", _id="any"): 1}
         )
     )
-    worker_pool.place_task(task_one)
+    worker_pool.place_task(
+        task_one, execution_strategy=task_one.available_execution_strategies[0]
+    )
 
     assert len(worker_pool.get_placed_tasks()) == 1, "Incorrect number of placed tasks."
     assert (
@@ -346,7 +351,9 @@ def test_place_task_on_worker_pool():
             resource_vector={Resource(name="CPU", _id="any"): 1}
         )
     )
-    worker_pool.place_task(task_two)
+    worker_pool.place_task(
+        task_two, execution_strategy=task_two.available_execution_strategies[0]
+    )
 
     assert len(worker_pool.get_placed_tasks()) == 2, "Incorrect number of placed tasks."
     assert (
@@ -361,7 +368,10 @@ def test_place_task_on_worker_pool():
         )
     )
     assert (
-        worker_pool.place_task(task_three) is False
+        worker_pool.place_task(
+            task_three, execution_strategy=task_three.available_execution_strategies[0]
+        )
+        is False
     ), "Task should have not been placed."
 
     # Place another task on the WorkerPool.
@@ -370,7 +380,9 @@ def test_place_task_on_worker_pool():
             resource_vector={Resource(name="GPU", _id="any"): 1}
         )
     )
-    worker_pool.place_task(task_four)
+    worker_pool.place_task(
+        task_four, execution_strategy=task_four.available_execution_strategies[0]
+    )
 
     assert len(worker_pool.get_placed_tasks()) == 3, "Incorrect number of placed tasks."
     assert (
@@ -402,7 +414,7 @@ def test_worker_pool_step():
         ),
         runtime=3,
     )
-    worker_pool.place_task(task_one)
+    worker_pool.place_task(task_one, task_one.available_execution_strategies[0])
 
     assert len(worker_pool.get_placed_tasks()) == 1, "Incorrect number of placed tasks."
 
@@ -413,7 +425,7 @@ def test_worker_pool_step():
         ),
         runtime=5,
     )
-    worker_pool.place_task(task_two)
+    worker_pool.place_task(task_two, task_two.available_execution_strategies[0])
 
     assert len(worker_pool.get_placed_tasks()) == 2, "Incorrect number of placed tasks."
 
@@ -426,6 +438,7 @@ def test_worker_pool_step():
             task=task_one,
             placement_time=EventTime(3, EventTime.Unit.US),
             worker_pool_id=worker_pool.id,
+            execution_strategy=task_one.available_execution_strategies[0],
         ),
     )
     task_two.schedule(
@@ -434,6 +447,7 @@ def test_worker_pool_step():
             task=task_two,
             placement_time=EventTime(3, EventTime.Unit.US),
             worker_pool_id=worker_pool.id,
+            execution_strategy=task_two.available_execution_strategies[0],
         ),
     )
     task_one.start(EventTime(3, EventTime.Unit.US))
@@ -477,7 +491,7 @@ def test_copy_worker_pool():
         ),
         runtime=3,
     )
-    worker_pool.place_task(task_one)
+    worker_pool.place_task(task_one, task_one.available_execution_strategies[0])
 
     assert len(worker_pool.get_placed_tasks()) == 1, "Incorrect number of placed tasks."
 
@@ -523,7 +537,7 @@ def test_deepcopy_worker_pool():
         ),
         runtime=3,
     )
-    worker_pool.place_task(task_one)
+    worker_pool.place_task(task_one, task_one.available_execution_strategies[0])
 
     assert len(worker_pool.get_placed_tasks()) == 1, "Incorrect number of placed tasks."
 
