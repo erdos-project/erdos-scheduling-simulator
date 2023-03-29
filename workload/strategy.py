@@ -96,6 +96,10 @@ class ExecutionStrategies(object):
             return None
         return max(self._strategies, key=lambda s: s.runtime)
 
+    def __iter__(self) -> ExecutionStrategy:
+        for strategy in self._strategies:
+            yield strategy
+
     def __getitem__(self, index):
         return self._strategies[index]
 
