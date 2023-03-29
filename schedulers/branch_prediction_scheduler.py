@@ -97,22 +97,25 @@ class BranchPredictionScheduler(BaseScheduler):
                 f"{task} with the resource requirements {task.resource_requirements}."
             )
             is_task_placed = False
-            for worker_pool in schedulable_worker_pools.worker_pools:
-                if worker_pool.can_accomodate_task(task):
-                    worker_pool.place_task(task)
-                    is_task_placed = True
-                    placements.append(
-                        Placement(
-                            task=task,
-                            placement_time=sim_time,
-                            worker_pool_id=worker_pool.id,
+            for execution_strategy in task.available_execution_strategies:
+                for worker_pool in schedulable_worker_pools.worker_pools:
+                    if worker_pool.can_accomodate_strategy(execution_strategy):
+                        worker_pool.place_task(task, execution_strategy)
+                        is_task_placed = True
+                        placements.append(
+                            Placement(
+                                task=task,
+                                placement_time=sim_time,
+                                worker_pool_id=worker_pool.id,
+                                execution_strategy=execution_strategy,
+                            )
                         )
-                    )
-                    self._logger.debug(
-                        f"[{sim_time.time}] Placed {task} on WorkerPool "
-                        f"({worker_pool.id}) to be started at {sim_time}."
-                    )
-                    break
+                        self._logger.debug(
+                            f"[{sim_time.time}] Placed {task} on WorkerPool "
+                            f"({worker_pool.id}) to be started at {sim_time}, and "
+                            f"executed using the strategy {execution_strategy}."
+                        )
+                        break
 
             if is_task_placed:
                 for worker_pool in schedulable_worker_pools.worker_pools:

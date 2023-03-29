@@ -62,17 +62,21 @@ class LSFScheduler(BaseScheduler):
         placements = []
         for task in ordered_tasks:
             is_task_placed = False
-            for worker_pool in schedulable_worker_pools.worker_pools:
-                if worker_pool.can_accomodate_task(task):
-                    worker_pool.place_task(task)
-                    is_task_placed = True
-                    placements.append(
-                        Placement(
-                            task=task,
-                            worker_pool_id=worker_pool.id,
-                            placement_time=sim_time,
+            for execution_strategy in task.available_execution_strategies:
+                for worker_pool in schedulable_worker_pools.worker_pools:
+                    if worker_pool.can_accomodate_strategy(execution_strategy):
+                        worker_pool.place_task(task)
+                        is_task_placed = True
+                        placements.append(
+                            Placement(
+                                task=task,
+                                worker_pool_id=worker_pool.id,
+                                placement_time=sim_time,
+                                execution_strategy=execution_strategy,
+                            )
                         )
-                    )
+                        break
+                if is_task_placed:
                     break
 
             if not is_task_placed:

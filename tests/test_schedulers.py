@@ -322,12 +322,14 @@ def test_lsf_scheduler_limited_resources():
     lsf_scheduler = LSFScheduler()
 
     # Create the tasks and the TaskGraph.
-    task_lower_priority = create_default_task(name="task_low_priority", deadline=200)
+    task_lower_priority = create_default_task(
+        name="task_low_priority", deadline=200, runtime=100
+    )
     task_lower_priority.release(EventTime(50, EventTime.Unit.US))
-    task_lower_priority.update_remaining_time(EventTime(100, EventTime.Unit.US))
-    task_higher_priority = create_default_task(name="task_high_priority", deadline=220)
+    task_higher_priority = create_default_task(
+        name="task_high_priority", deadline=220, runtime=150
+    )
     task_higher_priority.release(EventTime(50, EventTime.Unit.US))
-    task_higher_priority.update_remaining_time(EventTime(150, EventTime.Unit.US))
     task_graph = TaskGraph(
         name="TestTaskGraph", tasks={task_lower_priority: [], task_higher_priority: []}
     )
@@ -373,7 +375,6 @@ def test_branch_prediction_scheduler_slack():
         name="Perception@0",
         job=Job(
             name="Perception",
-            runtime=EventTime(1000, EventTime.Unit.US),
             conditional=True,
         ),
         runtime=1000,
@@ -382,33 +383,31 @@ def test_branch_prediction_scheduler_slack():
         name="Prediction@0",
         job=Job(
             name="Prediction_0",
-            runtime=EventTime(2000, EventTime.Unit.US),
             probability=1.0,
         ),
         runtime=2000,
     )
     prediction_task_1 = create_default_task(
         name="Prediction@1",
-        job=Job(name="Prediction_1", runtime=EventTime(4000, EventTime.Unit.US)),
+        job=Job(name="Prediction_1"),
         runtime=4000,
     )
     planning_task_0 = create_default_task(
         name="Planning@0",
         job=Job(
             name="Planning_0",
-            runtime=EventTime(6000, EventTime.Unit.US),
             probability=0.0,
         ),
         runtime=6000,
     )
     planning_task_1 = create_default_task(
         name="Planning@1",
-        job=Job(name="Planning_1", runtime=EventTime(8000, EventTime.Unit.US)),
+        job=Job(name="Planning_1"),
         runtime=8000,
     )
     perception_terminal_task = create_default_task(
         name="Perception_End@0",
-        job=Job(name="Perception_End", runtime=EventTime.zero()),
+        job=Job(name="Perception_End"),
         runtime=0,
         deadline=15000,
     )
