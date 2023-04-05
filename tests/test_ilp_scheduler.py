@@ -652,12 +652,14 @@ def test_ilp_respects_dependencies_under_constrained_resources():
     assert len(placements) == 3, "Incorrect length of placements retrieved."
 
     camera_task_1_placement = placements.get_placement(camera_task_1)
+    print(camera_task_1_placement)
     assert camera_task_1_placement is not None, "No placement found for camera_task_1."
     assert (
         camera_task_1_placement.worker_pool_id == worker_pool_1.id
     ), "Incorrect worker placement for camera_task_1"
     assert (
-        camera_task_1_placement.placement_time + camera_task_1.runtime
+        camera_task_1_placement.placement_time
+        + camera_task_1_placement.execution_strategy.runtime
         <= camera_task_1.deadline
     ), "Invalid start time for camera_task_1."
 
