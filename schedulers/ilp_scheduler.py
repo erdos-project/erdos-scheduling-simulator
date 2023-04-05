@@ -152,7 +152,10 @@ class TaskOptimizerVariables:
             # to be 0 in the optimizer.
             for worker_id, placed_variable in self._placed_on_worker.items():
                 cleared_worker = deepcopy(workers[worker_id])
-                if not cleared_worker.can_accomodate_task(task):
+                compatible_strategies = cleared_worker.get_compatible_strategies(
+                    self.task.available_execution_strategies
+                )
+                if len(compatible_strategies) == 0:
                     worker_name = cleared_worker.name
                     optimizer.addConstr(
                         placed_variable == 0,
@@ -160,7 +163,9 @@ class TaskOptimizerVariables:
                     )
 
             # Initialize the constraints for the variables.
-            self.initialize_constraints(optimizer, enforce_deadlines, retract_schedules)
+            self.initialize_constraints(
+                optimizer, enforce_deadlines, retract_schedules, workers
+            )
 
     @property
     def start_time(self) -> Union[int, gp.Var]:
@@ -214,34 +219,32 @@ class TaskOptimizerVariables:
         return str(self)
 
     def _initialize_timing_constraints(
-        self, optimizer: gp.Model, enforce_deadlines: bool
+        self,
+        optimizer: gp.Model,
+        enforce_deadlines: bool,
+        workers: Mapping[int, Worker],
     ) -> None:
         # Add a constraint to ensure that if enforcing deadlines is required, then
         # we are setting the start time to something that meets the deadline.
         if enforce_deadlines:
-            is_placed = optimizer.addVar(
-                vtype=GRB.BINARY, name=f"{self.name}_is_placed"
-            )
-            optimizer.addGenConstrIndicator(
-                is_placed,
-                1,
-                gp.quicksum(self.placed_on_workers),
-                GRB.EQUAL,
-                1,
-                name=f"{self.name}_is_placed_TRUE",
-            )
-            optimizer.addGenConstrIndicator(
-                is_placed,
-                0,
-                gp.quicksum(self.placed_on_workers),
-                GRB.EQUAL,
-                0,
-                name=f"{self.name}_is_placed_FALSE",
-            )
-            optimizer.addGenConstrIndicator(
-                is_placed,
-                1,
-                self.start_time + self.task.remaining_time.to(EventTime.Unit.US).time
+            deadline_enforcement_expression = gp.LinExpr(self.start_time)
+            for worker_id, worker in workers.items():
+                compatible_strategies = worker.get_compatible_strategies(
+                    self.task.available_execution_strategies
+                )
+                if len(compatible_strategies) == 0:
+                    # No compatible strategy is available for this worker. We can skip
+                    # adding it to the constraint, since the placement variable for this
+                    # will always be 0.
+                    continue
+                chosen_strategy = compatible_strategies.get_fastest_strategy()
+                worker_placed_variable = self.placed_on_worker(worker_id)
+                deadline_enforcement_expression.add(
+                    worker_placed_variable
+                    * chosen_strategy.runtime.to(EventTime.Unit.US).time
+                )
+            optimizer.addConstr(
+                deadline_enforcement_expression
                 <= self.task.deadline.to(EventTime.Unit.US).time,
                 name=f"{self.name}_enforce_deadlines",
             )
@@ -269,6 +272,7 @@ class TaskOptimizerVariables:
         optimizer: gp.Model,
         enforce_deadlines: bool,
         retract_schedules: bool,
+        workers: Mapping[int, Worker],
     ) -> None:
         """Initializes the constraints for the particular `Task`.
 
@@ -276,7 +280,7 @@ class TaskOptimizerVariables:
             optimizer (`gp.Model`): The Gurobi model to which the constraints must
                 be added.
         """
-        self._initialize_timing_constraints(optimizer, enforce_deadlines)
+        self._initialize_timing_constraints(optimizer, enforce_deadlines, workers)
         self._initialize_placement_constraints(optimizer, retract_schedules)
 
 
@@ -891,12 +895,24 @@ class ILPScheduler(BaseScheduler):
                     # we should skip adding the constraints here.
                     continue
 
+                compatible_strategies_for_task_1 = worker.get_compatible_strategies(
+                    task_1_variable.task.available_execution_strategies
+                )
+                if len(compatible_strategies_for_task_1) == 0:
+                    # There are no compatible strategies for this Task on this
+                    # particular Worker. So, there is no possibility of overlap since
+                    # this Task will never be placed on this Worker.
+                    continue
+                task_1_strategy_for_worker = (
+                    compatible_strategies_for_task_1.get_fastest_strategy()
+                )
+
                 for (
                     resource,
                     quantity,
                 ) in worker.resources.get_unique_resource_types().items():
                     task_1_request_for_resource = (
-                        task_1_variable.task.resource_requirements.get_total_quantity(
+                        task_1_strategy_for_worker.resources.get_total_quantity(
                             resource
                         )
                     )
@@ -918,16 +934,33 @@ class ILPScheduler(BaseScheduler):
                         task_2_placed_on_worker_var = task_2_variable.placed_on_worker(
                             worker_index
                         )
-                        task_2_resource_reqs = (
-                            task_2_variable.task.resource_requirements
+                        compatible_strategies_for_task_2 = (
+                            worker.get_compatible_strategies(
+                                task_2_variable.task.available_execution_strategies
+                            )
                         )
                         if (
                             task_2_variable.previously_placed
                             and task_2_placed_on_worker_var == 0
-                        ) or task_2_resource_reqs.get_total_quantity(resource) == 0:
-                            # The task was either not placed on this Worker, or the
-                            # requirements of this resource was 0. Thus, this task
-                            # cannot affect the resource oversubscription.
+                        ) or len(compatible_strategies_for_task_2) == 0:
+                            # The task was either not placed on this Worker, or there
+                            # were no available execution strategies for this Task on
+                            # this particular Worker. Hence, this Task cannot effect
+                            # oversubscription.
+                            continue
+
+                        task_2_chosen_strategy = (
+                            compatible_strategies_for_task_2.get_fastest_strategy()
+                        )
+                        task_2_resource_reqs = (
+                            task_2_chosen_strategy.resources.get_total_quantity(
+                                resource
+                            )
+                        )
+                        if task_2_resource_reqs == 0:
+                            # The second Task has no requirement for this Resource so
+                            # its placement will not affect oversubscription, we can
+                            # skip adding it to the constraint.
                             continue
 
                         overlap_variable = task_pair_overlap_variables[
@@ -936,7 +969,7 @@ class ILPScheduler(BaseScheduler):
                         resource_constraint_expression.add(
                             task_2_placed_on_worker_var
                             * overlap_variable
-                            * task_2_resource_reqs.get_total_quantity(resource)
+                            * task_2_resource_reqs
                         )
 
                     # Add the constraint to the optimizer.
