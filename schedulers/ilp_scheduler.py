@@ -426,7 +426,7 @@ class ILPScheduler(BaseScheduler):
         # Construct a mapping of the index of a Worker to the Worker itself, and
         # a mapping from the Worker to the WorkerPool to which it belongs.
         worker_index = 1
-        workers = {}
+        workers: Mapping[int, Worker] = {}
         worker_to_worker_pool = {}
         for worker_pool in schedulable_worker_pools.worker_pools:
             for worker in worker_pool.workers:
@@ -515,17 +515,13 @@ class ILPScheduler(BaseScheduler):
                     meets_deadline = start_time + task.remaining_time <= task.deadline
 
                     # Find the Worker and the WorkerPool where the Task was placed.
-                    placement_worker_id = None
-                    placement_worker_pool_id = None
+                    placement_worker = None
                     for worker_id, worker in workers.items():
                         if isinstance(
                             task_variables.placed_on_worker(worker_id), gp.Var
                         ):
                             if task_variables.placed_on_worker(worker_id).X == 1:
-                                placement_worker_id = worker.id
-                                placement_worker_pool_id = worker_to_worker_pool[
-                                    worker.id
-                                ]
+                                placement_worker = worker
 
                     # Check if all the tasks from this TaskGraph were placed.
                     all_tasks_placed = True
@@ -547,7 +543,7 @@ class ILPScheduler(BaseScheduler):
                                 break
 
                     # If the task was placed, find the start time.
-                    if placement_worker_pool_id is not None:
+                    if placement_worker:
                         if task_variables.enforce_deadlines and not meets_deadline:
                             self._logger.debug(
                                 "[%s] Failed to place %s because the deadline "
@@ -562,6 +558,7 @@ class ILPScheduler(BaseScheduler):
                                     placement_time=None,
                                     worker_pool_id=None,
                                     worker_id=None,
+                                    execution_strategy=None,
                                 )
                             )
                         elif self.release_taskgraphs and not all_tasks_placed:
@@ -579,6 +576,7 @@ class ILPScheduler(BaseScheduler):
                                     placement_time=None,
                                     worker_pool_id=None,
                                     worker_id=None,
+                                    execution_strategy=None,
                                 )
                             )
                         else:
@@ -589,15 +587,23 @@ class ILPScheduler(BaseScheduler):
                                 task.unique_name,
                                 task.deadline,
                                 task.remaining_time,
-                                placement_worker_pool_id,
+                                worker_to_worker_pool[placement_worker.id],
                                 start_time,
+                            )
+                            execution_strategy = (
+                                placement_worker.get_compatible_strategies(
+                                    task_variables.task.available_execution_strategies
+                                ).get_fastest_strategy()
                             )
                             placements.append(
                                 Placement(
                                     task=task_variables.task,
                                     placement_time=start_time,
-                                    worker_pool_id=placement_worker_pool_id,
-                                    worker_id=placement_worker_id,
+                                    worker_pool_id=worker_to_worker_pool[
+                                        placement_worker.id
+                                    ],
+                                    worker_id=placement_worker.id,
+                                    execution_strategy=execution_strategy,
                                 )
                             )
                     else:
@@ -613,6 +619,7 @@ class ILPScheduler(BaseScheduler):
                                 placement_time=None,
                                 worker_pool_id=None,
                                 worker_id=None,
+                                execution_strategy=None,
                             )
                         )
             else:
@@ -626,6 +633,7 @@ class ILPScheduler(BaseScheduler):
                             placement_time=None,
                             worker_pool_id=None,
                             worker_id=None,
+                            execution_strategy=None,
                         )
                     )
                 self._logger.warning(f"[{sim_time.time}] Failed to place any task.")
