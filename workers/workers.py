@@ -8,7 +8,6 @@ from utils import EventTime, setup_logging
 from workload import (
     ExecutionStrategies,
     ExecutionStrategy,
-    Placement,
     Resource,
     Resources,
     Task,
@@ -111,18 +110,6 @@ class Worker(object):
             if self.can_accomodate_strategy(strategy):
                 filtered_strategies.add_strategy(strategy)
         return filtered_strategies
-
-    # def can_accomodate_task(self, task: Task) -> bool:
-    #     """Checks if this `Worker` can accomodate the given `Task` based on
-    #     its resource availability.
-
-    #     Args:
-    #         task (`Task`): The task to be placed on this `Worker`.
-
-    #     Returns:
-    #         `True` if the task can be placed, `False` otherwise.
-    #     """
-    #     return self._resources > task.resource_requirements
 
     def get_placed_tasks(self) -> Sequence[Task]:
         """Retrieves the `Task` that is currently placed on this `Worker`.

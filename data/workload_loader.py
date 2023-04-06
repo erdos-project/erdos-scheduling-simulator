@@ -6,7 +6,15 @@ from typing import Mapping, Optional, Sequence
 import absl  # noqa: F401
 
 from utils import EventTime, setup_logging
-from workload import Job, JobGraph, Resource, Resources, Workload
+from workload import (
+    ExecutionStrategies,
+    ExecutionStrategy,
+    Job,
+    JobGraph,
+    Resource,
+    Resources,
+    Workload,
+)
 
 
 class WorkloadLoader(object):
@@ -177,21 +185,16 @@ class WorkloadLoader(object):
             terminal_job = False
             if "terminal" in node and node["terminal"]:
                 terminal_job = True
-            runtime = EventTime.zero()
-            if "runtime" in node:
-                runtime = EventTime(node["runtime"], EventTime.Unit.US)
-            resource_requirements = [Resources()]
-            if "resource_requirements" in node:
-                resource_requirements = WorkloadLoader.__create_resources(
-                    resource_requirements=node["resource_requirements"],
-                    resource_logger=resource_logger,
+            execution_strategies = None
+            if "execution_strategies" in node:
+                execution_strategies = WorkloadLoader.__create_execution_strategies(
+                    node["execution_strategies"], resource_logger
                 )
 
             # Create and save the Job.
             job = Job(
                 name=node["name"],
-                runtime=runtime,
-                resource_requirements=resource_requirements,
+                execution_strategies=execution_strategies,
                 conditional=conditional_job,
                 probability=probability,
                 terminal=terminal_job,
@@ -213,10 +216,52 @@ class WorkloadLoader(object):
         return job_graph
 
     @staticmethod
-    def __create_resources(
-        resource_requirements: Sequence[Mapping[str, str]],
+    def __create_execution_strategies(
+        execution_strategies: Sequence[Mapping[str, str]],
         resource_logger: Optional[logging.Logger] = None,
-    ) -> Sequence[Resources]:
+    ) -> ExecutionStrategies:
+        """Retrieve the ExecutionStrategies from the given JSON entries.
+
+        Args:
+            execution_strategies (`Sequence[Mapping[str, str]]`): The JSON entries for
+                the execution strategies for a given Jon.
+            resource_logger (`Optional[logging.Logger]`): The logger instance to use
+                to log the results of the execution.
+
+        Returns:
+            An `ExecutionStrategies` object that contains the strategies available for
+            execution of the Task.
+        """
+        execution_strategies_obj = ExecutionStrategies()
+        for strategy in execution_strategies:
+            resource_requirements = None
+            if "resource_requirements" in strategy:
+                WorkloadLoader.__create_resources(
+                    strategy["resource_requirements"], resource_logger
+                )
+
+            batch_size = 1
+            if "batch_size" in strategy:
+                batch_size = strategy["batch_size"]
+
+            runtime = EventTime.zero()
+            if "runtime" in strategy:
+                runtime = EventTime(strategy["runtime"], EventTime.Unit.US)
+
+            execution_strategies_obj.add_strategy(
+                ExecutionStrategy(
+                    resources=resource_requirements,
+                    batch_size=batch_size,
+                    runtime=runtime,
+                )
+            )
+        return execution_strategies_obj
+
+    @staticmethod
+    def __create_resources(
+        resource_requirements: Mapping[str, str],
+        resource_logger: Optional[logging.Logger] = None,
+    ) -> Resources:
         """Retrieve the Resource requirements from the given JSON entries.
 
         Args:
@@ -226,20 +271,13 @@ class WorkloadLoader(object):
                 results of the execution.
 
         Returns:
-            A Sequence of Resources depicting the potential requirements of a task.
+            A Resources object depicting the potential requirements of a task.
         """
-        potential_requirements = []
-        for requirements in resource_requirements:
-            resource_vector = {}
-            for resource, quantity in requirements.items():
-                resource_name, resource_id = resource.split(":")
-                resource_vector[
-                    Resource(name=resource_name, _id=resource_id)
-                ] = quantity
-            potential_requirements.append(
-                Resources(resource_vector=resource_vector, _logger=resource_logger)
-            )
-        return potential_requirements
+        resource_vector = {}
+        for resource, quantity in resource_requirements.items():
+            resource_name, resource_id = resource.split(":")
+            resource_vector[Resource(name=resource_name, _id=resource_id)] = quantity
+        return Resources(resource_vector=resource_vector, _logger=resource_logger)
 
     @property
     def workload(self) -> Workload:

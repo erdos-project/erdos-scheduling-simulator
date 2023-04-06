@@ -462,7 +462,6 @@ class JobGraph(Graph[Job]):
         """
         # Retrieve variances from the command line flags.
         if _flags:
-            runtime_variance = (0, _flags.runtime_variance)
             if self._deadline_variance is None:
                 deadline_variance = (
                     _flags.min_deadline_variance,
@@ -472,7 +471,6 @@ class JobGraph(Graph[Job]):
                 deadline_variance = self._deadline_variance
             use_branch_predicated_deadlines = _flags.use_branch_predicated_deadlines
         else:
-            runtime_variance = (0, 0)
             deadline_variance = (
                 self._deadline_variance
                 if self._deadline_variance is not None
