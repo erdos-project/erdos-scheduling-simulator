@@ -12,7 +12,7 @@ def test_z3_scheduling_success_basic():
     # Create the tasks and the graph.
     camera_task_1 = create_default_task(
         name="Camera_1",
-        job=Job(name="Camera_1", runtime=EventTime(1000, EventTime.Unit.US)),
+        job=Job(name="Camera_1"),
         timestamp=0,
     )
     task_graph = TaskGraph(name="TestTaskGraph", tasks={camera_task_1: []})
