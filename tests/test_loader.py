@@ -1,22 +1,69 @@
 from data import TaskLoader, TaskLoaderPylot, WorkerLoaderJSON, WorkloadLoader
 from tests.test_tasks import create_default_task
 from utils import EventTime
-from workload import Job, Resource, Resources
+from workload import (
+    ExecutionStrategies,
+    ExecutionStrategy,
+    Job,
+    JobGraph,
+    Resource,
+    Resources,
+)
 
 
 def test_create_jobs():
     """Tests the __create_jobs method of the TaskLoaderPylot."""
+    perception_job = Job(
+        "perception_operator",
+        ExecutionStrategies(
+            [
+                ExecutionStrategy(
+                    resources=Resources(), batch_size=1, runtime=EventTime.zero()
+                )
+            ]
+        ),
+    )
+    prediction_job = Job(
+        "prediction_operator",
+        ExecutionStrategies(
+            [
+                ExecutionStrategy(
+                    resources=Resources(), batch_size=1, runtime=EventTime.zero()
+                )
+            ]
+        ),
+    )
+    planning_job = Job(
+        "planning_operator",
+        ExecutionStrategies(
+            [
+                ExecutionStrategy(
+                    resources=Resources(), batch_size=1, runtime=EventTime.zero()
+                )
+            ]
+        ),
+    )
     jobs = TaskLoaderPylot._TaskLoaderPylot__create_jobs(
         [
             {"pid": "perception_operator", "dur": 1000},
             {"pid": "prediction_operator", "dur": 1000},
             {"pid": "planning_operator", "dur": 1000},
-        ]
+        ],
+        JobGraph(
+            name="TestJobGraph",
+            jobs={
+                perception_job: [prediction_job],
+                prediction_job: [planning_job],
+                planning_job: [],
+            },
+        ),
     )
     assert len(jobs) == 3, "Incorrect number of Jobs returned."
     assert jobs["perception_operator"].name == "perception_operator" and jobs[
         "perception_operator"
-    ].runtime == EventTime(1000, EventTime.Unit.US), "Incorrect Job returned."
+    ].execution_strategies.get_fastest_strategy().runtime == EventTime(
+        1000, EventTime.Unit.US
+    ), "Incorrect Job returned."
 
 
 def test_create_resources():
@@ -25,18 +72,15 @@ def test_create_resources():
     resources_json = [
         {
             "name": "perception_operator",
-            "resource_requirements": [{"CPU:any": 1}],
+            "resource_requirements": {"CPU:any": 1},
         },
         {
             "name": "prediction_operator",
-            "resource_requirements": [{"CPU:any": 1, "GPU:any": 1}],
+            "resource_requirements": {"CPU:any": 1, "GPUTaskLoaderPylot:any": 1},
         },
         {
             "name": "planning_operator",
-            "resource_requirements": [
-                {"CPU:any": 2},
-                {"CPU:any": 1, "GPU:any": 1},
-            ],
+            "resource_requirements": {"CPU:any": 1, "GPU:any": 1},
         },
     ]
     resources = {}
@@ -50,7 +94,7 @@ def test_create_resources():
         len(resources["perception_operator"]) == 1
     ), "Incorrect number of Resources returned."
     assert (
-        len(resources["prediction_operator"]) == 1
+        len(resources["prediction_operator"]) == 2
     ), "Incorrect number of Resources returned."
     assert (
         len(resources["planning_operator"]) == 2
@@ -73,10 +117,17 @@ def test_create_tasks():
     jobs = {
         "perception_operator": Job(
             name="Perception",
-            runtime=EventTime(1000, EventTime.Unit.US),
-            resource_requirements=[
-                Resources(resource_vector={Resource(name="CPU", _id="any"): 1})
-            ],
+            execution_strategies=ExecutionStrategies(
+                [
+                    ExecutionStrategy(
+                        resources=Resources(
+                            resource_vector={Resource(name="CPU", _id="any"): 1}
+                        ),
+                        batch_size=1,
+                        runtime=EventTime(1000, EventTime.Unit.US),
+                    )
+                ]
+            ),
         ),
     }
     tasks = TaskLoaderPylot._TaskLoaderPylot__create_tasks(
@@ -89,7 +140,9 @@ def test_create_tasks():
     assert (
         tasks[0].name == "perception_operator.on_watermark"
     ), "Incorrect name returned for the Task."
-    assert tasks[0].runtime == EventTime(
+    assert tasks[
+        0
+    ].available_execution_strategies.get_fastest_strategy().runtime == EventTime(
         100, EventTime.Unit.US
     ), "Incorrect runtime returned for the Task."
     assert tasks[0].timestamp == 1, "Incorrect timestamp for the Task."
@@ -101,15 +154,9 @@ def test_create_tasks():
 def test_create_jobgraph():
     """Tests the construction of a JobGraph by the TaskLoaderPylot."""
     jobs = {
-        "perception_operator": Job(
-            name="Perception", runtime=EventTime(1000, EventTime.Unit.US)
-        ),
-        "prediction_operator": Job(
-            name="Prediction", runtime=EventTime(1000, EventTime.Unit.US)
-        ),
-        "planning_operator": Job(
-            name="Planning", runtime=EventTime(1000, EventTime.Unit.US)
-        ),
+        "perception_operator": Job(name="Perception"),
+        "prediction_operator": Job(name="Prediction"),
+        "planning_operator": Job(name="Planning"),
     }
     edges = [
         ("perception_operator", "prediction_operator"),
@@ -138,15 +185,10 @@ def test_create_taskgraph():
     jobs = {
         "perception_operator": Job(
             name="Perception",
-            runtime=EventTime(1000, EventTime.Unit.US),
             pipelined=True,
         ),
-        "prediction_operator": Job(
-            name="Prediction", runtime=EventTime(1000, EventTime.Unit.US)
-        ),
-        "planning_operator": Job(
-            name="Planning", runtime=EventTime(1000, EventTime.Unit.US)
-        ),
+        "prediction_operator": Job(name="Prediction"),
+        "planning_operator": Job(name="Planning"),
     }
     edges = [
         ("perception_operator", "prediction_operator"),
@@ -171,7 +213,9 @@ def test_create_taskgraph():
     ]
 
     # Create a TaskGraph using the jobs and the list of tasks.
-    _, task_graph = TaskLoader._TaskLoader__create_task_graph(tasks, job_graph)
+    _, task_graph = TaskLoader._TaskLoader__create_task_graph(
+        "TestTaskGraph", tasks, job_graph
+    )
     assert len(task_graph) == len(tasks), "Incorrect length of TaskGraph."
 
     # Check the parent-child relationships.

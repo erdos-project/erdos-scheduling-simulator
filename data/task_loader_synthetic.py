@@ -4,9 +4,18 @@ from typing import Mapping, Optional, Sequence, Tuple
 
 import absl  # noqa: F401
 
-from data import TaskLoader, TaskLoaderPylot
+from data import TaskLoader
 from utils import EventTime, fuzz_time, setup_logging
-from workload import Job, JobGraph, Resource, Resources, Task, TaskGraph
+from workload import (
+    ExecutionStrategies,
+    ExecutionStrategy,
+    Job,
+    JobGraph,
+    Resource,
+    Resources,
+    Task,
+    TaskGraph,
+)
 
 
 class TaskLoaderSynthetic(TaskLoader):
@@ -44,7 +53,6 @@ class TaskLoaderSynthetic(TaskLoader):
             self._jobs,
             self._job_graph,
             deadlines,
-            resources,
         ) = TaskLoaderSynthetic._TaskLoaderSynthetic__create_job_graph(
             num_perception_sensors, num_traffic_light_cameras
         )
@@ -59,7 +67,6 @@ class TaskLoaderSynthetic(TaskLoader):
             _flags.runtime_variance,
             (_flags.min_deadline_variance, _flags.max_deadline_variance),
             deadlines,
-            resources,
             _flags.use_end_to_end_deadlines,
             task_logger,
         )
@@ -67,7 +74,9 @@ class TaskLoaderSynthetic(TaskLoader):
         (
             self._grouped_tasks,
             self._task_graph,
-        ) = TaskLoader._TaskLoader__create_task_graph(self._tasks, self._job_graph)
+        ) = TaskLoader._TaskLoader__create_task_graph(
+            "SyntheticAVTaskGraph", self._tasks, self._job_graph
+        )
         self._logger.debug("Finished creating TaskGraph from loaded tasks.")
 
     @staticmethod
@@ -94,24 +103,52 @@ class TaskLoaderSynthetic(TaskLoader):
             `Job`s.
         """
         deadlines = {}
-        resources = {}
-        gnss = Job(name="gnss", runtime=EventTime(1000, EventTime.Unit.US))
-        deadlines[gnss.name] = gnss.runtime.time * periodic_deadline_slack_factor
-        resources[gnss.name] = Resources(
-            resource_vector={Resource("CPU", _id="any"): 1}
+
+        # Add GNSS operator.
+        gnss_execution_strategy = ExecutionStrategy(
+            resources=Resources(resource_vector={Resource("CPU", _id="any"): 1}),
+            batch_size=1,
+            runtime=EventTime(1000, EventTime.Unit.US),
         )
-        imu = Job(name="imu", runtime=EventTime(1000, EventTime.Unit.US))
-        deadlines[imu.name] = imu.runtime.time * periodic_deadline_slack_factor
-        resources[imu.name] = Resources(resource_vector={Resource("CPU", _id="any"): 1})
+        gnss = Job(
+            name="gnss",
+            execution_strategies=ExecutionStrategies([gnss_execution_strategy]),
+        )
+        deadlines[gnss.name] = (
+            gnss_execution_strategy.runtime.to(EventTime.Unit.US).time
+            * periodic_deadline_slack_factor
+        )
+
+        # Add IMU operator.
+        imu_execution_strategy = ExecutionStrategy(
+            resources=Resources(resource_vector={Resource("CPU", _id="any"): 1}),
+            batch_size=1,
+            runtime=EventTime(1000, EventTime.Unit.US),
+        )
+        imu = Job(
+            name="imu",
+            execution_strategies=ExecutionStrategies([imu_execution_strategy]),
+        )
+        deadlines[imu.name] = (
+            imu_execution_strategy.runtime.to(EventTime.Unit.US).time
+            * periodic_deadline_slack_factor
+        )
+
+        # Add Localization operator.
+        localization_execution_strategy = ExecutionStrategy(
+            resources=Resources(resource_vector={Resource("CPU", _id="any"): 1}),
+            batch_size=1,
+            runtime=EventTime(20000, EventTime.Unit.US),
+        )
         localization = Job(
-            name="localization", runtime=EventTime(20000, EventTime.Unit.US)
+            name="localization",
+            execution_strategies=ExecutionStrategies([localization_execution_strategy]),
         )
         deadlines[localization.name] = (
-            localization.runtime.time * periodic_deadline_slack_factor
+            localization_execution_strategy.runtime.to(EventTime.Unit.US).time
+            * periodic_deadline_slack_factor
         )
-        resources[localization.name] = Resources(
-            resource_vector={Resource("CPU", _id="any"): 1}
-        )
+
         cameras = []
         lidars = []
         detectors = []
@@ -119,170 +156,268 @@ class TaskLoaderSynthetic(TaskLoader):
         object_localization = []
         lane_detectors = []
         for i in range(num_perception_sensors):
+            # Install camera.
+            camera_execution_strategy = ExecutionStrategy(
+                resources=Resources(resource_vector={Resource("CPU", _id="any"): 1}),
+                batch_size=1,
+                runtime=EventTime(10000, EventTime.Unit.US),
+            )
             cameras.append(
                 Job(
                     name=f"camera_{i}",
-                    runtime=EventTime(10000, EventTime.Unit.US),
+                    execution_strategies=ExecutionStrategies(
+                        [camera_execution_strategy]
+                    ),
                     pipelined=True,
                 )
             )
             deadlines[cameras[-1].name] = (
-                cameras[-1].runtime.time * periodic_deadline_slack_factor
+                camera_execution_strategy.runtime.to(EventTime.Unit.US).time
+                * periodic_deadline_slack_factor
             )
-            resources[cameras[-1].name] = Resources(
-                resource_vector={Resource("CPU", _id="any"): 1}
+
+            # Install LIDAR.
+            lidar_execution_strategy = ExecutionStrategy(
+                resources=Resources(resource_vector={Resource("CPU", _id="any"): 1}),
+                batch_size=1,
+                runtime=EventTime(8000, EventTime.Unit.US),
             )
             lidars.append(
                 Job(
                     name=f"lidar_{i}",
-                    runtime=EventTime(8000, EventTime.Unit.US),
+                    execution_strategies=ExecutionStrategies(
+                        [lidar_execution_strategy]
+                    ),
                     pipelined=True,
                 )
             )
             deadlines[lidars[-1].name] = (
-                lidars[-1].runtime.time * periodic_deadline_slack_factor
+                lidar_execution_strategy.runtime.to(EventTime.Unit.US).time
+                * periodic_deadline_slack_factor
             )
-            resources[lidars[-1].name] = Resources(
-                resource_vector={Resource("CPU", _id="any"): 1}
+
+            # Install Detection operators.
+            detection_execution_strategy = ExecutionStrategy(
+                resources=Resources(
+                    resource_vector={
+                        Resource("GPU", _id="any"): 1,
+                        Resource("CPU", _id="any"): 1,
+                    }
+                ),
+                batch_size=1,
+                runtime=EventTime(130000, EventTime.Unit.US),
             )
             detectors.append(
                 Job(
                     name=f"detection_{i}",
-                    runtime=EventTime(130000, EventTime.Unit.US),
+                    execution_strategies=ExecutionStrategies(
+                        [detection_execution_strategy]
+                    ),
                     pipelined=True,
                 )
             )
             deadlines[detectors[-1].name] = (
-                detectors[-1].runtime.time * deadline_slack_factor
+                detection_execution_strategy.runtime.to(EventTime.Unit.US).time
+                * deadline_slack_factor
             )
-            resources[detectors[-1].name] = Resources(
-                resource_vector={
-                    Resource("GPU", _id="any"): 1,
-                    Resource("CPU", _id="any"): 1,
-                }
+
+            # Install Tracker operators.
+            tracker_execution_strategy = ExecutionStrategy(
+                resources=Resources(
+                    resource_vector={
+                        Resource("GPU", _id="any"): 1,
+                        Resource("CPU", _id="any"): 2,
+                    }
+                ),
+                batch_size=1,
+                runtime=EventTime(50000, EventTime.Unit.US),
             )
             trackers.append(
                 Job(
                     name=f"tracker_{i}",
-                    runtime=EventTime(50000, EventTime.Unit.US),
+                    execution_strategies=ExecutionStrategies(
+                        [tracker_execution_strategy]
+                    ),
                     pipelined=False,
                 )
             )
             deadlines[trackers[-1].name] = (
-                trackers[-1].runtime.time * deadline_slack_factor
+                tracker_execution_strategy.runtime.to(EventTime.Unit.US).time
+                * deadline_slack_factor
             )
-            resources[trackers[-1].name] = Resources(
-                resource_vector={
-                    Resource("GPU", _id="any"): 1,
-                    Resource("CPU", _id="any"): 2,
-                }
+
+            # Install localization operators.
+            object_localization_execution_strategy = ExecutionStrategy(
+                resources=Resources(resource_vector={Resource("CPU", _id="any"): 4}),
+                batch_size=1,
+                runtime=EventTime(20000, EventTime.Unit.US),
             )
             object_localization.append(
                 Job(
                     name=f"obj_localization_{i}",
-                    runtime=EventTime(20000, EventTime.Unit.US),
+                    execution_strategies=ExecutionStrategies(
+                        [object_localization_execution_strategy]
+                    ),
                     pipelined=True,
                 )
             )
             deadlines[object_localization[-1].name] = (
-                object_localization[-1].runtime.time * deadline_slack_factor
+                object_localization_execution_strategy.runtime.to(
+                    EventTime.Unit.US
+                ).time
+                * deadline_slack_factor
             )
-            resources[object_localization[-1].name] = Resources(
-                resource_vector={Resource("CPU", _id="any"): 4}
+
+            # Install Lane Detection operators.
+            lane_detector_execution_strategy = ExecutionStrategy(
+                resources=Resources(
+                    resource_vector={
+                        Resource("GPU", _id="any"): 1,
+                        Resource("CPU", _id="any"): 1,
+                    }
+                ),
+                batch_size=1,
+                runtime=EventTime(90000, EventTime.Unit.US),
             )
             lane_detectors.append(
                 Job(
                     name=f"lane_detection_{i}",
-                    runtime=EventTime(90000, EventTime.Unit.US),
+                    execution_strategies=ExecutionStrategies(
+                        [lane_detector_execution_strategy]
+                    ),
                     pipelined=True,
                 )
             )
             deadlines[lane_detectors[-1].name] = (
-                lane_detectors[-1].runtime.time * deadline_slack_factor
-            )
-            resources[lane_detectors[-1].name] = Resources(
-                resource_vector={
-                    Resource("GPU", _id="any"): 1,
-                    Resource("CPU", _id="any"): 1,
-                }
+                lane_detector_execution_strategy.runtime.to(EventTime.Unit.US).time
+                * deadline_slack_factor
             )
 
         tl_cameras = []
         tl_detectors = []
         tl_object_localization = []
         for i in range(num_traffic_light_cameras):
+            # Install Traffic Light camera.
+            tl_camera_execution_strategy = ExecutionStrategy(
+                resources=Resources(resource_vector={Resource("CPU", _id="any"): 1}),
+                batch_size=1,
+                runtime=EventTime(10000, EventTime.Unit.US),
+            )
             tl_cameras.append(
                 Job(
                     name=f"traffic_light_camera_{i}",
-                    runtime=EventTime(10000, EventTime.Unit.US),
+                    execution_strategies=ExecutionStrategies(
+                        [tl_camera_execution_strategy]
+                    ),
                     pipelined=True,
                 )
             )
             deadlines[tl_cameras[-1].name] = (
-                tl_cameras[-1].runtime.time * periodic_deadline_slack_factor
+                tl_camera_execution_strategy.runtime.to(EventTime.Unit.US).time
+                * periodic_deadline_slack_factor
             )
-            resources[tl_cameras[-1].name] = Resources(
-                resource_vector={Resource("CPU", _id="any"): 1}
+
+            # Install Traffic Light Detector.
+            tl_detector_execution_strategy = ExecutionStrategy(
+                resources=Resources(
+                    resource_vector={
+                        Resource("GPU", _id="any"): 1,
+                        Resource("CPU", _id="any"): 1,
+                    }
+                ),
+                batch_size=1,
+                runtime=EventTime(95000, EventTime.Unit.US),
             )
             tl_detectors.append(
                 Job(
                     name=f"tl_detection_{i}",
-                    runtime=EventTime(95000, EventTime.Unit.US),
+                    execution_strategies=ExecutionStrategies(
+                        [tl_detector_execution_strategy]
+                    ),
                     pipelined=True,
                 )
             )
             deadlines[tl_detectors[-1].name] = (
-                tl_detectors[-1].runtime.time * deadline_slack_factor
+                tl_detector_execution_strategy.runtime.to(EventTime.Unit.US).time
+                * deadline_slack_factor
             )
-            resources[tl_detectors[-1].name] = Resources(
-                resource_vector={
-                    Resource("GPU", _id="any"): 1,
-                    Resource("CPU", _id="any"): 1,
-                }
+
+            # Install Traffic Light Object Localization.
+            tl_object_localization_execution_strategy = ExecutionStrategy(
+                resources=Resources(resource_vector={Resource("CPU", _id="any"): 1}),
+                batch_size=1,
+                runtime=EventTime(10000, EventTime.Unit.US),
             )
             tl_object_localization.append(
                 Job(
                     name=f"tl_obj_localization_{i}",
-                    runtime=EventTime(10000, EventTime.Unit.US),
+                    execution_strategies=ExecutionStrategies(
+                        [tl_object_localization_execution_strategy]
+                    ),
                     pipelined=True,
                 )
             )
             deadlines[tl_object_localization[-1].name] = (
-                tl_object_localization[-1].runtime.time * deadline_slack_factor
-            )
-            resources[tl_object_localization[-1].name] = Resources(
-                resource_vector={Resource("CPU", _id="any"): 1}
+                tl_object_localization_execution_strategy.runtime.to(
+                    EventTime.Unit.US
+                ).time
+                * deadline_slack_factor
             )
 
+        # Install Prediction operator.
+        prediction_execution_strategy = ExecutionStrategy(
+            resources=Resources(
+                resource_vector={
+                    Resource("GPU", _id="any"): 1,
+                    Resource("CPU", _id="any"): 1,
+                }
+            ),
+            batch_size=1,
+            runtime=EventTime(30000, EventTime.Unit.US),
+        )
         prediction = Job(
             name="prediction",
-            runtime=EventTime(30000, EventTime.Unit.US),
+            execution_strategies=ExecutionStrategies([prediction_execution_strategy]),
             pipelined=False,
         )
-        deadlines[prediction.name] = prediction.runtime.time * deadline_slack_factor
-        resources[prediction.name] = Resources(
-            resource_vector={
-                Resource("GPU", _id="any"): 1,
-                Resource("CPU", _id="any"): 1,
-            }
+        deadlines[prediction.name] = (
+            prediction_execution_strategy.runtime.to(EventTime.Unit.US).time
+            * deadline_slack_factor
+        )
+
+        # Install Planning operator.
+        planning_execution_strategy = ExecutionStrategy(
+            resources=Resources(resource_vector={Resource("CPU", _id="any"): 8}),
+            batch_size=1,
+            runtime=EventTime(50000, EventTime.Unit.US),
         )
         planning = Job(
             name="planning",
-            runtime=EventTime(50000, EventTime.Unit.US),
+            execution_strategies=ExecutionStrategies([planning_execution_strategy]),
             pipelined=False,
         )
-        deadlines[planning.name] = planning.runtime.time * deadline_slack_factor
-        resources[planning.name] = Resources(
-            resource_vector={Resource("CPU", _id="any"): 8}
-        )
-        control = Job(
-            name="control", runtime=EventTime(1000, EventTime.Unit.US), pipelined=False
-        )
-        deadlines[control.name] = control.runtime.time * periodic_deadline_slack_factor
-        resources[control.name] = Resources(
-            resource_vector={Resource("CPU", _id="any"): 1}
+        deadlines[planning.name] = (
+            planning_execution_strategy.runtime.to(EventTime.Unit.US).time
+            * deadline_slack_factor
         )
 
+        # Install Control operator.
+        control_execution_strategy = ExecutionStrategy(
+            resources=Resources(resource_vector={Resource("CPU", _id="any"): 1}),
+            batch_size=1,
+            runtime=EventTime(1000, EventTime.Unit.US),
+        )
+        control = Job(
+            name="control",
+            execution_strategies=ExecutionStrategies([control_execution_strategy]),
+            pipelined=False,
+        )
+        deadlines[control.name] = (
+            control_execution_strategy.runtime.to(EventTime.Unit.US).time
+            * periodic_deadline_slack_factor
+        )
+
+        # Construct the JobGraph.
         job_graph = JobGraph()
 
         job_graph.add_job(gnss, [localization])
@@ -327,7 +462,7 @@ class TaskLoaderSynthetic(TaskLoader):
             + tl_detectors
             + tl_object_localization
         )
-        return jobs, job_graph, deadlines, resources
+        return jobs, job_graph, deadlines
 
     def create_tasks(
         self,
@@ -336,7 +471,6 @@ class TaskLoaderSynthetic(TaskLoader):
         runtime_variance: int,
         deadline_variance: Tuple[int, int],
         deadlines: Mapping[str, int],
-        resources: Mapping[str, Sequence[Resources]],
         use_end_to_end_deadlines: bool = False,
         logger: Optional[logging.Logger] = None,
     ):
@@ -369,7 +503,8 @@ class TaskLoaderSynthetic(TaskLoader):
                     # Non-Source jobs are released as soon as all of their dependencies
                     # are estimated to be satisfied.
                     max_estimated_parent_completion_time = max(
-                        tasks[(parent.name, timestamp)].release_time + parent.runtime
+                        tasks[(parent.name, timestamp)].release_time
+                        + parent.execution_strategies.get_fastest_strategy().runtime
                         for parent in self._job_graph.get_parents(job)
                     )
                     release_time = (
@@ -377,17 +512,17 @@ class TaskLoaderSynthetic(TaskLoader):
                         if job.pipelined or timestamp == 0
                         else max(
                             max_estimated_parent_completion_time,
-                            tasks[(job.name, timestamp - 1)].release_time + job.runtime,
+                            tasks[(job.name, timestamp - 1)].release_time
+                            + job.execution_strategies.get_fastest_strategy().runtime,
                         )
                     )
                     deadline = release_time + get_deadline(job, timestamp)
 
                 # Create the task.
                 task = Task(
-                    job.name,
-                    job,
-                    resource_requirements=resources[job.name],
-                    runtime=fuzz_time(job.runtime, (0, runtime_variance)),
+                    name=job.name,
+                    task_graph="SyntheticAVTaskGraph",
+                    job=job,
                     deadline=deadline,
                     timestamp=timestamp,
                     release_time=release_time,

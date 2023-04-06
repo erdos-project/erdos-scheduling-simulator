@@ -94,6 +94,7 @@ class Task(object):
     ):
         if (
             completion_time == EventTime(-1, EventTime.Unit.US)
+            and available_execution_strategies
             and len(available_execution_strategies) != 1
         ):
             raise RuntimeError(
@@ -608,10 +609,6 @@ class Task(object):
     @property
     def id(self):
         return str(self._id)
-
-    @property
-    def runtime(self):
-        return self._expected_runtime
 
     @property
     def release_time(self):
