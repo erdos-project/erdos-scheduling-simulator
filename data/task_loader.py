@@ -9,7 +9,9 @@ class TaskLoader(object):
     """Base class for task data loaders."""
 
     @staticmethod
-    def __create_task_graph(tasks: Sequence[Task], job_graph: JobGraph) -> TaskGraph:
+    def __create_task_graph(
+        name: str, tasks: Sequence[Task], job_graph: JobGraph
+    ) -> TaskGraph:
         """Constructs the `TaskGraph` from the given set of tasks and their
         job order defined by the `job_graph`.
 
@@ -18,6 +20,7 @@ class TaskLoader(object):
         `Job` according to the timestamp order.
 
         Args:
+            name (`str`): The name to assign to this Task
             tasks (`Sequence[Task]`): The set of `Task`s.
             job_graph (`JobGraph`): The topology of the graph.
 
@@ -68,7 +71,7 @@ class TaskLoader(object):
                     for parent_task in parent_task_same_timestamp:
                         task_graph[parent_task].append(task)
 
-        return grouped_tasks, TaskGraph(name=tasks[0].task_graph, tasks=task_graph)
+        return grouped_tasks, TaskGraph(name=name, tasks=task_graph)
 
     def get_jobs(self) -> Sequence[Job]:
         """Retrieve the set of `Job`s loaded.
