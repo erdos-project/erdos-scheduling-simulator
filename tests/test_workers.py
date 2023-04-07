@@ -29,8 +29,8 @@ def test_worker_task_accomodation():
             resource_vector={Resource(name="CPU", _id="any"): 1}
         )
     )
-    assert worker.can_accomodate_strategy(
-        task.available_execution_strategies[0]
+    assert (
+        len(worker.get_compatible_strategies(task.available_execution_strategies)) != 0
     ), "Worker should have been able to accomodate the task."
 
 

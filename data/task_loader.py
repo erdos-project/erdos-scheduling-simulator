@@ -20,7 +20,7 @@ class TaskLoader(object):
         `Job` according to the timestamp order.
 
         Args:
-            name (`str`): The name to assign to this Task
+            name (`str`): The name to assign to this `TaskGraph`.
             tasks (`Sequence[Task]`): The set of `Task`s.
             job_graph (`JobGraph`): The topology of the graph.
 

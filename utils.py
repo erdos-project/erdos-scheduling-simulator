@@ -105,6 +105,14 @@ class EventTime:
     def __lt__(self, other) -> bool:
         return (self - other).time < 0
 
+    def __mul__(self, other: int) -> "EventTime":
+        if type(other) != int:
+            raise RuntimeError(
+                f"Multiplication of EventTime with {other} of "
+                f"invalid type {type(other)}."
+            )
+        return EventTime(time=self.time * other, unit=self.unit)
+
     @property
     def time(self) -> int:
         return self._time

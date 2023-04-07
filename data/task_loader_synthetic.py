@@ -115,8 +115,7 @@ class TaskLoaderSynthetic(TaskLoader):
             execution_strategies=ExecutionStrategies([gnss_execution_strategy]),
         )
         deadlines[gnss.name] = (
-            gnss_execution_strategy.runtime.to(EventTime.Unit.US).time
-            * periodic_deadline_slack_factor
+            gnss_execution_strategy.runtime * periodic_deadline_slack_factor
         )
 
         # Add IMU operator.
@@ -130,8 +129,7 @@ class TaskLoaderSynthetic(TaskLoader):
             execution_strategies=ExecutionStrategies([imu_execution_strategy]),
         )
         deadlines[imu.name] = (
-            imu_execution_strategy.runtime.to(EventTime.Unit.US).time
-            * periodic_deadline_slack_factor
+            imu_execution_strategy.runtime * periodic_deadline_slack_factor
         )
 
         # Add Localization operator.
@@ -145,8 +143,7 @@ class TaskLoaderSynthetic(TaskLoader):
             execution_strategies=ExecutionStrategies([localization_execution_strategy]),
         )
         deadlines[localization.name] = (
-            localization_execution_strategy.runtime.to(EventTime.Unit.US).time
-            * periodic_deadline_slack_factor
+            localization_execution_strategy.runtime * periodic_deadline_slack_factor
         )
 
         cameras = []
@@ -172,8 +169,7 @@ class TaskLoaderSynthetic(TaskLoader):
                 )
             )
             deadlines[cameras[-1].name] = (
-                camera_execution_strategy.runtime.to(EventTime.Unit.US).time
-                * periodic_deadline_slack_factor
+                camera_execution_strategy.runtime * periodic_deadline_slack_factor
             )
 
             # Install LIDAR.
@@ -192,8 +188,7 @@ class TaskLoaderSynthetic(TaskLoader):
                 )
             )
             deadlines[lidars[-1].name] = (
-                lidar_execution_strategy.runtime.to(EventTime.Unit.US).time
-                * periodic_deadline_slack_factor
+                lidar_execution_strategy.runtime * periodic_deadline_slack_factor
             )
 
             # Install Detection operators.
@@ -217,8 +212,7 @@ class TaskLoaderSynthetic(TaskLoader):
                 )
             )
             deadlines[detectors[-1].name] = (
-                detection_execution_strategy.runtime.to(EventTime.Unit.US).time
-                * deadline_slack_factor
+                detection_execution_strategy.runtime * deadline_slack_factor
             )
 
             # Install Tracker operators.
@@ -242,8 +236,7 @@ class TaskLoaderSynthetic(TaskLoader):
                 )
             )
             deadlines[trackers[-1].name] = (
-                tracker_execution_strategy.runtime.to(EventTime.Unit.US).time
-                * deadline_slack_factor
+                tracker_execution_strategy.runtime * deadline_slack_factor
             )
 
             # Install localization operators.
@@ -262,10 +255,7 @@ class TaskLoaderSynthetic(TaskLoader):
                 )
             )
             deadlines[object_localization[-1].name] = (
-                object_localization_execution_strategy.runtime.to(
-                    EventTime.Unit.US
-                ).time
-                * deadline_slack_factor
+                object_localization_execution_strategy.runtime * deadline_slack_factor
             )
 
             # Install Lane Detection operators.
@@ -289,8 +279,7 @@ class TaskLoaderSynthetic(TaskLoader):
                 )
             )
             deadlines[lane_detectors[-1].name] = (
-                lane_detector_execution_strategy.runtime.to(EventTime.Unit.US).time
-                * deadline_slack_factor
+                lane_detector_execution_strategy.runtime * deadline_slack_factor
             )
 
         tl_cameras = []
@@ -313,8 +302,7 @@ class TaskLoaderSynthetic(TaskLoader):
                 )
             )
             deadlines[tl_cameras[-1].name] = (
-                tl_camera_execution_strategy.runtime.to(EventTime.Unit.US).time
-                * periodic_deadline_slack_factor
+                tl_camera_execution_strategy.runtime * periodic_deadline_slack_factor
             )
 
             # Install Traffic Light Detector.
@@ -338,8 +326,7 @@ class TaskLoaderSynthetic(TaskLoader):
                 )
             )
             deadlines[tl_detectors[-1].name] = (
-                tl_detector_execution_strategy.runtime.to(EventTime.Unit.US).time
-                * deadline_slack_factor
+                tl_detector_execution_strategy.runtime * deadline_slack_factor
             )
 
             # Install Traffic Light Object Localization.
@@ -358,9 +345,7 @@ class TaskLoaderSynthetic(TaskLoader):
                 )
             )
             deadlines[tl_object_localization[-1].name] = (
-                tl_object_localization_execution_strategy.runtime.to(
-                    EventTime.Unit.US
-                ).time
+                tl_object_localization_execution_strategy.runtime
                 * deadline_slack_factor
             )
 
@@ -381,8 +366,7 @@ class TaskLoaderSynthetic(TaskLoader):
             pipelined=False,
         )
         deadlines[prediction.name] = (
-            prediction_execution_strategy.runtime.to(EventTime.Unit.US).time
-            * deadline_slack_factor
+            prediction_execution_strategy.runtime * deadline_slack_factor
         )
 
         # Install Planning operator.
@@ -397,8 +381,7 @@ class TaskLoaderSynthetic(TaskLoader):
             pipelined=False,
         )
         deadlines[planning.name] = (
-            planning_execution_strategy.runtime.to(EventTime.Unit.US).time
-            * deadline_slack_factor
+            planning_execution_strategy.runtime * deadline_slack_factor
         )
 
         # Install Control operator.
@@ -413,8 +396,7 @@ class TaskLoaderSynthetic(TaskLoader):
             pipelined=False,
         )
         deadlines[control.name] = (
-            control_execution_strategy.runtime.to(EventTime.Unit.US).time
-            * periodic_deadline_slack_factor
+            control_execution_strategy.runtime * periodic_deadline_slack_factor
         )
 
         # Construct the JobGraph.
