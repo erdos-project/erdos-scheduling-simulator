@@ -113,6 +113,9 @@ class EventTime:
             )
         return EventTime(time=self.time * other, unit=self.unit)
 
+    def __hash__(self) -> int:
+        return self.to(EventTime.Unit.US).time
+
     @property
     def time(self) -> int:
         return self._time
