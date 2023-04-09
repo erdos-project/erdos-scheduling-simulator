@@ -65,6 +65,19 @@ class BaseScheduler(object):
         else:
             self._logger = setup_logging(name=self.__class__.__name__)
 
+    def start(self, start_time: EventTime) -> None:
+        """Initializes the startup phase of a scheduler. This method is invoked before
+        requests start arriving to the Scheduler, and allows it to do basic set-up work.
+
+        Args:
+            start_time (`EventTime`): The time at which the scheduler was invoked.
+        """
+        self._logger.info(
+            "[%s] Initiated the %s with the default startup implementation.",
+            start_time.to(EventTime.Unit.US).time,
+            self.__class__.__name__,
+        )
+
     def schedule(
         self,
         sim_time: EventTime,

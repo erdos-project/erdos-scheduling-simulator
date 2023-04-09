@@ -1038,7 +1038,11 @@ class Simulator(object):
             self._csv_logger.debug(
                 f"{event.time.time},SIMULATOR_START,{len(self._workload)}"
             )
-            self._logger.info("[%s] Starting the simulator loop.", event.time.time)
+            self._logger.info(
+                "[%s] Starting the simulator loop.",
+                event.time.to(EventTime.Unit.US).time,
+            )
+            self._scheduler.start(event.time)
         elif event.event_type == EventType.SIMULATOR_END:
             # End of the simulator loop.
             self._csv_logger.debug(
