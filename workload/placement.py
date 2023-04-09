@@ -2,6 +2,8 @@ from typing import Optional, Sequence
 
 from utils import EventTime
 
+from .strategy import ExecutionStrategy
+
 
 class Placement(object):
     """A mapping of a particular Task to its executing Worker determined by a Scheduler.
@@ -18,6 +20,8 @@ class Placement(object):
         worker_id (`Optional[str]`): The ID of the Worker where the Task is to be
             placed. If None, the Worker is assigned by the second-level Scheduler used
             inside the `WorkerPool`.
+        execution_strategy (`ExecutionStrategy`): The execution strategy to be
+            observed by this placement.
     """
 
     def __init__(
@@ -26,11 +30,13 @@ class Placement(object):
         placement_time: Optional[EventTime] = None,
         worker_pool_id: Optional[str] = None,
         worker_id: Optional[str] = None,
+        execution_strategy: ExecutionStrategy = None,
     ) -> None:
         self._task = task
         self._placement_time = placement_time
         self._worker_pool_id = worker_pool_id
         self._worker_id = worker_id
+        self._execution_strategy = execution_strategy
 
     def is_placed(self) -> bool:
         """Check if the task associated with this Placement was placed on a WorkerPool.
@@ -61,10 +67,16 @@ class Placement(object):
         """Returns the ID of the `Worker` where the Task is to be placed."""
         return self._worker_id
 
+    @property
+    def execution_strategy(self) -> Optional[ExecutionStrategy]:
+        """Returns the ExecutionStrategy to be used by the Task."""
+        return self._execution_strategy
+
     def __str__(self) -> str:
         return (
             f"Placement(task={self.task.unique_name}, time={self.placement_time}, "
-            f"worker_pool_id={self.worker_pool_id}, worker_id={self.worker_id})"
+            f"worker_pool_id={self.worker_pool_id}, worker_id={self.worker_id}, "
+            f"execution_strategy={self.execution_strategy})"
         )
 
 

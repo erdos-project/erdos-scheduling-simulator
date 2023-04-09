@@ -9,7 +9,16 @@ import numpy as np
 
 from data import TaskLoader
 from utils import EventTime, fuzz_time, log_statistics, setup_logging
-from workload import Job, JobGraph, Resource, Resources, Task, TaskGraph
+from workload import (
+    ExecutionStrategies,
+    ExecutionStrategy,
+    Job,
+    JobGraph,
+    Resource,
+    Resources,
+    Task,
+    TaskGraph,
+)
 
 
 class TaskLoaderPylot(TaskLoader):
@@ -69,7 +78,9 @@ class TaskLoaderPylot(TaskLoader):
             entry["ts"] = entry["ts"] - start_real_time
 
         # Create the Jobs from the profile path.
-        self._jobs = TaskLoaderPylot._TaskLoaderPylot__create_jobs(profile_data)
+        self._jobs = TaskLoaderPylot._TaskLoaderPylot__create_jobs(
+            profile_data, job_graph
+        )
         self._logger.debug(f"Loaded {len(self._jobs)} Jobs from {profile_path}")
 
         # Read the JSON file and ensure that we have jobs for all the nodes.
@@ -80,13 +91,6 @@ class TaskLoaderPylot(TaskLoader):
                 f"profile. JSON profile had {len(self._jobs)} jobs and DOT "
                 f"graph had {len(job_graph)} jobs."
             )
-
-        # Update the Resource requirements from the JobGraph.
-        for node in job_graph.get_nodes():
-            if node.name not in self._jobs:
-                raise ValueError(f"{node.name} found in JobGraph, but not in JSON.")
-            job = self._jobs[node.name]
-            job._resource_requirements = node.resource_requirements
 
         # Create the JobGraph from the jobs and the given JobGraph representation.
         self._job_graph = TaskLoaderPylot._TaskLoaderPylot__create_job_graph(
@@ -117,17 +121,23 @@ class TaskLoaderPylot(TaskLoader):
         (
             self._grouped_tasks,
             self._task_graph,
-        ) = TaskLoader._TaskLoader__create_task_graph(self._tasks, self._job_graph)
+        ) = TaskLoader._TaskLoader__create_task_graph(
+            self._tasks[0].task_graph, self._tasks, self._job_graph
+        )
         self._logger.debug("Finished creating TaskGraph from loaded tasks.")
 
     @staticmethod
-    def __create_jobs(json_entries: Sequence[Mapping[str, str]]) -> Mapping[str, Job]:
+    def __create_jobs(
+        json_entries: Sequence[Mapping[str, str]], job_graph: JobGraph
+    ) -> Mapping[str, Job]:
         """Creates a mapping of Job names to Job instances using the given
         JSON entries.
 
         Args:
             json_entries (`Sequence[Mapping[str, str]]`): The JSON entries
             retrieved from the profile file.
+            job_graph (`JobGraph`): The `JobGraph` to use for deciding the structure
+                of the `Job`s.
 
         Returns:
             A `Mapping[str, Job]` with the Job information retrieved from the
@@ -138,11 +148,27 @@ class TaskLoaderPylot(TaskLoader):
             job_to_duration_mapping[entry["pid"]].append(entry["dur"])
 
         jobs = {}
-        for job_name, durations in job_to_duration_mapping.items():
-            jobs[job_name] = Job(
-                name=job_name,
-                runtime=EventTime(int(np.mean(durations)), EventTime.Unit.US),
+        for node in job_graph.get_nodes():
+            if node.name not in job_to_duration_mapping:
+                raise RuntimeError(f"{node.name} found in JobGraph, but not in JSON.")
+            jobs[node.name] = Job(
+                name=node.name,
+                execution_strategies=ExecutionStrategies(
+                    strategies=[
+                        ExecutionStrategy(
+                            resources=node.execution_strategies[0].resources,
+                            batch_size=node.execution_strategies[0].batch_size,
+                            runtime=EventTime(
+                                int(np.mean(job_to_duration_mapping[node.name])),
+                                EventTime.Unit.US,
+                            ),
+                        )
+                    ]
+                ),
                 pipelined=False,
+                conditional=node.conditional,
+                probability=node.probability,
+                terminal=node.terminal,
             )
 
         return jobs
@@ -222,7 +248,16 @@ class TaskLoaderPylot(TaskLoader):
                     name=entry["name"],
                     task_graph=task_graph_name,
                     job=jobs[entry["pid"]],
-                    runtime=EventTime(entry["dur"], EventTime.Unit.US),
+                    available_execution_strategies=ExecutionStrategies(
+                        [
+                            ExecutionStrategy(
+                                resources=strategy.resources,
+                                batch_size=strategy.batch_size,
+                                runtime=EventTime(entry["dur"], EventTime.Unit.US),
+                            )
+                            for strategy in jobs[entry["pid"]].execution_strategies
+                        ]
+                    ),
                     deadline=(deadline - offset),
                     timestamp=entry["args"]["timestamp"],
                     release_time=EventTime(entry["ts"], EventTime.Unit.US) - offset,

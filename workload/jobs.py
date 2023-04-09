@@ -10,7 +10,7 @@ import absl
 from utils import EventTime, fuzz_time, setup_logging
 
 from .graph import Graph
-from .resources import Resources
+from .strategy import ExecutionStrategies
 from .tasks import Task, TaskGraph
 
 
@@ -57,13 +57,15 @@ class Job(object):
     scheduled by a `Scheduler`.
 
     Args:
-        name: The name of the ERDOS operator that corresponds to this Job.
-        runtime: The expected runtime of the tasks created from this Job.
-        resource_requirements: A list of Resources that each Task may choose from.
+        name (`str`): The name of the ERDOS operator that corresponds to this Job.
+        execution_strategies (`ExecutionStrategies`): A selection of execution
+            strategies that the Job may choose from when executing on a `Worker`.
         pipelined (`bool`): True if job's tasks from different timestamps can run
             in parallel.
         conditional (`bool`): True if only some of the job's childrens are invoked
             upon the job's completion instead of all of them.
+        probability (`float`): The probability of executing this `Job`, if it's part of
+            a conditional graph. 1.0 otherwise.
         terminal (`bool`): True if the job is a terminal job of the conditional
             node (can also be constructed using `create_conditional_pair` method).
     """
@@ -71,56 +73,48 @@ class Job(object):
     def __init__(
         self,
         name: str,
-        runtime: EventTime,
-        resource_requirements: Optional[Sequence[Resources]] = None,
+        execution_strategies: Optional[ExecutionStrategies] = None,
         pipelined: bool = False,
         conditional: bool = False,
         probability: float = 1.0,
         terminal: bool = False,
     ) -> None:
-        if type(runtime) != EventTime:
-            raise ValueError(f"Invalid type received for runtime: {type(runtime)}")
         self._name = name
         self._id = uuid.UUID(int=random.getrandbits(128), version=4)
-        if resource_requirements is None:
-            resource_requirements = [Resources()]
-        self._resource_requirements = resource_requirements
-        self._runtime = runtime
+        self._execution_strategies = (
+            execution_strategies if execution_strategies else ExecutionStrategies()
+        )
         self._pipelined = pipelined
         self._conditional = conditional
         self._probability = probability
         self._terminal = terminal
 
     @property
-    def name(self):
+    def name(self) -> str:
         return self._name
 
     @property
-    def id(self):
+    def id(self) -> str:
         return str(self._id)
 
     @property
-    def runtime(self):
-        return self._runtime
+    def execution_strategies(self) -> ExecutionStrategies:
+        return self._execution_strategies
 
     @property
-    def resource_requirements(self):
-        return self._resource_requirements
-
-    @property
-    def pipelined(self):
+    def pipelined(self) -> bool:
         return self._pipelined
 
     @property
-    def conditional(self):
+    def conditional(self) -> bool:
         return self._conditional
 
     @property
-    def probability(self):
+    def probability(self) -> float:
         return self._probability
 
     @property
-    def terminal(self):
+    def terminal(self) -> bool:
         return self._terminal
 
     @staticmethod
@@ -165,11 +159,16 @@ class JobGraph(Graph[Job]):
     different `Job`s of the application.
 
     Args:
-        jobs: A Mapping from a set of `Job`s to their children that needs to be
-            initialized into a `JobGraph`.
+        name (`str`): The name to assign to this `JobGraph`.
+        jobs (`Optional[Mapping[Job, Sequence[Job]]]`): A Mapping from a set of `Job`s
+            to their children that needs to be initialized into a `JobGraph`.
+        release_policy (`Optional[ReleasePolicy]`): The policy to use to generate
+            `TaskGraph`s from this `JobGraph`.
         completion_time: The completion time to assign to this `JobGraph`. If `None`,
             the completion time will be computed as the sum of the runtime of the
             longest path in the graph.
+        deadline_variance (`Optional[Tuple[int, int]]`): The variance by which the
+            deadline can be dithered on top of the actual execution time.
     """
 
     class ReleasePolicyType(Enum):
@@ -336,7 +335,10 @@ class JobGraph(Graph[Job]):
             completion_time
             if completion_time or len(self) == 0
             else sum(
-                (job.runtime for job in self.get_longest_path()),
+                (
+                    job.execution_strategies.get_fastest_strategy().runtime
+                    for job in self.get_longest_path()
+                ),
                 start=EventTime.zero(),
             )
         )
@@ -460,7 +462,6 @@ class JobGraph(Graph[Job]):
         """
         # Retrieve variances from the command line flags.
         if _flags:
-            runtime_variance = (0, _flags.runtime_variance)
             if self._deadline_variance is None:
                 deadline_variance = (
                     _flags.min_deadline_variance,
@@ -470,7 +471,6 @@ class JobGraph(Graph[Job]):
                 deadline_variance = self._deadline_variance
             use_branch_predicated_deadlines = _flags.use_branch_predicated_deadlines
         else:
-            runtime_variance = (0, 0)
             deadline_variance = (
                 self._deadline_variance
                 if self._deadline_variance is not None
@@ -486,7 +486,6 @@ class JobGraph(Graph[Job]):
                 if self.is_source(job)
                 else EventTime(-1, EventTime.Unit.US)
             )
-            task_runtime = fuzz_time(job.runtime, runtime_variance)
             task_deadline = release_time + fuzz_time(
                 self.__get_completion_time(),
                 deadline_variance,
@@ -495,8 +494,8 @@ class JobGraph(Graph[Job]):
                 name=job.name,
                 task_graph=task_graph_name,
                 job=job,
-                runtime=task_runtime,
                 deadline=task_deadline,
+                available_execution_strategies=job.execution_strategies,
                 timestamp=timestamp,
                 release_time=task_release_time,
                 _logger=task_logger,
@@ -561,9 +560,11 @@ class JobGraph(Graph[Job]):
     def __get_completion_time(self, start=EventTime.zero()) -> EventTime:
         return sum(
             (
-                job.runtime
+                job.execution_strategies.get_fastest_strategy().runtime
                 for job in self.get_longest_path(
-                    weights=lambda job: job.runtime.time
+                    weights=lambda job: job.execution_strategies.get_fastest_strategy()
+                    .runtime.to(EventTime.Unit.US)
+                    .time
                     if job.probability > sys.float_info.epsilon
                     else 0
                 )

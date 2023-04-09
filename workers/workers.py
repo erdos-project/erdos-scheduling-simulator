@@ -5,7 +5,16 @@ from copy import copy, deepcopy
 from typing import List, Optional, Sequence, Tuple, Type
 
 from utils import EventTime, setup_logging
-from workload import Resource, Resources, Task, TaskGraph, TaskState
+from workload import (
+    ExecutionStrategies,
+    ExecutionStrategy,
+    Resource,
+    Resources,
+    Task,
+    TaskGraph,
+    TaskState,
+    Workload,
+)
 
 
 class Worker(object):
@@ -36,18 +45,22 @@ class Worker(object):
         self._resources = resources
         self._placed_tasks = {}  # Mapping[Task, TaskState]
 
-    def place_task(self, task: Task):
-        """Places the task on this `Worker`.
+    def place_task(self, task: Task, execution_strategy: ExecutionStrategy):
+        """Places the task on this `Worker` using the given `execution_strategy`.
 
-        The caller must check that the `Worker` can accomodate this task by
-        invoking `can_accomodate_task`.
+        The caller must check that the `Worker` can accomodate this strategy by
+        invoking `can_accomodate_strategy`.
 
         Args:
             task (`Task`): The task to be placed on this `Worker`.
+            execution_strategy (`ExecutionStrategy`): The strategy to be used for
+                executing the task.
         """
-        self._resources.allocate_multiple(task.resource_requirements, task)
+        self._resources.allocate_multiple(execution_strategy.resources, task)
         self._placed_tasks[task] = task.state
-        self._logger.debug(f"Placed {task} on {self}")
+        self._logger.debug(
+            f"Placed {task} on {self} with the execution strategy {execution_strategy}."
+        )
 
     def remove_task(self, task: Task):
         """Removes the task from this `Worker`.
@@ -63,17 +76,40 @@ class Worker(object):
         self._resources.deallocate(task)
         del self._placed_tasks[task]
 
-    def can_accomodate_task(self, task: Task) -> bool:
-        """Checks if this `Worker` can accomodate the given `Task` based on
-        its resource availability.
+    def can_accomodate_strategy(self, execution_strategy: ExecutionStrategy) -> bool:
+        """Checks if this `Worker` can accomodate the given `ExecutionStrategy` based
+        on the available resources.
 
         Args:
-            task (`Task`): The task to be placed on this `Worker`.
+            execution_strategy (`ExecutionStrategy`): The strategy that the `Worker`
+                has to accomodate.
 
         Returns:
-            `True` if the task can be placed, `False` otherwise.
+            `True` if the `Worker` has enough resources to execute this strategy, and
+            `False` otherwise.
         """
-        return self._resources > task.resource_requirements
+        return self._resources > execution_strategy.resources
+
+    def get_compatible_strategies(
+        self, execution_strategies: ExecutionStrategies
+    ) -> ExecutionStrategies:
+        """Get the set of execution strategies from the given strategies that are
+        compatible with this `Worker` i.e., can be executed by this `Worker`.
+
+        Args:
+            execution_strategies (`ExecutionStrategies`): The initial set of available
+                strategies that need to be filtered to the set of strategies executable
+                by this `Worker`.
+
+        Returns
+            A new (possibly empty) `ExecutionStrategies` object that contains the set
+            of strategies that can be executed by this `Worker`.
+        """
+        filtered_strategies = ExecutionStrategies()
+        for strategy in execution_strategies:
+            if self.can_accomodate_strategy(strategy):
+                filtered_strategies.add_strategy(strategy)
+        return filtered_strategies
 
     def get_placed_tasks(self) -> Sequence[Task]:
         """Retrieves the `Task` that is currently placed on this `Worker`.
@@ -264,7 +300,12 @@ class WorkerPool(object):
                 self._logger.debug(f"Adding {worker} to {self}")
                 self._workers[worker.id] = worker
 
-    def place_task(self, task: Task, worker_id: Optional[str] = None) -> bool:
+    def place_task(
+        self,
+        task: Task,
+        execution_strategy: Optional[ExecutionStrategy] = None,
+        worker_id: Optional[str] = None,
+    ) -> bool:
         """Places the task on this `WorkerPool`.
 
         The caller must ensure that the `WorkerPool` has enough resources to
@@ -273,6 +314,9 @@ class WorkerPool(object):
 
         Args:
             task (`Task`): The task to be placed in this `WorkerPool`.
+            execution_strategy (`Optional[ExecutionStrategy`]): The ExecutionStrategy
+                to be used for placing this task. If no strategy is provided, any
+                fit strategy is used.
             worker_id (`Optional[str]`): The ID of the Worker where the Task
                 is to be placed on this WorkerPool. If `None` and a secondary
                 scheduler is provided, the results from that scheduler are
@@ -282,7 +326,7 @@ class WorkerPool(object):
         Returns:
             False if the task could not be placed due to insufficient resources.
         """
-        placement = None
+        placement, strategy = None, None
         if worker_id is not None:
             # If a WorkerID is provided, ensure that the Worker with that ID
             # is available on this WorkerPool.
@@ -291,20 +335,55 @@ class WorkerPool(object):
                     f"The WorkerID {worker_id} was not found in "
                     f"the WorkerPool {self.id}."
                 )
+            if execution_strategy and not self._workers[
+                worker_id
+            ].can_accomodate_strategy(execution_strategy):
+                raise RuntimeError(
+                    f"The WorkerID {worker_id} cannot accomodate the "
+                    f"strategy {execution_strategy}."
+                )
+            else:
+                strategy = execution_strategy
+
+            if not execution_strategy:
+                for possible_strategy in task.available_execution_strategies:
+                    if self._workers[worker_id].can_accomodate_strategy(
+                        possible_strategy
+                    ):
+                        strategy = possible_strategy
+                        break
             placement = worker_id
         elif self._scheduler is not None:
             # If a scheduler was provided, get a task placement from it.
-            runtime_us, placement = self._scheduler.schedule(
-                TaskGraph(tasks={task: []})[task], WorkerPools(self._workers)
+            placements = self._scheduler.schedule(
+                sim_time=None,
+                workload=Workload.from_task_graphs(
+                    task_graphs={"test_task_graph": TaskGraph(tasks={task: []})}
+                ),
+                worker_pools=WorkerPools([self]),
             )
             # Add the runtime to the task start time.
-            task._start_time += runtime_us
-        else:
+            task._start_time += placements.runtime
+            placement = placements.get_placement(task).worker_id
+            strategy = placements.get_placement(task).execution_strategy
+        elif execution_strategy is not None:
             # If there was no scheduler, find the first worker that can
             # accomodate the task given its resource requirements.
             for _id, _worker in self._workers.items():
-                if _worker.can_accomodate_task(task):
+                if _worker.can_accomodate_strategy(execution_strategy):
                     placement = _id
+                    break
+            strategy = execution_strategy
+        else:
+            # If there was no provided strategy, search if any strategy is executable
+            # on any of the Workers.
+            for _id, _worker in self._workers.items():
+                for possible_strategy in task.available_execution_strategies:
+                    if _worker.can_accomodate_strategy(possible_strategy):
+                        placement = _id
+                        strategy = possible_strategy
+                        break
+                if placement is not None:
                     break
 
         if placement is None:
@@ -313,7 +392,7 @@ class WorkerPool(object):
             )
             return False
         else:
-            self._workers[placement].place_task(task)
+            self._workers[placement].place_task(task, strategy)
             self._placed_tasks[task] = placement
             return True
 
@@ -371,18 +450,20 @@ class WorkerPool(object):
             del self._placed_tasks[task]
         return completed_tasks
 
-    def can_accomodate_task(self, task: Task) -> bool:
+    def can_accomodate_strategy(self, execution_strategy: ExecutionStrategy) -> bool:
         """Checks if any of the `Worker`s of this `WorkerPool` can accomodate
-        the given `Task` based on its resource availability.
+        the given `ExecutionStrategy` based on its resource availability.
 
         Args:
-            task (`Task`): The task to be placed on this `WorkerPool`.
+            execution_strategy (`ExecutionStrategy`): The execution strategy to be used
+                to place a Task on this `WorkerPool`.
 
         Returns:
             `True` if the task can be placed, `False` otherwise.
         """
         return any(
-            worker.can_accomodate_task(task) for worker in self._workers.values()
+            worker.can_accomodate_strategy(execution_strategy)
+            for worker in self._workers.values()
         )
 
     def get_utilization(self) -> Sequence[str]:

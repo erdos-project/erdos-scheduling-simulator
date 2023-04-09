@@ -37,7 +37,7 @@ def test_ilp_scheduling_success_basic(scheduler):
     # Create the tasks and the graph.
     camera_task_1 = create_default_task(
         name="Camera_1",
-        job=Job(name="Camera_1", runtime=EventTime(1000, EventTime.Unit.US)),
+        job=Job(name="Camera_1"),
         runtime=1000,
         timestamp=0,
         deadline=1100,
@@ -241,7 +241,7 @@ def test_ilp_scheduling_deadline_enforcement(scheduler):
     # Create the tasks and the graph.
     camera_task_1 = create_default_task(
         name="Camera_1",
-        job=Job(name="Camera_1", runtime=EventTime(1000, EventTime.Unit.US)),
+        job=Job(name="Camera_1"),
         timestamp=0,
         runtime=5,
         deadline=2,
@@ -657,7 +657,8 @@ def test_ilp_respects_dependencies_under_constrained_resources():
         camera_task_1_placement.worker_pool_id == worker_pool_1.id
     ), "Incorrect worker placement for camera_task_1"
     assert (
-        camera_task_1_placement.placement_time + camera_task_1.runtime
+        camera_task_1_placement.placement_time
+        + camera_task_1_placement.execution_strategy.runtime
         <= camera_task_1.deadline
     ), "Invalid start time for camera_task_1."
 

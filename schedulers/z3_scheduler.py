@@ -53,9 +53,15 @@ class TaskOptimizerVariables:
         self._placed_on_worker = z3.BitVec(f"{task.unique_name}_worker", len(workers))
 
         # If any worker can accomodate the task, find the optimal ones.
-        if any(worker.can_accomodate_task(task) for worker in workers.values()):
+        if any(
+            len(worker.get_compatible_strategies(task.available_execution_strategies))
+            != 0
+            for worker in workers.values()
+        ):
             resource_types = set(
-                resource.name for resource, _ in task.resource_requirements.resources
+                resource.name
+                for strategy in task.available_execution_strategies
+                for resource, _ in strategy.resources.resources
             )
             self._resources = {
                 resource_type: z3.BitVec(
@@ -153,7 +159,9 @@ class TaskOptimizerVariables:
         # placed on any worker (i.e., no bit of placed_on_worker was turned on).
         optimizer.add(self.is_placed == (self.placed_on_worker != 0))
 
-    def _initialize_resource_constraints(self, optimizer, workers):
+    def _initialize_resource_constraints(
+        self, optimizer, workers: Mapping[int, Worker]
+    ):
         # Add a constraint to ensure that if the task is placed on a worker that has
         # fewer than the maximum quantity of the resource type, then assume that the
         # first n bits of the vector are already allocated to a phantom task, and the
@@ -167,8 +175,18 @@ class TaskOptimizerVariables:
                 num_resource_on_worker = worker.resources.get_available_quantity(
                     resource
                 )
-                num_required_by_task = (
-                    self.task.resource_requirements.get_total_quantity(resource)
+                compatible_strategies = worker.get_compatible_strategies(
+                    self.task.available_execution_strategies
+                )
+                if len(compatible_strategies) == 0:
+                    # There are no compatible strategies for this Worker, the task
+                    # cannot be placed here.
+                    can_be_placed = False
+                    break
+
+                fastest_strategy = compatible_strategies.get_fastest_strategy()
+                num_required_by_task = fastest_strategy.resources.get_total_quantity(
+                    resource
                 )
                 if num_resource_on_worker < num_required_by_task:
                     can_be_placed = False
@@ -181,7 +199,11 @@ class TaskOptimizerVariables:
                 for resource_name, variable in self.resources.items():
                     resource = Resource(name=resource_name, _id="any")
                     num_required_by_task = (
-                        self.task.resource_requirements.get_total_quantity(resource)
+                        worker.get_compatible_strategies(
+                            self.task.available_execution_strategies
+                        )
+                        .get_fastest_strategy()
+                        .resources.get_total_quantity(resource)
                     )
                     bottom_m_bits = worker.resources.get_available_quantity(resource)
                     top_n_bits = variable.size() - bottom_m_bits

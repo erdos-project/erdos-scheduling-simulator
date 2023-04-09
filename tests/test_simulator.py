@@ -284,6 +284,7 @@ def test_simulator_step():
             task=task,
             worker_pool_id=worker_pool.id,
             placement_time=EventTime(2, EventTime.Unit.US),
+            execution_strategy=task.available_execution_strategies[0],
         ),
     )
     worker_pool.place_task(task)
@@ -333,12 +334,8 @@ def test_simulator_step():
 def test_simulator_handle_event():
     """Test the Simulator's handle_event method with different events."""
     worker_pool = __create_default_worker_pool()
-    perception_task = create_default_task(
-        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US))
-    )
-    planning_task = create_default_task(
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US))
-    )
+    perception_task = create_default_task(job=Job(name="Perception"))
+    planning_task = create_default_task(job=Job(name="Planning"))
     task_graph = TaskGraph(name="TestTaskGraph")
     task_graph.add_task(perception_task, [planning_task])
     simulator = Simulator(
@@ -371,6 +368,7 @@ def test_simulator_handle_event():
             task=perception_task,
             worker_pool_id=worker_pool.id,
             placement_time=EventTime(2, EventTime.Unit.US),
+            execution_strategy=perception_task.available_execution_strategies[0],
         ),
     )
     perception_task.start(EventTime(3, EventTime.Unit.US))
@@ -406,6 +404,7 @@ def test_simulator_handle_event():
                 task=planning_task,
                 worker_pool_id=worker_pool.id,
                 placement_time=EventTime(6, EventTime.Unit.US),
+                execution_strategy=planning_task.available_execution_strategies[0],
             )
         ],
     )

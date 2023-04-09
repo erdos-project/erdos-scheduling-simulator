@@ -55,8 +55,8 @@ class EDFScheduler(BaseScheduler):
 
         for worker_pool in schedulable_worker_pools.worker_pools:
             self._logger.debug(
-                f"[{sim_time}] The state of {worker_pool} is:{os.linesep}"
-                f"{os.linesep.join(worker_pool.get_utilization())}"
+                f"[{sim_time.to(EventTime.Unit.US).time}] The state of {worker_pool} "
+                f"is:{os.linesep} {os.linesep.join(worker_pool.get_utilization())}"
             )
 
         # Sort the tasks according to their deadlines, and place them on the
@@ -68,7 +68,8 @@ class EDFScheduler(BaseScheduler):
             f"{task.unique_name} ({task.deadline})" for task in ordered_tasks
         ]
         self._logger.debug(
-            f"[{sim_time}] The order of the tasks is {task_descriptions}."
+            f"[{sim_time.to(EventTime.Unit.US).time}] The order of the "
+            f"tasks is {task_descriptions}."
         )
 
         # Run the scheduling loop.
@@ -80,25 +81,34 @@ class EDFScheduler(BaseScheduler):
         placements = []
         for task in ordered_tasks:
             self._logger.debug(
-                f"[{sim_time}] {self.__class__.__name__} trying to schedule {task} "
-                f"with the resource requirements {task.resource_requirements}."
+                f"[{sim_time.to(EventTime.Unit.US).time}] EDFScheduler trying to "
+                f"schedule {task} with the available execution strategies: "
+                f"{task.available_execution_strategies}."
             )
             is_task_placed = False
-            for worker_pool in schedulable_worker_pools.worker_pools:
-                if worker_pool.can_accomodate_task(task):
-                    worker_pool.place_task(task)
-                    is_task_placed = True
-                    placements.append(
-                        Placement(
-                            task=task,
-                            worker_pool_id=worker_pool.id,
-                            placement_time=sim_time,
+            for execution_strategy in task.available_execution_strategies:
+                for worker_pool in schedulable_worker_pools.worker_pools:
+                    if worker_pool.can_accomodate_strategy(execution_strategy):
+                        worker_pool.place_task(
+                            task, execution_strategy=execution_strategy
                         )
-                    )
-                    self._logger.debug(
-                        f"[{sim_time}] Placed {task} on Worker Pool ({worker_pool.id})"
-                        f" to be started at {sim_time}."
-                    )
+                        is_task_placed = True
+                        placements.append(
+                            Placement(
+                                task=task,
+                                worker_pool_id=worker_pool.id,
+                                placement_time=sim_time,
+                                execution_strategy=execution_strategy,
+                            )
+                        )
+                        self._logger.debug(
+                            f"[{sim_time.to(EventTime.Unit.US).time}] Placed {task} on "
+                            f"Worker Pool ({worker_pool.id}) to be started at "
+                            f"{sim_time} with the execution strategy: "
+                            f"{execution_strategy}."
+                        )
+                        break
+                if is_task_placed:
                     break
 
             if is_task_placed:

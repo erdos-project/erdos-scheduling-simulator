@@ -9,9 +9,11 @@
                 "children": [
                     "localization_operator"
                 ],
-                "resource_requirements": [
+                "execution_strategies": [
                     {
-                        "CPU:any": 1
+                        "resource_requirements": {
+                            "CPU:any": 1
+                        }
                     }
                 ]
             },
@@ -20,9 +22,11 @@
                 "children": [
                     "localization_operator"
                 ],
-                "resource_requirements": [
+                "execution_strategies": [
                     {
-                        "CPU:any": 1
+                        "resource_requirements": {
+                            "CPU:any": 1
+                        }
                     }
                 ]
             },
@@ -32,9 +36,11 @@
                     "traffic_light_camera_location_finder_operator",
                     "center_camera_location_finder_history_operator"
                 ],
-                "resource_requirements": [
+                "execution_strategies": [
                     {
-                        "CPU:any": 1
+                        "resource_requirements": {
+                            "CPU:any": 1
+                        }
                     }
                 ]
             },
@@ -45,9 +51,11 @@
                     "lanenet_lane_detection",
                     "tracker_sort"
                 ],
-                "resource_requirements": [
+                "execution_strategies": [
                     {
-                        "CPU:any": 1
+                        "resource_requirements": {
+                            "CPU:any": 1
+                        }
                     }
                 ]
             },
@@ -56,10 +64,12 @@
                 "children": [
                     "tracker_sort"
                 ],
-                "resource_requirements": [
+                "execution_strategies": [
                     {
-                        "CPU:any": 1,
-                        "GPU:any": 1
+                        "resource_requirements": {
+                            "CPU:any": 1,
+                            "GPU:any": 1
+                        }
                     }
                 ]
             },
@@ -68,9 +78,11 @@
                 "children": [
                     "center_camera_location_finder_history_operator"
                 ],
-                "resource_requirements": [
+                "execution_strategies": [
                     {
-                        "CPU:any": 1
+                        "resource_requirements": {
+                            "CPU:any": 1
+                        }
                     }
                 ]
             },
@@ -83,9 +95,11 @@
                     "planning_operator",
                     "pid_control_operator"
                 ],
-                "resource_requirements": [
+                "execution_strategies": [
                     {
-                        "CPU:any": 1
+                        "resource_requirements": {
+                            "CPU:any": 1
+                        }
                     }
                 ]
             },
@@ -94,9 +108,11 @@
                 "children": [
                     "planning_operator"
                 ],
-                "resource_requirements": [
+                "execution_strategies": [
                     {
-                        "CPU:any": 1
+                        "resource_requirements": {
+                            "CPU:any": 1
+                        }
                     }
                 ]
             },
@@ -105,9 +121,11 @@
                 "children": [
                     "linear_prediction_operator"
                 ],
-                "resource_requirements": [
+                "execution_strategies": [
                     {
-                        "CPU:any": 1
+                        "resource_requirements": {
+                            "CPU:any": 1
+                        }
                     }
                 ]
             },
@@ -116,9 +134,11 @@
                 "children": [
                     "traffic_light_detector_operator"
                 ],
-                "resource_requirements": [
+                "execution_strategies": [
                     {
-                        "CPU:any": 1
+                        "resource_requirements": {
+                            "CPU:any": 1
+                        }
                     }
                 ]
             },
@@ -127,10 +147,12 @@
                 "children": [
                     "traffic_light_camera_location_finder_operator"
                 ],
-                "resource_requirements": [
+                "execution_strategies": [
                     {
-                        "CPU:any": 1,
-                        "GPU:any": 1
+                        "resource_requirements": {
+                            "CPU:any": 1,
+                            "GPU:any": 1
+                        }
                     }
                 ]
             },
@@ -139,9 +161,11 @@
                 "children": [
                     "simulator_bridge_operator"
                 ],
-                "resource_requirements": [
+                "execution_strategies": [
                     {
-                        "CPU:any": 1
+                        "resource_requirements": {
+                            "CPU:any": 1
+                        }
                     }
                 ]
             },
@@ -150,9 +174,11 @@
                 "children": [
                     "planning_operator"
                 ],
-                "resource_requirements": [
+                "execution_strategies": [
                     {
-                        "CPU:any": 1
+                        "resource_requirements": {
+                            "CPU:any": 1
+                        }
                     }
                 ]
             },
@@ -161,10 +187,12 @@
                 "children": [
                     "planning_operator"
                 ],
-                "resource_requirements": [
+                "execution_strategies": [
                     {
-                        "CPU:any": 1,
-                        "GPU:any": 1
+                        "resource_requirements": {
+                            "CPU:any": 1,
+                            "GPU:any": 1
+                        }
                     }
                 ]
             },
@@ -173,9 +201,11 @@
                 "children": [
                     "planning_operator"
                 ],
-                "resource_requirements": [
+                "execution_strategies": [
                     {
-                        "CPU:any": 1
+                        "resource_requirements": {
+                            "CPU:any": 1
+                        }
                     }
                 ]
             },
@@ -184,18 +214,22 @@
                 "children": [
                     "pid_control_operator"
                 ],
-                "resource_requirements": [
+                "execution_strategies": [
                     {
-                        "CPU:any": 1
+                        "resource_requirements": {
+                            "CPU:any": 1
+                        }
                     }
                 ]
             },
             {
                 "name": "simulator_bridge_operator",
                 "children": [],
-                "resource_requirements": [
+                "execution_strategies": [
                     {
-                        "CPU:any": 1
+                        "resource_requirements": {
+                            "CPU:any": 1
+                        }
                     }
                 ]
             }

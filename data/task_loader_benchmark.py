@@ -2,9 +2,18 @@ from typing import Optional, Sequence
 
 import absl  # noqa: F401
 
-import utils
 from data import TaskLoader
-from workload import Job, JobGraph, Resource, Resources, Task, TaskGraph
+from utils import EventTime, setup_logging
+from workload import (
+    ExecutionStrategies,
+    ExecutionStrategy,
+    Job,
+    JobGraph,
+    Resource,
+    Resources,
+    Task,
+    TaskGraph,
+)
 
 
 class TaskLoaderBenchmark(TaskLoader):
@@ -26,19 +35,16 @@ class TaskLoaderBenchmark(TaskLoader):
     ):
         # Set up the logger.
         if _flags:
-            self._logger = utils.setup_logging(
+            self._logger = setup_logging(
                 name=self.__class__.__name__,
                 log_dir=_flags.log_dir,
                 log_file=_flags.log_file_name,
                 log_level=_flags.log_level,
             )
         else:
-            self._logger = utils.setup_logging(name=self.__class__.__name__)
+            self._logger = setup_logging(name=self.__class__.__name__)
 
-        self._jobs = [
-            Job(name=f"Job_{index}", runtime=task_runtime)
-            for index in range(0, num_jobs)
-        ]
+        self._jobs = [Job(name=f"Job_{index}") for index in range(0, num_jobs)]
         self._job_graph = JobGraph()
         # Note: The jobs are independent.
         for job in self._jobs:
@@ -57,21 +63,31 @@ class TaskLoaderBenchmark(TaskLoader):
             # All times are in us.
             self._tasks.append(
                 Task(
-                    f"{job.name}_task_{index}",
+                    name=f"{job.name}_task_{index}",
+                    task_graph="TaskLoaderBenchmarkTaskGraph",
                     job=job,
-                    resource_requirements=resource_requirements,
-                    runtime=job.runtime,
                     deadline=task_deadline,
+                    available_execution_strategies=ExecutionStrategies(
+                        strategies=[
+                            ExecutionStrategy(
+                                resources=resource_requirements,
+                                batch_size=1,
+                                runtime=EventTime(task_runtime, EventTime.Unit.US),
+                            )
+                        ]
+                    ),
                     timestamp=0,
-                    release_time=0,
-                    start_time=-1,
-                    completion_time=-1,
+                    release_time=EventTime.zero(),
                 )
             )
         (
             self._grouped_tasks,
             self._task_graph,
-        ) = TaskLoader._TaskLoader__create_task_graph(self._tasks, self._job_graph)
+        ) = TaskLoader._TaskLoader__create_task_graph(
+            name="TaskLoaderBenchmarkTaskGraph",
+            tasks=self._tasks,
+            job_graph=self._job_graph,
+        )
 
     def get_jobs(self) -> Sequence[Job]:
         """Retrieve the set of `Job`s loaded.

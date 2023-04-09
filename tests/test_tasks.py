@@ -14,13 +14,7 @@ def test_successful_task_creation():
 
 def test_successful_conditional_task_creation():
     """Test that a conditional Task is created successfully."""
-    default_task = create_default_task(
-        job=Job(
-            name="Perception",
-            runtime=EventTime(1000, EventTime.Unit.US),
-            conditional=True,
-        )
-    )
+    default_task = create_default_task(job=Job(name="Perception", conditional=True))
     assert default_task.name == "Perception_Task", "Incorrect name for Task."
     assert default_task.conditional, "Incorrect conditionality for Task."
 
@@ -58,12 +52,17 @@ def test_successful_task_start():
     default_task.release(release_time)
     default_task.schedule(
         release_time,
-        Placement(task=default_task, placement_time=release_time, worker_pool_id=None),
+        Placement(
+            task=default_task,
+            placement_time=release_time,
+            worker_pool_id=None,
+            execution_strategy=default_task.available_execution_strategies[0],
+        ),
     )
     default_task.start(start_time)
     assert default_task.start_time == start_time, "Incorrect start time for Task."
     assert default_task.state == TaskState.RUNNING, "Incorrect state for Task."
-    assert default_task._remaining_time == EventTime(
+    assert default_task.remaining_time == EventTime(
         1, EventTime.Unit.US
     ), "Incorrect remaining time for Task."
 
@@ -79,15 +78,13 @@ def test_task_runtime_variability():
     """Test that the runtime of the task can be varied upon its start."""
     default_task = create_default_task()
     default_task.release(EventTime(2, EventTime.Unit.US))
-    assert default_task.remaining_time == EventTime(
-        1, EventTime.Unit.US
-    ), "Incorrect initial remaining time for the Task."
     default_task.schedule(
         EventTime(3, EventTime.Unit.US),
         Placement(
             task=default_task,
             placement_time=EventTime(3, EventTime.Unit.US),
             worker_pool_id=None,
+            execution_strategy=default_task.available_execution_strategies[0],
         ),
     )
     default_task.start(EventTime(3, EventTime.Unit.US), variance=50)
@@ -108,6 +105,7 @@ def test_successful_task_preempt():
             task=default_task,
             worker_pool_id=None,
             placement_time=EventTime(3, EventTime.Unit.US),
+            execution_strategy=default_task.available_execution_strategies[0],
         ),
     )
     default_task.start(EventTime(3, EventTime.Unit.US))
@@ -132,6 +130,7 @@ def test_successful_task_resume():
             task=default_task,
             worker_pool_id=None,
             placement_time=EventTime(3, EventTime.Unit.US),
+            execution_strategy=default_task.available_execution_strategies[0],
         ),
     )
     default_task.start(EventTime(3, EventTime.Unit.US))
@@ -150,6 +149,7 @@ def test_failed_task_resume():
             task=default_task,
             worker_pool_id=None,
             placement_time=EventTime(3, EventTime.Unit.US),
+            execution_strategy=default_task.available_execution_strategies[0],
         ),
     )
     default_task.start(EventTime(3, EventTime.Unit.US))
@@ -167,6 +167,7 @@ def test_task_completion():
             task=default_task,
             worker_pool_id=None,
             placement_time=EventTime(3, EventTime.Unit.US),
+            execution_strategy=default_task.available_execution_strategies[0],
         ),
     )
     default_task.start(EventTime(3, EventTime.Unit.US))
@@ -185,6 +186,7 @@ def test_task_eviction():
             task=default_task,
             worker_pool_id=None,
             placement_time=EventTime(3, EventTime.Unit.US),
+            execution_strategy=default_task.available_execution_strategies[0],
         ),
     )
     default_task.start(EventTime(3, EventTime.Unit.US))
@@ -202,6 +204,7 @@ def test_task_step_one():
             task=default_task,
             worker_pool_id=None,
             placement_time=EventTime(3, EventTime.Unit.US),
+            execution_strategy=default_task.available_execution_strategies[0],
         ),
     )
     default_task.start(EventTime(3, EventTime.Unit.US))
@@ -233,6 +236,7 @@ def test_task_step_two():
             task=default_task,
             worker_pool_id=None,
             placement_time=EventTime(3, EventTime.Unit.US),
+            execution_strategy=default_task.available_execution_strategies[0],
         ),
     )
     default_task.start(EventTime(5, EventTime.Unit.US))
@@ -269,6 +273,7 @@ def test_fail_step_non_running():
             task=default_task,
             worker_pool_id=None,
             placement_time=EventTime(3, EventTime.Unit.US),
+            execution_strategy=default_task.available_execution_strategies[0],
         ),
     )
     default_task.start(EventTime(3, EventTime.Unit.US))
@@ -292,12 +297,8 @@ def test_task_graph_construction_from_mapping():
 
 def test_task_addition_to_task_graph():
     """Test addition of Tasks to the graph."""
-    default_task = create_default_task(
-        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US))
-    )
-    child_task = create_default_task(
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US))
-    )
+    default_task = create_default_task(job=Job(name="Perception"))
+    child_task = create_default_task(job=Job(name="Planning"))
     task_graph = TaskGraph(name="TestTaskGraph")
     assert len(task_graph) == 0, "Incorrect length of the TaskGraph."
     task_graph.add_task(default_task, [child_task])
@@ -306,12 +307,8 @@ def test_task_addition_to_task_graph():
 
 def test_addition_of_child_to_task():
     """Test addition of children to a Task."""
-    default_task = create_default_task(
-        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US))
-    )
-    child_task = create_default_task(
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US))
-    )
+    default_task = create_default_task(job=Job(name="Perception"))
+    child_task = create_default_task(job=Job(name="Planning"))
     task_graph = TaskGraph(name="TestTaskGraph")
     assert len(task_graph) == 0, "Incorrect length of the TaskGraph."
     task_graph.add_task(default_task)
@@ -322,12 +319,8 @@ def test_addition_of_child_to_task():
 
 def test_retrieval_of_children():
     """Test that the correct set of children are retrieved."""
-    default_task = create_default_task(
-        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US))
-    )
-    child_task = create_default_task(
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US))
-    )
+    default_task = create_default_task(job=Job(name="Perception"))
+    child_task = create_default_task(job=Job(name="Planning"))
     task_graph = TaskGraph(name="TestTaskGraph")
     task_graph.add_task(default_task, [child_task])
     children = task_graph.get_children(default_task)
@@ -337,14 +330,8 @@ def test_retrieval_of_children():
 
 def test_get_schedulable_tasks():
     """Test that the correct set of schedulable tasks are returned."""
-    default_task = create_default_task(
-        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
-        runtime=1000,
-    )
-    child_task = create_default_task(
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)),
-        runtime=1000,
-    )
+    default_task = create_default_task(job=Job(name="Perception"), runtime=1000)
+    child_task = create_default_task(job=Job(name="Planning"), runtime=1000)
     task_graph = TaskGraph(name="TestTaskGraph")
     task_graph.add_task(default_task, [child_task])
     assert (
@@ -364,6 +351,7 @@ def test_get_schedulable_tasks():
             task=default_task,
             worker_pool_id=None,
             placement_time=EventTime(3, EventTime.Unit.US),
+            execution_strategy=default_task.available_execution_strategies[0],
         ),
     )
     default_task.start(EventTime(3, EventTime.Unit.US))
@@ -376,18 +364,10 @@ def test_get_schedulable_tasks():
 
 def test_release_tasks():
     """Test that the correct tasks are released by the TaskGraph."""
-    perception_task = create_default_task(
-        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US))
-    )
-    prediction_task = create_default_task(
-        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US))
-    )
-    planning_task = create_default_task(
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US))
-    )
-    localization_task = create_default_task(
-        job=Job(name="Localization", runtime=EventTime(1000, EventTime.Unit.US))
-    )
+    perception_task = create_default_task(job=Job(name="Perception"))
+    prediction_task = create_default_task(job=Job(name="Prediction"))
+    planning_task = create_default_task(job=Job(name="Planning"))
+    localization_task = create_default_task(job=Job(name="Localization"))
     task_graph = TaskGraph(name="TestTaskGraph")
     task_graph.add_task(perception_task, [prediction_task])
     task_graph.add_task(prediction_task, [planning_task])
@@ -407,12 +387,8 @@ def test_release_tasks():
 
 def test_retrieval_of_parents():
     """Test that the correct set of parents are retrieved."""
-    default_task = create_default_task(
-        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US))
-    )
-    child_task = create_default_task(
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US))
-    )
+    default_task = create_default_task(job=Job(name="Perception"))
+    child_task = create_default_task(job=Job(name="Planning"))
     task_graph = TaskGraph(name="TestTaskGraph")
     task_graph.add_task(default_task, [child_task])
     parents = task_graph.get_parents(child_task)
@@ -422,15 +398,9 @@ def test_retrieval_of_parents():
 
 def test_task_completion_notification():
     """Test that the completion of a task ensures release of children."""
-    perception_task = create_default_task(
-        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US))
-    )
-    prediction_task = create_default_task(
-        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US))
-    )
-    planning_task = create_default_task(
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US))
-    )
+    perception_task = create_default_task(job=Job(name="Perception"))
+    prediction_task = create_default_task(job=Job(name="Prediction"))
+    planning_task = create_default_task(job=Job(name="Planning"))
     task_graph = TaskGraph(name="TestTaskGraph")
     task_graph.add_task(perception_task, [planning_task])
     task_graph.add_task(prediction_task, [planning_task])
@@ -449,6 +419,7 @@ def test_task_completion_notification():
             task=prediction_task,
             worker_pool_id=None,
             placement_time=EventTime(3, EventTime.Unit.US),
+            execution_strategy=perception_task.available_execution_strategies[0],
         ),
     )
     perception_task.start(EventTime(3, EventTime.Unit.US))
@@ -466,6 +437,7 @@ def test_task_completion_notification():
             task=prediction_task,
             worker_pool_id=None,
             placement_time=EventTime(3, EventTime.Unit.US),
+            execution_strategy=prediction_task.available_execution_strategies[0],
         ),
     )
     prediction_task.start(EventTime(4, EventTime.Unit.US))
@@ -480,25 +452,9 @@ def test_task_completion_notification():
 
 def test_conditional_task_completion_notification():
     """Test that the completion of a conditional task ensures release of one child."""
-    perception_task = create_default_task(
-        job=Job(
-            name="Perception",
-            runtime=EventTime(1000, EventTime.Unit.US),
-            conditional=True,
-        )
-    )
-    prediction_task = create_default_task(
-        job=Job(
-            name="Prediction",
-            runtime=EventTime(1000, EventTime.Unit.US),
-            probability=0.5,
-        )
-    )
-    planning_task = create_default_task(
-        job=Job(
-            name="Planning", runtime=EventTime(1000, EventTime.Unit.US), probability=0.5
-        )
-    )
+    perception_task = create_default_task(job=Job(name="Perception", conditional=True))
+    prediction_task = create_default_task(job=Job(name="Prediction", probability=0.5))
+    planning_task = create_default_task(job=Job(name="Planning", probability=0.5))
     task_graph = TaskGraph(name="TestTaskGraph")
     release_policy = BranchPredictionPolicy.RANDOM
     task_graph.add_task(perception_task, [planning_task, prediction_task])
@@ -521,6 +477,7 @@ def test_conditional_task_completion_notification():
             task=perception_task,
             worker_pool_id=None,
             placement_time=EventTime(3, EventTime.Unit.US),
+            execution_strategy=perception_task.available_execution_strategies[0],
         ),
     )
     perception_task.start(EventTime(3, EventTime.Unit.US))
@@ -543,25 +500,9 @@ def test_conditional_task_completion_notification():
 def test_conditional_weighted_task_completion_notification():
     """Test that the completion of a conditional task under a probability distribution
     ensures the release of the correct child."""
-    perception_task = create_default_task(
-        job=Job(
-            name="Perception",
-            runtime=EventTime(1000, EventTime.Unit.US),
-            conditional=True,
-        )
-    )
-    prediction_task = create_default_task(
-        job=Job(
-            name="Prediction",
-            runtime=EventTime(1000, EventTime.Unit.US),
-            probability=1.0,
-        )
-    )
-    planning_task = create_default_task(
-        job=Job(
-            name="Planning", runtime=EventTime(1000, EventTime.Unit.US), probability=0.0
-        )
-    )
+    perception_task = create_default_task(job=Job(name="Perception", conditional=True))
+    prediction_task = create_default_task(job=Job(name="Prediction", probability=1.0))
+    planning_task = create_default_task(job=Job(name="Planning", probability=0.0))
     task_graph = TaskGraph(name="TestTaskGraph")
     task_graph.add_task(perception_task, [planning_task, prediction_task])
 
@@ -579,6 +520,7 @@ def test_conditional_weighted_task_completion_notification():
             task=perception_task,
             worker_pool_id=None,
             placement_time=EventTime(3, EventTime.Unit.US),
+            execution_strategy=perception_task.available_execution_strategies[0],
         ),
     )
     perception_task.start(EventTime(3, EventTime.Unit.US))
@@ -596,30 +538,12 @@ def test_conditional_weighted_task_completion_notification():
 def test_task_graph_index_success():
     """Test that indexing a TaskGraph works correctly."""
     # Create the individual tasks.
-    perception_task_0 = create_default_task(
-        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=0,
-    )
-    perception_task_1 = create_default_task(
-        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=1,
-    )
-    prediction_task_0 = create_default_task(
-        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=0,
-    )
-    prediction_task_1 = create_default_task(
-        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=1,
-    )
-    planning_task_0 = create_default_task(
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=0,
-    )
-    planning_task_1 = create_default_task(
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=1,
-    )
+    perception_task_0 = create_default_task(job=Job(name="Perception"), timestamp=0)
+    perception_task_1 = create_default_task(job=Job(name="Perception"), timestamp=1)
+    prediction_task_0 = create_default_task(job=Job(name="Prediction"), timestamp=0)
+    prediction_task_1 = create_default_task(job=Job(name="Prediction"), timestamp=1)
+    planning_task_0 = create_default_task(job=Job(name="Planning"), timestamp=0)
+    planning_task_1 = create_default_task(job=Job(name="Planning"), timestamp=1)
 
     # Create the TaskGraph.
     task_graph = TaskGraph(
@@ -644,30 +568,12 @@ def test_task_graph_index_success():
 def test_task_graph_index_failure():
     """Test that an invalid argument to indexing a TaskGraph fails."""
     # Create the individual tasks.
-    perception_task_0 = create_default_task(
-        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=0,
-    )
-    perception_task_1 = create_default_task(
-        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=1,
-    )
-    prediction_task_0 = create_default_task(
-        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=0,
-    )
-    prediction_task_1 = create_default_task(
-        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=1,
-    )
-    planning_task_0 = create_default_task(
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=0,
-    )
-    planning_task_1 = create_default_task(
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=1,
-    )
+    perception_task_0 = create_default_task(job=Job(name="Perception"), timestamp=0)
+    perception_task_1 = create_default_task(job=Job(name="Perception"), timestamp=1)
+    prediction_task_0 = create_default_task(job=Job(name="Prediction"), timestamp=0)
+    prediction_task_1 = create_default_task(job=Job(name="Prediction"), timestamp=1)
+    planning_task_0 = create_default_task(job=Job(name="Planning"), timestamp=0)
+    planning_task_1 = create_default_task(job=Job(name="Planning"), timestamp=1)
 
     # Create the TaskGraph.
     task_graph = TaskGraph(
@@ -687,42 +593,15 @@ def test_task_graph_index_failure():
 def test_task_graph_slice_success():
     """Test that slicing a TaskGraph works correctly."""
     # Create the individual tasks.
-    perception_task_0 = create_default_task(
-        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=0,
-    )
-    perception_task_1 = create_default_task(
-        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=1,
-    )
-    perception_task_2 = create_default_task(
-        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=2,
-    )
-    prediction_task_0 = create_default_task(
-        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=0,
-    )
-    prediction_task_1 = create_default_task(
-        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=1,
-    )
-    prediction_task_2 = create_default_task(
-        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=2,
-    )
-    planning_task_0 = create_default_task(
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=0,
-    )
-    planning_task_1 = create_default_task(
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=1,
-    )
-    planning_task_2 = create_default_task(
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=2,
-    )
+    perception_task_0 = create_default_task(job=Job(name="Perception"), timestamp=0)
+    perception_task_1 = create_default_task(job=Job(name="Perception"), timestamp=1)
+    perception_task_2 = create_default_task(job=Job(name="Perception"), timestamp=2)
+    prediction_task_0 = create_default_task(job=Job(name="Prediction"), timestamp=0)
+    prediction_task_1 = create_default_task(job=Job(name="Prediction"), timestamp=1)
+    prediction_task_2 = create_default_task(job=Job(name="Prediction"), timestamp=2)
+    planning_task_0 = create_default_task(job=Job(name="Planning"), timestamp=0)
+    planning_task_1 = create_default_task(job=Job(name="Planning"), timestamp=1)
+    planning_task_2 = create_default_task(job=Job(name="Planning"), timestamp=2)
 
     # Create the TaskGraph.
     task_graph = TaskGraph(
@@ -752,30 +631,12 @@ def test_task_graph_slice_success():
 def test_is_source_task():
     """Test that the is_source_task method works correctly."""
     # Create the individual tasks.
-    perception_task_0 = create_default_task(
-        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=0,
-    )
-    perception_task_1 = create_default_task(
-        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=1,
-    )
-    prediction_task_0 = create_default_task(
-        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=0,
-    )
-    prediction_task_1 = create_default_task(
-        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=1,
-    )
-    planning_task_0 = create_default_task(
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=0,
-    )
-    planning_task_1 = create_default_task(
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=1,
-    )
+    perception_task_0 = create_default_task(job=Job(name="Perception"), timestamp=0)
+    perception_task_1 = create_default_task(job=Job(name="Perception"), timestamp=1)
+    prediction_task_0 = create_default_task(job=Job(name="Prediction"), timestamp=0)
+    prediction_task_1 = create_default_task(job=Job(name="Prediction"), timestamp=1)
+    planning_task_0 = create_default_task(job=Job(name="Planning"), timestamp=0)
+    planning_task_1 = create_default_task(job=Job(name="Planning"), timestamp=1)
 
     # Create the TaskGraph.
     task_graph = TaskGraph(
@@ -814,30 +675,12 @@ def test_is_source_task():
 def test_is_sink_task():
     """Test that the is_source_task method works correctly."""
     # Create the individual tasks.
-    perception_task_0 = create_default_task(
-        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=0,
-    )
-    perception_task_1 = create_default_task(
-        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=1,
-    )
-    prediction_task_0 = create_default_task(
-        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=0,
-    )
-    prediction_task_1 = create_default_task(
-        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=1,
-    )
-    planning_task_0 = create_default_task(
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=0,
-    )
-    planning_task_1 = create_default_task(
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=1,
-    )
+    perception_task_0 = create_default_task(job=Job(name="Perception"), timestamp=0)
+    perception_task_1 = create_default_task(job=Job(name="Perception"), timestamp=1)
+    prediction_task_0 = create_default_task(job=Job(name="Prediction"), timestamp=0)
+    prediction_task_1 = create_default_task(job=Job(name="Prediction"), timestamp=1)
+    planning_task_0 = create_default_task(job=Job(name="Planning"), timestamp=0)
+    planning_task_1 = create_default_task(job=Job(name="Planning"), timestamp=1)
 
     # Create the TaskGraph.
     task_graph = TaskGraph(
@@ -872,30 +715,12 @@ def test_is_sink_task():
 def test_get_source_tasks():
     """Test that the get_source_tasks method works correctly."""
     # Create the individual tasks.
-    perception_task_0 = create_default_task(
-        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=0,
-    )
-    perception_task_1 = create_default_task(
-        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=1,
-    )
-    prediction_task_0 = create_default_task(
-        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=0,
-    )
-    prediction_task_1 = create_default_task(
-        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=1,
-    )
-    planning_task_0 = create_default_task(
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=0,
-    )
-    planning_task_1 = create_default_task(
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=1,
-    )
+    perception_task_0 = create_default_task(job=Job(name="Perception"), timestamp=0)
+    perception_task_1 = create_default_task(job=Job(name="Perception"), timestamp=1)
+    prediction_task_0 = create_default_task(job=Job(name="Prediction"), timestamp=0)
+    prediction_task_1 = create_default_task(job=Job(name="Prediction"), timestamp=1)
+    planning_task_0 = create_default_task(job=Job(name="Planning"), timestamp=0)
+    planning_task_1 = create_default_task(job=Job(name="Planning"), timestamp=1)
 
     # Create the TaskGraph.
     task_graph = TaskGraph(
@@ -922,30 +747,12 @@ def test_get_source_tasks():
 def test_get_sink_tasks():
     """Test that the get_sink_tasks method works correctly."""
     # Create the individual tasks.
-    perception_task_0 = create_default_task(
-        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=0,
-    )
-    perception_task_1 = create_default_task(
-        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=1,
-    )
-    prediction_task_0 = create_default_task(
-        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=0,
-    )
-    prediction_task_1 = create_default_task(
-        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=1,
-    )
-    planning_task_0 = create_default_task(
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=0,
-    )
-    planning_task_1 = create_default_task(
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=1,
-    )
+    perception_task_0 = create_default_task(job=Job(name="Perception"), timestamp=0)
+    perception_task_1 = create_default_task(job=Job(name="Perception"), timestamp=1)
+    prediction_task_0 = create_default_task(job=Job(name="Prediction"), timestamp=0)
+    prediction_task_1 = create_default_task(job=Job(name="Prediction"), timestamp=1)
+    planning_task_0 = create_default_task(job=Job(name="Planning"), timestamp=0)
+    planning_task_1 = create_default_task(job=Job(name="Planning"), timestamp=1)
 
     # Create the TaskGraph.
     task_graph = TaskGraph(
@@ -972,18 +779,9 @@ def test_get_sink_tasks():
 def test_task_graph_complete():
     """Test that the is_complete method works correctly."""
     # Create the individual tasks.
-    perception_task_0 = create_default_task(
-        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=0,
-    )
-    prediction_task_0 = create_default_task(
-        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=0,
-    )
-    planning_task_0 = create_default_task(
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)),
-        timestamp=0,
-    )
+    perception_task_0 = create_default_task(job=Job(name="Perception"), timestamp=0)
+    prediction_task_0 = create_default_task(job=Job(name="Prediction"), timestamp=0)
+    planning_task_0 = create_default_task(job=Job(name="Planning"), timestamp=0)
 
     # Create the TaskGraph.
     task_graph = TaskGraph(
@@ -1003,7 +801,10 @@ def test_task_graph_complete():
     perception_task_0.schedule(
         EventTime.zero(),
         Placement(
-            task=perception_task_0, worker_pool_id=None, placement_time=EventTime.zero()
+            task=perception_task_0,
+            worker_pool_id=None,
+            placement_time=EventTime.zero(),
+            execution_strategy=perception_task_0.available_execution_strategies[0],
         ),
     )
     perception_task_0.start(EventTime.zero())
@@ -1022,6 +823,7 @@ def test_task_graph_complete():
             task=released_tasks[0],
             worker_pool_id=None,
             placement_time=EventTime(1, EventTime.Unit.US),
+            execution_strategy=released_tasks[0].available_execution_strategies[0],
         ),
     )
     released_tasks[0].start(EventTime(1, EventTime.Unit.US))
@@ -1040,6 +842,7 @@ def test_task_graph_complete():
             task=released_tasks[0],
             worker_pool_id=None,
             placement_time=EventTime(2, EventTime.Unit.US),
+            execution_strategy=released_tasks[0].available_execution_strategies[0],
         ),
     )
     released_tasks[0].start(EventTime(2, EventTime.Unit.US))
@@ -1054,7 +857,6 @@ def test_conditional_task_graph_complete():
     perception_task_0 = create_default_task(
         job=Job(
             name="Perception",
-            runtime=EventTime(1000, EventTime.Unit.US),
             conditional=True,
         ),
         timestamp=0,
@@ -1062,19 +864,16 @@ def test_conditional_task_graph_complete():
     prediction_task_0 = create_default_task(
         job=Job(
             name="Prediction",
-            runtime=EventTime(1000, EventTime.Unit.US),
             probability=0.5,
         ),
         timestamp=0,
     )
     planning_task_0 = create_default_task(
-        job=Job(
-            name="Planning", runtime=EventTime(1000, EventTime.Unit.US), probability=0.5
-        ),
+        job=Job(name="Planning", probability=0.5),
         timestamp=0,
     )
     final_task_0 = create_default_task(
-        job=Job("Perception_End", runtime=EventTime.zero(), terminal=True),
+        job=Job("Perception_End", terminal=True),
         timestamp=0,
     )
 
@@ -1096,7 +895,10 @@ def test_conditional_task_graph_complete():
     perception_task_0.schedule(
         EventTime.zero(),
         Placement(
-            task=perception_task_0, worker_pool_id=None, placement_time=EventTime.zero()
+            task=perception_task_0,
+            worker_pool_id=None,
+            placement_time=EventTime.zero(),
+            execution_strategy=perception_task_0.available_execution_strategies[0],
         ),
     )
     perception_task_0.start(EventTime.zero())
@@ -1126,6 +928,7 @@ def test_conditional_task_graph_complete():
             task=released_tasks[0],
             worker_pool_id=None,
             placement_time=EventTime(1, EventTime.Unit.US),
+            execution_strategy=released_tasks[0].available_execution_strategies[0],
         ),
     )
     released_tasks[0].start(EventTime(1, EventTime.Unit.US))
@@ -1144,6 +947,7 @@ def test_conditional_task_graph_complete():
             task=released_tasks[0],
             worker_pool_id=None,
             placement_time=EventTime(2, EventTime.Unit.US),
+            execution_strategy=released_tasks[0].available_execution_strategies[0],
         ),
     )
     released_tasks[0].start(EventTime(2, EventTime.Unit.US))
@@ -1156,32 +960,32 @@ def test_task_find():
     # Create the individual tasks.
     perception_task_0 = create_default_task(
         name="Perception_Watermark",
-        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
+        job=Job(name="Perception"),
         timestamp=0,
     )
     perception_task_1 = create_default_task(
         name="Perception_Watermark",
-        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
+        job=Job(name="Perception"),
         timestamp=1,
     )
     prediction_task_0 = create_default_task(
         name="Prediction_Watermark",
-        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US)),
+        job=Job(name="Prediction"),
         timestamp=0,
     )
     prediction_task_1 = create_default_task(
         name="Prediction_Watermark",
-        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US)),
+        job=Job(name="Prediction"),
         timestamp=1,
     )
     planning_task_0 = create_default_task(
         name="Planning_Watermark",
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)),
+        job=Job(name="Planning"),
         timestamp=0,
     )
     planning_task_1 = create_default_task(
         name="Planning_Watermark",
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)),
+        job=Job(name="Planning"),
         timestamp=1,
     )
 
@@ -1223,49 +1027,49 @@ def test_task_time_dilation():
     # Create the individual tasks.
     localization_task_0 = create_default_task(
         name="Localization_Watermark",
-        job=Job(name="Localization", runtime=EventTime(1000, EventTime.Unit.US)),
+        job=Job(name="Localization"),
         timestamp=0,
         release_time=5,
     )
     localization_task_1 = create_default_task(
         name="Localization_Watermark",
-        job=Job(name="Localization", runtime=EventTime(1000, EventTime.Unit.US)),
+        job=Job(name="Localization"),
         timestamp=1,
         release_time=120,
     )
     perception_task_0 = create_default_task(
         name="Perception_Watermark",
-        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
+        job=Job(name="Perception"),
         timestamp=0,
         release_time=0,
     )
     perception_task_1 = create_default_task(
         name="Perception_Watermark",
-        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
+        job=Job(name="Perception"),
         timestamp=1,
         release_time=100,
     )
     prediction_task_0 = create_default_task(
         name="Prediction_Watermark",
-        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US)),
+        job=Job(name="Prediction"),
         timestamp=0,
         release_time=10,
     )
     prediction_task_1 = create_default_task(
         name="Prediction_Watermark",
-        job=Job(name="Prediction", runtime=EventTime(1000, EventTime.Unit.US)),
+        job=Job(name="Prediction"),
         timestamp=1,
         release_time=150,
     )
     planning_task_0 = create_default_task(
         name="Planning_Watermark",
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)),
+        job=Job(name="Planning"),
         timestamp=0,
         release_time=50,
     )
     planning_task_1 = create_default_task(
         name="Planning_Watermark",
-        job=Job(name="Planning", runtime=EventTime(1000, EventTime.Unit.US)),
+        job=Job(name="Planning"),
         timestamp=1,
         release_time=190,
     )
@@ -1320,17 +1124,17 @@ def test_task_graph_remaining_time_simple():
     across a simple TaskGraph."""
     perception_task = create_default_task(
         name="Perception@0",
-        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
+        job=Job(name="Perception"),
         runtime=1000,
     )
     prediction_task = create_default_task(
         name="Prediction@0",
-        job=Job(name="Prediction", runtime=EventTime(2000, EventTime.Unit.US)),
+        job=Job(name="Prediction"),
         runtime=2000,
     )
     planning_task = create_default_task(
         name="Planning@0",
-        job=Job(name="Planning", runtime=EventTime(3000, EventTime.Unit.US)),
+        job=Job(name="Planning"),
         runtime=3000,
     )
     task_graph = TaskGraph(
@@ -1350,7 +1154,10 @@ def test_task_graph_remaining_time_simple():
     perception_task.schedule(
         EventTime.zero(),
         Placement(
-            task=perception_task, worker_pool_id=None, placement_time=EventTime.zero()
+            task=perception_task,
+            worker_pool_id=None,
+            placement_time=EventTime.zero(),
+            execution_strategy=perception_task.available_execution_strategies[0],
         ),
     )
     perception_task.start(EventTime.zero())
@@ -1368,6 +1175,7 @@ def test_task_graph_remaining_time_simple():
             task=prediction_task,
             worker_pool_id=None,
             placement_time=EventTime(1, EventTime.Unit.US),
+            execution_strategy=prediction_task.available_execution_strategies[0],
         ),
     )
     prediction_task.start(EventTime(1, EventTime.Unit.MS))
@@ -1385,6 +1193,7 @@ def test_task_graph_remaining_time_simple():
             task=planning_task,
             worker_pool_id=None,
             placement_time=EventTime(3, EventTime.Unit.US),
+            execution_strategy=planning_task.available_execution_strategies[0],
         ),
     )
     planning_task.start(EventTime(3, EventTime.Unit.MS))
@@ -1401,37 +1210,37 @@ def test_task_graph_remaining_time_complex():
     a complex TaskGraph."""
     imu_task = create_default_task(
         name="IMU@0",
-        job=Job(name="IMU", runtime=EventTime(1000, EventTime.Unit.US)),
+        job=Job(name="IMU"),
         runtime=1000,
     )
     gnss_task = create_default_task(
         name="GNSS@0",
-        job=Job(name="GNSS", runtime=EventTime(1000, EventTime.Unit.US)),
+        job=Job(name="GNSS"),
         runtime=1000,
     )
     localization_task = create_default_task(
         name="Localization@0",
-        job=Job(name="Localization", runtime=EventTime(1000, EventTime.Unit.US)),
+        job=Job(name="Localization"),
         runtime=1000,
     )
     camera_task = create_default_task(
         name="Camera@0",
-        job=Job(name="Camera", runtime=EventTime(5000, EventTime.Unit.US)),
+        job=Job(name="Camera"),
         runtime=5000,
     )
     perception_task = create_default_task(
         name="Perception@0",
-        job=Job(name="Perception", runtime=EventTime(1000, EventTime.Unit.US)),
+        job=Job(name="Perception"),
         runtime=1000,
     )
     prediction_task = create_default_task(
         name="Prediction@0",
-        job=Job(name="Prediction", runtime=EventTime(2000, EventTime.Unit.US)),
+        job=Job(name="Prediction"),
         runtime=2000,
     )
     planning_task = create_default_task(
         name="Planning@0",
-        job=Job(name="Planning", runtime=EventTime(3000, EventTime.Unit.US)),
+        job=Job(name="Planning"),
         runtime=3000,
     )
     task_graph = TaskGraph(
@@ -1455,52 +1264,36 @@ def test_task_cancellation():
     """Tests that the Task cancellation process works correctly."""
     detection_start_task = create_default_task(
         name="DetectionStart@0",
-        job=Job(
-            name="DetectionStart",
-            runtime=EventTime(1000, EventTime.Unit.US),
-            conditional=True,
-        ),
+        job=Job(name="DetectionStart", conditional=True),
         timestamp=0,
         runtime=1000,
     )
     preprocess_face_task = create_default_task(
         name="PreprocessFace@0",
-        job=Job(
-            name="PreprocessFace",
-            runtime=EventTime(1000, EventTime.Unit.US),
-            probability=0.5,
-        ),
+        job=Job(name="PreprocessFace", probability=0.5),
         timestamp=0,
         runtime=1000,
     )
     face_recognition_task = create_default_task(
         name="FaceRecognition",
-        job=Job(name="FaceRecognition", runtime=EventTime(1000, EventTime.Unit.US)),
+        job=Job(name="FaceRecognition"),
         timestamp=0,
         runtime=1000,
     )
     preprocess_car_task = create_default_task(
         name="PreprocessCar@0",
-        job=Job(
-            name="PreprocessCar",
-            runtime=EventTime(1000, EventTime.Unit.US),
-            probability=0.5,
-        ),
+        job=Job(name="PreprocessCar", probability=0.5),
         timestamp=0,
         runtime=1000,
     )
     car_recognition_task = create_default_task(
         name="CarRecognition@0",
-        job=Job(name="CarRecognition", runtime=EventTime(1000, EventTime.Unit.US)),
+        job=Job(name="CarRecognition"),
         timestamp=0,
     )
     detection_end_task = create_default_task(
         name="DetectionEnd@0",
-        job=Job(
-            name="DetectionEnd",
-            runtime=EventTime(1000, EventTime.Unit.US),
-            terminal=True,
-        ),
+        job=Job(name="DetectionEnd", terminal=True),
         timestamp=0,
         runtime=1000,
     )
@@ -1540,6 +1333,7 @@ def test_task_cancellation():
             task=detection_start_task,
             worker_pool_id=None,
             placement_time=EventTime.zero(),
+            execution_strategy=detection_start_task.available_execution_strategies[0],
         ),
     )
     detection_start_task.start(EventTime.zero())
@@ -1609,52 +1403,36 @@ def test_branch_prediction_policy():
     """Tests that the BranchPredictionPolicy works correctly."""
     detection_start_task = create_default_task(
         name="DetectionStart@0",
-        job=Job(
-            name="DetectionStart",
-            runtime=EventTime(1000, EventTime.Unit.US),
-            conditional=True,
-        ),
+        job=Job(name="DetectionStart", conditional=True),
         timestamp=0,
         runtime=1000,
     )
     preprocess_face_task = create_default_task(
         name="PreprocessFace@0",
-        job=Job(
-            name="PreprocessFace",
-            runtime=EventTime(4000, EventTime.Unit.US),
-            probability=0.95,
-        ),
+        job=Job(name="PreprocessFace", probability=0.95),
         timestamp=0,
         runtime=4000,
     )
     face_recognition_task = create_default_task(
         name="FaceRecognition",
-        job=Job(name="FaceRecognition", runtime=EventTime(4000, EventTime.Unit.US)),
+        job=Job(name="FaceRecognition"),
         timestamp=0,
         runtime=4000,
     )
     preprocess_car_task = create_default_task(
         name="PreprocessCar@0",
-        job=Job(
-            name="PreprocessCar",
-            runtime=EventTime(1000, EventTime.Unit.US),
-            probability=0.05,
-        ),
+        job=Job(name="PreprocessCar", probability=0.05),
         timestamp=0,
         runtime=1000,
     )
     car_recognition_task = create_default_task(
         name="CarRecognition@0",
-        job=Job(name="CarRecognition", runtime=EventTime(1000, EventTime.Unit.US)),
+        job=Job(name="CarRecognition"),
         timestamp=0,
     )
     detection_end_task = create_default_task(
         name="DetectionEnd@0",
-        job=Job(
-            name="DetectionEnd",
-            runtime=EventTime(1000, EventTime.Unit.US),
-            terminal=True,
-        ),
+        job=Job(name="DetectionEnd", terminal=True),
         timestamp=0,
         runtime=1000,
     )
