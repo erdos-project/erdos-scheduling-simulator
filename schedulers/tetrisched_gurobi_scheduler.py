@@ -257,16 +257,22 @@ class TaskOptimizerVariables:
             self._start_time_indicators[start_time] = start_time_indicator
             # Begin STRL nCk(workers, 1, current_time, remaining_time, 1)
             # expression to consider task placements on workers.
-            # TODO: prune workers that lack the requested resources.
+
             partition_vars = []
             for worker_idx, worker in workers.items():
-                partition_var = optimizer.addVar(
-                    vtype=GRB.BINARY,
-                    name=(
-                        f"{self.task.unique_name}_placed_on_{worker.name}"
-                        "_start_{start_time_int}"
-                    ),
+                compatible_strategies = worker.get_compatible_strategies(
+                    self.task.available_execution_strategies
                 )
+                if len(compatible_strategies) == 0:
+                    partition_var = 0
+                else:
+                    partition_var = optimizer.addVar(
+                        vtype=GRB.BINARY,
+                        name=(
+                            f"{self.task.unique_name}_placed_on_{worker.name}"
+                            "_start_{start_time_int}"
+                        ),
+                    )
                 self._partition_vars[worker_idx][start_time] = partition_var
                 partition_vars.append(partition_var)
             # Worker demand constraint.
@@ -523,20 +529,16 @@ class TetriSchedGurobiScheduler(BaseScheduler):
                     task = task_variables.task
 
                     # Find the Worker and the WorkerPool where the Task was placed.
-                    placement_worker_id = None
-                    placement_worker_pool_id = None
+                    placement_worker: Optional[Worker] = None
                     for worker_id, worker in workers.items():
                         if isinstance(
                             task_variables.placed_on_worker(worker_id), gp.Var
                         ):
                             if task_variables.placed_on_worker(worker_id).X == 1:
-                                placement_worker_id = worker.id
-                                placement_worker_pool_id = worker_to_worker_pool[
-                                    worker.id
-                                ]
+                                placement_worker = worker
 
                     # If the task was placed, find the start time.
-                    if placement_worker_pool_id is not None:
+                    if placement_worker:
                         start_time = None
                         for (
                             event_time,
@@ -553,15 +555,23 @@ class TetriSchedGurobiScheduler(BaseScheduler):
                             task.unique_name,
                             task.deadline,
                             task.remaining_time,
-                            worker_pools.get_worker_pool(placement_worker_pool_id),
+                            worker_pools.get_worker_pool(
+                                worker_to_worker_pool[placement_worker.id]
+                            ),
                             start_time,
                         )
+                        execution_strategy = placement_worker.get_compatible_strategies(
+                            task_variables.task.available_execution_strategies
+                        ).get_fastest_strategy()
                         placements.append(
                             Placement(
                                 task=task_variables.task,
                                 placement_time=start_time,
-                                worker_pool_id=placement_worker_pool_id,
-                                worker_id=placement_worker_id,
+                                worker_pool_id=worker_to_worker_pool[
+                                    placement_worker.id
+                                ],
+                                worker_id=placement_worker.id,
+                                execution_strategy=execution_strategy,
                             )
                         )
                     else:
@@ -577,6 +587,7 @@ class TetriSchedGurobiScheduler(BaseScheduler):
                                 placement_time=None,
                                 worker_pool_id=None,
                                 worker_id=None,
+                                execution_strategy=None,
                             )
                         )
             else:
@@ -590,6 +601,7 @@ class TetriSchedGurobiScheduler(BaseScheduler):
                             placement_time=None,
                             worker_pool_id=None,
                             worker_id=None,
+                            execution_strategy=None,
                         )
                     )
                 self._logger.warning(f"[{sim_time.time}] Failed to place any task.")
@@ -681,7 +693,17 @@ class TetriSchedGurobiScheduler(BaseScheduler):
                 # Compute total demand placed on a worker.
                 total_demand = defaultdict(lambda: 0)
                 for task_variables in tasks_to_variables.values():
-                    resource_requirements = task_variables.task.resource_requirements
+                    compatible_strategies = worker.get_compatible_strategies(
+                        task_variables.task.available_execution_strategies
+                    )
+                    if len(compatible_strategies) == 0:
+                        # There are no compatible strategies for this (Task, Worker)
+                        # combination. Hence, this Task cannot affect the demand of a
+                        # resource on this Worker. Skipping.
+                        continue
+                    resource_requirements = (
+                        compatible_strategies.get_fastest_strategy().resources
+                    )
                     task_demand = resource_requirements.get_unique_resource_types()
                     for resource, quantity in task_demand.items():
                         partition_vars = task_variables.partition_variables_at(

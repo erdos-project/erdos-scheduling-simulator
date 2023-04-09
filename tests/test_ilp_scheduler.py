@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from schedulers import ILPScheduler, TetriSchedCPLEXScheduler
+from schedulers import ILPScheduler, TetriSchedCPLEXScheduler, TetriSchedGurobiScheduler
 from tests.utils import create_default_task
 from utils import EventTime
 from workers import Worker, WorkerPool, WorkerPools
@@ -18,6 +18,11 @@ from workload import Job, Resource, Resources, TaskGraph, Workload
             lookahead=EventTime.zero(),
             enforce_deadlines=True,
         ),
+        TetriSchedGurobiScheduler(
+            runtime=EventTime.zero(),
+            enforce_deadlines=True,
+            time_discretization=EventTime(10, EventTime.Unit.US),
+        ),
         pytest.param(
             TetriSchedCPLEXScheduler(
                 runtime=EventTime.zero(),
@@ -30,7 +35,7 @@ from workload import Job, Resource, Resources, TaskGraph, Workload
             ),
         ),
     ],
-    ids=["ILP", "TetriSchedCPLEX"],
+    ids=["ILP", "TetriSchedGurobi", "TetriSchedCPLEX"],
 )
 def test_ilp_scheduling_success_basic(scheduler):
     """Test that a single task can be successfully scheduled with enough resources."""
@@ -78,6 +83,11 @@ def test_ilp_scheduling_success_basic(scheduler):
             lookahead=EventTime.zero(),
             enforce_deadlines=True,
         ),
+        TetriSchedGurobiScheduler(
+            runtime=EventTime.zero(),
+            enforce_deadlines=True,
+            time_discretization=EventTime(10, EventTime.Unit.US),
+        ),
         pytest.param(
             TetriSchedCPLEXScheduler(
                 runtime=EventTime.zero(),
@@ -90,7 +100,7 @@ def test_ilp_scheduling_success_basic(scheduler):
             ),
         ),
     ],
-    ids=["ILP", "TetriSchedCPLEX"],
+    ids=["ILP", "TetriSchedGurobi", "TetriSchedCPLEX"],
 )
 def test_ilp_scheduling_multiple_tasks_different_resources(scheduler):
     """Test that the ILPScheduler schedules multiple tasks requiring different
@@ -166,6 +176,11 @@ def test_ilp_scheduling_multiple_tasks_different_resources(scheduler):
             lookahead=EventTime.zero(),
             enforce_deadlines=True,
         ),
+        TetriSchedGurobiScheduler(
+            runtime=EventTime.zero(),
+            enforce_deadlines=True,
+            time_discretization=EventTime(10, EventTime.Unit.US),
+        ),
         pytest.param(
             TetriSchedCPLEXScheduler(
                 runtime=EventTime.zero(),
@@ -178,7 +193,7 @@ def test_ilp_scheduling_multiple_tasks_different_resources(scheduler):
             ),
         ),
     ],
-    ids=["ILP", "TetriSchedCPLEX"],
+    ids=["ILP", "TetriSchedGurobi", "TetriSchedCPLEX"],
 )
 def test_ilp_scheduler_limited_resources(scheduler):
     """Test that the ILPScheduler recognizes that the Workload is not schedulable."""
@@ -222,6 +237,11 @@ def test_ilp_scheduler_limited_resources(scheduler):
             enforce_deadlines=True,
             goal="max_slack",
         ),
+        TetriSchedGurobiScheduler(
+            runtime=EventTime.zero(),
+            enforce_deadlines=True,
+            time_discretization=EventTime(10, EventTime.Unit.US),
+        ),
         pytest.param(
             TetriSchedCPLEXScheduler(
                 runtime=EventTime.zero(),
@@ -234,7 +254,7 @@ def test_ilp_scheduler_limited_resources(scheduler):
             ),
         ),
     ],
-    ids=["ILP", "TetriSchedCPLEX"],
+    ids=["ILP", "TetriSchedGurobi", "TetriSchedCPLEX"],
 )
 def test_ilp_scheduling_deadline_enforcement(scheduler):
     """Tests that ILP tries to schedule the task under soft deadline enforcement."""
@@ -268,6 +288,9 @@ def test_ilp_scheduling_deadline_enforcement(scheduler):
 
     # Create the softly enforce deadlines scheduler.
     scheduler._enforce_deadlines = False
+    assert (
+        not scheduler.enforce_deadlines
+    ), "The Scheduler is still enforcing deadlines."
     placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
 
     assert len(placements) == 1, "Incorrect length of placements retrieved."
@@ -290,6 +313,11 @@ def test_ilp_scheduling_deadline_enforcement(scheduler):
             lookahead=EventTime.zero(),
             enforce_deadlines=True,
         ),
+        TetriSchedGurobiScheduler(
+            runtime=EventTime.zero(),
+            enforce_deadlines=True,
+            time_discretization=EventTime(10, EventTime.Unit.US),
+        ),
         pytest.param(
             TetriSchedCPLEXScheduler(
                 runtime=EventTime.zero(),
@@ -302,7 +330,7 @@ def test_ilp_scheduling_deadline_enforcement(scheduler):
             ),
         ),
     ],
-    ids=["ILP", "TetriSchedCPLEX"],
+    ids=["ILP", "TetriSchedGurobi", "TetriSchedCPLEX"],
 )
 def test_ilp_scheduling_dependency(scheduler):
     """Ensure that the dependencies are correctly scheduled."""
@@ -433,6 +461,11 @@ def test_ilp_skip_taskgraphs_under_enforce_deadlines(scheduler):
             lookahead=EventTime.zero(),
             enforce_deadlines=True,
         ),
+        TetriSchedGurobiScheduler(
+            runtime=EventTime.zero(),
+            enforce_deadlines=True,
+            time_discretization=EventTime(10, EventTime.Unit.US),
+        ),
         pytest.param(
             TetriSchedCPLEXScheduler(
                 runtime=EventTime.zero(),
@@ -445,7 +478,7 @@ def test_ilp_skip_taskgraphs_under_enforce_deadlines(scheduler):
             ),
         ),
     ],
-    ids=["ILP", "TetriSchedCPLEX"],
+    ids=["ILP", "TetriSchedGurobi", "TetriSchedCPLEX"],
 )
 def test_ilp_delays_scheduling_under_constrained_resources(scheduler):
     """Tests that if the resources are constrained, ILP delays the execution of some
@@ -683,6 +716,11 @@ def test_ilp_respects_dependencies_under_constrained_resources():
             lookahead=EventTime.zero(),
             enforce_deadlines=True,
         ),
+        TetriSchedGurobiScheduler(
+            runtime=EventTime.zero(),
+            enforce_deadlines=True,
+            time_discretization=EventTime(10, EventTime.Unit.US),
+        ),
         pytest.param(
             TetriSchedCPLEXScheduler(
                 runtime=EventTime.zero(),
@@ -695,7 +733,7 @@ def test_ilp_respects_dependencies_under_constrained_resources():
             ),
         ),
     ],
-    ids=["ILP", "TetriSchedCPLEX"],
+    ids=["ILP", "TetriSchedGurobi", "TetriSchedCPLEX"],
 )
 def test_ilp_respects_worker_resource_constraints(scheduler):
     """Tests that the scheduler respects the maximum resources in the worker."""
@@ -749,6 +787,11 @@ def test_ilp_respects_worker_resource_constraints(scheduler):
             lookahead=EventTime.zero(),
             enforce_deadlines=True,
         ),
+        TetriSchedGurobiScheduler(
+            runtime=EventTime.zero(),
+            enforce_deadlines=True,
+            time_discretization=EventTime(10, EventTime.Unit.US),
+        ),
         pytest.param(
             TetriSchedCPLEXScheduler(
                 runtime=EventTime.zero(),
@@ -761,7 +804,7 @@ def test_ilp_respects_worker_resource_constraints(scheduler):
             ),
         ),
     ],
-    ids=["ILP", "TetriSchedCPLEX"],
+    ids=["ILP", "TetriSchedGurobi", "TetriSchedCPLEX"],
 )
 def test_ilp_does_not_schedule_across_workers(scheduler):
     """Tests that the scheduler restricts the allocation to individual workers."""
