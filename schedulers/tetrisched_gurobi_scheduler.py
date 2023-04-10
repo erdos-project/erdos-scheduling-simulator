@@ -1,10 +1,9 @@
-import itertools
 import multiprocessing
 import sys
 import time
 from collections import defaultdict
-from copy import copy, deepcopy
-from typing import Mapping, Optional, Sequence, Tuple, Union
+from copy import copy
+from typing import Mapping, Optional, Sequence, Union
 
 import absl  # noqa: F401
 import gurobipy as gp

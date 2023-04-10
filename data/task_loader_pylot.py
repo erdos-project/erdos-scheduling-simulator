@@ -14,10 +14,9 @@ from workload import (
     ExecutionStrategy,
     Job,
     JobGraph,
-    Resource,
-    Resources,
     Task,
     TaskGraph,
+    WorkProfile,
 )
 
 
@@ -153,17 +152,20 @@ class TaskLoaderPylot(TaskLoader):
                 raise RuntimeError(f"{node.name} found in JobGraph, but not in JSON.")
             jobs[node.name] = Job(
                 name=node.name,
-                execution_strategies=ExecutionStrategies(
-                    strategies=[
-                        ExecutionStrategy(
-                            resources=node.execution_strategies[0].resources,
-                            batch_size=node.execution_strategies[0].batch_size,
-                            runtime=EventTime(
-                                int(np.mean(job_to_duration_mapping[node.name])),
-                                EventTime.Unit.US,
-                            ),
-                        )
-                    ]
+                profile=WorkProfile(
+                    name=f"{node.name}_Work_Profile",
+                    execution_strategies=ExecutionStrategies(
+                        strategies=[
+                            ExecutionStrategy(
+                                resources=node.execution_strategies[0].resources,
+                                batch_size=node.execution_strategies[0].batch_size,
+                                runtime=EventTime(
+                                    int(np.mean(job_to_duration_mapping[node.name])),
+                                    EventTime.Unit.US,
+                                ),
+                            )
+                        ]
+                    ),
                 ),
                 pipelined=False,
                 conditional=node.conditional,
@@ -248,15 +250,18 @@ class TaskLoaderPylot(TaskLoader):
                     name=entry["name"],
                     task_graph=task_graph_name,
                     job=jobs[entry["pid"]],
-                    available_execution_strategies=ExecutionStrategies(
-                        [
-                            ExecutionStrategy(
-                                resources=strategy.resources,
-                                batch_size=strategy.batch_size,
-                                runtime=EventTime(entry["dur"], EventTime.Unit.US),
-                            )
-                            for strategy in jobs[entry["pid"]].execution_strategies
-                        ]
+                    profile=WorkProfile(
+                        name=f"{entry['name']}_Work_Profile",
+                        execution_strategies=ExecutionStrategies(
+                            [
+                                ExecutionStrategy(
+                                    resources=strategy.resources,
+                                    batch_size=strategy.batch_size,
+                                    runtime=EventTime(entry["dur"], EventTime.Unit.US),
+                                )
+                                for strategy in jobs[entry["pid"]].execution_strategies
+                            ]
+                        ),
                     ),
                     deadline=(deadline - offset),
                     timestamp=entry["args"]["timestamp"],

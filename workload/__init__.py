@@ -15,6 +15,7 @@ class BranchPredictionPolicy(Enum):
 
 from .jobs import Job, JobGraph
 from .placement import Placement, Placements
+from .profile import WorkProfile
 from .resource import Resource
 from .resources import Resources
 from .strategy import ExecutionStrategies, ExecutionStrategy

@@ -8,39 +8,49 @@ from workload import (
     JobGraph,
     Resource,
     Resources,
+    WorkProfile,
 )
 
 
 def test_create_jobs():
     """Tests the __create_jobs method of the TaskLoaderPylot."""
     perception_job = Job(
-        "perception_operator",
-        ExecutionStrategies(
-            [
-                ExecutionStrategy(
-                    resources=Resources(), batch_size=1, runtime=EventTime.zero()
-                )
-            ]
+        name="perception_operator",
+        profile=WorkProfile(
+            name="perception_operator_work_profile",
+            execution_strategies=ExecutionStrategies(
+                [
+                    ExecutionStrategy(
+                        resources=Resources(), batch_size=1, runtime=EventTime.zero()
+                    )
+                ]
+            ),
         ),
     )
     prediction_job = Job(
-        "prediction_operator",
-        ExecutionStrategies(
-            [
-                ExecutionStrategy(
-                    resources=Resources(), batch_size=1, runtime=EventTime.zero()
-                )
-            ]
+        name="prediction_operator",
+        profile=WorkProfile(
+            name="prediction_operator_work_profile",
+            execution_strategies=ExecutionStrategies(
+                [
+                    ExecutionStrategy(
+                        resources=Resources(), batch_size=1, runtime=EventTime.zero()
+                    )
+                ]
+            ),
         ),
     )
     planning_job = Job(
-        "planning_operator",
-        ExecutionStrategies(
-            [
-                ExecutionStrategy(
-                    resources=Resources(), batch_size=1, runtime=EventTime.zero()
-                )
-            ]
+        name="planning_operator",
+        profile=WorkProfile(
+            name="planning_operator_work_profile",
+            execution_strategies=ExecutionStrategies(
+                [
+                    ExecutionStrategy(
+                        resources=Resources(), batch_size=1, runtime=EventTime.zero()
+                    )
+                ]
+            ),
         ),
     )
     jobs = TaskLoaderPylot._TaskLoaderPylot__create_jobs(
@@ -117,16 +127,19 @@ def test_create_tasks():
     jobs = {
         "perception_operator": Job(
             name="Perception",
-            execution_strategies=ExecutionStrategies(
-                [
-                    ExecutionStrategy(
-                        resources=Resources(
-                            resource_vector={Resource(name="CPU", _id="any"): 1}
-                        ),
-                        batch_size=1,
-                        runtime=EventTime(1000, EventTime.Unit.US),
-                    )
-                ]
+            profile=WorkProfile(
+                name="Perception_Work_Profile",
+                execution_strategies=ExecutionStrategies(
+                    [
+                        ExecutionStrategy(
+                            resources=Resources(
+                                resource_vector={Resource(name="CPU", _id="any"): 1}
+                            ),
+                            batch_size=1,
+                            runtime=EventTime(1000, EventTime.Unit.US),
+                        )
+                    ]
+                ),
             ),
         ),
     }

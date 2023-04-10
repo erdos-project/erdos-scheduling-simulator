@@ -12,6 +12,7 @@ from utils import EventTime, fuzz_time, setup_logging
 from . import BranchPredictionPolicy
 from .graph import Graph
 from .placement import Placement
+from .profile import WorkProfile
 from .strategy import ExecutionStrategies
 
 
@@ -50,12 +51,12 @@ class Task(object):
             the ERDOS operator.
         task_graph_name (`str`): The name of the TaskGraph that this Task belongs to.
         job (`Job`): The job that created this particular task.
-        resource_requirements (`Resources`): The set of resources required by
-            this task.
+        deadline (`EventTime`): The absolute deadline by which the task should complete.
+        profile (`WorkProfile`): A profile of the computation that the Task is supposed
+            to execute (including the execution strategies for different resources).
         release_time (`EventTime`): The time at which the task was released by the
             job (in us).
         runtime (`EventTime`): The expected runtime (in us) of this task.
-        deadline (`EventTime`): The absolute deadline by which the task should complete.
         state (`TaskState`): Defines the state of the task.
         timestamp (`int`): The timestamp for the Task (single dimension).
         start_time (`EventTime`): The time (in us) at which the task was started
@@ -84,7 +85,7 @@ class Task(object):
         task_graph: str,
         job: "Job",  # noqa: F821
         deadline: EventTime,
-        available_execution_strategies: ExecutionStrategies = None,
+        profile: Optional[WorkProfile] = None,
         timestamp: int = None,
         release_time: Optional[EventTime] = EventTime(-1, EventTime.Unit.US),
         start_time: Optional[EventTime] = EventTime(-1, EventTime.Unit.US),
@@ -94,8 +95,8 @@ class Task(object):
     ):
         if (
             completion_time == EventTime(-1, EventTime.Unit.US)
-            and available_execution_strategies
-            and len(available_execution_strategies) != 1
+            and profile
+            and len(profile.execution_strategies) != 1
         ):
             raise RuntimeError(
                 "Execution of TaskGraphs with multiple strategies and a "
@@ -113,11 +114,7 @@ class Task(object):
         self._probability = (
             self._creating_job.probability if probability is None else probability
         )
-        self._available_execution_strategies = (
-            available_execution_strategies
-            if available_execution_strategies
-            else job.execution_strategies
-        )
+        self._profile = profile if profile else job.profile
         self._deadline = deadline
         self._timestamp = timestamp
         self._id = uuid.UUID(int=random.getrandbits(128), version=4)
@@ -664,7 +661,7 @@ class Task(object):
 
     @property
     def available_execution_strategies(self) -> Optional[ExecutionStrategies]:
-        return self._available_execution_strategies
+        return self._profile.execution_strategies
 
     @property
     def preemption_time(self):
@@ -693,7 +690,7 @@ class Task(object):
         ]:
             return self._remaining_time
         else:
-            return self._available_execution_strategies.get_slowest_strategy().runtime
+            return self.available_execution_strategies.get_slowest_strategy().runtime
 
     @property
     def completion_time(self):

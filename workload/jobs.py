@@ -10,6 +10,7 @@ import absl
 from utils import EventTime, fuzz_time, setup_logging
 
 from .graph import Graph
+from .profile import WorkProfile
 from .strategy import ExecutionStrategies
 from .tasks import Task, TaskGraph
 
@@ -58,8 +59,8 @@ class Job(object):
 
     Args:
         name (`str`): The name of the ERDOS operator that corresponds to this Job.
-        execution_strategies (`ExecutionStrategies`): A selection of execution
-            strategies that the Job may choose from when executing on a `Worker`.
+        profile (`WorkProfile`): A profile of the computation that the Job is supposed
+            to execute (including the execution strategies for different resources).
         pipelined (`bool`): True if job's tasks from different timestamps can run
             in parallel.
         conditional (`bool`): True if only some of the job's childrens are invoked
@@ -73,7 +74,7 @@ class Job(object):
     def __init__(
         self,
         name: str,
-        execution_strategies: Optional[ExecutionStrategies] = None,
+        profile: Optional[WorkProfile] = None,
         pipelined: bool = False,
         conditional: bool = False,
         probability: float = 1.0,
@@ -81,8 +82,13 @@ class Job(object):
     ) -> None:
         self._name = name
         self._id = uuid.UUID(int=random.getrandbits(128), version=4)
-        self._execution_strategies = (
-            execution_strategies if execution_strategies else ExecutionStrategies()
+        self._profile = (
+            profile
+            if profile
+            else WorkProfile(
+                name=f"{self._name}_{self._id}_work_profile",
+                execution_strategies=ExecutionStrategies(),
+            )
         )
         self._pipelined = pipelined
         self._conditional = conditional
@@ -98,8 +104,12 @@ class Job(object):
         return str(self._id)
 
     @property
+    def profile(self) -> WorkProfile:
+        return self._profile
+
+    @property
     def execution_strategies(self) -> ExecutionStrategies:
-        return self._execution_strategies
+        return self._profile.execution_strategies
 
     @property
     def pipelined(self) -> bool:
@@ -495,7 +505,6 @@ class JobGraph(Graph[Job]):
                 task_graph=task_graph_name,
                 job=job,
                 deadline=task_deadline,
-                available_execution_strategies=job.execution_strategies,
                 timestamp=timestamp,
                 release_time=task_release_time,
                 _logger=task_logger,
