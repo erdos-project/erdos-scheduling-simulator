@@ -19,7 +19,7 @@ class WorkProfile(object):
     def __init__(
         self,
         name: str,
-        execution_strategies: ExecutionStrategies,
+        execution_strategies: ExecutionStrategies = ExecutionStrategies(),
         loading_strategies: ExecutionStrategies = ExecutionStrategies(),
     ) -> None:
         self._name = name
@@ -29,6 +29,9 @@ class WorkProfile(object):
 
     def __eq__(self, __value: object) -> bool:
         return self._id == __value._id
+
+    def __hash__(self) -> int:
+        return hash(self._id)
 
     @property
     def name(self) -> str:
