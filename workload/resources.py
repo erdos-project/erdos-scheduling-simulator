@@ -52,7 +52,7 @@ class Resources(object):
                 "The keys for the resource vector " "should be of type 'Resource'"
             )
         self._current_allocations: Mapping[
-            Union["Task", "WorkProfile"], Sequence[Tuple[Resource, int]]
+            Union["Task", "WorkProfile"], Sequence[Tuple[Resource, int]]  # noqa: F821
         ] = defaultdict(list)
         self.__virtual = __virtual
 
@@ -74,7 +74,7 @@ class Resources(object):
     def allocate(
         self,
         resource: Resource,
-        computation: Union["Task", "WorkProfile"],
+        computation: Union["Task", "WorkProfile"],  # noqa: F821
         quantity: int = 1,  # noqa: F821
     ):
         """Allocates the given quantity of the specified resource for a
