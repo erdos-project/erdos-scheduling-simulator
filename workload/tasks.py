@@ -660,6 +660,10 @@ class Task(object):
         return self._start_time
 
     @property
+    def profile(self) -> WorkProfile:
+        return self._profile
+
+    @property
     def available_execution_strategies(self) -> Optional[ExecutionStrategies]:
         return self._profile.execution_strategies
 

@@ -2,7 +2,7 @@ import logging
 import random
 import uuid
 from copy import copy, deepcopy
-from typing import List, Optional, Sequence, Tuple, Type
+from typing import List, Mapping, Optional, Sequence, Tuple, Type
 
 from utils import EventTime, setup_logging
 from workload import (
@@ -14,6 +14,7 @@ from workload import (
     TaskGraph,
     TaskState,
     Workload,
+    WorkProfile,
 )
 
 
@@ -43,9 +44,41 @@ class Worker(object):
         self._name = name
         self._id = uuid.UUID(int=random.getrandbits(128), version=4)
         self._resources = resources
-        self._placed_tasks = {}  # Mapping[Task, TaskState]
+        self._placed_tasks: Mapping[
+            Task, Tuple[ExecutionStrategy, ExecutionStrategy]
+        ] = {}
+        self._available_profiles: Mapping[WorkProfile, ExecutionStrategy] = {}
+        self._pending_profiles: Mapping[WorkProfile, ExecutionStrategy] = {}
 
-    def place_task(self, task: Task, execution_strategy: ExecutionStrategy):
+    def load_profile(
+        self, profile: WorkProfile, loading_strategy: ExecutionStrategy
+    ) -> None:
+        """Loads a given `WorkProfile` into the `Worker`. This method is used for
+        loading models into the `Worker`, which a `Task` can then utilize to execute
+        using an execution strategy.
+
+        The caller must check that the `Worker` can accomodate this strategy by
+        invoking `can_accomodate_strategy`. If there are not enough resources available,
+        the method raises a `ValueError`.
+
+        Args:
+            profile (`WorkProfile`): The profile that represents the computation that
+                is to be loaded into this `Worker`.
+            loading_strategy (`ExecutionStrategy`): The strategy to be used to load the
+                computation into this `Worker`.
+
+        Raises:
+            A `ValueError` if not enough resources are available to accomodate the
+            loading strategy.
+        """
+        self._resources.allocate_multiple(loading_strategy.resources, profile)
+        self._pending_profiles[profile] = copy(loading_strategy)
+        self._logger.debug(
+            f"Added the profile {profile} with the loading strategy "
+            f"{loading_strategy} to the set of pending profiles."
+        )
+
+    def place_task(self, task: Task, execution_strategy: ExecutionStrategy) -> None:
         """Places the task on this `Worker` using the given `execution_strategy`.
 
         The caller must check that the `Worker` can accomodate this strategy by
@@ -62,6 +95,36 @@ class Worker(object):
             f"Placed {task} on {self} with the execution strategy {execution_strategy}."
         )
 
+    def evict_profile(self, profile: WorkProfile) -> None:
+        """Evicts the given `profile` and frees up the resources corresponding to the
+        loading strategy used for the profile.
+
+        Args:
+            profile (`WorkProfile`): The profile that needs to be evicted from the
+                set of available profiles at this `Worker`.
+
+        Raises:
+            A `ValueError` if the profile was not placed on this `Worker`.
+        """
+        if (
+            profile not in self._available_profiles
+            or profile not in self._pending_profiles
+        ):
+            raise ValueError(
+                f"The profile {profile} was not available at Worker {self}."
+            )
+
+        # Deallocates the resources corresponding to the loading strategy and remove
+        # the profile from the set of available profiles.
+        if profile in self._available_profiles:
+            loading_strategy = self._available_profiles[profile]
+            self._resources.deallocate(profile, loading_strategy)
+            del self._available_profiles[profile]
+        else:
+            loading_strategy = self._pending_profiles[profile]
+            self._resources.deallocate(profile, loading_strategy)
+            del self._pending_profiles[profile]
+
     def remove_task(self, task: Task):
         """Removes the task from this `Worker`.
 
@@ -71,24 +134,25 @@ class Worker(object):
             `ValueError` if the task was not placed on this worker.
         """
         if task not in self._placed_tasks:
-            raise ValueError(f"The task {task} was not placed on {self.id} Worker.")
+            raise ValueError(f"The task {task} was not placed on Worker {self}.")
+
         # Deallocate the resources and remove the placed task.
         self._resources.deallocate(task)
         del self._placed_tasks[task]
 
-    def can_accomodate_strategy(self, execution_strategy: ExecutionStrategy) -> bool:
+    def can_accomodate_strategy(self, strategy: ExecutionStrategy) -> bool:
         """Checks if this `Worker` can accomodate the given `ExecutionStrategy` based
         on the available resources.
 
         Args:
-            execution_strategy (`ExecutionStrategy`): The strategy that the `Worker`
-                has to accomodate.
+            strategy (`ExecutionStrategy`): The strategy that the `Worker` has to
+                accomodate.
 
         Returns:
             `True` if the `Worker` has enough resources to execute this strategy, and
             `False` otherwise.
         """
-        return self._resources > execution_strategy.resources
+        return self._resources > strategy.resources
 
     def get_compatible_strategies(
         self, execution_strategies: ExecutionStrategies

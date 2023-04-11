@@ -116,6 +116,9 @@ class EventTime:
     def __hash__(self) -> int:
         return self.to(EventTime.Unit.US).time
 
+    def __copy__(self) -> "EventTime":
+        return EventTime(time=self.time, unit=self.unit)
+
     @property
     def time(self) -> int:
         return self._time

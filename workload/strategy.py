@@ -1,3 +1,4 @@
+from copy import copy
 from typing import Optional, Sequence
 
 from utils import EventTime
@@ -40,6 +41,20 @@ class ExecutionStrategy(object):
     @property
     def batch_size(self) -> int:
         return self._batch_size
+
+    def __add__(self, other: "ExecutionStrategy") -> "ExecutionStrategy":
+        return ExecutionStrategy(
+            resources=self.resources + other.resources,
+            batch_size=min(self.batch_size, other.batch_size),
+            runtime=self.runtime + other.runtime,
+        )
+
+    def __copy__(self) -> "ExecutionStrategy":
+        return ExecutionStrategy(
+            resources=copy(self.resources),
+            batch_size=self.batch_size,
+            runtime=copy(self.runtime),
+        )
 
     def __str__(self) -> str:
         return "ExecutionStrategy(resources={}, batch_size={}, runtime={})".format(
