@@ -371,6 +371,10 @@ def test_simulator_handle_event():
             execution_strategy=perception_task.available_execution_strategies[0],
         ),
     )
+    worker_pool.place_task(
+        task=perception_task,
+        execution_strategy=perception_task.available_execution_strategies[0],
+    )
     perception_task.start(EventTime(3, EventTime.Unit.US))
     perception_task.update_remaining_time(EventTime.zero())
 

@@ -751,8 +751,14 @@ class Simulator(object):
                 self._event_queue.reheapify()
 
     def __handle_task_finished(self, event: Event):
-        # Log the TASK_FINISHED event into the CSV.
+        # Remove the Task from the WorkerPool and invoke it's finish method.
+        task_placed_at_worker_pool = self._worker_pools.get_worker_pool(
+            event.task.worker_pool_id
+        )
+        task_placed_at_worker_pool.remove_task(current_time=event.time, task=event.task)
         event.task.finish()
+
+        # Log the TASK_FINISHED event into the CSV.
         self._finished_tasks += 1
         self._csv_logger.debug(
             f"{event.time.time},TASK_FINISHED,{event.task.name},{event.task.timestamp},"
@@ -861,7 +867,7 @@ class Simulator(object):
             f"{event.time.time},TASK_PREEMPT,{task.name},{task.timestamp},{task.id}"
         )
         worker_pool = self._worker_pools.get_worker_pool(task.worker_pool_id)
-        worker_pool.remove_task(task)
+        worker_pool.remove_task(current_time=event.time, task=task)
         task.preempt(event.time)
 
     def __handle_task_placement(self, event: Event, workload: Workload):
@@ -1086,26 +1092,32 @@ class Simulator(object):
         if step_size < EventTime.zero():
             raise ValueError(f"Simulator cannot step backwards {step_size}")
 
+        # Step the simulator for the required steps and construct TASK_FINISHED events
+        # for any tasks that were able to complete their execution.
         self._logger.info(
             "[%s] Stepping for %s timesteps.",
             self._simulator_time.time,
             step_size,
         )
-        completed_tasks = []
+        task_finished_events = []
         for worker_pool in self._worker_pools.worker_pools:
-            completed_tasks.extend(worker_pool.step(self._simulator_time, step_size))
+            for task in worker_pool.step(self._simulator_time, step_size):
+                task_finished_event = Event(
+                    event_type=EventType.TASK_FINISHED,
+                    time=self._simulator_time,
+                    task=task,
+                )
+                task_finished_events.append(task_finished_event)
 
-        # Add TASK_FINISHED events for all the completed tasks.
+        # Update the simulator time, and add the TASK_FINISHED events to the queue for
+        # further processing.
         self._simulator_time += step_size
         self._logger.debug(
             "[%s] The stepping yielded the following completed tasks: %s.",
             self._simulator_time.time,
-            [task.unique_name for task in completed_tasks],
+            [event.task.unique_name for event in task_finished_events],
         )
-        for task in completed_tasks:
-            task_finished_event = Event(
-                event_type=EventType.TASK_FINISHED, time=self._simulator_time, task=task
-            )
+        for task_finished_event in task_finished_events:
             self._event_queue.add_event(task_finished_event)
             self._logger.info(
                 "[%s] Added %s to the event queue.",
