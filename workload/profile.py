@@ -38,7 +38,7 @@ class WorkProfile(object):
         return self._name
 
     @property
-    def loading_strategy(self) -> ExecutionStrategies:
+    def loading_strategies(self) -> ExecutionStrategies:
         return self._loading_strategies
 
     @property

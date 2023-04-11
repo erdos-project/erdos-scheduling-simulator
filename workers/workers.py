@@ -108,7 +108,7 @@ class Worker(object):
         """
         if (
             profile not in self._available_profiles
-            or profile not in self._pending_profiles
+            and profile not in self._pending_profiles
         ):
             raise ValueError(
                 f"The profile {profile} was not available at Worker {self}."
@@ -222,6 +222,23 @@ class Worker(object):
             A set of tasks that have been completed.
         """
         completed_tasks = []
+
+        # Step the pending WorkProfiles and add the completed ones to the set of
+        # available profiles.
+        for profile, loading_strategy in self._pending_profiles.items():
+            remaining_time = loading_strategy.runtime - step_size
+            if remaining_time <= EventTime.zero():
+                # The WorkProfile has finished loading, make it available.
+                self._available_profiles[profile] = ExecutionStrategy(
+                    resources=loading_strategy.resources,
+                    batch_size=loading_strategy.batch_size,
+                    runtime=EventTime.zero(),
+                )
+            else:
+                # The WorkProfile has still not finished loading, update the time
+                # remaining until it becomes available.
+                loading_strategy._runtime = remaining_time
+
         # Invoke the step() method on all the tasks.
         for task in self._placed_tasks:
             if task.state != TaskState.RUNNING:
@@ -237,6 +254,29 @@ class Worker(object):
                 )
                 completed_tasks.append(task)
         return completed_tasks
+
+    def is_available(self, profile: WorkProfile) -> EventTime:
+        """Check if the given `WorkProfile` is available on this `Worker`.
+
+        The method returns an EventTime instance that denotes how far into the future
+        a given profile will be available. An instance of `EventTime.invalid()` means
+        that the `WorkProfile` has not been requested for loading onto this `Worker`,
+        and an instance of `EventTime.zero()` means that the profile is available at
+        the current time.
+
+        Args:
+            profile (`WorkProfile`): The profile whose availability needs to be checked.
+
+        Returns:
+            An `EventTime` instance specifying when the profile will be available at
+            this `Worker`.
+        """
+        if profile in self._available_profiles:
+            return EventTime.zero()
+        elif profile in self._pending_profiles:
+            return self._pending_profiles[profile].runtime
+        else:
+            return EventTime.invalid()
 
     def is_full(self) -> bool:
         """Check if the Worker is full.

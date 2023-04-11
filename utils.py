@@ -131,6 +131,10 @@ class EventTime:
     def zero() -> "EventTime":
         return EventTime(0, EventTime.Unit.US)
 
+    @staticmethod
+    def invalid() -> "EventTime":
+        return EventTime(-1, EventTime.Unit.US)
+
 
 def setup_logging(
     name: str,
