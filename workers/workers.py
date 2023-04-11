@@ -44,9 +44,7 @@ class Worker(object):
         self._name = name
         self._id = uuid.UUID(int=random.getrandbits(128), version=4)
         self._resources = resources
-        self._placed_tasks: Mapping[
-            Task, Tuple[ExecutionStrategy, ExecutionStrategy]
-        ] = {}
+        self._placed_tasks: Mapping[Task, ExecutionStrategy] = {}
         self._available_profiles: Mapping[WorkProfile, ExecutionStrategy] = {}
         self._pending_profiles: Mapping[WorkProfile, ExecutionStrategy] = {}
 
@@ -90,7 +88,7 @@ class Worker(object):
                 executing the task.
         """
         self._resources.allocate_multiple(execution_strategy.resources, task)
-        self._placed_tasks[task] = task.state
+        self._placed_tasks[task] = execution_strategy
         self._logger.debug(
             f"Placed {task} on {self} with the execution strategy {execution_strategy}."
         )
@@ -116,13 +114,10 @@ class Worker(object):
 
         # Deallocates the resources corresponding to the loading strategy and remove
         # the profile from the set of available profiles.
+        self._resources.deallocate(profile)
         if profile in self._available_profiles:
-            loading_strategy = self._available_profiles[profile]
-            self._resources.deallocate(profile)
             del self._available_profiles[profile]
         else:
-            loading_strategy = self._pending_profiles[profile]
-            self._resources.deallocate(profile)
             del self._pending_profiles[profile]
 
     def remove_task(self, current_time: EventTime, task: Task):
@@ -189,10 +184,7 @@ class Worker(object):
         Returns:
             A sequence of `Task`s that are currently placed on this `Worker`.
         """
-        placed_tasks = []
-        for task, _ in self._placed_tasks.items():
-            placed_tasks.append(task)
-        return placed_tasks
+        return list(self._placed_tasks.keys())
 
     def get_allocated_resources(self, task: Task) -> List[Tuple[Resource, float]]:
         """Retrieves the resources allocated to a given task from this Worker.
@@ -305,8 +297,8 @@ class Worker(object):
         instance._id = uuid.UUID(self.id)
 
         # Copy the placed tasks.
-        for task, state in self._placed_tasks.items():
-            instance._placed_tasks[task] = state
+        for task, strategy in self._placed_tasks.items():
+            instance._placed_tasks[task] = strategy
 
         return instance
 
