@@ -118,11 +118,11 @@ class Worker(object):
         # the profile from the set of available profiles.
         if profile in self._available_profiles:
             loading_strategy = self._available_profiles[profile]
-            self._resources.deallocate(profile, loading_strategy)
+            self._resources.deallocate(profile)
             del self._available_profiles[profile]
         else:
             loading_strategy = self._pending_profiles[profile]
-            self._resources.deallocate(profile, loading_strategy)
+            self._resources.deallocate(profile)
             del self._pending_profiles[profile]
 
     def remove_task(self, current_time: EventTime, task: Task):
