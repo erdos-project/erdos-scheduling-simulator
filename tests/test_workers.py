@@ -170,7 +170,7 @@ def test_worker_remove_task_failed():
 
     # Ensure failure.
     with pytest.raises(ValueError):
-        worker.remove_task(task)
+        worker.remove_task(current_time=EventTime.zero(), task=task)
 
 
 def test_worker_remove_task_success():
@@ -213,7 +213,7 @@ def test_worker_remove_task_success():
     task.preempt(EventTime(3, EventTime.Unit.US))
 
     # Remove the task and ensure correct resources.
-    worker.remove_task(task)
+    worker.remove_task(current_time=EventTime(3, EventTime.Unit.US), task=task)
     assert len(worker.get_placed_tasks()) == 0, "Incorrect number of placed tasks."
     assert (
         worker.resources.get_available_quantity(Resource(name="CPU", _id="any")) == 1
@@ -455,18 +455,29 @@ def test_worker_pool_step():
 
     # Step through the WorkerPool and ensure that the correct completed tasks
     # are returned at the correct simulation time.
-    completed_tasks = worker_pool.step(EventTime(3, EventTime.Unit.US))
+    time = EventTime(3, EventTime.Unit.US)
+    completed_tasks = worker_pool.step(current_time=time)
     assert len(completed_tasks) == 0, "Incorrect number of completed tasks."
-    completed_tasks = worker_pool.step(EventTime(4, EventTime.Unit.US))
+
+    time = EventTime(4, EventTime.Unit.US)
+    completed_tasks = worker_pool.step(current_time=time)
     assert len(completed_tasks) == 0, "Incorrect number of completed tasks."
-    completed_tasks = worker_pool.step(EventTime(5, EventTime.Unit.US))
+
+    time = EventTime(5, EventTime.Unit.US)
+    completed_tasks = worker_pool.step(current_time=time)
     assert len(completed_tasks) == 1, "Incorrect number of completed tasks."
     assert completed_tasks[0] == task_one, "Incorrect completed task."
-    completed_tasks = worker_pool.step(EventTime(6, EventTime.Unit.US))
+    worker_pool.remove_task(current_time=time, task=completed_tasks[0])
+
+    time = EventTime(6, EventTime.Unit.US)
+    completed_tasks = worker_pool.step(current_time=time)
     assert len(completed_tasks) == 0, "Incorrect number of completed tasks."
-    completed_tasks = worker_pool.step(EventTime(7, EventTime.Unit.US))
+
+    time = EventTime(7, EventTime.Unit.US)
+    completed_tasks = worker_pool.step(current_time=time)
     assert len(completed_tasks) == 1, "Incorrect number of completed tasks."
     assert completed_tasks[0] == task_two, "Incorrect completed task."
+    worker_pool.remove_task(current_time=time, task=completed_tasks[0])
 
 
 def test_copy_worker_pool():

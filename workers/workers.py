@@ -125,10 +125,12 @@ class Worker(object):
             self._resources.deallocate(profile, loading_strategy)
             del self._pending_profiles[profile]
 
-    def remove_task(self, task: Task):
+    def remove_task(self, current_time: EventTime, task: Task):
         """Removes the task from this `Worker`.
 
         Args:
+            current_time (`EventTime`): The time at which the removal of the `Task`
+                was requested.
             task (`Task`): The task to be placed on this `Worker`.
         Raises:
             `ValueError` if the task was not placed on this worker.
@@ -139,6 +141,12 @@ class Worker(object):
         # Deallocate the resources and remove the placed task.
         self._resources.deallocate(task)
         del self._placed_tasks[task]
+        self._logger.debug(
+            "[%d] The Task %s was removed from the Worker %s.",
+            current_time.to(EventTime.Unit.US).time,
+            task,
+            self,
+        )
 
     def can_accomodate_strategy(self, strategy: ExecutionStrategy) -> bool:
         """Checks if this `Worker` can accomodate the given `ExecutionStrategy` based
@@ -228,10 +236,6 @@ class Worker(object):
                     f"finished execution on {self}."
                 )
                 completed_tasks.append(task)
-
-        # Delete the completed tasks from the set of placed tasks.
-        for task in completed_tasks:
-            self.remove_task(task)
         return completed_tasks
 
     def is_full(self) -> bool:
@@ -343,10 +347,12 @@ class WorkerPool(object):
             self._logger = setup_logging(name=self.__class__.__name__)
 
         self._name = name
-        self._workers = {worker.id: worker for worker in workers}
+        # A Mapping from the ID of the Worker to the instance of the Worker.
+        self._workers: Mapping[str, Worker] = {worker.id: worker for worker in workers}
         self._scheduler = scheduler
         self._id = uuid.UUID(int=random.getrandbits(128), version=4)
-        self._placed_tasks = {}  # Mapping[Task, str] from task to worker ID.
+        # A mapping from the Task to the ID of the Worker.
+        self._placed_tasks: Mapping[Task, str] = {}
 
     def add_workers(self, workers: Sequence[Worker]):
         """Adds the given set of `Worker`s to this `WorkerPool`.
@@ -460,10 +466,11 @@ class WorkerPool(object):
             self._placed_tasks[task] = placement
             return True
 
-    def remove_task(self, task: Task):
+    def remove_task(self, current_time: EventTime, task: Task):
         """Removes the task from this `WorkerPool`.
 
         Args:
+            current_time (`EventTime`): The time at which the removal was requested.
             task (`Task`): The task to be placed on this `WorkerPool`.
 
         Raises:
@@ -471,8 +478,11 @@ class WorkerPool(object):
         """
         if task not in self._placed_tasks:
             raise ValueError(f"The task {task} was not placed on {self.id} WorkerPool.")
+
         # Deallocate the resources and remove the placed task.
-        self._workers[self._placed_tasks[task]].remove_task(task)
+        self._workers[self._placed_tasks[task]].remove_task(
+            current_time=current_time, task=task
+        )
         del self._placed_tasks[task]
 
     def get_placed_tasks(self) -> Sequence[Task]:
@@ -499,19 +509,12 @@ class WorkerPool(object):
             The set of tasks that have finished execution.
         """
         completed_tasks = []
-        # Invoke the step() method on all the workers.
         for _, worker in self._workers.items():
             self._logger.debug(
                 f"Stepping through the execution of {worker} for {step_size} "
                 f"steps from time {current_time}"
             )
             completed_tasks.extend(worker.step(current_time, step_size))
-
-        # Delete the completed tasks from the set of placed tasks.
-        for task in completed_tasks:
-            # We do not need to remove the task from the worker because it was
-            # already removed while the worker stepped.
-            del self._placed_tasks[task]
         return completed_tasks
 
     def can_accomodate_strategy(self, execution_strategy: ExecutionStrategy) -> bool:
