@@ -312,7 +312,7 @@ class Placements(object):
         self._placements[task.id] = Placement(task, worker_pool_id, placement_time)
 
     def get_placement(
-        self, computation: Union["Task", "WorkProfile"]
+        self, computation: Union["Task", "WorkProfile"]  # noqa: F821
     ) -> Optional[Placement]:  # noqa: F821
         """Retrieves the placement for the corresponding computation (if available).
 
