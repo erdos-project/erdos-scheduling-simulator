@@ -5,7 +5,14 @@ import pytest
 from tests.utils import create_default_task
 from utils import EventTime
 from workers import Worker, WorkerPool
-from workload import Placement, Resource, Resources
+from workload import (
+    ExecutionStrategies,
+    ExecutionStrategy,
+    Placement,
+    Resource,
+    Resources,
+    WorkProfile,
+)
 
 
 def test_worker_construction():
@@ -170,7 +177,7 @@ def test_worker_remove_task_failed():
 
     # Ensure failure.
     with pytest.raises(ValueError):
-        worker.remove_task(task)
+        worker.remove_task(current_time=EventTime.zero(), task=task)
 
 
 def test_worker_remove_task_success():
@@ -213,7 +220,7 @@ def test_worker_remove_task_success():
     task.preempt(EventTime(3, EventTime.Unit.US))
 
     # Remove the task and ensure correct resources.
-    worker.remove_task(task)
+    worker.remove_task(current_time=EventTime(3, EventTime.Unit.US), task=task)
     assert len(worker.get_placed_tasks()) == 0, "Incorrect number of placed tasks."
     assert (
         worker.resources.get_available_quantity(Resource(name="CPU", _id="any")) == 1
@@ -455,18 +462,29 @@ def test_worker_pool_step():
 
     # Step through the WorkerPool and ensure that the correct completed tasks
     # are returned at the correct simulation time.
-    completed_tasks = worker_pool.step(EventTime(3, EventTime.Unit.US))
+    time = EventTime(3, EventTime.Unit.US)
+    completed_tasks = worker_pool.step(current_time=time)
     assert len(completed_tasks) == 0, "Incorrect number of completed tasks."
-    completed_tasks = worker_pool.step(EventTime(4, EventTime.Unit.US))
+
+    time = EventTime(4, EventTime.Unit.US)
+    completed_tasks = worker_pool.step(current_time=time)
     assert len(completed_tasks) == 0, "Incorrect number of completed tasks."
-    completed_tasks = worker_pool.step(EventTime(5, EventTime.Unit.US))
+
+    time = EventTime(5, EventTime.Unit.US)
+    completed_tasks = worker_pool.step(current_time=time)
     assert len(completed_tasks) == 1, "Incorrect number of completed tasks."
     assert completed_tasks[0] == task_one, "Incorrect completed task."
-    completed_tasks = worker_pool.step(EventTime(6, EventTime.Unit.US))
+    worker_pool.remove_task(current_time=time, task=completed_tasks[0])
+
+    time = EventTime(6, EventTime.Unit.US)
+    completed_tasks = worker_pool.step(current_time=time)
     assert len(completed_tasks) == 0, "Incorrect number of completed tasks."
-    completed_tasks = worker_pool.step(EventTime(7, EventTime.Unit.US))
+
+    time = EventTime(7, EventTime.Unit.US)
+    completed_tasks = worker_pool.step(current_time=time)
     assert len(completed_tasks) == 1, "Incorrect number of completed tasks."
     assert completed_tasks[0] == task_two, "Incorrect completed task."
+    worker_pool.remove_task(current_time=time, task=completed_tasks[0])
 
 
 def test_copy_worker_pool():
@@ -559,3 +577,91 @@ def test_deepcopy_worker_pool():
         )
         == 1
     ), "Incorrect number of available resources in Worker."
+
+
+def test_worker_profile_loading():
+    """Test that the Worker can correctly load profiles and make it available at the
+    correct time."""
+    worker = Worker(
+        name="Worker_1",
+        resources=Resources(resource_vector={Resource(name="RAM"): 100}),
+    )
+    work_profile = WorkProfile(
+        name="TestWorkProfile",
+        loading_strategies=ExecutionStrategies(
+            strategies=[
+                ExecutionStrategy(
+                    resources=Resources(
+                        resource_vector={Resource(name="RAM", _id="any"): 50}
+                    ),
+                    batch_size=1,
+                    runtime=EventTime(50, EventTime.Unit.US),
+                )
+            ]
+        ),
+    )
+    assert worker.can_accomodate_strategy(
+        work_profile.loading_strategies.get_fastest_strategy()
+    ), "Worker should be able to accomodate the LoadingStrategy."
+    worker.load_profile(
+        profile=work_profile,
+        loading_strategy=work_profile.loading_strategies.get_fastest_strategy(),
+    )
+    assert worker.is_available(work_profile) == EventTime(
+        50, EventTime.Unit.US
+    ), "Incorrect remaining time until the WorkProfile is available."
+
+    # Step the Worker and recheck the remaining time.
+    worker.step(
+        current_time=EventTime.zero(), step_size=EventTime(20, EventTime.Unit.US)
+    )
+    assert worker.is_available(work_profile) == EventTime(
+        30, EventTime.Unit.US
+    ), "Incorrect remaining time until the WorkProfile is available."
+
+    # Step the Worker and recheck the remaining time.
+    worker.step(
+        current_time=EventTime(20, EventTime.Unit.US),
+        step_size=EventTime(30, EventTime.Unit.US),
+    )
+    assert (
+        worker.is_available(work_profile) == EventTime.zero()
+    ), "Incorrect remaining time until the WorkProfile is available."
+
+
+def test_worker_profile_eviction():
+    """Test that a Worker can correctly evict profiles upon request."""
+    worker = Worker(
+        name="Worker_1",
+        resources=Resources(resource_vector={Resource(name="RAM"): 100}),
+    )
+    work_profile = WorkProfile(
+        name="TestWorkProfile",
+        loading_strategies=ExecutionStrategies(
+            strategies=[
+                ExecutionStrategy(
+                    resources=Resources(
+                        resource_vector={Resource(name="RAM", _id="any"): 50}
+                    ),
+                    batch_size=1,
+                    runtime=EventTime(50, EventTime.Unit.US),
+                )
+            ]
+        ),
+    )
+
+    assert worker.can_accomodate_strategy(
+        work_profile.loading_strategies.get_fastest_strategy()
+    ), "Worker should be able to accomodate the LoadingStrategy."
+    worker.load_profile(
+        profile=work_profile,
+        loading_strategy=work_profile.loading_strategies.get_fastest_strategy(),
+    )
+    assert worker.is_available(work_profile) == EventTime(
+        50, EventTime.Unit.US
+    ), "Incorrect remaining time until the WorkProfile is available."
+
+    worker.evict_profile(profile=work_profile)
+    assert (
+        worker.is_available(work_profile) == EventTime.invalid()
+    ), "The profile was not evicted correctly."

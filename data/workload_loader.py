@@ -14,6 +14,7 @@ from workload import (
     Resource,
     Resources,
     Workload,
+    WorkProfile,
 )
 
 
@@ -64,9 +65,17 @@ class WorkloadLoader(object):
         if len(workload_data) == 0:
             raise ValueError("Empty Workload generated.")
 
+        # Create the WorkProfiles provided in the JSON.
+        work_profiles: Mapping[str, WorkProfile] = {}
+        for profile in workload_data["profiles"]:
+            work_profile = WorkloadLoader.__create_work_profile(
+                profile, self._resource_logger
+            )
+            work_profiles[work_profile.name] = work_profile
+
         # Create the sequence of JobGraphs for each application.
         job_graph_mapping = {}
-        for index, job in enumerate(workload_data):
+        for index, job in enumerate(workload_data["graphs"]):
             # Retrieve the name of the JobGraph.
             if "name" not in job:
                 raise ValueError(f"A name was not defined for the JobGraph {index}.")
@@ -153,19 +162,21 @@ class WorkloadLoader(object):
                     deadline_variance=deadline_variance,
                 ),
                 job["graph"],
-                self._resource_logger,
+                work_profiles,
             )
 
         self._workload = Workload.from_job_graphs(job_graph_mapping, _flags=_flags)
 
     @staticmethod
-    def load_job_graph(job_graph, json_repr, resource_logger) -> JobGraph:
+    def load_job_graph(
+        job_graph, json_repr, work_profiles: Mapping[str, WorkProfile]
+    ) -> JobGraph:
         """Load a particular JobGraph from its JSON representation.
 
         Args:
             job_graph: The `JobGraph` to populate from JSON.
             json_repr: The JSON representation of the JobGraph.
-            resource_logger: The logger to use for Resources.
+            work_profiles: The `WorkProfile`s loaded from the JSON.
 
         Returns:
             A `JobGraph` encoding the serialized JSON representation of the JobGraph.
@@ -185,16 +196,14 @@ class WorkloadLoader(object):
             terminal_job = False
             if "terminal" in node and node["terminal"]:
                 terminal_job = True
-            execution_strategies = None
-            if "execution_strategies" in node:
-                execution_strategies = WorkloadLoader.__create_execution_strategies(
-                    node["execution_strategies"], resource_logger
-                )
+            work_profile = None
+            if "work_profile" in node:
+                work_profile = work_profiles[node["work_profile"]]
 
             # Create and save the Job.
             job = Job(
                 name=node["name"],
-                execution_strategies=execution_strategies,
+                profile=work_profile,
                 conditional=conditional_job,
                 probability=probability,
                 terminal=terminal_job,
@@ -205,15 +214,52 @@ class WorkloadLoader(object):
         # Make connections between the nodes.
         for node in json_repr:
             node_job = name_to_job_mapping[node["name"]]
-            for child in node["children"]:
-                if child not in name_to_job_mapping:
-                    raise ValueError(
-                        f"Child {child} of {node['name']} was not present in the graph."
-                    )
-                child_node_job = name_to_job_mapping[child]
-                job_graph.add_child(node_job, child_node_job)
+            if "children" in node:
+                for child in node["children"]:
+                    if child not in name_to_job_mapping:
+                        raise ValueError(
+                            f"Child {child} of {node['name']} was "
+                            f"not present in the graph."
+                        )
+                    child_node_job = name_to_job_mapping[child]
+                    job_graph.add_child(node_job, child_node_job)
 
         return job_graph
+
+    @staticmethod
+    def __create_work_profile(
+        profile: Mapping[str, str], resource_logger: Optional[logging.Logger] = None
+    ) -> WorkProfile:
+        """Retrieves the WorkProfile from the given JSON entries.
+
+        Args:
+            profile (`Mapping[str, str]`): The JSON entries for the Work Profile.
+            resource_logger (`Optional[logging.Logger]`): The logger instance to use
+                to log the results of the execution.
+
+        Returns:
+            A `WorkProfile` object that contains the strategies available for execution.
+        """
+        if "name" not in profile:
+            raise KeyError("The key 'name' was not found in the WorkProfile.")
+
+        loading_strategies = ExecutionStrategies()
+        if "loading_strategies" in profile:
+            loading_strategies = WorkloadLoader.__create_execution_strategies(
+                profile["loading_strategies"], resource_logger
+            )
+
+        execution_strategies = ExecutionStrategies()
+        if "execution_strategies" in profile:
+            execution_strategies = WorkloadLoader.__create_execution_strategies(
+                profile["execution_strategies"], resource_logger
+            )
+
+        return WorkProfile(
+            name=profile["name"],
+            loading_strategies=loading_strategies,
+            execution_strategies=execution_strategies,
+        )
 
     @staticmethod
     def __create_execution_strategies(
@@ -224,7 +270,7 @@ class WorkloadLoader(object):
 
         Args:
             execution_strategies (`Sequence[Mapping[str, str]]`): The JSON entries for
-                the execution strategies for a given Jon.
+                the execution strategies for a given Job.
             resource_logger (`Optional[logging.Logger]`): The logger instance to use
                 to log the results of the execution.
 
@@ -236,7 +282,7 @@ class WorkloadLoader(object):
         for strategy in execution_strategies:
             resource_requirements = None
             if "resource_requirements" in strategy:
-                WorkloadLoader.__create_resources(
+                resource_requirements = WorkloadLoader.__create_resources(
                     strategy["resource_requirements"], resource_logger
                 )
 

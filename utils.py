@@ -116,6 +116,9 @@ class EventTime:
     def __hash__(self) -> int:
         return self.to(EventTime.Unit.US).time
 
+    def __copy__(self) -> "EventTime":
+        return EventTime(time=self.time, unit=self.unit)
+
     @property
     def time(self) -> int:
         return self._time
@@ -127,6 +130,10 @@ class EventTime:
     @staticmethod
     def zero() -> "EventTime":
         return EventTime(0, EventTime.Unit.US)
+
+    @staticmethod
+    def invalid() -> "EventTime":
+        return EventTime(-1, EventTime.Unit.US)
 
 
 def setup_logging(

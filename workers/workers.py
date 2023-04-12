@@ -2,7 +2,7 @@ import logging
 import random
 import uuid
 from copy import copy, deepcopy
-from typing import List, Optional, Sequence, Tuple, Type
+from typing import List, Mapping, Optional, Sequence, Tuple, Type
 
 from utils import EventTime, setup_logging
 from workload import (
@@ -14,6 +14,7 @@ from workload import (
     TaskGraph,
     TaskState,
     Workload,
+    WorkProfile,
 )
 
 
@@ -43,9 +44,39 @@ class Worker(object):
         self._name = name
         self._id = uuid.UUID(int=random.getrandbits(128), version=4)
         self._resources = resources
-        self._placed_tasks = {}  # Mapping[Task, TaskState]
+        self._placed_tasks: Mapping[Task, ExecutionStrategy] = {}
+        self._available_profiles: Mapping[WorkProfile, ExecutionStrategy] = {}
+        self._pending_profiles: Mapping[WorkProfile, ExecutionStrategy] = {}
 
-    def place_task(self, task: Task, execution_strategy: ExecutionStrategy):
+    def load_profile(
+        self, profile: WorkProfile, loading_strategy: ExecutionStrategy
+    ) -> None:
+        """Loads a given `WorkProfile` into the `Worker`. This method is used for
+        loading models into the `Worker`, which a `Task` can then utilize to execute
+        using an execution strategy.
+
+        The caller must check that the `Worker` can accomodate this strategy by
+        invoking `can_accomodate_strategy`. If there are not enough resources available,
+        the method raises a `ValueError`.
+
+        Args:
+            profile (`WorkProfile`): The profile that represents the computation that
+                is to be loaded into this `Worker`.
+            loading_strategy (`ExecutionStrategy`): The strategy to be used to load the
+                computation into this `Worker`.
+
+        Raises:
+            A `ValueError` if not enough resources are available to accomodate the
+            loading strategy.
+        """
+        self._resources.allocate_multiple(loading_strategy.resources, profile)
+        self._pending_profiles[profile] = copy(loading_strategy)
+        self._logger.debug(
+            f"Added the profile {profile} with the loading strategy "
+            f"{loading_strategy} to the set of pending profiles."
+        )
+
+    def place_task(self, task: Task, execution_strategy: ExecutionStrategy) -> None:
         """Places the task on this `Worker` using the given `execution_strategy`.
 
         The caller must check that the `Worker` can accomodate this strategy by
@@ -57,38 +88,74 @@ class Worker(object):
                 executing the task.
         """
         self._resources.allocate_multiple(execution_strategy.resources, task)
-        self._placed_tasks[task] = task.state
+        self._placed_tasks[task] = execution_strategy
         self._logger.debug(
             f"Placed {task} on {self} with the execution strategy {execution_strategy}."
         )
 
-    def remove_task(self, task: Task):
+    def evict_profile(self, profile: WorkProfile) -> None:
+        """Evicts the given `profile` and frees up the resources corresponding to the
+        loading strategy used for the profile.
+
+        Args:
+            profile (`WorkProfile`): The profile that needs to be evicted from the
+                set of available profiles at this `Worker`.
+
+        Raises:
+            A `ValueError` if the profile was not placed on this `Worker`.
+        """
+        if (
+            profile not in self._available_profiles
+            and profile not in self._pending_profiles
+        ):
+            raise ValueError(
+                f"The profile {profile} was not available at Worker {self}."
+            )
+
+        # Deallocates the resources corresponding to the loading strategy and remove
+        # the profile from the set of available profiles.
+        self._resources.deallocate(profile)
+        if profile in self._available_profiles:
+            del self._available_profiles[profile]
+        else:
+            del self._pending_profiles[profile]
+
+    def remove_task(self, current_time: EventTime, task: Task):
         """Removes the task from this `Worker`.
 
         Args:
+            current_time (`EventTime`): The time at which the removal of the `Task`
+                was requested.
             task (`Task`): The task to be placed on this `Worker`.
         Raises:
             `ValueError` if the task was not placed on this worker.
         """
         if task not in self._placed_tasks:
-            raise ValueError(f"The task {task} was not placed on {self.id} Worker.")
+            raise ValueError(f"The task {task} was not placed on Worker {self}.")
+
         # Deallocate the resources and remove the placed task.
         self._resources.deallocate(task)
         del self._placed_tasks[task]
+        self._logger.debug(
+            "[%d] The Task %s was removed from the Worker %s.",
+            current_time.to(EventTime.Unit.US).time,
+            task,
+            self,
+        )
 
-    def can_accomodate_strategy(self, execution_strategy: ExecutionStrategy) -> bool:
+    def can_accomodate_strategy(self, strategy: ExecutionStrategy) -> bool:
         """Checks if this `Worker` can accomodate the given `ExecutionStrategy` based
         on the available resources.
 
         Args:
-            execution_strategy (`ExecutionStrategy`): The strategy that the `Worker`
-                has to accomodate.
+            strategy (`ExecutionStrategy`): The strategy that the `Worker` has to
+                accomodate.
 
         Returns:
             `True` if the `Worker` has enough resources to execute this strategy, and
             `False` otherwise.
         """
-        return self._resources > execution_strategy.resources
+        return self._resources > strategy.resources
 
     def get_compatible_strategies(
         self, execution_strategies: ExecutionStrategies
@@ -117,10 +184,7 @@ class Worker(object):
         Returns:
             A sequence of `Task`s that are currently placed on this `Worker`.
         """
-        placed_tasks = []
-        for task, _ in self._placed_tasks.items():
-            placed_tasks.append(task)
-        return placed_tasks
+        return list(self._placed_tasks.keys())
 
     def get_allocated_resources(self, task: Task) -> List[Tuple[Resource, float]]:
         """Retrieves the resources allocated to a given task from this Worker.
@@ -150,6 +214,23 @@ class Worker(object):
             A set of tasks that have been completed.
         """
         completed_tasks = []
+
+        # Step the pending WorkProfiles and add the completed ones to the set of
+        # available profiles.
+        for profile, loading_strategy in self._pending_profiles.items():
+            remaining_time = loading_strategy.runtime - step_size
+            if remaining_time <= EventTime.zero():
+                # The WorkProfile has finished loading, make it available.
+                self._available_profiles[profile] = ExecutionStrategy(
+                    resources=loading_strategy.resources,
+                    batch_size=loading_strategy.batch_size,
+                    runtime=EventTime.zero(),
+                )
+            else:
+                # The WorkProfile has still not finished loading, update the time
+                # remaining until it becomes available.
+                loading_strategy._runtime = remaining_time
+
         # Invoke the step() method on all the tasks.
         for task in self._placed_tasks:
             if task.state != TaskState.RUNNING:
@@ -164,11 +245,30 @@ class Worker(object):
                     f"finished execution on {self}."
                 )
                 completed_tasks.append(task)
-
-        # Delete the completed tasks from the set of placed tasks.
-        for task in completed_tasks:
-            self.remove_task(task)
         return completed_tasks
+
+    def is_available(self, profile: WorkProfile) -> EventTime:
+        """Check if the given `WorkProfile` is available on this `Worker`.
+
+        The method returns an EventTime instance that denotes how far into the future
+        a given profile will be available. An instance of `EventTime.invalid()` means
+        that the `WorkProfile` has not been requested for loading onto this `Worker`,
+        and an instance of `EventTime.zero()` means that the profile is available at
+        the current time.
+
+        Args:
+            profile (`WorkProfile`): The profile whose availability needs to be checked.
+
+        Returns:
+            An `EventTime` instance specifying when the profile will be available at
+            this `Worker`.
+        """
+        if profile in self._available_profiles:
+            return EventTime.zero()
+        elif profile in self._pending_profiles:
+            return self._pending_profiles[profile].runtime
+        else:
+            return EventTime.invalid()
 
     def is_full(self) -> bool:
         """Check if the Worker is full.
@@ -197,8 +297,8 @@ class Worker(object):
         instance._id = uuid.UUID(self.id)
 
         # Copy the placed tasks.
-        for task, state in self._placed_tasks.items():
-            instance._placed_tasks[task] = state
+        for task, strategy in self._placed_tasks.items():
+            instance._placed_tasks[task] = strategy
 
         return instance
 
@@ -279,10 +379,12 @@ class WorkerPool(object):
             self._logger = setup_logging(name=self.__class__.__name__)
 
         self._name = name
-        self._workers = {worker.id: worker for worker in workers}
+        # A Mapping from the ID of the Worker to the instance of the Worker.
+        self._workers: Mapping[str, Worker] = {worker.id: worker for worker in workers}
         self._scheduler = scheduler
         self._id = uuid.UUID(int=random.getrandbits(128), version=4)
-        self._placed_tasks = {}  # Mapping[Task, str] from task to worker ID.
+        # A mapping from the Task to the ID of the Worker.
+        self._placed_tasks: Mapping[Task, str] = {}
 
     def add_workers(self, workers: Sequence[Worker]):
         """Adds the given set of `Worker`s to this `WorkerPool`.
@@ -396,10 +498,11 @@ class WorkerPool(object):
             self._placed_tasks[task] = placement
             return True
 
-    def remove_task(self, task: Task):
+    def remove_task(self, current_time: EventTime, task: Task):
         """Removes the task from this `WorkerPool`.
 
         Args:
+            current_time (`EventTime`): The time at which the removal was requested.
             task (`Task`): The task to be placed on this `WorkerPool`.
 
         Raises:
@@ -407,8 +510,11 @@ class WorkerPool(object):
         """
         if task not in self._placed_tasks:
             raise ValueError(f"The task {task} was not placed on {self.id} WorkerPool.")
+
         # Deallocate the resources and remove the placed task.
-        self._workers[self._placed_tasks[task]].remove_task(task)
+        self._workers[self._placed_tasks[task]].remove_task(
+            current_time=current_time, task=task
+        )
         del self._placed_tasks[task]
 
     def get_placed_tasks(self) -> Sequence[Task]:
@@ -435,19 +541,12 @@ class WorkerPool(object):
             The set of tasks that have finished execution.
         """
         completed_tasks = []
-        # Invoke the step() method on all the workers.
         for _, worker in self._workers.items():
             self._logger.debug(
                 f"Stepping through the execution of {worker} for {step_size} "
                 f"steps from time {current_time}"
             )
             completed_tasks.extend(worker.step(current_time, step_size))
-
-        # Delete the completed tasks from the set of placed tasks.
-        for task in completed_tasks:
-            # We do not need to remove the task from the worker because it was
-            # already removed while the worker stepped.
-            del self._placed_tasks[task]
         return completed_tasks
 
     def can_accomodate_strategy(self, execution_strategy: ExecutionStrategy) -> bool:

@@ -338,7 +338,7 @@ def test_retrieval_allocated_tasks_resource():
     task_2 = create_default_task()
     resources.allocate(gpu_resource_1, task_2, 5)
 
-    allocations = resources.get_allocated_tasks(gpu_resource_1)
+    allocations = resources.get_allocated_computation(gpu_resource_1)
     assert len(allocations) == 2, "Incorrect number of allocations were retrieved."
     assert allocations[0] == (task_1, 5), "Incorrect allocation retrieved."
     assert allocations[1] == (task_2, 5), "Incorrect allocation retrieved."

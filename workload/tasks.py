@@ -227,7 +227,6 @@ class Task(object):
     def start(
         self,
         time: Optional[EventTime] = None,
-        worker_pool_id: Optional[str] = None,
         variance: Optional[int] = 0,
     ):
         """Begins the execution of the task at the given simulator time.
@@ -235,8 +234,6 @@ class Task(object):
         Args:
             time (`Optional[EventTime]`): The simulation time (in us) at which to
                 begin the task. If None, should be specified at task construction.
-            worker_pool_id (`Optional[str]`): The ID of the WorkerPool that
-                the task will be started on.
             variance (`Optional[int]`): The percentage variation to add to
                 the runtime of the task.
 
@@ -267,7 +264,6 @@ class Task(object):
         self._last_step_time = time
         self._state = TaskState.RUNNING
         self.update_remaining_time(remaining_time)
-        self._worker_pool_id = worker_pool_id
 
     def step(
         self,
@@ -299,6 +295,15 @@ class Task(object):
                 f"[{current_time.to(EventTime.Unit.US).time}] Cannot step {self} with "
                 f"start time {self.start_time} at time {current_time} since it's "
                 f"either not RUNNING or isn't supposed to start yet."
+            )
+            return False
+
+        if self._remaining_time == EventTime.zero():
+            self._logger.info(
+                "[%d] Skipping the stepping of %s since it "
+                "has zero remaining time left.",
+                current_time.to(EventTime.Unit.US).time,
+                self,
             )
             return False
 
@@ -658,6 +663,10 @@ class Task(object):
     @property
     def start_time(self):
         return self._start_time
+
+    @property
+    def profile(self) -> WorkProfile:
+        return self._profile
 
     @property
     def available_execution_strategies(self) -> Optional[ExecutionStrategies]:

@@ -2,7 +2,7 @@ import logging
 from collections import defaultdict
 from copy import copy
 from functools import total_ordering
-from typing import Generator, List, Mapping, Optional, Tuple
+from typing import Generator, List, Mapping, Optional, Sequence, Tuple, Union
 
 import utils
 
@@ -51,7 +51,9 @@ class Resources(object):
             raise ValueError(
                 "The keys for the resource vector " "should be of type 'Resource'"
             )
-        self._current_allocations = defaultdict(list)
+        self._current_allocations: Mapping[
+            Union["Task", "WorkProfile"], Sequence[Tuple[Resource, int]]  # noqa: F821
+        ] = defaultdict(list)
         self.__virtual = __virtual
 
     def add_resource(self, resource: Resource, quantity: Optional[int] = 1):
@@ -70,14 +72,18 @@ class Resources(object):
             self._logger.debug(f"Added {resource} [quantity={quantity}] to {self}")
 
     def allocate(
-        self, resource: Resource, task: "Task", quantity: int = 1  # noqa: F821
+        self,
+        resource: Resource,
+        computation: Union["Task", "WorkProfile"],  # noqa: F821
+        quantity: int = 1,  # noqa: F821
     ):
         """Allocates the given quantity of the specified resource for a
         particular task.
 
         Args:
             resource (`Resource`): The resource to be allocated.
-            task (`Task`): The task to which the resources are allocated.
+            computation (`Union[Task, WorkProfile]`): The computation to which the
+                resources are allocated.
             quantity (`int`): The amount of the resource to be allocated
                 (default = 1).
 
@@ -105,7 +111,7 @@ class Resources(object):
                             f"[quantity={remaining_quantity}] from {self}"
                         )
                     self._resource_vector[_resource] = _quantity - remaining_quantity
-                    self._current_allocations[task].append(
+                    self._current_allocations[computation].append(
                         (_resource, remaining_quantity)
                     )
                     break
@@ -116,30 +122,32 @@ class Resources(object):
                             f"from {self}"
                         )
                     self._resource_vector[_resource] = 0
-                    self._current_allocations[task].append((_resource, _quantity))
+                    self._current_allocations[computation].append(
+                        (_resource, _quantity)
+                    )
                 remaining_quantity -= _quantity
 
             if remaining_quantity == 0:
                 break
 
     def get_allocated_resources(
-        self, task: "Task"  # noqa: F821
+        self, computation: Union["Task", "WorkProfile"]  # noqa: F821
     ) -> List[Tuple[Resource, int]]:
         """Retrieves the resources on this set allocated to a given task.
 
         Args:
-            task: The task whose allocated resources need to be retrieved.
+            computation: The computation whose allocated resources need to be retrieved.
 
         Returns:
             A list of resource allocations whose each element is a (Resource,
             quantity allocated) pair.
         """
-        return self._current_allocations[task]
+        return self._current_allocations[computation]
 
-    def get_allocated_tasks(
+    def get_allocated_computation(
         self,
         resource: Resource,
-    ) -> List[Tuple["Task", int]]:  # noqa: F821
+    ) -> List[Tuple[Union["Task", "WorkProfile"], int]]:  # noqa: F821
         """Retrieves the list of (task, quantity) pairs that the requested `resource`
         has been allocated to.
 
@@ -148,17 +156,21 @@ class Resources(object):
                 requested.
 
         Returns:
-            A `List[Tuple[Task, int]]` signifying the `task` and the quantity allocated
-            to it.
+            A `List[Tuple[Union[Task, WorkProfile], int]]` signifying the `computation`
+            and the quantity allocated to it.
         """
         allocated_tasks = []
-        for task, allocations in self._current_allocations.items():
+        for computation, allocations in self._current_allocations.items():
             for allocated_resource, allocated_quantity in allocations:
                 if resource == allocated_resource:
-                    allocated_tasks.append((task, allocated_quantity))
+                    allocated_tasks.append((computation, allocated_quantity))
         return allocated_tasks
 
-    def allocate_multiple(self, resources: "Resources", task: "Task"):  # noqa: F821
+    def allocate_multiple(
+        self,
+        resources: "Resources",
+        computation: Union["Task", "WorkProfile"],  # noqa: F821
+    ) -> None:
         """Allocates multiple resources together according to their specified
         quantity.
 
@@ -185,9 +197,10 @@ class Resources(object):
         for resource, quantity in resources._resource_vector.items():
             if not self.__virtual:
                 self._logger.debug(
-                    f"Allocating {quantity} of {resource} from {self} to " f"{task}"
+                    f"Allocating {quantity} of {resource} from {self} to "
+                    f"{computation}."
                 )
-            self.allocate(resource, task, quantity)
+            self.allocate(resource=resource, computation=computation, quantity=quantity)
 
     def get_available_quantity(self, resource: Resource) -> int:
         """Provides the quantity of the available resources of the given type.
@@ -239,24 +252,26 @@ class Resources(object):
                 total_quantity += _quantity
         return total_quantity
 
-    def deallocate(self, task: "Task"):  # noqa: F821
-        """Deallocates the resources assigned to the particular `task`.
+    def deallocate(
+        self, computation: Union["Task", "WorkProfile"]  # noqa: F821
+    ) -> None:
+        """Deallocates the resources assigned to the particular `computation`.
 
         Args:
-            task (`Task`): The task whose assigned resources need to be
-                deallocated.
+            computation (`Union[Task, WorkProfile]`): The computation whose assigned
+                resources need to be deallocated.
 
         Raises:
             `ValueError` if the `task` was not allocated from this set of
             Resources.
         """
-        if task not in self._current_allocations:
+        if computation not in self._current_allocations:
             raise ValueError("The task was not allocated from this Resources.")
 
-        for resource, quantity in self._current_allocations[task]:
+        for resource, quantity in self._current_allocations[computation]:
             self._resource_vector[resource] += quantity
 
-        del self._current_allocations[task]
+        del self._current_allocations[computation]
 
     def empty(self) -> bool:
         """Check if the Resources instance has no available resources.
@@ -307,9 +322,9 @@ class Resources(object):
         cls.__init__(instance, self.__total_resources, self._logger, True)
 
         # Copy over the allocations.
-        for task, allocations in self._current_allocations.items():
+        for computation, allocations in self._current_allocations.items():
             for resource, quantity in allocations:
-                instance.allocate(copy(resource), task, quantity)
+                instance.allocate(copy(resource), computation, quantity)
 
         return instance
 

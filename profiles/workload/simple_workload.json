@@ -1,0 +1,96 @@
+{
+    "graphs": [
+        {
+            "name": "TaskGraph_One",
+            "graph": [
+                {
+                    "name": "Task_One",
+                    "work_profile": "WorkProfile_One"
+                }
+            ],
+            "release_policy": "fixed",
+            "period": 100,
+            "invocations": 1
+        },
+        {
+            "name": "TaskGraph_Two",
+            "graph": [
+                {
+                    "name": "Task_One",
+                    "work_profile": "WorkProfile_Two"
+                }
+            ],
+            "release_policy": "fixed",
+            "period": 100,
+            "invocations": 1
+        },
+        {
+            "name": "TaskGraph_Three",
+            "graph": [
+                {
+                    "name": "Task_One",
+                    "work_profile": "WorkProfile_One"
+                }
+            ],
+            "release_policy": "fixed",
+            "period": 100,
+            "invocations": 1
+        },
+        {
+            "name": "TaskGraph_Four",
+            "graph": [
+                {
+                    "name": "Task_One",
+                    "work_profile": "WorkProfile_Two"
+                }
+            ],
+            "release_policy": "fixed",
+            "period": 100,
+            "invocations": 1
+        }
+    ],
+    "profiles": [
+        {
+            "name": "WorkProfile_One",
+            "loading_strategies": [
+                {
+                    "resource_requirements": {
+                        "RAM:any": 100
+                    },
+                    "batch_size": 1,
+                    "runtime": 500
+                }
+            ],
+            "execution_strategies": [
+                {
+                    "resource_requirements": {
+                        "GPU:any": 1
+                    },
+                    "batch_size": 1,
+                    "runtime": 500
+                }
+            ]
+        },
+        {
+            "name": "WorkProfile_Two",
+            "loading_strategies": [
+                {
+                    "resource_requirements": {
+                        "RAM:any": 200
+                    },
+                    "batch_size": 1,
+                    "runtime": 1000
+                }
+            ],
+            "execution_strategies": [
+                {
+                    "resource_requirements": {
+                        "GPU:any": 1
+                    },
+                    "batch_size": 1,
+                    "runtime": 700
+                }
+            ]
+        }
+    ]
+}

@@ -445,7 +445,6 @@ def main(args):
         workload=workload,
         loop_timeout=EventTime(FLAGS.loop_timeout, EventTime.Unit.US),
         scheduler_frequency=EventTime(FLAGS.scheduler_frequency, EventTime.Unit.US),
-        policy=branch_prediction_policy,
         _flags=FLAGS,
     )
     simulator.simulate()
