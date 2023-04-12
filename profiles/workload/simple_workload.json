@@ -10,7 +10,7 @@
             ],
             "release_policy": "fixed",
             "period": 100,
-            "invocations": 20
+            "invocations": 1
         },
         {
             "name": "TaskGraph_Two",
@@ -22,7 +22,7 @@
             ],
             "release_policy": "fixed",
             "period": 100,
-            "invocations": 20
+            "invocations": 1
         },
         {
             "name": "TaskGraph_Three",
@@ -34,7 +34,7 @@
             ],
             "release_policy": "fixed",
             "period": 100,
-            "invocations": 20
+            "invocations": 1
         },
         {
             "name": "TaskGraph_Four",
@@ -46,7 +46,7 @@
             ],
             "release_policy": "fixed",
             "period": 100,
-            "invocations": 20
+            "invocations": 1
         }
     ],
     "profiles": [

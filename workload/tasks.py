@@ -298,6 +298,15 @@ class Task(object):
             )
             return False
 
+        if self._remaining_time == EventTime.zero():
+            self._logger.info(
+                "[%d] Skipping the stepping of %s since it "
+                "has zero remaining time left.",
+                current_time.to(EventTime.Unit.US).time,
+                self,
+            )
+            return False
+
         # Task can be run, step through the task's execution.
         execution_time = current_time + step_size - self._last_step_time
         if self._remaining_time - execution_time <= EventTime.zero():

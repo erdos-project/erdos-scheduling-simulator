@@ -11,14 +11,7 @@ import absl  # noqa: F401
 from schedulers import BaseScheduler
 from utils import EventTime, setup_csv_logging, setup_logging
 from workers import WorkerPools
-from workload import (
-    BranchPredictionPolicy,
-    Placement,
-    Resource,
-    Task,
-    TaskState,
-    Workload,
-)
+from workload import Placement, Resource, Task, TaskState, Workload
 
 
 @total_ordering
@@ -726,7 +719,6 @@ class Simulator(object):
             f"{event.task.timestamp},"
             f"{event.task.intended_release_time.to(EventTime.Unit.US).time},"
             f"{event.task.release_time.to(EventTime.Unit.US).time},"
-            f"{event.task.runtime.to(EventTime.Unit.US).time},"
             f"{event.task.deadline.to(EventTime.Unit.US).time},{event.task.id},"
             f"{event.task.task_graph}"
         )
@@ -929,11 +921,7 @@ class Simulator(object):
         ), f"No WorkerPool found with ID: {event.placement.worker_pool_id}."
         success = worker_pool.place_task(task, worker_id=event.placement.worker_id)
         if success:
-            task.start(
-                event.time,
-                worker_pool_id=event.placement.worker_pool_id,
-                variance=self._runtime_variance,
-            )
+            task.start(event.time, variance=self._runtime_variance)
             resource_allocation_str = ",".join(
                 [
                     ",".join((resource.name, resource.id, str(quantity)))
@@ -944,7 +932,8 @@ class Simulator(object):
             self._csv_logger.debug(
                 f"{event.time.time},TASK_PLACEMENT,{task.name},{task.task_graph},"
                 f"{task.timestamp},{task.id},{event.placement.worker_pool_id},"
-                f"{resource_allocation_str}"
+                f"{resource_allocation_str},"
+                f"{event.placement.execution_strategy.runtime.time}"
             )
             self._logger.info(
                 "[%s] Placed %s on %s.", event.time.time, task, worker_pool
@@ -1104,7 +1093,7 @@ class Simulator(object):
             for task in worker_pool.step(self._simulator_time, step_size):
                 task_finished_event = Event(
                     event_type=EventType.TASK_FINISHED,
-                    time=self._simulator_time,
+                    time=self._simulator_time + step_size,
                     task=task,
                 )
                 task_finished_events.append(task_finished_event)

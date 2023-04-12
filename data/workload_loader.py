@@ -68,14 +68,14 @@ class WorkloadLoader(object):
         # Create the WorkProfiles provided in the JSON.
         work_profiles: Mapping[str, WorkProfile] = {}
         for profile in workload_data["profiles"]:
-            work_profile = Workload.__create_work_profile(
+            work_profile = WorkloadLoader.__create_work_profile(
                 profile, self._resource_logger
             )
             work_profiles[work_profile.name] = work_profile
 
         # Create the sequence of JobGraphs for each application.
         job_graph_mapping = {}
-        for index, job in enumerate(workload_data):
+        for index, job in enumerate(workload_data["graphs"]):
             # Retrieve the name of the JobGraph.
             if "name" not in job:
                 raise ValueError(f"A name was not defined for the JobGraph {index}.")
@@ -214,13 +214,15 @@ class WorkloadLoader(object):
         # Make connections between the nodes.
         for node in json_repr:
             node_job = name_to_job_mapping[node["name"]]
-            for child in node["children"]:
-                if child not in name_to_job_mapping:
-                    raise ValueError(
-                        f"Child {child} of {node['name']} was not present in the graph."
-                    )
-                child_node_job = name_to_job_mapping[child]
-                job_graph.add_child(node_job, child_node_job)
+            if "children" in node:
+                for child in node["children"]:
+                    if child not in name_to_job_mapping:
+                        raise ValueError(
+                            f"Child {child} of {node['name']} was "
+                            f"not present in the graph."
+                        )
+                    child_node_job = name_to_job_mapping[child]
+                    job_graph.add_child(node_job, child_node_job)
 
         return job_graph
 
@@ -280,7 +282,7 @@ class WorkloadLoader(object):
         for strategy in execution_strategies:
             resource_requirements = None
             if "resource_requirements" in strategy:
-                WorkloadLoader.__create_resources(
+                resource_requirements = WorkloadLoader.__create_resources(
                     strategy["resource_requirements"], resource_logger
                 )
 
