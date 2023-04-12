@@ -435,7 +435,7 @@ class Simulator(object):
             sched_finished_event,
         )
 
-    def __handle_task_placement_skip(
+    def __create_events_from_task_placement_skip(
         self, time: EventTime, placement: Placement
     ) -> Sequence[Event]:
         """Handles the non-placement of Tasks by the Scheduler.
@@ -486,6 +486,156 @@ class Simulator(object):
             )
         return cancelled_task_events
 
+    def __create_events_from_task_placement(
+        self, event_time: EventTime, placement: Placement
+    ) -> Sequence[Event]:
+        """Handle the placement of a Task by the Scheduler.
+
+        Note that the `Placement` must be of type `Placement.PlacementType.PLACE_TASK`.
+
+        Args:
+            event_time (`EventTime`): The time at which the placement was received.
+            placement (`Placement`): The Placement object returned by a Scheduler.
+
+        Returns:
+            A sequence of events that need to be added to the event queue as a result
+            of this Placement.
+        """
+        if placement.placement_type != Placement.PlacementType.PLACE_TASK:
+            raise ValueError(
+                f"Invalid placement type {placement.placement_type} for "
+                f"{placement.task.unique_name}."
+            )
+
+        simulator_events = []
+        if placement.task.state < TaskState.SCHEDULED:
+            if placement.is_placed():
+                # The Task has not been scheduled before, we populate the
+                # required fields and cache the placement event in case
+                # changes need to be made before the task is actually executed.
+                self._logger.debug(
+                    "[%s] Scheduling the Task %s for the first time to be "
+                    "executed on WorkerPool %s at %s.",
+                    event_time.to(EventTime.Unit.US),
+                    placement.task,
+                    placement.worker_pool_id,
+                    placement.placement_time,
+                )
+                placement.task.schedule(event_time, placement)
+
+                simulator_event = Event(
+                    event_type=EventType.TASK_PLACEMENT,
+                    time=placement.placement_time,
+                    task=placement.task,
+                    placement=placement,
+                )
+                self._future_placement_events[placement.task.id] = simulator_event
+                simulator_events.append(simulator_event)
+            else:
+                simulator_events.extend(
+                    self.__create_events_from_task_placement_skip(event_time, placement)
+                )
+        elif placement.task.state == TaskState.SCHEDULED:
+            if placement.is_placed():
+                # The Task was SCHEDULED previously, we update any changes to
+                # both the Task and any future placement events in the queue.
+                if placement.task.id not in self._future_placement_events:
+                    self._logger.debug(
+                        "[%s] The Task %s in %s state did not have any "
+                        "corresponding cached Placement events in the future.",
+                        event_time.to(EventTime.Unit.US).time,
+                        placement.task,
+                        placement.task.state,
+                    )
+                    raise ValueError(
+                        f"Task {placement.task.unique_name} does not have a "
+                        f"cached future Placement event."
+                    )
+                cached_placement_event = self._future_placement_events[
+                    placement.task.id
+                ]
+                self._logger.debug(
+                    "[%s] Updating a prior placement of Task %s from "
+                    "WorkerPool %s and time %s to WorkerPool %s and time %s.",
+                    event_time.to(EventTime.Unit.US).time,
+                    placement.task,
+                    cached_placement_event.placement.worker_pool_id,
+                    cached_placement_event.time,
+                    placement.worker_pool_id,
+                    placement.placement_time,
+                )
+                placement.task.schedule(event_time, placement)
+                cached_placement_event._time = placement.placement_time
+                cached_placement_event._placement = placement
+                # Reheapify since we changed the time of some already cached events.
+                self._event_queue.reheapify()
+            else:
+                simulator_events.extend(
+                    self.__create_events_from_task_placement_skip(event_time, placement)
+                )
+        elif placement.task.state == TaskState.RUNNING:
+            if placement.is_placed():
+                if (
+                    placement.worker_pool_id != placement.task.worker_pool_id
+                    or placement.placement_time > event_time
+                ):
+                    self._logger.debug(
+                        "[%s] The Task %s in state %s was migrated from "
+                        "WorkerPool %s to WorkerPool %s to be started at %s.",
+                        event_time.to(EventTime.Unit.US).time,
+                        placement.task,
+                        placement.task.state,
+                        placement.task.worker_pool_id,
+                        placement.worker_pool_id,
+                        placement.placement_time,
+                    )
+                    simulator_events.append(
+                        Event(
+                            event_type=EventType.TASK_PREEMPT,
+                            time=event_time,
+                            task=placement.task,
+                        )
+                    )
+                    simulator_events.append(
+                        Event(
+                            event_type=EventType.TASK_MIGRATION,
+                            time=placement.placement_time,
+                            task=placement.task,
+                            placement=placement,
+                        )
+                    )
+            else:
+                self._logger.debug(
+                    "[%s] The Task %s in state %s was preempted.",
+                    event_time.to(EventTime.Unit.US).time,
+                    placement.task,
+                    placement.task.state,
+                )
+                simulator_events.append(
+                    Event(
+                        event_type=EventType.TASK_PREEMPT,
+                        time=event_time,
+                        task=placement.task,
+                    )
+                )
+        elif placement.task.state == TaskState.PREEMPTED:
+            raise NotImplementedError(
+                "Rescheduling of PREEMPTED tasks hasn't been implemented yet."
+            )
+        else:
+            # Task was either completed or cancelled before the Scheduler finished,
+            # we skip the application of this Placement decision.
+            self._logger.warning(
+                "[%s] Skipping the application of Placement of Task %s at "
+                "time %s because the Task was in %s state.",
+                event_time.to(EventTime.Unit.US).time,
+                placement.task,
+                placement.placement_time,
+                placement.task.state,
+            )
+
+        return simulator_events
+
     def __handle_scheduler_finish(self, event: Event) -> None:
         """Handle the SCHEDULER_FINISHED event. The method places the profiles and tasks
         on the appropriate workers, and computes the next scheduler start time.
@@ -523,7 +673,6 @@ class Simulator(object):
             )
 
         simulator_events = []
-        reheapify = False
         for placement in self._last_scheduler_placements:
             if placement.placement_type == Placement.PlacementType.PLACE_TASK:
                 # Ensure that the Placement always occurs in the present or future.
@@ -538,133 +687,9 @@ class Simulator(object):
                         f"A Placement for the Task {placement.task.unique_name} "
                         f"occurred in the past at {placement.placement_time}."
                     )
-
-                if placement.task.state < TaskState.SCHEDULED:
-                    if placement.is_placed():
-                        # The Task has not been scheduled before, we populate the
-                        # required # fields and cache the placement event in case
-                        # changes need to be made before the task is actually executed.
-                        self._logger.debug(
-                            "[%s] Scheduling the Task %s for the first time to be "
-                            "executed on WorkerPool %s at %s.",
-                            event.time.to(EventTime.Unit.US),
-                            placement.task,
-                            placement.worker_pool_id,
-                            placement.placement_time,
-                        )
-                        placement.task.schedule(event.time, placement)
-
-                        simulator_event = Event(
-                            event_type=EventType.TASK_PLACEMENT,
-                            time=placement.placement_time,
-                            task=placement.task,
-                            placement=placement,
-                        )
-                        self._future_placement_events[
-                            placement.task.id
-                        ] = simulator_event
-                        simulator_events.append(simulator_event)
-                    else:
-                        simulator_events.extend(
-                            self.__handle_task_placement_skip(event.time, placement)
-                        )
-                elif placement.task.state == TaskState.SCHEDULED:
-                    if placement.is_placed():
-                        # The Task was SCHEDULED previously, we update any changes to
-                        # both the Task and any future placement events in the queue.
-                        if placement.task.id not in self._future_placement_events:
-                            self._logger.debug(
-                                "[%s] The Task %s in %s state did not have any "
-                                "corresponding cached Placement events in the future.",
-                                event.time.to(EventTime.Unit.US).time,
-                                placement.task,
-                                placement.task.state,
-                            )
-                            raise ValueError(
-                                f"Task {placement.task.unique_name} does not have a "
-                                f"cached future Placement event."
-                            )
-                        cached_placement_event = self._future_placement_events[
-                            placement.task.id
-                        ]
-                        self._logger.debug(
-                            "[%s] Updating a prior placement of Task %s from "
-                            "WorkerPool %s and time %s to WorkerPool %s and time %s.",
-                            event.time.to(EventTime.Unit.US).time,
-                            placement.task,
-                            cached_placement_event.placement.worker_pool_id,
-                            cached_placement_event.time,
-                            placement.worker_pool_id,
-                            placement.placement_time,
-                        )
-                        placement.task.schedule(event.time, placement)
-                        cached_placement_event._time = placement.placement_time
-                        cached_placement_event._placement = placement
-                        reheapify = True
-                    else:
-                        simulator_events.extend(
-                            self.__handle_task_placement_skip(event.time, placement)
-                        )
-                elif placement.task.state == TaskState.RUNNING:
-                    if placement.is_placed():
-                        if (
-                            placement.worker_pool_id != placement.task.worker_pool_id
-                            or placement.placement_time > event.time
-                        ):
-                            self._logger.debug(
-                                "[%s] The Task %s in state %s was migrated from "
-                                "WorkerPool %s to WorkerPool %s to be started at %s.",
-                                event.time.to(EventTime.Unit.US).time,
-                                placement.task,
-                                placement.task.state,
-                                placement.task.worker_pool_id,
-                                placement.worker_pool_id,
-                                placement.placement_time,
-                            )
-                            simulator_events.append(
-                                Event(
-                                    event_type=EventType.TASK_PREEMPT,
-                                    time=event.time,
-                                    task=placement.task,
-                                )
-                            )
-                            simulator_events.append(
-                                Event(
-                                    event_type=EventType.TASK_MIGRATION,
-                                    time=placement.placement_time,
-                                    task=placement.task,
-                                    placement=placement,
-                                )
-                            )
-                    else:
-                        self._logger.debug(
-                            "[%s] The Task %s in state %s was preempted.",
-                            event.time.to(EventTime.Unit.US).time,
-                            placement.task,
-                            placement.task.state,
-                        )
-                        simulator_events.append(
-                            Event(
-                                event_type=EventType.TASK_PREEMPT,
-                                time=event.time,
-                                task=placement.task,
-                            )
-                        )
-                elif placement.task.state == TaskState.PREEMPTED:
-                    raise NotImplementedError(
-                        "Rescheduling of PREEMPTED tasks hasn't been implemented yet."
-                    )
-                else:
-                    # Task was either completed or cancelled before the Scheduler finished,
-                    # we skip the application of this Placement decision.
-                    self._logger.warning(
-                        "[%s] Skipping the application of Placement of Task %s at "
-                        "time %s because the Task was in %s state.",
-                        event.time.to(EventTime.Unit.US).time,
-                        placement.task,
-                        placement.placement_time,
-                        placement.task.state,
-                    )
+                simulator_events.extend(
+                    self.__create_events_from_task_placement(event.time, placement)
+                )
 
         # Sort the events so that preemptions and migrations happen first.
         for simulator_event in sorted(simulator_events):
@@ -674,10 +699,6 @@ class Simulator(object):
                 simulator_event,
             )
             self._event_queue.add_event(simulator_event)
-
-        # If we changed the start times of some events, then reheapify.
-        if reheapify:
-            self._event_queue.reheapify()
 
         # Reset the available tasks and the last task placement.
         self._last_scheduler_placements = []
