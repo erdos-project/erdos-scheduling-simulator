@@ -241,7 +241,7 @@ class WorkloadLoader(object):
             A `WorkProfile` object that contains the strategies available for execution.
         """
         if "name" not in profile:
-            raise KeyError(f"The key 'name' was not found in the WorkProfile.")
+            raise KeyError("The key 'name' was not found in the WorkProfile.")
 
         loading_strategies = ExecutionStrategies()
         if "loading_strategies" in profile:
