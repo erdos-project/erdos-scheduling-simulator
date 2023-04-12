@@ -1,6 +1,6 @@
 from copy import copy
 import time
-from typing import Mapping, Optional, Sequence, Union
+from typing import Mapping, Optional, Sequence, Tuple, Union
 
 import absl  # noqa: F401
 
@@ -8,10 +8,27 @@ from schedulers import BaseScheduler
 from utils import EventTime
 from workers import Worker, WorkerPools
 from workload import Placement, Placements, Task, TaskState, Workload
+from workload.strategy import ExecutionStrategy
+
+
+class Models:
+    """Defines a priority order over the models to figure out which
+    needs to be loaded and evicted."""
 
 
 class Model:
-    pass
+    def __init__(self, id: str):
+        self._tasks_priority_queue = None
+        pass
+
+    def get_feasible_strategy(
+        self,
+        sim_time: EventTime,
+        worker: Worker,
+    ) -> Sequence[Placement]:
+        """Returns a feasible execution strategy with the largest batch size
+        that meets the earliest deadline, and removes all tasks from the queues
+        that comprise the batch."""
 
 
 class ClockworkScheduler(BaseScheduler):
@@ -21,14 +38,8 @@ class ClockworkScheduler(BaseScheduler):
         runtime (`EventTime`): The runtime to return to the Simulator (in us).
             If -1, the scheduler returns the actual runtime.
         enforce_deadlines (`bool`): If True then deadlines must be met or else the
-            `schedule()` will return None.
-        goal (`str`): The goal to use as the optimization objective.
-        time_limit (`EventTime`): The time to keep searching for new solutions without
-            any changes to either the incumbent or the best bound.
-        time_discretization (`EventTime`): Assigns time to buckets to reduce the
-            number of constraints. Defaults to 1 us.
-        plan_ahead (`EventTime`): The time frame to consider for scheduling decisions.
-            If -1, uses the greatest deadline.
+            `schedule()` will return None. Likewise, tasks which cannot meet their
+            deadlines will not be placed.
         log_to_file (`bool`): If `True`, the scheduler writes the Gurobi search
             log to files with the format "gurobi_{sim_time}.log".
         _flags (`Optional[absl.flags]`): The runtime flags that are used to initialize
@@ -39,18 +50,14 @@ class ClockworkScheduler(BaseScheduler):
         self,
         runtime: EventTime = EventTime(time=-1, unit=EventTime.Unit.US),
         enforce_deadlines: bool = False,
-        goal: str = "max_goodput",
-        plan_ahead: EventTime = EventTime(time=-1, unit=EventTime.Unit.US),
         log_to_file: bool = False,
         _flags: Optional["absl.flags"] = None,
     ):
-        super(TetriSchedGurobiScheduler, self).__init__(
+        super(ClockworkScheduler, self).__init__(
             runtime=runtime,
             enforce_deadlines=enforce_deadlines,
             _flags=_flags,
         )
-        self._goal = goal
-        self._plan_ahead = plan_ahead
         self._log_to_file = log_to_file
 
         self._models = {}
@@ -77,19 +84,12 @@ class ClockworkScheduler(BaseScheduler):
             branch_prediction_accuracy=self.branch_prediction_accuracy,
         )
 
-        # Find the currently running and scheduled tasks to inform
-        # the scheduler of previous placements.
-        if self.retract_schedules:
-            # If we are retracting schedules, the scheduler will re-place
-            # the scheduled tasks, so we should only consider RUNNING tasks.
-            filter_fn = lambda task: task.state == TaskState.RUNNING  # noqa: E731
-        else:
-            # If we are not retracting schedules, we should consider both
-            # RUNNING and SCHEDULED task placements as permanent.
-            filter_fn = lambda task: task.state in (  # noqa: E731
-                TaskState.RUNNING,
-                TaskState.SCHEDULED,
-            )
+        # If we are not retracting schedules, we should consider both
+        # RUNNING and SCHEDULED task placements as permanent.
+        filter_fn = lambda task: task.state in (  # noqa: E731
+            TaskState.RUNNING,
+            TaskState.SCHEDULED,
+        )
         previously_placed_tasks = workload.filter(filter_fn)
 
         # Create a virtual WorkerPool set to try scheduling decisions on.
@@ -126,7 +126,7 @@ class ClockworkScheduler(BaseScheduler):
                 task.deadline - task.profile.loading_strategy.get_fastest_strategy()
             )
             # Admission control
-            if task.deadline > sim_time:
+            if task.deadline > sim_time and self.enforce_deadlines:
                 placements.append(
                     Placement(
                         task=task,
@@ -137,6 +137,7 @@ class ClockworkScheduler(BaseScheduler):
                     )
                 )
             else:
+                per_worker_edf_queues = {}
                 # TODO: order by EDF instead.
                 # Compute demand
                 # Clockwork uses a `size` parameter which is an estimate of the amount
