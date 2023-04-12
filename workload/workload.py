@@ -1,4 +1,4 @@
-from typing import Callable, Mapping, Optional, Sequence, Tuple
+from typing import Callable, Mapping, Optional, Sequence, Set, Tuple
 
 import absl
 
@@ -6,6 +6,7 @@ from utils import EventTime, setup_logging
 from workload import BranchPredictionPolicy
 
 from .jobs import JobGraph
+from .profile import WorkProfile
 from .tasks import Task, TaskGraph
 
 
@@ -24,6 +25,7 @@ class Workload(object):
         self,
         job_graphs: Optional[Mapping[str, JobGraph]] = None,
         task_graphs: Optional[Mapping[str, TaskGraph]] = None,
+        work_profiles: Optional[Set[WorkProfile]] = None,
         _flags: Optional["absl.flags"] = None,
     ) -> None:
         if job_graphs is None and task_graphs is None:
@@ -45,6 +47,7 @@ class Workload(object):
 
         # Prioritize the creation of the Workload from a TaskGraph
         # for backward compatibility with older versions of logs.
+        self._work_profiles = work_profiles
         if task_graphs is None:
             self._job_graphs = job_graphs
             self._task_graphs = dict()
@@ -64,7 +67,14 @@ class Workload(object):
             job_graphs: A mapping from the name of the application to its JobGraph.
 
         """
-        return Workload(job_graphs=job_graphs, _flags=_flags)
+        work_profiles = set()
+        for job_graph in job_graphs.values():
+            for job in job_graph.get_nodes():
+                if job.profile is not None:
+                    work_profiles.add(job.profile)
+        return Workload(
+            job_graphs=job_graphs, work_profiles=work_profiles, _flags=_flags
+        )
 
     @staticmethod
     def from_task_graphs(
@@ -75,11 +85,17 @@ class Workload(object):
         Args:
             task_graphs: A mapping from the name of the application to its TaskGraph.
         """
+        work_profiles = set()
         for task_graph_name, task_graph in task_graphs.items():
             assert (
                 task_graph_name == task_graph.name
             ), "Naming mismatch between TaskGraph and Workload."
-        return Workload(task_graphs=task_graphs, _flags=_flags)
+            for task in task_graph.get_nodes():
+                if task.profile is not None:
+                    work_profiles.add(task.profile)
+        return Workload(
+            task_graphs=task_graphs, work_profiles=work_profiles, _flags=_flags
+        )
 
     @staticmethod
     def empty() -> "Workload":
@@ -284,3 +300,8 @@ class Workload(object):
     def task_graphs(self) -> Mapping[str, TaskGraph]:
         """Retrieve the TaskGraph instances stored in this Workload."""
         return self._task_graphs
+
+    @property
+    def work_profiles(self) -> Set[WorkProfile]:
+        """Retrieve the `WorkProfile`s that constitute this `Workload`."""
+        return self._work_profiles

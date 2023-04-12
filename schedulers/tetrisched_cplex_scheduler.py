@@ -221,7 +221,7 @@ class TaskOptimizerVariables(object):
             if type(variable) != int and solution.get_value(variable) == 1:
                 placement_worker = worker_index_to_worker[worker_id]
                 placement_worker_pool_id = worker_id_to_worker_pool[placement_worker.id]
-                return Placement(
+                return Placement.create_task_placement(
                     task=self.task,
                     placement_time=EventTime(start_time, unit=EventTime.Unit.US),
                     worker_pool_id=placement_worker_pool_id,
@@ -230,7 +230,7 @@ class TaskOptimizerVariables(object):
                         self.task.available_execution_strategies
                     ).get_fastest_strategy(),
                 )
-        return Placement(
+        return Placement.create_task_placement(
             task=self.task,
             placement_time=None,
             worker_pool_id=None,

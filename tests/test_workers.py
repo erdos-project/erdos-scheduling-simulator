@@ -209,7 +209,7 @@ def test_worker_remove_task_success():
     task.release(EventTime(1, EventTime.Unit.US))
     task.schedule(
         EventTime(2, EventTime.Unit.US),
-        placement=Placement(
+        placement=Placement.create_task_placement(
             task=task,
             placement_time=EventTime(2, EventTime.Unit.US),
             worker_pool_id=worker.id,
@@ -257,7 +257,7 @@ def test_worker_step_tasks():
     task_one.release(EventTime(2, EventTime.Unit.US))
     task_one.schedule(
         EventTime(3, EventTime.Unit.US),
-        placement=Placement(
+        placement=Placement.create_task_placement(
             task=task_one,
             placement_time=EventTime(3, EventTime.Unit.US),
             worker_pool_id=worker.id,
@@ -268,7 +268,7 @@ def test_worker_step_tasks():
     task_two.release(EventTime(2, EventTime.Unit.US))
     task_two.schedule(
         EventTime(3, EventTime.Unit.US),
-        placement=Placement(
+        placement=Placement.create_task_placement(
             task=task_two,
             placement_time=EventTime(3, EventTime.Unit.US),
             worker_pool_id=worker.id,
@@ -441,7 +441,7 @@ def test_worker_pool_step():
     task_two.release(EventTime(2, EventTime.Unit.US))
     task_one.schedule(
         EventTime(3, EventTime.Unit.US),
-        placement=Placement(
+        placement=Placement.create_task_placement(
             task=task_one,
             placement_time=EventTime(3, EventTime.Unit.US),
             worker_pool_id=worker_pool.id,
@@ -450,7 +450,7 @@ def test_worker_pool_step():
     )
     task_two.schedule(
         EventTime(3, EventTime.Unit.US),
-        placement=Placement(
+        placement=Placement.create_task_placement(
             task=task_two,
             placement_time=EventTime(3, EventTime.Unit.US),
             worker_pool_id=worker_pool.id,

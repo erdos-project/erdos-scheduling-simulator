@@ -68,7 +68,7 @@ class LSFScheduler(BaseScheduler):
                         worker_pool.place_task(task)
                         is_task_placed = True
                         placements.append(
-                            Placement(
+                            Placement.create_task_placement(
                                 task=task,
                                 worker_pool_id=worker_pool.id,
                                 placement_time=sim_time,
@@ -80,7 +80,7 @@ class LSFScheduler(BaseScheduler):
                     break
 
             if not is_task_placed:
-                placements.append(Placement(task))
+                placements.append(Placement.create_task_placement(task))
 
         end_time = time.time()
 

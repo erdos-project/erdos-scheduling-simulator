@@ -1,3 +1,4 @@
+import random
 import uuid
 
 from .strategy import ExecutionStrategies
@@ -23,7 +24,7 @@ class WorkProfile(object):
         loading_strategies: ExecutionStrategies = ExecutionStrategies(),
     ) -> None:
         self._name = name
-        self._id = uuid.uuid4()
+        self._id = uuid.UUID(int=random.getrandbits(128), version=4)
         self._loading_strategies = loading_strategies
         self._execution_strategies = execution_strategies
 
@@ -36,6 +37,10 @@ class WorkProfile(object):
     @property
     def name(self) -> str:
         return self._name
+
+    @property
+    def id(self) -> str:
+        return str(self._id)
 
     @property
     def loading_strategies(self) -> ExecutionStrategies:

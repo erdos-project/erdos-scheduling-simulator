@@ -563,7 +563,7 @@ class TetriSchedGurobiScheduler(BaseScheduler):
                             task_variables.task.available_execution_strategies
                         ).get_fastest_strategy()
                         placements.append(
-                            Placement(
+                            Placement.create_task_placement(
                                 task=task_variables.task,
                                 placement_time=start_time,
                                 worker_pool_id=worker_to_worker_pool[
@@ -581,7 +581,7 @@ class TetriSchedGurobiScheduler(BaseScheduler):
                             task.unique_name,
                         )
                         placements.append(
-                            Placement(
+                            Placement.create_task_placement(
                                 task=task_variables.task,
                                 placement_time=None,
                                 worker_pool_id=None,
@@ -595,7 +595,7 @@ class TetriSchedGurobiScheduler(BaseScheduler):
                 # tasks.
                 for task in tasks_to_be_scheduled:
                     placements.append(
-                        Placement(
+                        Placement.create_task_placement(
                             task=task,
                             placement_time=None,
                             worker_pool_id=None,

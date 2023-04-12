@@ -179,9 +179,11 @@ class Task(object):
                     f"time was {self.intended_release_time}."
                 )
         if self._state < TaskState.RELEASED:
-            self._logger.debug(
-                f"[{time}] Released task {self.unique_name} from state {self._state}."
-            )
+            if time:
+                self._logger.debug(
+                    f"[{time.to(EventTime.Unit.US).time}] Released task "
+                    f"{self.unique_name} from state {self._state}."
+                )
             self._state = TaskState.RELEASED
 
     def schedule(

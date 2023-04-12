@@ -1,11 +1,18 @@
 from operator import itemgetter
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Set
 
 import absl  # noqa: F401
 
 from utils import EventTime, setup_logging
 from workers import WorkerPool, WorkerPools
-from workload import BranchPredictionPolicy, Placements, Task, TaskState, Workload
+from workload import (
+    BranchPredictionPolicy,
+    Placements,
+    Task,
+    TaskState,
+    Workload,
+    WorkProfile,
+)
 
 
 class BaseScheduler(object):
@@ -65,17 +72,31 @@ class BaseScheduler(object):
         else:
             self._logger = setup_logging(name=self.__class__.__name__)
 
-    def start(self, start_time: EventTime) -> None:
+    def start(
+        self, start_time: EventTime, work_profiles: Set[WorkProfile]
+    ) -> Placements:
         """Initializes the startup phase of a scheduler. This method is invoked before
         requests start arriving to the Scheduler, and allows it to do basic set-up work.
 
         Args:
             start_time (`EventTime`): The time at which the scheduler was invoked.
+            work_profiles (`Set[WorkProfile]`): A (possibly) empty set of
+                `WorkProfile`s provided to the scheduler at the start.
+
+        Returns:
+            A `Placements` object that signifies the initial placements to be made by
+            the Scheduler.
         """
         self._logger.info(
-            "[%s] Initiated the %s with the default startup implementation.",
+            "[%s] Initiated the %s with the default startup implementation "
+            "with the following work profiles: [%s].",
             start_time.to(EventTime.Unit.US).time,
             self.__class__.__name__,
+            ", ".join(work_profile.name for work_profile in work_profiles),
+        )
+        return Placements(
+            runtime=EventTime.zero(),
+            true_runtime=EventTime.zero(),
         )
 
     def schedule(

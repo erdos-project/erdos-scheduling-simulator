@@ -94,10 +94,10 @@ class EDFScheduler(BaseScheduler):
                         )
                         is_task_placed = True
                         placements.append(
-                            Placement(
+                            Placement.create_task_placement(
                                 task=task,
-                                worker_pool_id=worker_pool.id,
                                 placement_time=sim_time,
+                                worker_pool_id=worker_pool.id,
                                 execution_strategy=execution_strategy,
                             )
                         )
@@ -122,7 +122,7 @@ class EDFScheduler(BaseScheduler):
                     f"[{sim_time}] Failed to place {task} because no worker pool "
                     f"could accomodate the resource requirements."
                 )
-                placements.append(Placement(task=task))
+                placements.append(Placement.create_task_placement(task=task))
 
         end_time = time.time()
 

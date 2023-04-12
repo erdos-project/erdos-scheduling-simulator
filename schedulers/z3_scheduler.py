@@ -348,7 +348,7 @@ class Z3Scheduler(BaseScheduler):
                     worker_pool_id = worker_to_worker_pool[worker.id]
                     start_time = model[variables.start_time].as_long()
                     placements.append(
-                        Placement(
+                        Placement.create_task_placement(
                             task=variables.task,
                             placement_time=EventTime(start_time, EventTime.Unit.US),
                             worker_pool_id=worker_pool_id,
@@ -360,14 +360,14 @@ class Z3Scheduler(BaseScheduler):
                         f"WorkerPool({worker_pool_id}) to be started at {start_time}."
                     )
                 else:
-                    placements.append(Placement(variables.task))
+                    placements.append(Placement.create_task_placement(variables.task))
                     self._logger.debug(
                         f"[{sim_time.time}] Failed to place {variables.task} because "
                         f"no worker pool could accomodate the resource requirements."
                     )
         else:
             for variables in tasks_to_variables.values():
-                placements.append(Placement(variables.task))
+                placements.append(Placement.create_task_placement(variables.task))
             self._logger.debug(f"[{sim_time.time}] Failed to place any task.")
         scheduler_end_time = time.time()
         scheduler_runtime = EventTime(

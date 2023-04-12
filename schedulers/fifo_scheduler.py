@@ -52,7 +52,7 @@ class FIFOScheduler(BaseScheduler):
                     worker_pool.place_task(task)
                     task_placed = True
                     placements.append(
-                        Placement(
+                        Placement.create_task_placement(
                             task=task,
                             worker_pool_id=worker_pool.id,
                             placement_time=sim_time,
@@ -60,7 +60,7 @@ class FIFOScheduler(BaseScheduler):
                     )
                     break
             if not task_placed:
-                placements.append(Placement(task=task))
+                placements.append(Placement.create_task_placement(task=task))
 
         end_time = time.time()
 
