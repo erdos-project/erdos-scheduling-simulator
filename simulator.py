@@ -390,7 +390,13 @@ class Simulator(object):
                 if self.__handle_event(self._event_queue.next()):
                     break
 
-    def __handle_scheduler_start(self, event: Event):
+    def __handle_scheduler_start(self, event: Event) -> None:
+        """Handle the SCHEDULER_START event. The method invokes the scheduler, and adds
+        a SCHEDULER_FINISHED event to the event queue.
+
+        Args:
+            event (`Event`): The event to handle.
+        """
         # Log the required CSV information.
         currently_placed_tasks = self._worker_pools.get_placed_tasks()
         schedulable_tasks = self._workload.get_schedulable_tasks(
@@ -480,7 +486,13 @@ class Simulator(object):
             )
         return cancelled_task_events
 
-    def __handle_scheduler_finish(self, event: Event):
+    def __handle_scheduler_finish(self, event: Event) -> None:
+        """Handle the SCHEDULER_FINISHED event. The method places the profiles and tasks
+        on the appropriate workers, and computes the next scheduler start time.
+
+        Args:
+            event (`Event`): The event to handle.
+        """
         # Place the tasks on the assigned worker pool, and reset the
         # available events to the tasks that could not be placed.
         self._logger.info(
@@ -686,7 +698,14 @@ class Simulator(object):
             Event(event_type=EventType.LOG_UTILIZATION, time=event.time)
         )
 
-    def _handle_task_cancellation(self, event: Event):
+    def _handle_task_cancellation(self, event: Event) -> None:
+        """Handle the cancellation of a task. If the scheduler decided to cancel the
+        task or the conditional task was resolved to never be executed, we cancel the
+        Task and remove any future placements queued for this Task.
+
+        Args:
+            event (`Event`): The event containing the task to be cancelled.
+        """
         self._cancelled_tasks += 1
         self._logger.info(
             "[%s] (%d) The Simulator is cancelling the task %s.",
@@ -711,7 +730,14 @@ class Simulator(object):
             self._event_queue.remove_event(placement_event)
             del self._future_placement_events[event.task.id]
 
-    def __handle_task_release(self, event: Event):
+    def __handle_task_release(self, event: Event) -> None:
+        """Handle the release of a task. If the task is not already scheduled and the
+        next scheduler event is too far into the future, we bring the next scheduler
+        event closer to ensure minimal queueing delay.
+
+        Args:
+            event (`Event`): The event containing the task to be released.
+        """
         # Release a task for the scheduler.
         event.task.release(event.time)
         self._csv_logger.debug(
@@ -742,7 +768,16 @@ class Simulator(object):
                 self._next_scheduler_event._time = new_scheduler_event_time
                 self._event_queue.reheapify()
 
-    def __handle_task_finished(self, event: Event):
+    def __handle_task_finished(self, event: Event) -> None:
+        """Handle the completion of a task. The Task is first removed from the Worker
+        where it was placed, and then the Task is marked as finished. If the finishing
+        of this `Task` completes the `TaskGraph`, then the `TaskGraph` is marked as
+        complete and the event is logged. If not, the next `Task`s in the `TaskGraph`
+        are released to the Simulator.
+
+        Args:
+            event (`Event`): The event containing the task that finished.
+        """
         # Remove the Task from the WorkerPool and invoke it's finish method.
         task_placed_at_worker_pool = self._worker_pools.get_worker_pool(
             event.task.worker_pool_id
@@ -853,7 +888,13 @@ class Simulator(object):
                 task,
             )
 
-    def __handle_task_preempt(self, event: Event):
+    def __handle_task_preempt(self, event: Event) -> None:
+        """Handles the TASK_PREEMPT event. The `Task` is removed from the `WorkerPool`
+        where it was running and the `Task`'s preemption is logged into the CSV.
+
+        Args:
+            event (Event): The event to handle.
+        """
         task = event.task
         self._csv_logger.debug(
             f"{event.time.time},TASK_PREEMPT,{task.name},{task.timestamp},{task.id}"
@@ -862,7 +903,16 @@ class Simulator(object):
         worker_pool.remove_task(current_time=event.time, task=task)
         task.preempt(event.time)
 
-    def __handle_task_placement(self, event: Event, workload: Workload):
+    def __handle_task_placement(self, event: Event, workload: Workload) -> None:
+        """Handles the TASK_PLACEMENT event. The `Task` is placed on the `WorkerPool`
+        where it was scheduled to run and the placement is moved further in the future
+        if the `WorkerPool` is not ready to run the `Task`.
+
+        Args:
+            event (Event): The event to handle.
+            workload (Workload): The `Workload` where the `TaskGraph`s for the `Task`
+                are stored.
+        """
         self._logger.debug(
             "[%s] Handling TASK_PLACEMENT event: %s.",
             event.time.to(EventTime.Unit.US).time,
@@ -961,7 +1011,15 @@ class Simulator(object):
                 f"{task.id},{event.placement.worker_pool_id}"
             )
 
-    def __handle_task_migration(self, event: Event):
+    def __handle_task_migration(self, event: Event) -> None:
+        """Handles the TASK_MIGRATION event. This event must be followed by a
+        `TASK_PREEMPT` event that preempts the `Task` from the `WorkerPool` where it
+        was last placed. The `Task` is then placed on the `WorkerPool` where it is to
+        be migrated.
+
+        Args:
+            event (Event): The event to handle.
+        """
         task = event.task
         assert (
             task.state == TaskState.PREEMPTED
@@ -1071,7 +1129,7 @@ class Simulator(object):
             raise ValueError(f"[{event.time}] Retrieved event of unknown type: {event}")
         return False
 
-    def __step(self, step_size: EventTime = EventTime(1, EventTime.Unit.US)):
+    def __step(self, step_size: EventTime = EventTime(1, EventTime.Unit.US)) -> None:
         """Advances the clock by the given `step_size`.
 
         Args:
