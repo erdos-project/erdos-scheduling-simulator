@@ -1,5 +1,5 @@
 from copy import copy
-from typing import Optional, Sequence
+from typing import Iterator, Optional, Sequence
 
 from utils import EventTime
 
@@ -111,7 +111,7 @@ class ExecutionStrategies(object):
             return None
         return max(self._strategies, key=lambda s: s.runtime)
 
-    def __iter__(self) -> ExecutionStrategy:
+    def __iter__(self) -> Iterator[ExecutionStrategy]:
         for strategy in self._strategies:
             yield strategy
 

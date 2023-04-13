@@ -8,6 +8,7 @@ from schedulers import BaseScheduler
 from utils import EventTime
 from workers import Worker, WorkerPools
 from workload import Placement, Placements, Task, TaskState, Workload
+from workload.profile import WorkProfile
 from workload.strategy import ExecutionStrategy
 
 
@@ -17,18 +18,62 @@ class Models:
 
 
 class Model:
-    def __init__(self, id: str):
-        self._tasks_priority_queue = None
-        pass
+    def __init__(self, profile: WorkProfile):
+        self._task_priority_queue: Sequence[Task] = []
+        self._profile = profile
 
-    def get_feasible_strategy(
+    @property
+    def id(self) -> str:
+        return self._profile.id
+
+    @property
+    def profile(self) -> WorkProfile:
+        return self._profile
+
+    def add_task(self, task: Task):
+        if task not in self._task_priority_queue:
+            self._task_priority_queue = self._task_priority_queue + [task]
+
+    def get_feasible_placements(
         self,
         sim_time: EventTime,
+        worker_pool_id: str,
         worker: Worker,
     ) -> Sequence[Placement]:
         """Returns a feasible execution strategy with the largest batch size
         that meets the earliest deadline, and removes all tasks from the queues
         that comprise the batch."""
+        if len(self._task_priority_queue) == 0:
+            return []
+
+        # TODO: Update this when the task PQ implementation changes.
+        deadline = self._task_priority_queue[0].deadline
+
+        strategies = worker.get_compatible_strategies(self.profile.execution_strategies)
+        chosen_strategy = strategies.get_fastest_strategy()
+        if chosen_strategy is None:
+            return []
+        for strategy in strategies:
+            if sim_time + strategy.runtime <= deadline:
+                if (
+                    strategy.batch_size > chosen_strategy.batch_size
+                    # Prevent over-provisioning for an unnecessarily large batch size.
+                    and chosen_strategy.batch_size < len(self._task_priority_queue)
+                ):
+                    chosen_strategy = strategy
+
+        placements = []
+        for _ in range(chosen_strategy.batch_size):
+            # TODO: Update this when the task PQ implementation changes.
+            task = self._task_priority_queue[0]
+            self._task_priority_queue = self._task_priority_queue[1:]
+
+            placements.append(
+                Placement.create_task_placement(
+                    task, sim_time, worker_pool_id, worker.id, chosen_strategy
+                )
+            )
+        return placements
 
 
 class ClockworkScheduler(BaseScheduler):
@@ -60,7 +105,7 @@ class ClockworkScheduler(BaseScheduler):
         )
         self._log_to_file = log_to_file
 
-        self._models = {}
+        self._models: Mapping[str, Model] = {}
         # Maps worker ID to model ID.
         # LRU cache of models loaded onto each GPU.
         self._cached_models: Mapping[int, Sequence[str]] = {}
@@ -98,7 +143,7 @@ class ClockworkScheduler(BaseScheduler):
         # Construct a mapping of the index of a Worker to the Worker itself, and
         # a mapping from the Worker to the WorkerPool to which it belongs.
         worker_index = 1
-        workers = {}
+        workers: Mapping[str, Worker] = {}
         worker_to_worker_pool = {}
         for worker_pool in schedulable_worker_pools.worker_pools:
             for worker in worker_pool.workers:
@@ -117,14 +162,13 @@ class ClockworkScheduler(BaseScheduler):
             f"placements: {[task.unique_name for task in previously_placed_tasks]}."
         )
 
-        # Construct the model and the variables for each of the tasks.
+        # Populate the models with tasks.
         scheduler_start_time = time.time()
         placements = []
         for task in tasks_to_be_scheduled:
             model_id = task.profile.id
-            load_weights_deadline = (
-                task.deadline - task.profile.loading_strategy.get_fastest_strategy()
-            )
+            if model_id not in self._models:
+                self._models[model_id] = Model(model_id)
             # Admission control
             if task.deadline > sim_time and self.enforce_deadlines:
                 placements.append(
@@ -137,31 +181,22 @@ class ClockworkScheduler(BaseScheduler):
                     )
                 )
             else:
-                per_worker_edf_queues = {}
-                # TODO: order by EDF instead.
-                # Compute demand
-                # Clockwork uses a `size` parameter which is an estimate of the amount
-                # of time the model takes to execute for batch size 1. While
-                # configurable, Clockwork defaults to using the 99th percentile over the
-                # last 10 executions, which is equivalent to the slowest execution.
-                estimated_execution_time = (
-                    task.available_execution_strategies.get_fastest_strategy().runtime
+                if model_id in self._models:
+                    self._models[model_id].add_task(task)
+                else:
+                    model = Model(task.profile)
+                    model.add_task(task)
+                    self._models[model_id] = model
+
+        for worker in workers.values():
+            # Skip workers currently processing tasks.
+            if len(worker.get_placed_tasks()) > 0:
+                continue
+            for model in self._models.values():
+                new_placements = model.get_feasible_placements(
+                    sim_time, worker_to_worker_pool[worker.id], worker.id
                 )
-                estimated_loadweights_time = (
-                    task.available_execution_strategies.get_fastest_strategy().runtime
-                )
-                # Clockwork's capacity parameter is set to 100 ms, measured in ns.
-                # https://gitlab.mpi-sws.org/cld/ml/clockwork/-/blob/master/src/controller.cpp#L153
-                exec_size = (
-                    estimated_execution_time.to(EventTime.Unit.US).time
-                    * 1e5
-                    / estimated_execution_time.to(EventTime.Unit.US).time
-                )
-                loadweights_size = (
-                    estimated_execution_time.to(EventTime.Unit.US).time
-                    * 1e5
-                    # / estimated_execution_time.to(EventTime.Unit.US).time
-                )
+                placements.extend(new_placements)
 
         scheduler_end_time = time.time()
         scheduler_runtime = EventTime(
