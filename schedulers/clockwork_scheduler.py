@@ -43,7 +43,7 @@ class Model:
         """Returns a feasible execution strategy with the largest batch size
         that meets the earliest deadline, and removes all tasks from the queues
         that comprise the batch."""
-        if len(self._task_priority_queue) == 0:
+        if len(self._task_priority_queue) == 0 or not worker.is_available(self.profile):
             return []
 
         # TODO: Update this when the task PQ implementation changes.
