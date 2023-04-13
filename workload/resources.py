@@ -266,7 +266,9 @@ class Resources(object):
             Resources.
         """
         if computation not in self._current_allocations:
-            raise ValueError("The task was not allocated from this Resources.")
+            raise ValueError(
+                f"The computation {computation} was not allocated from these Resources."
+            )
 
         for resource, quantity in self._current_allocations[computation]:
             self._resource_vector[resource] += quantity
