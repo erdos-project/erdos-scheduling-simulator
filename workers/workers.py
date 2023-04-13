@@ -2,10 +2,11 @@ import logging
 import random
 import uuid
 from copy import copy, deepcopy
-from typing import List, Mapping, Optional, Sequence, Tuple, Type
+from typing import List, Mapping, Optional, Sequence, Set, Tuple, Type, Union
 
 from utils import EventTime, setup_logging
 from workload import (
+    BatchStrategy,
     ExecutionStrategies,
     ExecutionStrategy,
     Resource,
@@ -45,6 +46,8 @@ class Worker(object):
         self._id = uuid.UUID(int=random.getrandbits(128), version=4)
         self._resources = resources
         self._placed_tasks: Mapping[Task, ExecutionStrategy] = {}
+        self._placed_batches: Mapping[BatchStrategy, Set[Task]] = {}
+        self._batch_tasks_for_strategy: Mapping[BatchStrategy, Task] = {}
         self._available_profiles: Mapping[WorkProfile, ExecutionStrategy] = {}
         self._pending_profiles: Mapping[WorkProfile, ExecutionStrategy] = {}
 
@@ -76,22 +79,74 @@ class Worker(object):
             f"{loading_strategy} to the set of pending profiles."
         )
 
-    def place_task(self, task: Task, execution_strategy: ExecutionStrategy) -> None:
+    def place_task(
+        self, task: Task, execution_strategy: Union[ExecutionStrategy, BatchStrategy]
+    ) -> None:
         """Places the task on this `Worker` using the given `execution_strategy`.
 
         The caller must check that the `Worker` can accomodate this strategy by
-        invoking `can_accomodate_strategy`.
+        invoking `can_accomodate_strategy`. If an instance of type `BatchStrategy` is
+        provided to the method, the method will ensure that all `Task`s in the batch
+        are accomodated together without requiring separate resources for each of them.
 
         Args:
             task (`Task`): The task to be placed on this `Worker`.
-            execution_strategy (`ExecutionStrategy`): The strategy to be used for
-                executing the task.
+            execution_strategy (`Union[ExecutionStrategy, BatchStrategy]`): The
+                strategy to be used for executing the task.
         """
-        self._resources.allocate_multiple(execution_strategy.resources, task)
-        self._placed_tasks[task] = execution_strategy
-        self._logger.debug(
-            f"Placed {task} on {self} with the execution strategy {execution_strategy}."
-        )
+        if isinstance(execution_strategy, BatchStrategy):
+            # If the execution strategy is a batch strategy, then we need to allocate
+            # the resources only if the batch is not already placed on this worker.
+            if execution_strategy not in self._placed_batches:
+                if execution_strategy.batch_size < 1:
+                    raise ValueError(
+                        f"The batch size {execution_strategy.batch_size} is invalid."
+                    )
+                # Create a virtual task that acts as a placeholder for the Resources.
+                batch_task = Task(
+                    name=f"BatchFor{task.name}",
+                    task_graph=task.task_graph,
+                    job=task.job,
+                    deadline=task.deadline,
+                )
+                self._resources.allocate_multiple(
+                    execution_strategy.resources, batch_task
+                )
+
+                # Add the task to the set of placed tasks for the given batch.
+                self._placed_batches[execution_strategy] = set()
+                self._placed_batches[execution_strategy].add(task)
+                self._placed_tasks[task] = execution_strategy
+
+                # Log the virtual task for the batch.
+                self._batch_tasks_for_strategy[execution_strategy] = batch_task
+                self._logger.debug(
+                    f"Placed {task} on {self} as part of a new "
+                    f"batch with the ID: {execution_strategy.id}."
+                )
+            else:
+                if (
+                    len(self._placed_batches[execution_strategy]) + 1
+                    > execution_strategy.batch_size
+                ):
+                    raise RuntimeError(
+                        f"Total of {len(self._placed_batches[execution_strategy]) + 1} "
+                        f"tasks were placed in the batch, but the batch size is "
+                        f"{execution_strategy.batch_size}."
+                    )
+                self._placed_batches[execution_strategy].add(task)
+                self._placed_tasks[task] = execution_strategy
+                self._logger.debug(
+                    f"Placed {task} on {self} as part of an already "
+                    f"placed batch with the ID: {execution_strategy.id}."
+                )
+        else:
+            self._resources.allocate_multiple(execution_strategy.resources, task)
+            self._placed_tasks[task] = execution_strategy
+            self._logger.debug(
+                f"Placed {task} on {self} with the "
+                f"execution strategy {execution_strategy}."
+            )
 
     def evict_profile(self, profile: WorkProfile) -> None:
         """Evicts the given `profile` and frees up the resources corresponding to the
@@ -123,6 +178,10 @@ class Worker(object):
     def remove_task(self, current_time: EventTime, task: Task):
         """Removes the task from this `Worker`.
 
+        If the `task` was executed as part of a `BatchStrategy`, then the method only
+        deallocates the resources for the `Task` once the last `Task` in the batch has
+        been requested to be removed.
+
         Args:
             current_time (`EventTime`): The time at which the removal of the `Task`
                 was requested.
@@ -133,15 +192,53 @@ class Worker(object):
         if task not in self._placed_tasks:
             raise ValueError(f"The task {task} was not placed on Worker {self}.")
 
-        # Deallocate the resources and remove the placed task.
-        self._resources.deallocate(task)
-        del self._placed_tasks[task]
-        self._logger.debug(
-            "[%d] The Task %s was removed from the Worker %s.",
-            current_time.to(EventTime.Unit.US).time,
-            task,
-            self,
-        )
+        execution_strategy = self._placed_tasks[task]
+        if isinstance(execution_strategy, BatchStrategy):
+            # If the Task was executed as part of a `Batch`, then we need to check if
+            # this is the last task in the batch. If it is, then we need to deallocate
+            # the resources for the batch. Otherwise, we just remove the task from the
+            # set of placed tasks for the batch.
+            remaining_tasks_in_batch = self._placed_batches.get(execution_strategy)
+            if remaining_tasks_in_batch is None or task not in remaining_tasks_in_batch:
+                raise RuntimeError(
+                    f"The Task {task} was executed as part of a Batch "
+                    f"{execution_strategy.id}, but was not found in the set of "
+                    f"remaining tasks."
+                )
+            remaining_tasks_in_batch.remove(task)
+            if len(remaining_tasks_in_batch) == 0:
+                # The last Task in the batch was removed, so we need to deallocate the
+                # resources for the batch.
+                batch_task = self._batch_tasks_for_strategy.get(execution_strategy)
+                if batch_task is None:
+                    raise RuntimeError(
+                        f"The Task {task} was executed as part of a Batch "
+                        f"{execution_strategy.id}, but the corresponding batch "
+                        f"task was not found."
+                    )
+                self._resources.deallocate(batch_task)
+                del self._placed_batches[execution_strategy]
+                del self._batch_tasks_for_strategy[execution_strategy]
+                self._logger.debug(
+                    "[%d] The last Task %s from the Batch %s was removed from the "
+                    "Worker %s, and the batch was removed.",
+                    current_time.to(EventTime.Unit.US).time,
+                    task,
+                    execution_strategy.id,
+                    self,
+                )
+            self._placed_batches[execution_strategy] = remaining_tasks_in_batch
+            del self._placed_tasks[task]
+        else:
+            # Deallocate the resources and remove the placed task.
+            self._resources.deallocate(task)
+            del self._placed_tasks[task]
+            self._logger.debug(
+                "[%d] The Task %s was removed from the Worker %s.",
+                current_time.to(EventTime.Unit.US).time,
+                task,
+                self,
+            )
 
     def can_accomodate_strategy(self, strategy: ExecutionStrategy) -> bool:
         """Checks if this `Worker` can accomodate the given `ExecutionStrategy` based
