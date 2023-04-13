@@ -20,16 +20,18 @@ class EventType(Enum):
 
     SIMULATOR_START = 0  # Signify the start of the simulator loop.
     TASK_CANCEL = 1  # Ask the simulator to cancel the task.
-    TASK_FINISHED = 2  # Notify the simulator of the end of a task.
-    TASK_RELEASE = 3  # Ask the simulator to release the task.
-    TASK_PREEMPT = 4  # Ask the simulator to preempt a task.
-    TASK_MIGRATION = 5  # Ask the simulator to migrate a task.
-    TASK_PLACEMENT = 6  # Ask the simulator to place a task.
-    SCHEDULER_START = 7  # Requires the simulator to invoke the scheduler.
-    SCHEDULER_FINISHED = 8  # Signifies the end of the scheduler loop.
-    SIMULATOR_END = 9  # Signify the end of the simulator loop.
+    EVICT_PROFILE = 2  # Ask the simulator to evict the profile from the WorkerPool.
+    TASK_FINISHED = 3  # Notify the simulator of the end of a task.
+    TASK_RELEASE = 4  # Ask the simulator to release the task.
+    TASK_PREEMPT = 5  # Ask the simulator to preempt a task.
+    TASK_MIGRATION = 6  # Ask the simulator to migrate a task.
+    LOAD_PROFILE = 7  # Ask the simulator to load a profile into the WorkerPool.
+    TASK_PLACEMENT = 8  # Ask the simulator to place a task.
+    SCHEDULER_START = 9  # Requires the simulator to invoke the scheduler.
+    SCHEDULER_FINISHED = 10  # Signifies the end of the scheduler loop.
+    SIMULATOR_END = 11  # Signify the end of the simulator loop.
     LOG_UTILIZATION = (
-        10  # Ask the simulator to log the utilization of the worker pools.
+        12  # Ask the simulator to log the utilization of the worker pools.
     )
 
     def __lt__(self, other):
@@ -58,7 +60,7 @@ class Event(object):
         event_type: EventType,
         time: EventTime,
         task: Optional[Task] = None,
-        placement: Optional[str] = None,
+        placement: Optional[Placement] = None,
     ):
         if event_type in [
             EventType.TASK_CANCEL,
@@ -435,6 +437,69 @@ class Simulator(object):
             sched_finished_event,
         )
 
+    def __handle_profile_eviction(self, event: Event) -> None:
+        """Handles the eviction of `WorkProfile`s from the given `WorkerPool`.
+
+        Args:
+            event (`Event`): The event that contains the `placement` information with
+                the type `Placement.PlacementType.EVICT_WORK_PROFILE`.
+        """
+        if event.placement.placement_type != Placement.PlacementType.EVICT_WORK_PROFILE:
+            raise ValueError(
+                f"The placement type of the event {event.placement.placement_type} is "
+                f"not {Placement.PlacementType.EVICT_WORK_PROFILE}."
+            )
+        self._logger.info(
+            "[%s] The Simulator is requesting the eviction of %s "
+            "from the WorkerPool %s and the Worker %s.",
+            event.time.to(EventTime.Unit.US).time,
+            event.placement.work_profile,
+            event.placement.worker_pool_id,
+            event.placement.worker_id,
+        )
+        worker_pool = self._worker_pools.get_worker_pool(event.placement.worker_pool_id)
+        if worker_pool is None:
+            raise ValueError(
+                f"The WorkerPool {event.placement.worker_pool_id} does not exist."
+            )
+        else:
+            worker_pool.evict_profile(
+                event.placement.work_profile,
+                event.placement.worker_id,
+            )
+
+    def __handle_profile_loading(self, event: Event) -> None:
+        """Handles the loading of a `WorkProfile` into the given `WorkerPool`.
+
+        Args:
+            event (`Event`): The event that contains the `placement` information with
+                the type `Placement.PlacementType.LOAD_WORK_PROFILE`.
+        """
+        if event.placement.placement_type != Placement.PlacementType.LOAD_WORK_PROFILE:
+            raise ValueError(
+                f"The placement type of the event {event.placement.placement_type} is "
+                f"not {Placement.PlacementType.LOAD_WORK_PROFILE}."
+            )
+        self._logger.info(
+            "[%s] The Simulator is requesting the loading of %s "
+            "into the WorkerPool %s and the Worker %s.",
+            event.time.to(EventTime.Unit.US).time,
+            event.placement.work_profile,
+            event.placement.worker_pool_id,
+            event.placement.worker_id,
+        )
+        worker_pool = self._worker_pools.get_worker_pool(event.placement.worker_pool_id)
+        if worker_pool is None:
+            raise ValueError(
+                f"The WorkerPool {event.placement.worker_pool_id} does not exist."
+            )
+        else:
+            worker_pool.load_profile(
+                event.placement.work_profile,
+                event.placement.loading_strategy,
+                event.placement.worker_id,
+            )
+
     def __create_events_from_task_placement_skip(
         self, time: EventTime, placement: Placement
     ) -> Sequence[Event]:
@@ -690,6 +755,46 @@ class Simulator(object):
                 simulator_events.extend(
                     self.__create_events_from_task_placement(event.time, placement)
                 )
+            elif placement.placement_type == Placement.PlacementType.EVICT_WORK_PROFILE:
+                # Ensure that the Placement always occurs in the present or future.
+                if placement.placement_time < event.time:
+                    self._logger.error(
+                        "[%s] A Placement for the WorkProfile %s occurred in "
+                        "the past at %s.",
+                        event.time.to(EventTime.Unit.US).time,
+                        placement.work_profile,
+                        placement.placement_time,
+                    )
+                    raise ValueError(
+                        f"A Placement for the WorkProfile {placement.work_profile} "
+                        f"occurred in the past at {placement.placement_time}."
+                    )
+                eviction_event = Event(
+                    event_type=EventType.EVICT_PROFILE,
+                    time=placement.placement_time,
+                    placement=placement,
+                )
+                simulator_events.append(eviction_event)
+            elif placement.placement_type == Placement.PlacementType.LOAD_WORK_PROFILE:
+                # Ensure that the Placement always occurs in the present or future.
+                if placement.placement_time < event.time:
+                    self._logger.error(
+                        "[%s] A Placement for the WorkProfile %s occurred in "
+                        "the past at %s.",
+                        event.time.to(EventTime.Unit.US).time,
+                        placement.work_profile,
+                        placement.placement_time,
+                    )
+                    raise ValueError(
+                        f"A Placement for the WorkProfile {placement.work_profile} "
+                        f"occurred in the past at {placement.placement_time}."
+                    )
+                profile_load_event = Event(
+                    event_type=EventType.LOAD_PROFILE,
+                    time=placement.placement_time,
+                    placement=placement,
+                )
+                simulator_events.append(profile_load_event)
 
         # Sort the events so that preemptions and migrations happen first.
         for simulator_event in sorted(simulator_events):
@@ -1120,6 +1225,26 @@ class Simulator(object):
                 event.time.to(EventTime.Unit.US).time,
             )
             self._scheduler.start(event.time, self._workload.work_profiles)
+        elif event.event_type == EventType.TASK_CANCEL:
+            self.__handle_task_cancellation(event)
+        elif event.event_type == EventType.EVICT_PROFILE:
+            self.__handle_profile_eviction(event)
+        elif event.event_type == EventType.TASK_FINISHED:
+            self.__handle_task_finished(event)
+        elif event.event_type == EventType.TASK_RELEASE:
+            self.__handle_task_release(event)
+        elif event.event_type == EventType.TASK_PREEMPT:
+            self.__handle_task_preempt(event)
+        elif event.event_type == EventType.TASK_MIGRATION:
+            self.__handle_task_migration(event)
+        elif event.event_type == EventType.LOAD_PROFILE:
+            self.__handle_profile_loading(event)
+        elif event.event_type == EventType.TASK_PLACEMENT:
+            self.__handle_task_placement(event, self._workload)
+        elif event.event_type == EventType.SCHEDULER_START:
+            self.__handle_scheduler_start(event)
+        elif event.event_type == EventType.SCHEDULER_FINISHED:
+            self.__handle_scheduler_finish(event)
         elif event.event_type == EventType.SIMULATOR_END:
             # End of the simulator loop.
             self._csv_logger.debug(
@@ -1131,22 +1256,6 @@ class Simulator(object):
             )
             self._logger.info("[%s] Ending the simulator loop.", event.time.time)
             return True
-        elif event.event_type == EventType.TASK_CANCEL:
-            self.__handle_task_cancellation(event)
-        elif event.event_type == EventType.TASK_RELEASE:
-            self.__handle_task_release(event)
-        elif event.event_type == EventType.TASK_FINISHED:
-            self.__handle_task_finished(event)
-        elif event.event_type == EventType.TASK_PREEMPT:
-            self.__handle_task_preempt(event)
-        elif event.event_type == EventType.TASK_PLACEMENT:
-            self.__handle_task_placement(event, self._workload)
-        elif event.event_type == EventType.TASK_MIGRATION:
-            self.__handle_task_migration(event)
-        elif event.event_type == EventType.SCHEDULER_START:
-            self.__handle_scheduler_start(event)
-        elif event.event_type == EventType.SCHEDULER_FINISHED:
-            self.__handle_scheduler_finish(event)
         elif event.event_type == EventType.LOG_UTILIZATION:
             self.__log_utilization(event.time)
         else:

@@ -217,6 +217,7 @@ class Worker(object):
 
         # Step the pending WorkProfiles and add the completed ones to the set of
         # available profiles.
+        invalid_profiles = []
         for profile, loading_strategy in self._pending_profiles.items():
             remaining_time = loading_strategy.runtime - step_size
             if remaining_time <= EventTime.zero():
@@ -226,10 +227,15 @@ class Worker(object):
                     batch_size=loading_strategy.batch_size,
                     runtime=EventTime.zero(),
                 )
+                invalid_profiles.append(profile)
             else:
                 # The WorkProfile has still not finished loading, update the time
                 # remaining until it becomes available.
                 loading_strategy._runtime = remaining_time
+
+        # Remove the completed WorkProfiles from the set of pending profiles.
+        for profile in invalid_profiles:
+            del self._pending_profiles[profile]
 
         # Invoke the step() method on all the tasks.
         for task in self._placed_tasks:
@@ -269,6 +275,15 @@ class Worker(object):
             return self._pending_profiles[profile].runtime
         else:
             return EventTime.invalid()
+
+    def get_available_profiles(self) -> Sequence[WorkProfile]:
+        """Get the set of `WorkProfile`s that are available on this `Worker` at the
+        current time.
+
+        Returns:
+            A sequence of `WorkProfile`s that are available on this `Worker`.
+        """
+        return list(self._available_profiles.keys())
 
     def is_full(self) -> bool:
         """Check if the Worker is full.
@@ -613,6 +628,47 @@ class WorkerPool(object):
             `True` if all the Resources in the WorkerPool are full, `False` otherwise.
         """
         return all(worker.is_full() for worker in self._workers.values())
+
+    def evict_profile(
+        self, profile: WorkProfile, worker_id: Optional[str] = None
+    ) -> None:
+        """Evicts the `profile` from the requested `Worker`s on this `WorkerPool`
+        instance. If no `Worker`s are specified, the `profile` is evicted from all
+        the `Worker`s on this `WorkerPool`.
+
+        Args:
+            profile (`WorkProfile`): The `Profile` to be evicted.
+            worker_id (`Optional[str]`): The ID of the `Worker` from which the profile
+                is to be evicted.
+        """
+        worker_ids = (
+            [worker_id] if worker_id else [worker.id for worker in self.workers]
+        )
+        for worker in worker_ids:
+            self._workers[worker].evict_profile(profile)
+
+    def load_profile(
+        self,
+        profile: WorkProfile,
+        loading_strategy: ExecutionStrategy,
+        worker_id: Optional[str] = None,
+    ) -> None:
+        """Loads the given `profile` into the set of available profiles at the
+        requested `Worker`. If no `Worker` is specified, the `profile` is loaded into
+        all the `Worker`s on this `WorkerPool`.
+
+        Args:
+            profile (`WorkProfile`): The `Profile` to be loaded.
+            loading_strategy (`ExecutionStrategy`): The `ExecutionStrategy` to be used
+                to load the profile onto the `Worker`.
+            worker_id (`Optional[str]`): The ID of the `Worker` into which the profile
+                is to be loaded.
+        """
+        worker_ids = (
+            [worker_id] if worker_id else [worker.id for worker in self.workers]
+        )
+        for worker in worker_ids:
+            self._workers[worker].load_profile(profile, loading_strategy)
 
     @property
     def name(self):
