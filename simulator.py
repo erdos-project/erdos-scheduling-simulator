@@ -11,7 +11,7 @@ import absl  # noqa: F401
 from schedulers import BaseScheduler
 from utils import EventTime, setup_csv_logging, setup_logging
 from workers import WorkerPools
-from workload import Placement, Resource, Task, TaskState, Workload
+from workload import Placement, Placements, Resource, Task, TaskState, Workload
 
 
 @total_ordering
@@ -200,7 +200,7 @@ class Simulator(object):
     def __init__(
         self,
         worker_pools: WorkerPools,
-        scheduler: Type[BaseScheduler],
+        scheduler: BaseScheduler,
         workload: Workload,
         loop_timeout: EventTime = EventTime(time=sys.maxsize, unit=EventTime.Unit.US),
         scheduler_frequency: EventTime = EventTime(time=-1, unit=EventTime.Unit.US),
@@ -277,7 +277,7 @@ class Simulator(object):
         # Internal data.
         self._last_scheduler_start_time = self._simulator_time
         self._next_scheduler_event = None
-        self._last_scheduler_placements = None
+        self._last_scheduler_placements: Optional[Placements] = None
 
         # A Cache from the TaskID to a future Placement event in the EventQueue.
         # The Simulator uses this bookkeeping to revoke / invalidate decisions made
@@ -806,7 +806,7 @@ class Simulator(object):
             self._event_queue.add_event(simulator_event)
 
         # Reset the available tasks and the last task placement.
-        self._last_scheduler_placements = []
+        self._last_scheduler_placements = None
 
         # The scheduler has finished its execution, insert an event for the next
         # invocation of the scheduler.
@@ -1224,7 +1224,30 @@ class Simulator(object):
                 "[%s] Starting the simulator loop.",
                 event.time.to(EventTime.Unit.US).time,
             )
-            self._scheduler.start(event.time, self._workload.work_profiles)
+            placements = self._scheduler.start(
+                event.time, self._workload.work_profiles, self._worker_pools
+            )
+            for placement in placements:
+                if (
+                    placement.placement_type
+                    != Placement.PlacementType.LOAD_WORK_PROFILE
+                ):
+                    raise RuntimeError(
+                        f"A Placement of type {placement.placement_type} was returned "
+                        f"by the scheduler. Only "
+                        f"{Placement.PlacementType.LOAD_WORK_PROFILE} is supported."
+                    )
+                profile_load_event = Event(
+                    event_type=EventType.LOAD_PROFILE,
+                    time=placement.placement_time,
+                    placement=placement,
+                )
+                self._logger.debug(
+                    "[%s] Adding %s to the event queue as part of the scheduler start.",
+                    event.time.time,
+                    profile_load_event,
+                )
+                self._event_queue.add_event(profile_load_event)
         elif event.event_type == EventType.TASK_CANCEL:
             self.__handle_task_cancellation(event)
         elif event.event_type == EventType.EVICT_PROFILE:
