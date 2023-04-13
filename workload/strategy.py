@@ -1,3 +1,5 @@
+import random
+import uuid
 from copy import copy
 from typing import Iterator, Optional, Sequence
 
@@ -59,6 +61,50 @@ class ExecutionStrategy(object):
     def __str__(self) -> str:
         return "ExecutionStrategy(resources={}, batch_size={}, runtime={})".format(
             self._resources, self._batch_size, self._runtime
+        )
+
+    def __repr__(self) -> str:
+        return str(self)
+
+
+class BatchStrategy(ExecutionStrategy):
+    """A representation of a unique execution strategy for each batch.
+
+    An execution strategy defines how a set of Tasks would execute under the given
+    set of resources. A `BatchStrategy` differs from `ExecutionStrategy` in that it
+    provides a unique identifier that can be used by the `Worker` to identify the
+    `Task`s that belong to the same strategy and do correct accounting of the resources.
+
+    Args:
+        resources (`Resources`): The number and type of resources required in a
+            `Worker` to execute this strategy.
+        batch_size (`int`): The number of maximum requests that can be batched together
+            under this strategy.
+        runtime (`EventTime`): The total runtime that will be incurred on the `Worker`
+            if this execution strategy is chosen.
+    """
+
+    def __init__(self, execution_strategy=ExecutionStrategy) -> None:
+        super().__init__(
+            resources=copy(execution_strategy.resources),
+            batch_size=execution_strategy.batch_size,
+            runtime=copy(execution_strategy.runtime),
+        )
+        self._id = uuid.UUID(int=random.getrandbits(128), version=4)
+
+    @property
+    def id(self) -> str:
+        return str(self._id)
+
+    def __hash__(self) -> int:
+        return hash(self._id)
+
+    def __eq__(self, other: "BatchStrategy") -> bool:  # noqa: F821
+        return self._id == other._id
+
+    def __str__(self) -> str:
+        return "BatchStrategy(resources={}, batch_size={}, runtime={})".format(
+            self.resources, self.batch_size, self.runtime
         )
 
     def __repr__(self) -> str:

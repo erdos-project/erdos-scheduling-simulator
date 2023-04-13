@@ -6,8 +6,10 @@ from tests.utils import create_default_task
 from utils import EventTime
 from workers import Worker, WorkerPool
 from workload import (
+    BatchStrategy,
     ExecutionStrategies,
     ExecutionStrategy,
+    Job,
     Placement,
     Resource,
     Resources,
@@ -665,3 +667,85 @@ def test_worker_profile_eviction():
     assert (
         worker.is_available(work_profile) == EventTime.invalid()
     ), "The profile was not evicted correctly."
+
+
+def test_worker_succesfully_handles_batch_addition_removal():
+    """Test that the Worker does the correct accounting when a batch is added."""
+    worker = Worker(
+        name="Worker_1",
+        resources=Resources(
+            resource_vector={Resource(name="RAM"): 100, Resource(name="GPU"): 1}
+        ),
+    )
+    execution_strategy = ExecutionStrategy(
+        resources=Resources(resource_vector={Resource(name="GPU", _id="any"): 1}),
+        batch_size=2,
+        runtime=EventTime(10, EventTime.Unit.US),
+    )
+    batch_strategy = BatchStrategy(execution_strategy=execution_strategy)
+    work_profile = WorkProfile(
+        name="WorkProfile_One",
+        execution_strategies=ExecutionStrategies(strategies=[execution_strategy]),
+    )
+
+    task_one = create_default_task(job=Job(name="Job_1", profile=work_profile))
+    task_two = create_default_task(job=Job(name="Job_2", profile=work_profile))
+    task_three = create_default_task(job=Job(name="Job_3", profile=work_profile))
+
+    # The Worker should be able to accomodate the first task and allocate the resources
+    # correctly.
+    worker.place_task(task=task_one, execution_strategy=batch_strategy)
+    assert worker.get_placed_tasks() == [task_one], "Incorrect placed tasks."
+    assert (
+        worker.resources.get_available_quantity(
+            resource=Resource(name="GPU", _id="any")
+        )
+        == 0
+    ), "Incorrect allocation of resources."
+
+    # The Worker should not be able to accomodate another task that is not part of the
+    # Batch.
+    with pytest.raises(ValueError):
+        worker.place_task(task=task_two, execution_strategy=execution_strategy)
+
+    # The Worker should also not be able to accomodate another task that is part of
+    # a different batch.
+    with pytest.raises(ValueError):
+        worker.place_task(
+            task=task_two,
+            execution_strategy=BatchStrategy(execution_strategy=execution_strategy),
+        )
+
+    # The Worker should be able to accomodate the second task as part of the batch and
+    # not complain about the lack of resources.
+    worker.place_task(task=task_two, execution_strategy=batch_strategy)
+    assert set(worker.get_placed_tasks()) == {
+        task_one,
+        task_two,
+    }, "Incorrect placed tasks."
+
+    # The Worker should not accomodate more than the batch size.
+    with pytest.raises(RuntimeError):
+        worker.place_task(task=task_three, execution_strategy=batch_strategy)
+
+    # The removal of a single task should not affect the resource allocations
+    # of the batch.
+    worker.remove_task(current_time=EventTime.zero(), task=task_one)
+    assert worker.get_placed_tasks() == [task_two], "Incorrect placed tasks."
+    assert (
+        worker.resources.get_available_quantity(
+            resource=Resource(name="GPU", _id="any")
+        )
+        == 0
+    ), "Incorrect allocation of resources."
+
+    # The removal of the last task should free the resources.
+    print(worker._placed_batches[batch_strategy])
+    worker.remove_task(current_time=EventTime.zero(), task=task_two)
+    assert worker.get_placed_tasks() == [], "Incorrect placed tasks."
+    assert (
+        worker.resources.get_available_quantity(
+            resource=Resource(name="GPU", _id="any")
+        )
+        == 1
+    ), "Incorrect allocation of resources."

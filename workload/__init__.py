@@ -18,6 +18,6 @@ from .placement import Placement, Placements
 from .profile import WorkProfile
 from .resource import Resource
 from .resources import Resources
-from .strategy import ExecutionStrategies, ExecutionStrategy
+from .strategy import BatchStrategy, ExecutionStrategies, ExecutionStrategy
 from .tasks import Task, TaskGraph, TaskState
 from .workload import Workload

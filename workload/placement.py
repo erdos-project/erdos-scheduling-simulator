@@ -240,10 +240,10 @@ class Placement(object):
     @staticmethod
     def create_load_profile_placement(
         work_profile: "WorkProfile",  # noqa: F821
-        placement_time: Optional[EventTime] = None,
-        worker_pool_id: Optional[str] = None,
+        placement_time: EventTime,
+        worker_pool_id: str,
+        loading_strategy: ExecutionStrategy,
         worker_id: Optional[str] = None,
-        loading_strategy: ExecutionStrategy = None,
     ) -> "Placement":
         return Placement(
             type=Placement.PlacementType.LOAD_WORK_PROFILE,
@@ -257,8 +257,8 @@ class Placement(object):
     @staticmethod
     def create_evict_profile_placement(
         work_profile: "WorkProfile",  # noqa: F821
-        placement_time: Optional[EventTime] = None,
-        worker_pool_id: Optional[str] = None,
+        placement_time: EventTime,
+        worker_pool_id: str,
         worker_id: Optional[str] = None,
     ) -> "Placement":
         return Placement(
