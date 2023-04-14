@@ -197,14 +197,6 @@ class ClockworkScheduler(BaseScheduler):
             branch_prediction_accuracy=self.branch_prediction_accuracy,
         )
 
-        # If we are not retracting schedules, we should consider both
-        # RUNNING and SCHEDULED task placements as permanent.
-        filter_fn = lambda task: task.state in (  # noqa: E731
-            TaskState.RUNNING,
-            TaskState.SCHEDULED,
-        )
-        previously_placed_tasks = workload.filter(filter_fn)
-
         # Create a virtual WorkerPool set to try scheduling decisions on.
         schedulable_worker_pools = copy(worker_pools)
 
@@ -223,11 +215,6 @@ class ClockworkScheduler(BaseScheduler):
             f"[{sim_time.time}] The scheduler received {len(tasks_to_be_scheduled)} "
             f"tasks for scheduling across {len(workers)} workers. These tasks were: "
             f"{[task.unique_name for task in tasks_to_be_scheduled]}."
-        )
-        self._logger.debug(
-            f"[{sim_time.time}] The scheduler is also considering the following "
-            f"{len(previously_placed_tasks)} for their effects on the current "
-            f"placements: {[task.unique_name for task in previously_placed_tasks]}."
         )
 
         # Populate the models with tasks.
