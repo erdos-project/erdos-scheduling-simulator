@@ -1,3 +1,5 @@
+import random
+import uuid
 from enum import Enum
 from functools import total_ordering
 from typing import Optional, Sequence, Union
@@ -75,6 +77,7 @@ class Placement(object):
         self._worker_pool_id = worker_pool_id
         self._worker_id = worker_id
         self._strategy = strategy
+        self._id = uuid.UUID(int=random.getrandbits(128), version=4)
 
     def is_placed(self) -> bool:
         """Check if the computation associated with this Placement was placed on a
@@ -155,6 +158,11 @@ class Placement(object):
 
     @property
     def id(self) -> str:
+        """Returns the ID of the Placement."""
+        return self._id
+
+    @property
+    def computation_id(self) -> str:
         """Returns the ID of the computation underlying this Placement."""
         return self._computation.id
 
@@ -311,19 +319,23 @@ class Placements(object):
         """
         self._placements[task.id] = Placement(task, worker_pool_id, placement_time)
 
-    def get_placement(
+    def get_placements(
         self, computation: Union["Task", "WorkProfile"]  # noqa: F821
-    ) -> Optional[Placement]:  # noqa: F821
-        """Retrieves the placement for the corresponding computation (if available).
+    ) -> Sequence[Placement]:
+        """Retrieves all the placement for the corresponding computation.
 
         Args:
             computation (`Union[Task, WorkProfile]`): The computation for which the
                 placement is to be retrieved.
 
         Returns:
-            The `Placement` object if found, `None` otherwise.
+            A (possibly empty) sequence of `Placement` objects.
         """
-        return self._placements.get(computation.id)
+        placements = []
+        for placement in self._placements.values():
+            if placement.computation_id == computation.id:
+                placements.append(placement)
+        return placements
 
     @property
     def runtime(self) -> EventTime:

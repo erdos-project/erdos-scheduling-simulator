@@ -63,13 +63,13 @@ def test_ilp_scheduling_success_basic(scheduler):
     placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
 
     assert len(placements) == 1, "Incorrect length of placements retrieved."
-    camera_task_placement = placements.get_placement(camera_task_1)
-    assert camera_task_placement is not None, "The task was expected to be placed."
+    camera_task_placements = placements.get_placements(camera_task_1)
+    assert len(camera_task_placements) == 1, "The task was expected to be placed."
     assert (
-        camera_task_placement.worker_pool_id == worker_pool_1.id
+        camera_task_placements[0].worker_pool_id == worker_pool_1.id
     ), "Incorrect WorkerPoolID retrieved."
     assert (
-        camera_task_placement.placement_time + camera_task_1.remaining_time
+        camera_task_placements[0].placement_time + camera_task_1.remaining_time
         <= camera_task_1.deadline
     ), "Incorrect start time retrieved."
 
@@ -147,22 +147,23 @@ def test_ilp_scheduling_multiple_tasks_different_resources(scheduler):
 
     assert len(placements) == 2, "Incorrect length of placements retrieved."
 
-    cpu_task_placement = placements.get_placement(cpu_task)
-    assert cpu_task_placement is not None, "The task was expected to be placed."
+    cpu_task_placements = placements.get_placements(cpu_task)
+    assert len(cpu_task_placements) == 1, "The task was expected to be placed."
     assert (
-        cpu_task_placement.worker_pool_id == worker_pool_1.id
+        cpu_task_placements[0].worker_pool_id == worker_pool_1.id
     ), "Incorrect WorkerPoolID retrieved."
     assert (
-        cpu_task_placement.placement_time + cpu_task.remaining_time <= cpu_task.deadline
+        cpu_task_placements[0].placement_time + cpu_task.remaining_time
+        <= cpu_task.deadline
     ), "Incorrect start time retrieved."
 
-    cpu_gpu_task_placement = placements.get_placement(cpu_gpu_task)
-    assert cpu_gpu_task_placement is not None, "The task was expected to be placed."
+    cpu_gpu_task_placements = placements.get_placements(cpu_gpu_task)
+    assert len(cpu_gpu_task_placements) == 1, "The task was expected to be placed."
     assert (
-        cpu_gpu_task_placement.worker_pool_id == worker_pool_2.id
+        cpu_gpu_task_placements[0].worker_pool_id == worker_pool_2.id
     ), "Incorrect WorkerPoolID retrieved."
     assert (
-        cpu_gpu_task_placement.placement_time + cpu_gpu_task.remaining_time
+        cpu_gpu_task_placements[0].placement_time + cpu_gpu_task.remaining_time
         <= cpu_task.deadline
     ), "Incorrect start time retrieved."
 
@@ -220,10 +221,10 @@ def test_ilp_scheduler_limited_resources(scheduler):
     placements = scheduler.schedule(release_time, workload, worker_pools)
 
     assert len(placements) == 2, "Incorrect length of placements retrieved."
-    task_one_placement = placements.get_placement(task_one)
-    task_two_placement = placements.get_placement(task_two)
+    task_one_placements = placements.get_placements(task_one)
+    task_two_placements = placements.get_placements(task_two)
     assert not (
-        task_one_placement.is_placed() and task_two_placement.is_placed()
+        task_one_placements[0].is_placed() and task_two_placements[0].is_placed()
     ), "Only one task should be placed."
 
 
@@ -283,9 +284,11 @@ def test_ilp_scheduling_deadline_enforcement(scheduler):
     placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
 
     assert len(placements) == 1, "Incorrect length of placements retrieved."
-    camera_task_placement = placements.get_placement(camera_task_1)
-    assert camera_task_placement is not None, "The task was not found in placements."
-    assert not camera_task_placement.is_placed(), "Incorrect WorkerPoolID retrieved."
+    camera_task_placements = placements.get_placements(camera_task_1)
+    assert len(camera_task_placements) == 1, "The task was not found in placements."
+    assert not camera_task_placements[
+        0
+    ].is_placed(), "Incorrect WorkerPoolID retrieved."
 
     # Create the softly enforce deadlines scheduler.
     scheduler._enforce_deadlines = False
@@ -295,13 +298,13 @@ def test_ilp_scheduling_deadline_enforcement(scheduler):
     placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
 
     assert len(placements) == 1, "Incorrect length of placements retrieved."
-    camera_task_placement = placements.get_placement(camera_task_1)
-    assert camera_task_placement is not None, "The task was not found in placements."
+    camera_task_placements = placements.get_placements(camera_task_1)
+    assert len(camera_task_placements) == 1, "The task was not found in placements."
     assert (
-        camera_task_placement.worker_pool_id == worker_pool_1.id
+        camera_task_placements[0].worker_pool_id == worker_pool_1.id
     ), "Incorrect WorkerPoolID retrieved."
     assert (
-        camera_task_placement.placement_time <= camera_task_1.deadline
+        camera_task_placements[0].placement_time <= camera_task_1.deadline
     ), "Incorrect start time retrieved."
 
 
@@ -369,25 +372,23 @@ def test_ilp_scheduling_dependency(scheduler):
 
     assert len(placements) == 2, "Incorrect length of placements retrieved."
 
-    camera_task_placement = placements.get_placement(camera_task_1)
-    assert camera_task_placement is not None, "The task was not found in placements."
+    camera_task_placements = placements.get_placements(camera_task_1)
+    assert len(camera_task_placements) == 1, "The task was not found in placements."
     assert (
-        camera_task_placement.worker_pool_id == worker_pool_1.id
+        camera_task_placements[0].worker_pool_id == worker_pool_1.id
     ), "Incorrect WorkerPoolID retrieved."
     assert (
-        camera_task_placement.placement_time + camera_task_1.remaining_time
+        camera_task_placements[0].placement_time + camera_task_1.remaining_time
         <= camera_task_1.deadline
     ), "Incorrect start time retrieved."
 
-    perception_task_placement = placements.get_placement(perception_task_1)
+    perception_task_placements = placements.get_placements(perception_task_1)
+    assert len(perception_task_placements) == 1, "The task was not found in placements."
     assert (
-        perception_task_placement is not None
-    ), "The task was not found in placements."
-    assert (
-        perception_task_placement.worker_pool_id == worker_pool_1.id
+        perception_task_placements[0].worker_pool_id == worker_pool_1.id
     ), "Incorrect WorkerPoolID retrieved."
     assert (
-        perception_task_placement.placement_time + perception_task_1.remaining_time
+        perception_task_placements[0].placement_time + perception_task_1.remaining_time
         <= perception_task_1.deadline
     ), "Incorrect start time retrieved."
 
@@ -442,14 +443,14 @@ def test_ilp_skip_taskgraphs_under_enforce_deadlines(scheduler):
     placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
     assert len(placements) == 2, "Incorrect length of placements retrieved."
 
-    camera_task_placement = placements.get_placement(camera_task_1)
-    perception_task_placement = placements.get_placement(perception_task_1)
+    camera_task_placements = placements.get_placements(camera_task_1)
+    perception_task_placements = placements.get_placements(perception_task_1)
     assert (
-        camera_task_placement is not None and perception_task_placement is not None
+        len(camera_task_placements) == 1 and len(perception_task_placements) == 1
     ), "Placement information for the tasks was not provided."
     assert (
-        not camera_task_placement.is_placed()
-        and not perception_task_placement.is_placed()
+        not camera_task_placements[0].is_placed()
+        and not perception_task_placements[0].is_placed()
     ), "The tasks were not expected to be placed."
 
 
@@ -508,23 +509,23 @@ def test_ilp_delays_scheduling_under_constrained_resources(scheduler):
 
     assert len(placements) == 2, "Incorrect length of placements retrieved."
 
-    camera_task_placement = placements.get_placement(camera_task_1)
-    assert camera_task_placement is not None, "The task was expected in placements."
+    camera_task_placements = placements.get_placements(camera_task_1)
+    assert len(camera_task_placements) == 1, "The task was expected in placements."
     assert (
-        camera_task_placement.worker_pool_id == worker_pool_1.id
+        camera_task_placements[0].worker_pool_id == worker_pool_1.id
     ), "Incorrect WorkerPoolID retrieved."
     assert (
-        camera_task_placement.placement_time + camera_task_1.remaining_time
+        camera_task_placements[0].placement_time + camera_task_1.remaining_time
         <= camera_task_1.deadline
     ), "Incorrect start time retrieved."
 
-    camera_task_2_placement = placements.get_placement(camera_task_2)
-    assert camera_task_2_placement is not None, "The task was expected in placements."
+    camera_task_2_placements = placements.get_placements(camera_task_2)
+    assert len(camera_task_2_placements) == 1, "The task was expected in placements."
     assert (
-        camera_task_2_placement.worker_pool_id == worker_pool_1.id
+        camera_task_2_placements[0].worker_pool_id == worker_pool_1.id
     ), "Incorrect WorkerPoolID retrieved."
     assert (
-        camera_task_2_placement.placement_time + camera_task_2.remaining_time
+        camera_task_2_placements[0].placement_time + camera_task_2.remaining_time
         <= camera_task_2.deadline
     ), "Incorrect start time retrieved."
 
@@ -583,35 +584,36 @@ def test_ilp_respects_dependencies_under_delayed_scheduling(scheduler):
     placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
     assert len(placements) == 3, "Incorrect length of placements retrieved."
 
-    camera_task_1_placement = placements.get_placement(camera_task_1)
-    assert camera_task_1_placement is not None, "The task was not found in placements."
+    camera_task_1_placements = placements.get_placements(camera_task_1)
+    assert len(camera_task_1_placements) == 1, "The task was not found in placements."
     assert (
-        camera_task_1_placement.worker_pool_id == worker_pool_1.id
+        camera_task_1_placements[0].worker_pool_id == worker_pool_1.id
     ), "Incorrect WorkerPoolID retrieved."
     assert (
-        camera_task_1_placement.placement_time + camera_task_1.remaining_time
+        camera_task_1_placements[0].placement_time + camera_task_1.remaining_time
         <= camera_task_1.deadline
     ), "Incorrect start time retrieved."
 
-    camera_task_2_placement = placements.get_placement(camera_task_2)
-    assert camera_task_2_placement is not None, "The task was not found in placements."
+    camera_task_2_placements = placements.get_placements(camera_task_2)
+    assert len(camera_task_2_placements) == 1, "The task was not found in placements."
     assert (
-        camera_task_2_placement.worker_pool_id == worker_pool_1.id
+        camera_task_2_placements[0].worker_pool_id == worker_pool_1.id
     ), "Incorrect WorkerPoolID retrieved."
     assert (
-        camera_task_2_placement.placement_time + camera_task_2.remaining_time
+        camera_task_2_placements[0].placement_time + camera_task_2.remaining_time
         <= camera_task_2.deadline
     ), "Incorrect start time retrieved."
 
-    perception_task_2_placement = placements.get_placement(perception_task_2)
+    perception_task_2_placements = placements.get_placements(perception_task_2)
     assert (
-        perception_task_2_placement is not None
+        len(perception_task_2_placements) == 1
     ), "The task was not found in placements."
     assert (
-        perception_task_2_placement.worker_pool_id == worker_pool_1.id
+        perception_task_2_placements[0].worker_pool_id == worker_pool_1.id
     ), "Incorrect WorkerPoolID retrieved."
     assert (
-        perception_task_2_placement.placement_time + perception_task_2.remaining_time
+        perception_task_2_placements[0].placement_time
+        + perception_task_2.remaining_time
         <= perception_task_2.deadline
     ), "Incorrect placement for perception_task_2."
 
@@ -685,27 +687,27 @@ def test_ilp_respects_dependencies_under_constrained_resources():
     placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
     assert len(placements) == 3, "Incorrect length of placements retrieved."
 
-    camera_task_1_placement = placements.get_placement(camera_task_1)
-    assert camera_task_1_placement is not None, "No placement found for camera_task_1."
+    camera_task_1_placements = placements.get_placements(camera_task_1)
+    assert len(camera_task_1_placements) == 1, "No placement found for camera_task_1."
     assert (
-        camera_task_1_placement.worker_pool_id == worker_pool_1.id
+        camera_task_1_placements[0].worker_pool_id == worker_pool_1.id
     ), "Incorrect worker placement for camera_task_1"
     assert (
-        camera_task_1_placement.placement_time
-        + camera_task_1_placement.execution_strategy.runtime
+        camera_task_1_placements[0].placement_time
+        + camera_task_1_placements[0].execution_strategy.runtime
         <= camera_task_1.deadline
     ), "Invalid start time for camera_task_1."
 
-    camera_task_2_placement = placements.get_placement(camera_task_2)
-    assert camera_task_2_placement is not None, "No placement found for camera_task_2."
-    assert (
-        not camera_task_2_placement.is_placed()
-    ), "camera_task_2 should not be placed."
+    camera_task_2_placements = placements.get_placements(camera_task_2)
+    assert len(camera_task_2_placements) == 1, "No placement found for camera_task_2."
+    assert not camera_task_2_placements[
+        0
+    ].is_placed(), "camera_task_2 should not be placed."
 
-    perception_task_2_placement = placements.get_placement(perception_task_2)
-    assert (
-        not perception_task_2_placement.is_placed()
-    ), "No placement found for perception_task_2."
+    perception_task_2_placements = placements.get_placements(perception_task_2)
+    assert not perception_task_2_placements[
+        0
+    ].is_placed(), "No placement found for perception_task_2."
 
 
 @pytest.mark.parametrize(
@@ -774,8 +776,8 @@ def test_ilp_respects_worker_resource_constraints(scheduler):
     placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
     assert len(placements) == 2, "Incorrect length of placements retrieved."
     assert not (
-        placements.get_placement(camera_task_1).is_placed()
-        and placements.get_placement(camera_task_2).is_placed()
+        placements.get_placements(camera_task_1)[0].is_placed()
+        and placements.get_placements(camera_task_2)[0].is_placed()
     ), "One of the tasks should not be placed."
 
 
@@ -849,12 +851,14 @@ def test_ilp_does_not_schedule_across_workers(scheduler):
     placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
     assert len(placements) == 2, "Incorrect length of placements retrieved."
 
-    camera_task_1_placement = placements.get_placement(camera_task_1)
-    assert camera_task_1_placement is not None, "The task was not found in placements."
+    camera_task_1_placements = placements.get_placements(camera_task_1)
+    assert len(camera_task_1_placements) == 1, "The task was not found in placements."
 
-    camera_task_2_placement = placements.get_placement(camera_task_2)
-    assert camera_task_2_placement is not None, "The task was not found in placements."
-    assert not camera_task_2_placement.is_placed(), "Incorrect WorkerPoolID retrieved."
+    camera_task_2_placements = placements.get_placements(camera_task_2)
+    assert len(camera_task_2_placements) == 1, "The task was not found in placements."
+    assert not camera_task_2_placements[
+        0
+    ].is_placed(), "Incorrect WorkerPoolID retrieved."
 
 
 def test_ilp_not_work_conserving():
@@ -909,22 +913,22 @@ def test_ilp_not_work_conserving():
     placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
     assert len(placements) == 3, "Incorrect length of placements retrieved."
 
-    camera_task_1_placement = placements.get_placement(camera_task_1)
-    assert camera_task_1_placement is not None, "Placement for camera_task_1 not found."
-    assert camera_task_1_placement.placement_time == EventTime(
+    camera_task_1_placements = placements.get_placements(camera_task_1)
+    assert len(camera_task_1_placements) == 1, "Placement for camera_task_1 not found."
+    assert camera_task_1_placements[0].placement_time == EventTime(
         1, EventTime.Unit.US
     ), "Incorrect placement time for camera_task_1."
 
-    perception_task_1_placement = placements.get_placement(perception_task_1)
+    perception_task_1_placements = placements.get_placements(perception_task_1)
     assert (
-        perception_task_1_placement is not None
+        len(perception_task_1_placements) == 1
     ), "Placement for perception_task_1 not found."
-    assert perception_task_1_placement.placement_time == EventTime(
+    assert perception_task_1_placements[0].placement_time == EventTime(
         12, EventTime.Unit.US
     ), "Incorrect placement time for perception_task_1."
 
-    camera_task_2_placement = placements.get_placement(camera_task_2)
-    assert camera_task_2_placement is not None, "Placement for camera_task_2 not found."
-    assert camera_task_2_placement.placement_time == EventTime(
+    camera_task_2_placements = placements.get_placements(camera_task_2)
+    assert len(camera_task_2_placements) == 1, "Placement for camera_task_2 not found."
+    assert camera_task_2_placements[0].placement_time == EventTime(
         21, EventTime.Unit.US
     ), "Incorrect placement time for camera_task_2."

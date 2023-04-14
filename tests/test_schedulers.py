@@ -1,14 +1,22 @@
-from schedulers import BranchPredictionScheduler, EDFScheduler, LSFScheduler
+from schedulers import (
+    BranchPredictionScheduler,
+    ClockworkScheduler,
+    EDFScheduler,
+    LSFScheduler,
+)
 from tests.utils import create_default_task
 from utils import EventTime
 from workers import Worker, WorkerPool, WorkerPools
 from workload import (
     BranchPredictionPolicy,
+    ExecutionStrategies,
+    ExecutionStrategy,
     Job,
     Resource,
     Resources,
     TaskGraph,
     Workload,
+    WorkProfile,
 )
 
 
@@ -60,16 +68,16 @@ def test_edf_scheduler_success():
     )
     assert len(placements) == 2, "Incorrect length of task placements."
 
-    task_gpu_placement = placements.get_placement(task_gpu)
-    assert task_gpu_placement is not None, "The task was not found in placements."
+    task_gpu_placements = placements.get_placements(task_gpu)
+    assert len(task_gpu_placements) == 1, "The task was not found in placements."
     assert (
-        task_gpu_placement.worker_pool_id == worker_pool_two.id
+        task_gpu_placements[0].worker_pool_id == worker_pool_two.id
     ), "Incorrect placement of the task on the WorkerPool."
 
-    task_cpu_placement = placements.get_placement(task_cpu)
-    assert task_cpu_placement is not None, "The task was not found in placements."
+    task_cpu_placements = placements.get_placements(task_cpu)
+    assert len(task_cpu_placements) == 1, "The task was not found in placements."
     assert (
-        task_cpu_placement.worker_pool_id == worker_pool_one.id
+        task_cpu_placements[0].worker_pool_id == worker_pool_one.id
     ), "Incorrect placement of the task on the WorkerPool."
 
 
@@ -106,21 +114,21 @@ def test_edf_scheduler_limited_resources():
     )
     assert len(placements) == 2, "Incorrect length of task placements."
 
-    task_higher_priority_placement = placements.get_placement(task_higher_priority)
+    task_higher_priority_placements = placements.get_placements(task_higher_priority)
     assert (
-        task_higher_priority_placement is not None
+        len(task_higher_priority_placements) == 1
     ), "The task was not found in placements."
     assert (
-        task_higher_priority_placement.worker_pool_id == worker_pool.id
+        task_higher_priority_placements[0].worker_pool_id == worker_pool.id
     ), "Incorrect placement of the task on the WorkerPool."
 
-    task_lower_priority_placement = placements.get_placement(task_lower_priority)
+    task_lower_priority_placements = placements.get_placements(task_lower_priority)
     assert (
-        task_lower_priority_placement is not None
+        len(task_lower_priority_placements) == 1
     ), "The task was not found in placements."
-    assert (
-        not task_lower_priority_placement.is_placed()
-    ), "Incorrect placement of the task on the WorkerPool."
+    assert not task_lower_priority_placements[
+        0
+    ].is_placed(), "Incorrect placement of the task on the WorkerPool."
 
 
 def test_edf_scheduler_non_preemptive_higher_priority():
@@ -154,16 +162,17 @@ def test_edf_scheduler_non_preemptive_higher_priority():
         worker_pools=WorkerPools([worker_pool]),
     )
 
-    task_higher_priority_placement = placements.get_placement(task_higher_priority)
+    task_higher_priority_placements = placements.get_placements(task_higher_priority)
     assert (
-        task_higher_priority_placement is None
+        len(task_higher_priority_placements) == 0
     ), "The task was not found in placements."
-    task_lower_priority_placement = placements.get_placement(task_lower_priority)
+
+    task_lower_priority_placements = placements.get_placements(task_lower_priority)
     assert (
-        task_lower_priority_placement is not None
+        len(task_lower_priority_placements) == 1
     ), "The task was not found in placements."
     assert (
-        task_lower_priority_placement.worker_pool_id == worker_pool.id
+        task_lower_priority_placements[0].worker_pool_id == worker_pool.id
     ), "Incorrect placement of the low priority task."
     worker_pool.place_task(task_lower_priority)
 
@@ -174,13 +183,13 @@ def test_edf_scheduler_non_preemptive_higher_priority():
         workload=workload,
         worker_pools=WorkerPools([worker_pool]),
     )
-    task_higher_priority_placement = placements.get_placement(task_higher_priority)
+    task_higher_priority_placements = placements.get_placements(task_higher_priority)
     assert (
-        task_higher_priority_placement is not None
+        len(task_higher_priority_placements) == 1
     ), "The task was not found in placements."
-    assert (
-        not task_higher_priority_placement.is_placed()
-    ), "Incorrect placement of the high priority task."
+    assert not task_higher_priority_placements[
+        0
+    ].is_placed(), "Incorrect placement of the high priority task."
 
 
 def test_edf_scheduler_preemptive_higher_priority():
@@ -214,18 +223,22 @@ def test_edf_scheduler_preemptive_higher_priority():
         worker_pools=WorkerPools([worker_pool]),
     )
 
-    task_higher_priority_placement = placements.get_placement(task_higher_priority)
+    task_higher_priority_placements = placements.get_placements(task_higher_priority)
     assert (
-        task_higher_priority_placement is None
+        len(task_higher_priority_placements) == 0
     ), "The task was not found in placements."
-    task_lower_priority_placement = placements.get_placement(task_lower_priority)
+    task_lower_priority_placements = placements.get_placements(task_lower_priority)
     assert (
-        task_lower_priority_placement is not None
+        len(task_lower_priority_placements) == 1
     ), "The task was not found in placements."
     assert (
-        task_lower_priority_placement.worker_pool_id == worker_pool.id
+        task_lower_priority_placements[0].worker_pool_id == worker_pool.id
     ), "Incorrect placement of the low priority task."
 
+    task_lower_priority.schedule(
+        time=EventTime(1, EventTime.Unit.US),
+        placement=task_lower_priority_placements[0],
+    )
     worker_pool.place_task(task_lower_priority)
     task_higher_priority.release(EventTime(2, EventTime.Unit.US))
 
@@ -236,20 +249,21 @@ def test_edf_scheduler_preemptive_higher_priority():
         worker_pools=WorkerPools([worker_pool]),
     )
 
-    task_higher_priority_placement = placements.get_placement(task_higher_priority)
+    task_higher_priority_placements = placements.get_placements(task_higher_priority)
     assert (
-        task_higher_priority_placement is not None
+        len(task_higher_priority_placements) == 1
     ), "The task was not found in placements."
     assert (
-        task_higher_priority_placement.worker_pool_id == worker_pool.id
+        task_higher_priority_placements[0].worker_pool_id == worker_pool.id
     ), "Incorrect placement of the high priority task."
-    task_lower_priority_placement = placements.get_placement(task_lower_priority)
+    task_lower_priority_placements = placements.get_placements(task_lower_priority)
+    print(list(str(placement) for placement in task_lower_priority_placements))
     assert (
-        task_lower_priority_placement is not None
+        len(task_lower_priority_placements) == 1
     ), "The task was not found in placements."
-    assert (
-        not task_lower_priority_placement.is_placed()
-    ), "Incorrect placement of the low priority task."
+    assert not task_lower_priority_placements[
+        0
+    ].is_placed(), "Incorrect placement of the low priority task."
 
 
 def test_lsf_scheduler_success():
@@ -300,16 +314,16 @@ def test_lsf_scheduler_success():
     )
     assert len(placements) == 2, "Incorrect length of task placements."
 
-    task_gpu_placement = placements.get_placement(task_gpu)
-    assert task_gpu_placement is not None, "The task was not found in placements."
+    task_gpu_placements = placements.get_placements(task_gpu)
+    assert len(task_gpu_placements) == 1, "The task was not found in placements."
     assert (
-        task_gpu_placement.worker_pool_id == worker_pool_two.id
+        task_gpu_placements[0].worker_pool_id == worker_pool_two.id
     ), "Incorrect placement of the task on the WorkerPool."
 
-    task_cpu_placement = placements.get_placement(task_cpu)
-    assert task_cpu_placement is not None, "The task was not found in placements."
+    task_cpu_placements = placements.get_placements(task_cpu)
+    assert len(task_cpu_placements) == 1, "The task was not found in placements."
     assert (
-        task_cpu_placement.worker_pool_id == worker_pool_one.id
+        task_cpu_placements[0].worker_pool_id == worker_pool_one.id
     ), "Incorrect placement of the task on the WorkerPool."
 
 
@@ -350,21 +364,21 @@ def test_lsf_scheduler_limited_resources():
     )
     assert len(placements) == 2, "Incorrect length of task placements."
 
-    task_higher_priority_placement = placements.get_placement(task_higher_priority)
+    task_higher_priority_placements = placements.get_placements(task_higher_priority)
     assert (
-        task_higher_priority_placement is not None
+        len(task_higher_priority_placements) == 1
     ), "The task was not found in placements."
     assert (
-        task_higher_priority_placement.worker_pool_id == worker_pool.id
+        task_higher_priority_placements[0].worker_pool_id == worker_pool.id
     ), "Incorrect placement of the task on the WorkerPool."
 
-    task_lower_priority_placement = placements.get_placement(task_lower_priority)
+    task_lower_priority_placements = placements.get_placements(task_lower_priority)
     assert (
-        task_lower_priority_placement is not None
+        len(task_lower_priority_placements) == 1
     ), "The task was not found in placements."
-    assert (
-        not task_lower_priority_placement.is_placed()
-    ), "Incorrect placement of the task on the WorkerPool."
+    assert not task_lower_priority_placements[
+        0
+    ].is_placed(), "Incorrect placement of the task on the WorkerPool."
 
 
 def test_branch_prediction_scheduler_slack():
@@ -447,3 +461,130 @@ def test_branch_prediction_scheduler_slack():
     assert (
         slack == EventTime(8, EventTime.Unit.MS) or slack == EventTime.zero()
     ), "Incorrect slack returned."
+
+
+def test_clockwork_scheduler_start_simple():
+    """Tests that Clockwork's start method loads the work profiles correctly across
+    all the workers."""
+    clockwork_scheduler = ClockworkScheduler(runtime=EventTime.zero())
+    available_models = [
+        WorkProfile(
+            name="Model_A",
+            loading_strategies=ExecutionStrategies(
+                strategies=[
+                    ExecutionStrategy(
+                        resources=Resources(
+                            resource_vector={Resource(name="RAM", _id="any"): 10}
+                        ),
+                        batch_size=1,
+                        runtime=EventTime(100, EventTime.Unit.US),
+                    )
+                ]
+            ),
+        ),
+        WorkProfile(
+            name="Model_B",
+            loading_strategies=ExecutionStrategies(
+                strategies=[
+                    ExecutionStrategy(
+                        resources=Resources(
+                            resource_vector={Resource(name="RAM", _id="any"): 20}
+                        ),
+                        batch_size=1,
+                        runtime=EventTime(200, EventTime.Unit.US),
+                    )
+                ]
+            ),
+        ),
+    ]
+    worker_a = Worker(
+        name="Worker_A",
+        resources=Resources(resource_vector={Resource(name="RAM"): 100}),
+    )
+    worker_b = Worker(
+        name="Worker_B",
+        resources=Resources(resource_vector={Resource(name="RAM"): 100}),
+    )
+    worker_pool = WorkerPool(name="WorkerPool", workers=[worker_a, worker_b])
+
+    placements = clockwork_scheduler.start(
+        EventTime.zero(),
+        available_models,
+        WorkerPools([worker_pool]),
+    )
+    assert len(placements) == 4, "Incorrect number of placements for start()."
+    assert (
+        len(placements.get_placements(computation=available_models[0])) == 2
+    ), "The model should be placed on both workers."
+    assert (
+        len(placements.get_placements(computation=available_models[1])) == 2
+    ), "The model should be placed on both workers."
+
+
+def test_clockwork_scheduler_start_complex():
+    """Tests that Clockwork's start method loads the work profiles correctly across
+    all the workers."""
+    clockwork_scheduler = ClockworkScheduler(runtime=EventTime.zero())
+    available_models = [
+        WorkProfile(
+            name="Model_A",
+            loading_strategies=ExecutionStrategies(
+                strategies=[
+                    ExecutionStrategy(
+                        resources=Resources(
+                            resource_vector={Resource(name="RAM", _id="any"): 50}
+                        ),
+                        batch_size=1,
+                        runtime=EventTime(100, EventTime.Unit.US),
+                    )
+                ]
+            ),
+        ),
+        WorkProfile(
+            name="Model_B",
+            loading_strategies=ExecutionStrategies(
+                strategies=[
+                    ExecutionStrategy(
+                        resources=Resources(
+                            resource_vector={Resource(name="RAM", _id="any"): 30}
+                        ),
+                        batch_size=1,
+                        runtime=EventTime(200, EventTime.Unit.US),
+                    )
+                ]
+            ),
+        ),
+        WorkProfile(
+            name="Model_C",
+            loading_strategies=ExecutionStrategies(
+                strategies=[
+                    ExecutionStrategy(
+                        resources=Resources(
+                            resource_vector={Resource(name="RAM", _id="any"): 30}
+                        ),
+                        batch_size=1,
+                        runtime=EventTime(300, EventTime.Unit.US),
+                    )
+                ]
+            ),
+        ),
+    ]
+    worker_a = Worker(
+        name="Worker_A",
+        resources=Resources(resource_vector={Resource(name="RAM"): 200}),
+    )
+    worker_b = Worker(
+        name="Worker_B",
+        resources=Resources(resource_vector={Resource(name="RAM"): 100}),
+    )
+    worker_pool = WorkerPool(name="WorkerPool", workers=[worker_a, worker_b])
+
+    placements = clockwork_scheduler.start(
+        EventTime.zero(),
+        available_models,
+        WorkerPools([worker_pool]),
+    )
+    assert len(placements) == 5, "Incorrect number of placements for start()."
+    assert (
+        len(placements.get_placements(computation=available_models[2])) == 1
+    ), "The final model should be placed on one worker."

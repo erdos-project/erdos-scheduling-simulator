@@ -1,15 +1,14 @@
-from copy import copy
 import time
-from typing import Mapping, Optional, Sequence, Tuple, Union
+from copy import copy
+from typing import Mapping, Optional, Sequence, Set
 
 import absl  # noqa: F401
 
 from schedulers import BaseScheduler
 from utils import EventTime
 from workers import Worker, WorkerPools
-from workload import Placement, Placements, Task, TaskState, Workload
+from workload import ExecutionStrategy, Placement, Placements, Task, TaskState, Workload
 from workload.profile import WorkProfile
-from workload.strategy import ExecutionStrategy
 
 
 class Models:
@@ -82,9 +81,6 @@ class ClockworkScheduler(BaseScheduler):
     Args:
         runtime (`EventTime`): The runtime to return to the Simulator (in us).
             If -1, the scheduler returns the actual runtime.
-        enforce_deadlines (`bool`): If True then deadlines must be met or else the
-            `schedule()` will return None. Likewise, tasks which cannot meet their
-            deadlines will not be placed.
         log_to_file (`bool`): If `True`, the scheduler writes the Gurobi search
             log to files with the format "gurobi_{sim_time}.log".
         _flags (`Optional[absl.flags]`): The runtime flags that are used to initialize
@@ -93,14 +89,13 @@ class ClockworkScheduler(BaseScheduler):
 
     def __init__(
         self,
-        runtime: EventTime = EventTime(time=-1, unit=EventTime.Unit.US),
-        enforce_deadlines: bool = False,
+        runtime: EventTime = EventTime.invalid(),
         log_to_file: bool = False,
         _flags: Optional["absl.flags"] = None,
     ):
         super(ClockworkScheduler, self).__init__(
             runtime=runtime,
-            enforce_deadlines=enforce_deadlines,
+            enforce_deadlines=True,
             _flags=_flags,
         )
         self._log_to_file = log_to_file
@@ -112,8 +107,81 @@ class ClockworkScheduler(BaseScheduler):
         # Models not loaded onto each GPU, ordered by priority.
         self._not_cached_models: Mapping[int, Sequence[str]] = {}
 
-    def start(self, start_time: EventTime) -> None:
-        raise NotImplementedError
+    def start(
+        self,
+        start_time: EventTime,
+        work_profiles: Set[WorkProfile],
+        worker_pools: "WorkerPools",
+    ) -> Placements:
+        # Clockwork relies on the Client to initiate `LoadRemoteModel` requests to the
+        # controller during the startup phase. The `ControllerStartup` then enqueus
+        # the loading of each of the models requested onto all of the workers in the
+        # system. We simulate this by trying to load all of the models specified in the
+        # Workload on top of all the Workers, and log an error if the resource
+        # requirements cannot be met.
+        start_time = time.time()
+        placements = []
+        for worker_pool in worker_pools.worker_pools:
+            for worker in worker_pool.workers:
+                # We create a virtual copy of the Worker to simulate the loading of
+                # each model onto the Worker to correctly account for the resources.
+                worker_copy = copy(worker)
+                for work_profile in work_profiles:
+                    if worker_copy.is_available(work_profile) == EventTime.invalid():
+                        compatible_strategies = worker_copy.get_compatible_strategies(
+                            work_profile.loading_strategies
+                        )
+                        if len(compatible_strategies) == 0:
+                            self._logger.warning(
+                                "[%s] No compatible strategies found for loading "
+                                "WorkProfile %s onto Worker %s",
+                                start_time,
+                                work_profile.id,
+                                worker.id,
+                            )
+                            continue
+                        # We do not expect more than one strategy to be compatible
+                        # with each Worker.
+                        initial_loading_strategy = (
+                            compatible_strategies.get_fastest_strategy()
+                        )
+
+                        # We load the model onto the Worker with an amended strategy
+                        # such that all the models are available by the time the first
+                        # event executes in the Simulator. This replicates the
+                        # ControllerWithStartupPhase behavior in Clockwork.
+                        adjusted_loading_strategy = ExecutionStrategy(
+                            resources=initial_loading_strategy.resources,
+                            batch_size=initial_loading_strategy.batch_size,
+                            runtime=EventTime.zero(),
+                        )
+                        placements.append(
+                            Placement.create_load_profile_placement(
+                                work_profile=work_profile,
+                                placement_time=start_time,
+                                worker_pool_id=worker_pool.id,
+                                worker_id=worker.id,
+                                loading_strategy=adjusted_loading_strategy,
+                            )
+                        )
+                        worker_copy.load_profile(
+                            profile=work_profile,
+                            loading_strategy=adjusted_loading_strategy,
+                        )
+                        self._logger.debug(
+                            "[%s] Requesting to load WorkProfile %s onto Worker %s.",
+                            start_time,
+                            work_profile.id,
+                            worker.id,
+                        )
+        end_time = time.time()
+        return Placements(
+            runtime=EventTime.zero(),
+            true_runtime=EventTime(
+                int((end_time - start_time) * 1e6), EventTime.Unit.US
+            ),
+            placements=placements,
+        )
 
     def schedule(
         self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools

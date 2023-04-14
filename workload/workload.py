@@ -196,6 +196,7 @@ class Workload(object):
         policy: BranchPredictionPolicy = BranchPredictionPolicy.ALL,
         branch_prediction_accuracy: float = 0.50,
         release_taskgraphs: bool = False,
+        debug: bool = False,
     ) -> Sequence[Task]:
         """Retrieves all the tasks expected to be released within the scheduling
         horizon defined by `time + lookahead`.
@@ -219,6 +220,8 @@ class Workload(object):
             release_taskgraphs (`bool`): If `True`, all tasks of a TaskGraph are made
                 available for scheduling if any task in the TaskGraph falls within the
                 scheduler lookahead.
+            debug (`bool`): If `True`, print debug information about the decision
+                making.
 
         Returns:
             A list of tasks that are schedulable in the `time + lookahead` horizon.
@@ -235,6 +238,7 @@ class Workload(object):
                     policy,
                     branch_prediction_accuracy,
                     release_taskgraphs,
+                    debug,
                 )
             )
         return schedulable_tasks

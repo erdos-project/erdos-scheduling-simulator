@@ -114,7 +114,8 @@ class EDFScheduler(BaseScheduler):
             if is_task_placed:
                 for worker_pool in schedulable_worker_pools.worker_pools:
                     self._logger.debug(
-                        f"[{sim_time}] The state of {worker_pool} is:{os.linesep}"
+                        f"[{sim_time.to(EventTime.Unit.US).time}] The state of "
+                        f"{worker_pool} is:{os.linesep}"
                         f"{os.linesep.join(worker_pool.get_utilization())}"
                     )
             else:
