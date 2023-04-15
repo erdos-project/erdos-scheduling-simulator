@@ -1,24 +1,42 @@
+import bisect
 import time
 from copy import copy
-from typing import Mapping, Optional, Sequence, Set
+from operator import attrgetter
+from typing import Callable, List, Optional, Sequence, Set
 
 import absl  # noqa: F401
 
 from schedulers import BaseScheduler
 from utils import EventTime
 from workers import Worker, WorkerPools
-from workload import ExecutionStrategy, Placement, Placements, Task, TaskState, Workload
+from workload import (
+    BatchStrategy,
+    ExecutionStrategies,
+    ExecutionStrategy,
+    Placement,
+    Placements,
+    Task,
+    Workload,
+)
 from workload.profile import WorkProfile
 
 
-class Models:
-    """Defines a priority order over the models to figure out which
-    needs to be loaded and evicted."""
+class Model(object):
+    """A representation of a model that is loaded onto a Worker.
 
+    This instance maintains a request queue that sorts the remaining tasks by their
+    deadline. The `get_feasible_placements` method returns a feasible execution strategy
+    with the highest batch size that meets the earliest deadline, and removes all tasks
+    that are past its deadline but couldn't be scheduled.
 
-class Model:
+    Args:
+        profile (`WorkProfile`): The WorkProfile of the model that provides the loading
+            and execution strategies.
+    """
+
     def __init__(self, profile: WorkProfile):
-        self._task_priority_queue: Sequence[Task] = []
+        self._tasks: Set[Task] = set()
+        self._task_priority_queue: List[Task] = []
         self._profile = profile
 
     @property
@@ -29,50 +47,170 @@ class Model:
     def profile(self) -> WorkProfile:
         return self._profile
 
-    def add_task(self, task: Task):
-        if task not in self._task_priority_queue:
-            self._task_priority_queue = self._task_priority_queue + [task]
+    @property
+    def outstanding_requests(self) -> int:
+        """Returns the number of requests available in the queue for this `Model`."""
+        return len(self._tasks)
 
-    def get_feasible_placements(
+    def get_available_execution_strategies(
+        self, current_time: EventTime, key: Callable = attrgetter("batch_size")
+    ) -> ExecutionStrategies:
+        """Retrieve the strategies that are available for execution given the current
+        set of requests available in the model. The strategies are ordered by the
+        provided function. The default ordering is by the batch size.
+
+        Args:
+            current_time (`EventTime`): The current time of the simulation.
+            key (`Callable`): The function to use for ordering the strategies.
+
+        Returns:
+            An `ExecutionStrategies` object containing the available strategies sorted
+            by their priority as defined by the `key` function.
+        """
+        available_strategies = ExecutionStrategies()
+        for strategy in sorted(
+            self._profile.execution_strategies, key=key, reverse=True
+        ):
+            # The criteria for assuming the strategy is valid are as follows:
+            # 1. The number of requests in the queue must saturate the batch size of
+            #    the strategy.
+            # 2. The execution time of the strategy must be able to meet the deadline
+            #    of the earliest request in the queue.
+            if strategy.batch_size <= self.outstanding_requests and (
+                current_time + strategy.runtime <= self._task_priority_queue[0].deadline
+            ):
+                available_strategies.add_strategy(strategy)
+        return available_strategies
+
+    def add_task(self, task: Task) -> None:
+        """Adds a new Task to the request queue, while keeping the request queue sorted
+        by the deadline.
+
+        If the `Task` is already available in the queue, it is not added again.
+
+        Args:
+            task (`Task`): The task to add for scheduling.
+
+        Raises:
+            A `ValueError` if the `Task`'s profile does not match the model's profile.
+        """
+        if task.profile != self._profile:
+            raise ValueError(
+                f"The task's profile ({task.profile.id}) does not match the model's "
+                f"profile ({self._profile.id})."
+            )
+        if task not in self._tasks:
+            self._tasks.add(task)
+            bisect.insort(self._task_priority_queue, task)
+
+    def remove_task(self, task: Task) -> None:
+        """Removes a task from the request queue.
+
+        Args:
+            task (`Task`): The task to remove from the request queue.
+        """
+        if task in self._tasks:
+            self._tasks.remove(task)
+            self._task_priority_queue.remove(task)
+
+    def get_placements(
         self,
         sim_time: EventTime,
+        strategy: ExecutionStrategy,
         worker_pool_id: str,
-        worker: Worker,
+        worker_id: str = None,
     ) -> Sequence[Placement]:
-        """Returns a feasible execution strategy with the largest batch size
-        that meets the earliest deadline, and removes all tasks from the queues
-        that comprise the batch."""
-        if len(self._task_priority_queue) == 0 or not worker.is_available(self.profile):
-            return []
+        """Returns a sequence of `Placement`s that contain the `Task`s that can be
+        batched together to meet the requirements of the provided `ExecutionStrategy`.
 
-        # TODO: Update this when the task PQ implementation changes.
-        deadline = self._task_priority_queue[0].deadline
+        The method internally constructs a `BatchStrategy` object corresponding to the
+        provided `ExecutionStrategy` and uses it to inform the `Worker` to batch the
+        tasks in the request queue. The `Task`s are then removed from the request queue.
 
-        strategies = worker.get_compatible_strategies(self.profile.execution_strategies)
-        chosen_strategy = strategies.get_fastest_strategy()
-        if chosen_strategy is None:
-            return []
-        for strategy in strategies:
-            if sim_time + strategy.runtime <= deadline:
-                if (
-                    strategy.batch_size > chosen_strategy.batch_size
-                    # Prevent over-provisioning for an unnecessarily large batch size.
-                    and chosen_strategy.batch_size < len(self._task_priority_queue)
-                ):
-                    chosen_strategy = strategy
+        Args:
+            sim_time (`EventTime`): The current time of the simulation. This is used to
+                inform the placement time of the `Placement` objects.
+            strategy (`ExecutionStrategy`): The strategy to use for batching the tasks.
+            worker_pool_id (`str`): The ID of the `WorkerPool` that the `Task`s need
+                to be placed on.
+            worker_id (`str`): The ID of the `Worker` that the `Task`s need to be placed
+                on. If `None`, the `WorkerPool` finds appropriate `Worker`s to place the
+                `Task`s on.
 
-        placements = []
-        for _ in range(chosen_strategy.batch_size):
-            # TODO: Update this when the task PQ implementation changes.
-            task = self._task_priority_queue[0]
-            self._task_priority_queue = self._task_priority_queue[1:]
+        Returns:
+            A sequence of `Placement` objects to be returned by the scheduler.
 
-            placements.append(
-                Placement.create_task_placement(
-                    task, sim_time, worker_pool_id, worker.id, chosen_strategy
-                )
+        Raises:
+            A `RuntimeError` if the number of tasks in the queue is less than the batch
+            size of the provided `ExecutionStrategy`.
+        """
+        if len(self._task_priority_queue) < strategy.batch_size:
+            raise RuntimeError(
+                f"The number of tasks in the queue ({len(self._task_priority_queue)}) "
+                f"is less than the batch size ({strategy.batch_size})."
             )
+
+        # Construct the `Placement` objects.
+        batch_strategy = BatchStrategy(execution_strategy=strategy)
+        tasks = self._task_priority_queue[: strategy.batch_size]
+        placements = []
+        for task in tasks:
+            placement = Placement.create_task_placement(
+                task=task,
+                placement_time=sim_time,
+                worker_pool_id=worker_pool_id,
+                worker_id=worker_id,
+                execution_strategy=batch_strategy,
+            )
+            placements.append(placement)
+            self._tasks.remove(task)
+
+        # Update the priority queue.
+        self._task_priority_queue = self._task_priority_queue[strategy.batch_size :]
+
         return placements
+
+
+class Models:
+    """Encapsulates individual instances of `Model`s available during the simulation,
+    and maintains a priority queue over the models to figure out which models need to
+    be loaded and evicted.
+
+    Args:
+        models (`Sequence[Model]`): The models available during the simulation.
+    """
+
+    def __init__(self, models: Sequence[Model] = []) -> None:
+        self._models = {model.id: model for model in models}
+
+    def add_model(self, model: Model) -> None:
+        """Adds a new model to the set of models available during the simulation.
+
+        Args:
+            model (`Model`): The model to add.
+        """
+        if model.id not in self._models:
+            self._models[model.id] = model
+
+    def add_task(self, task: Task) -> None:
+        """Adds a new task to the request queue of the corresponding model.
+
+        If the model corresponding to the `Task`s profile has not been seen before, a
+        new instance of `Model` is created and added to the set of available models.
+        If the `Task` is already available in the queue, it is not added again.
+
+        Args:
+            task (`Task`): The task to add.
+        """
+        if task.profile.id not in self._models:
+            self.add_model(Model(task.profile))
+        self._models[task.profile.id].add_task(task)
+
+    def __getitem__(self, model_id: str) -> Model:
+        return self._models[model_id]
+
+    def __contains__(self, model_id: str) -> bool:
+        return model_id in self._models
 
 
 class ClockworkScheduler(BaseScheduler):
@@ -90,7 +228,6 @@ class ClockworkScheduler(BaseScheduler):
     def __init__(
         self,
         runtime: EventTime = EventTime.invalid(),
-        log_to_file: bool = False,
         _flags: Optional["absl.flags"] = None,
     ):
         super(ClockworkScheduler, self).__init__(
@@ -98,14 +235,10 @@ class ClockworkScheduler(BaseScheduler):
             enforce_deadlines=True,
             _flags=_flags,
         )
-        self._log_to_file = log_to_file
 
-        self._models: Mapping[str, Model] = {}
-        # Maps worker ID to model ID.
-        # LRU cache of models loaded onto each GPU.
-        self._cached_models: Mapping[int, Sequence[str]] = {}
-        # Models not loaded onto each GPU, ordered by priority.
-        self._not_cached_models: Mapping[int, Sequence[str]] = {}
+        # Maintain a set of `Model` instances to keep track of the request queues and
+        # construct batching strategies.
+        self._models = Models()
 
     def start(
         self,
@@ -113,6 +246,11 @@ class ClockworkScheduler(BaseScheduler):
         work_profiles: Set[WorkProfile],
         worker_pools: "WorkerPools",
     ) -> Placements:
+        # Maintain an instance of `Model` for each provided `WorkProfile` to keep track
+        # of the request queues and construct batching strategies.
+        for work_profile in work_profiles:
+            self._models.add_model(Model(work_profile))
+
         # Clockwork relies on the Client to initiate `LoadRemoteModel` requests to the
         # controller during the startup phase. The `ControllerStartup` then enqueus
         # the loading of each of the models requested onto all of the workers in the
@@ -199,59 +337,22 @@ class ClockworkScheduler(BaseScheduler):
 
         # Create a virtual WorkerPool set to try scheduling decisions on.
         schedulable_worker_pools = copy(worker_pools)
-
-        # Construct a mapping of the index of a Worker to the Worker itself, and
-        # a mapping from the Worker to the WorkerPool to which it belongs.
-        worker_index = 1
-        workers: Mapping[str, Worker] = {}
-        worker_to_worker_pool = {}
-        for worker_pool in schedulable_worker_pools.worker_pools:
-            for worker in worker_pool.workers:
-                workers[worker_index] = worker
-                worker_index += 1
-                worker_to_worker_pool[worker.id] = worker_pool.id
-
         self._logger.debug(
             f"[{sim_time.time}] The scheduler received {len(tasks_to_be_scheduled)} "
-            f"tasks for scheduling across {len(workers)} workers. These tasks were: "
-            f"{[task.unique_name for task in tasks_to_be_scheduled]}."
+            f"tasks for scheduling across "
+            f"{sum(len(worker_pool.workers) for worker_pool in worker_pools)} workers. "
+            f"These tasks were: {[task.unique_name for task in tasks_to_be_scheduled]}."
         )
 
-        # Populate the models with tasks.
         scheduler_start_time = time.time()
         placements = []
-        for task in tasks_to_be_scheduled:
-            model_id = task.profile.id
-            if model_id not in self._models:
-                self._models[model_id] = Model(model_id)
-            # Admission control
-            if task.deadline > sim_time and self.enforce_deadlines:
-                placements.append(
-                    Placement(
-                        task=task,
-                        placement_time=None,
-                        worker_pool_id=None,
-                        worker_id=None,
-                        execution_strategy=None,
-                    )
-                )
-            else:
-                if model_id in self._models:
-                    self._models[model_id].add_task(task)
-                else:
-                    model = Model(task.profile)
-                    model.add_task(task)
-                    self._models[model_id] = model
 
-        for worker in workers.values():
-            # Skip workers currently processing tasks.
-            if len(worker.get_placed_tasks()) > 0:
-                continue
-            for model in self._models.values():
-                new_placements = model.get_feasible_placements(
-                    sim_time, worker_to_worker_pool[worker.id], worker.id
-                )
-                placements.extend(new_placements)
+        # Add the tasks to the request queues of the appropriate `Model` instance.
+        for task in tasks_to_be_scheduled:
+            if task.deadline > sim_time and self.enforce_deadlines:
+                placements.append(Placement.create_task_placement(task=task))
+            else:
+                self._models.add_task(task)
 
         scheduler_end_time = time.time()
         scheduler_runtime = EventTime(

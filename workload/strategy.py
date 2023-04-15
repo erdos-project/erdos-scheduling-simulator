@@ -161,7 +161,7 @@ class ExecutionStrategies(object):
         for strategy in self._strategies:
             yield strategy
 
-    def __getitem__(self, index):
+    def __getitem__(self, index) -> ExecutionStrategy:
         return self._strategies[index]
 
     def __len__(self) -> int:

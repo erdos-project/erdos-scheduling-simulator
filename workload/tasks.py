@@ -87,14 +87,14 @@ class Task(object):
         deadline: EventTime,
         profile: Optional[WorkProfile] = None,
         timestamp: int = None,
-        release_time: Optional[EventTime] = EventTime(-1, EventTime.Unit.US),
-        start_time: Optional[EventTime] = EventTime(-1, EventTime.Unit.US),
-        completion_time: Optional[EventTime] = EventTime(-1, EventTime.Unit.US),
+        release_time: Optional[EventTime] = EventTime.invalid(),
+        start_time: Optional[EventTime] = EventTime.invalid(),
+        completion_time: Optional[EventTime] = EventTime.invalid(),
         probability: float = None,
         _logger: Optional[logging.Logger] = None,
     ):
         if (
-            completion_time == EventTime(-1, EventTime.Unit.US)
+            completion_time != EventTime.invalid()
             and profile
             and len(profile.execution_strategies) != 1
         ):

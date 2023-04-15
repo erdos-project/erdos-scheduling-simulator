@@ -39,6 +39,7 @@ def create_default_task(
     start_time=-1,
     completion_time=-1,
     task_graph_name="TestTaskGraph",
+    profile=None,
 ):
     """Helper function to create a default task."""
     task_name = name if name else f"{job.name}_Task"
@@ -57,7 +58,9 @@ def create_default_task(
                     )
                 ]
             ),
-        ),
+        )
+        if profile is None
+        else profile,
         deadline=EventTime(deadline, EventTime.Unit.US),
         timestamp=timestamp,
         release_time=EventTime(release_time, EventTime.Unit.US),
