@@ -408,6 +408,12 @@ class Worker(object):
         )
         instance._id = uuid.UUID(self.id)
 
+        # Copy the placed and pending profiles.
+        for profile_id, profile in self._available_profiles.items():
+            instance._available_profiles[profile_id] = profile
+        for profile_id, profile in self._pending_profiles.items():
+            instance._pending_profiles[profile_id] = profile
+
         # Copy the placed tasks.
         for task, strategy in self._placed_tasks.items():
             instance._placed_tasks[task] = strategy
