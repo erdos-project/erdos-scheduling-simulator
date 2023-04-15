@@ -10,6 +10,8 @@ from workload import (
     Job,
     Resource,
     Resources,
+    TaskGraph,
+    Workload,
     WorkProfile,
 )
 
@@ -276,3 +278,227 @@ def test_model_create_placements():
     assert all(
         placement.execution_strategy.id == batch_strategy.id for placement in placements
     ), "Incorrect strategy id."
+
+
+def test_clockwork_task_placement_success_simple():
+    """Tests that the scheduler is able to correctly place tasks."""
+    # Construct the `Task` objects.
+    work_profile_a = WorkProfile(
+        name="Model_A",
+        execution_strategies=ExecutionStrategies(
+            strategies=[
+                ExecutionStrategy(
+                    resources=Resources(
+                        resource_vector={Resource(name="GPU", _id="any"): 1}
+                    ),
+                    batch_size=4,
+                    runtime=EventTime(100, EventTime.Unit.US),
+                ),
+                ExecutionStrategy(
+                    resources=Resources(
+                        resource_vector={Resource(name="GPU", _id="any"): 1}
+                    ),
+                    batch_size=8,
+                    runtime=EventTime(150, EventTime.Unit.US),
+                ),
+                ExecutionStrategy(
+                    resources=Resources(
+                        resource_vector={Resource(name="GPU", _id="any"): 1}
+                    ),
+                    batch_size=16,
+                    runtime=EventTime(200, EventTime.Unit.US),
+                ),
+            ]
+        ),
+    )
+    work_profile_b = WorkProfile(
+        name="Model_B",
+        execution_strategies=ExecutionStrategies(
+            strategies=[
+                ExecutionStrategy(
+                    resources=Resources(
+                        resource_vector={Resource(name="GPU", _id="any"): 1}
+                    ),
+                    batch_size=4,
+                    runtime=EventTime(100, EventTime.Unit.US),
+                ),
+                ExecutionStrategy(
+                    resources=Resources(
+                        resource_vector={Resource(name="GPU", _id="any"): 1}
+                    ),
+                    batch_size=8,
+                    runtime=EventTime(150, EventTime.Unit.US),
+                ),
+                ExecutionStrategy(
+                    resources=Resources(
+                        resource_vector={Resource(name="GPU", _id="any"): 1}
+                    ),
+                    batch_size=16,
+                    runtime=EventTime(200, EventTime.Unit.US),
+                ),
+            ]
+        ),
+    )
+    tasks = [
+        create_default_task(
+            job=Job(name=f"Job_A_{i}"),
+            deadline=250 - 2 * i,
+            profile=work_profile_a,
+        )
+        for i in range(12)
+    ] + [
+        create_default_task(
+            job=Job(name=f"Job_B_{i}"),
+            deadline=250 - 2 * i,
+            profile=work_profile_b,
+        )
+        for i in range(4)
+    ]
+    task_graph = TaskGraph(name="TestTaskGraph", tasks={task: [] for task in tasks})
+    workload = Workload.from_task_graphs(task_graphs={task_graph.name: task_graph})
+    assert len(task_graph) == len(tasks), "Incorrect number of tasks in the graph."
+
+    # Construct the `WorkerPool`.
+    worker_1 = Worker(
+        name="Worker_1",
+        resources=Resources(resource_vector={Resource(name="GPU"): 1}),
+    )
+    worker_1.load_profile(
+        profile=work_profile_a,
+        loading_strategy=ExecutionStrategy(
+            resources=Resources(), batch_size=1, runtime=EventTime.zero()
+        ),
+    )
+    worker_1.load_profile(
+        profile=work_profile_b,
+        loading_strategy=ExecutionStrategy(
+            resources=Resources(), batch_size=1, runtime=EventTime.zero()
+        ),
+    )
+    worker_pool = WorkerPool(name="WorkerPool_1", workers=[worker_1])
+    worker_pools = WorkerPools(worker_pools=[worker_pool])
+
+    # Construct the scheduler.
+    scheduler = ClockworkScheduler(runtime=EventTime.zero())
+
+    # With one `Worker`, only one of the `Model` should be executed.
+    for task in tasks:
+        task.release(EventTime.zero())
+    placements = scheduler.schedule(
+        sim_time=EventTime.zero(), workload=workload, worker_pools=worker_pools
+    )
+    assert len(placements) in {4, 8}, "Incorrect number of placements created."
+    if len(placements) == 4:
+        # If the placements are for Model_B, check that the request queues are correct.
+        assert all(
+            placement.task.profile == work_profile_b for placement in placements
+        ), "Incorrect tasks returned in the Placement."
+        assert (
+            scheduler._models[work_profile_b.id].outstanding_requests == 0
+        ), "Incorrect number of requests remaining for the Model."
+    else:
+        # If the placements are for Model_A, check that the request queues are correct.
+        assert all(
+            placement.task.profile == work_profile_a for placement in placements
+        ), "Incorrect tasks returned in the Placement."
+        assert (
+            scheduler._models[work_profile_a.id].outstanding_requests == 4
+        ), "Incorrect number of requests remaining for the Model."
+
+    # With two `Worker`s, both `Model`s should be executed.
+    worker_2 = Worker(
+        name="Worker_2",
+        resources=Resources(resource_vector={Resource(name="GPU"): 1}),
+    )
+    worker_2.load_profile(
+        profile=work_profile_a,
+        loading_strategy=ExecutionStrategy(
+            resources=Resources(), batch_size=1, runtime=EventTime.zero()
+        ),
+    )
+    worker_2.load_profile(
+        profile=work_profile_b,
+        loading_strategy=ExecutionStrategy(
+            resources=Resources(), batch_size=1, runtime=EventTime.zero()
+        ),
+    )
+    worker_pool.add_workers([worker_2])
+    placements = scheduler.schedule(
+        sim_time=EventTime.zero(), workload=workload, worker_pools=worker_pools
+    )
+    assert len(placements) == 12, "Incorrect number of placements created."
+    assert (
+        len(
+            [
+                placement
+                for placement in placements
+                if placement.task.profile == work_profile_a
+            ]
+        )
+        == 8
+    ), "Incorrect number of Model_A tasks returned in the Placement."
+    assert (
+        len(
+            [
+                placement
+                for placement in placements
+                if placement.task.profile == work_profile_b
+            ]
+        )
+        == 4
+    ), "Incorrect number of Model_B tasks returned in the Placement."
+    assert (
+        scheduler._models[work_profile_a.id].outstanding_requests == 4
+    ), "Incorrect number of requests remaining for the Model A."
+    assert (
+        scheduler._models[work_profile_b.id].outstanding_requests == 0
+    ), "Incorrect number of requests remaining for the Model B."
+
+    # With three `Worker`s, all requests should be finished.
+    worker_3 = Worker(
+        name="Worker_3",
+        resources=Resources(resource_vector={Resource(name="GPU"): 1}),
+    )
+    worker_3.load_profile(
+        profile=work_profile_a,
+        loading_strategy=ExecutionStrategy(
+            resources=Resources(), batch_size=1, runtime=EventTime.zero()
+        ),
+    )
+    worker_3.load_profile(
+        profile=work_profile_b,
+        loading_strategy=ExecutionStrategy(
+            resources=Resources(), batch_size=1, runtime=EventTime.zero()
+        ),
+    )
+    worker_pool.add_workers([worker_3])
+    placements = scheduler.schedule(
+        sim_time=EventTime.zero(), workload=workload, worker_pools=worker_pools
+    )
+    assert len(placements) == 16, "Incorrect number of placements created."
+    assert (
+        len(
+            [
+                placement
+                for placement in placements
+                if placement.task.profile == work_profile_a
+            ]
+        )
+        == 12
+    ), "Incorrect number of Model_A tasks returned in the Placement."
+    assert (
+        len(
+            [
+                placement
+                for placement in placements
+                if placement.task.profile == work_profile_b
+            ]
+        )
+        == 4
+    ), "Incorrect number of Model_B tasks returned in the Placement."
+    assert (
+        scheduler._models[work_profile_a.id].outstanding_requests == 0
+    ), "Incorrect number of requests remaining for the Model A."
+    assert (
+        scheduler._models[work_profile_b.id].outstanding_requests == 0
+    ), "Incorrect number of requests remaining for the Model B."
