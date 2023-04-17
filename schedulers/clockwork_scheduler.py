@@ -406,6 +406,45 @@ class ClockworkScheduler(BaseScheduler):
                         )
         return placements
 
+    def run_admission(
+        self, current_time: EventTime, tasks_to_schedule: Sequence[Task]
+    ) -> Sequence[Placement]:
+        """Runs admission control on the given set of tasks. This method adds the
+        `Task`s to the request queue of the corresponding models and returns a
+        failed `Placement` for each `Task` that is past its deadline.
+
+        This method roughly corresponds to the `run_admission_thread` method of the
+        infer5 scheduler in Clockwork [here](https://tinyurl.com/45evsxbp).
+
+        Args:
+            current_time (`EventTime`): The current time of the simulation.
+            tasks_to_schedule (`Sequence[Task]`): The set of `Task`s available for
+                execution.
+
+        Returns:
+            A (possibly empty) `Sequence` of `Placement` instances that represent the
+            failed `Task` placements.
+        """
+        placements = []
+        for task in tasks_to_schedule:
+            if task.deadline < current_time and self.enforce_deadlines:
+                placements.append(Placement.create_task_placement(task=task))
+                self._logger.debug(
+                    "[%s] Task %s has a deadline of %s, which has been missed. ",
+                    current_time.to(EventTime.Unit.US).time,
+                    task,
+                    task.deadline.to(EventTime.Unit.US).time,
+                )
+            else:
+                self._models.add_task(task)
+                self._logger.debug(
+                    "[%s] Added Task %s to the request queue for Model %s.",
+                    current_time.to(EventTime.Unit.US).time,
+                    task,
+                    task.profile.name,
+                )
+        return placements
+
     def schedule(
         self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools
     ) -> Placements:
@@ -435,24 +474,18 @@ class ClockworkScheduler(BaseScheduler):
         scheduler_start_time = time.time()
         placements = []
 
-        # Add the tasks to the request queues of the appropriate `Model` instance.
-        for task in tasks_to_be_scheduled:
-            if task.deadline < sim_time and self.enforce_deadlines:
-                placements.append(Placement.create_task_placement(task=task))
-                self._logger.debug(
-                    "[%s] Task %s has a deadline of %s, which has been missed. ",
-                    sim_time.to(EventTime.Unit.US).time,
-                    task,
-                    task.deadline.to(EventTime.Unit.US).time,
-                )
-            else:
-                self._models.add_task(task)
-                self._logger.debug(
-                    "[%s] Added Task %s to the request queue for Model %s.",
-                    sim_time.to(EventTime.Unit.US).time,
-                    task,
-                    task.profile.name,
-                )
+        # Run admission control on the `Task`s available for execution.
+        failed_admission_control_tasks = self.run_admission(
+            current_time=sim_time, tasks_to_schedule=tasks_to_be_scheduled
+        )
+        if len(failed_admission_control_tasks) > 0:
+            self._logger.debug(
+                "[%s] A total of %d tasks (out of %d) failed admission control.",
+                sim_time.to(EventTime.Unit.US).time,
+                len(failed_admission_control_tasks),
+                len(tasks_to_be_scheduled),
+            )
+            placements.extend(failed_admission_control_tasks)
 
         # Retrieve the available strategies for each `Model` instance, ordered by their
         # execution preference, and find a `Worker` that can execute the strategy.
