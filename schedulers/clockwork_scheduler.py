@@ -162,15 +162,20 @@ class Model(object):
         return len(self._tasks)
 
     def get_available_execution_strategies(
-        self, current_time: EventTime, key: Callable = attrgetter("batch_size")
+        self,
+        current_time: EventTime,
     ) -> ExecutionStrategies:
         """Retrieve the strategies that are available for execution given the current
         set of requests available in the model. The strategies are ordered by the
-        provided function. The default ordering is by the batch size.
+        provided function. The default ordering is by the priority defined by the slack
+        between the deadline and the current time. (This follows the
+        `StrategyImpl::Comparator` in Clockwork.)
+
+        The method automatically removes requests from strategy queues that cannot meet
+        the deadline for the strategy.
 
         Args:
             current_time (`EventTime`): The current time of the simulation.
-            key (`Callable`): The function to use for ordering the strategies.
 
         Returns:
             An `ExecutionStrategies` object containing the available strategies sorted
@@ -199,19 +204,21 @@ class Model(object):
             # strategies.
             return available_strategies
 
-        for strategy in sorted(
-            self._profile.execution_strategies, key=key, reverse=True
-        ):
-            # The criteria for assuming the strategy is valid are as follows:
-            # 1. The number of requests in the queue must saturate the batch size of
-            #    the strategy.
-            # 2. The execution time of the strategy must be able to meet the deadline
-            #    of the earliest request in the queue.
-            request_queue = self._request_queues[strategy]
+        strategies = []
+        for strategy, request_queue in self._request_queues.items():
             if strategy.batch_size <= len(request_queue) and (
                 current_time + strategy.runtime <= request_queue[0].deadline
             ):
-                available_strategies.add_strategy(strategy)
+                priority = request_queue[0].deadline - strategy.runtime - current_time
+                strategies.append((priority, -strategy.batch_size, strategy))
+
+        # We now sort the strategies by the slack and resolve ties by the batch size.
+        # The batch size is inverted so that the largest batch size is chosen first.
+        # We then rely on the undocumented behavior of `ExecutionStrategies` to
+        # maintain the order in which the strategies are added.
+        for _, _, strategy in sorted(strategies):
+            available_strategies.add_strategy(strategy)
+
         return available_strategies
 
     def add_task(self, task: Task) -> None:

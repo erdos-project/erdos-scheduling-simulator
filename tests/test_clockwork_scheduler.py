@@ -411,6 +411,69 @@ def test_model_create_placements():
     ), "Incorrect strategy id."
 
 
+def test_model_least_slack_strategy_preferred():
+    """Test that Clockwork prefers the strategy with the least slack."""
+    work_profile = WorkProfile(
+        name="Model_A",
+        execution_strategies=ExecutionStrategies(
+            strategies=[
+                ExecutionStrategy(
+                    resources=Resources(),
+                    batch_size=8,
+                    runtime=EventTime(150, EventTime.Unit.US),
+                ),
+                ExecutionStrategy(
+                    resources=Resources(),
+                    batch_size=4,
+                    runtime=EventTime(100, EventTime.Unit.US),
+                ),
+            ]
+        ),
+        loading_strategies=ExecutionStrategies(
+            strategies=[
+                ExecutionStrategy(
+                    resources=Resources(),
+                    batch_size=1,
+                    runtime=EventTime(50, EventTime.Unit.US),
+                )
+            ]
+        ),
+    )
+    tasks = [
+        create_default_task(
+            job=Job(name="Job_A"),
+            deadline=120,
+            profile=work_profile,
+        )
+        for _ in range(4)
+    ]
+    tasks.extend(
+        [
+            create_default_task(
+                job=Job(name="Job_B"), deadline=200, profile=work_profile
+            )
+            for _ in range(8)
+        ]
+    )
+
+    # Construct an instance of `Model` and add the tasks to the request queue.
+    model = Model(work_profile)
+    for task in tasks:
+        model.add_task(task)
+
+    # Get the available strategies.
+    available_strategies = model.get_available_execution_strategies(
+        current_time=EventTime(10, EventTime.Unit.US)
+    )
+    assert len(available_strategies) == 2, "Incorrect number of available strategies."
+    assert (
+        available_strategies[0].batch_size == 4
+    ), "Incorrect batch size for high priority strategy."
+    assert (
+        available_strategies[1].batch_size == 8
+    ), "Incorrect batch size for low priority strategy."
+
+
 def test_clockwork_task_placement_success_simple():
     """Tests that the scheduler is able to correctly place tasks."""
     # Construct the `Task` objects.
