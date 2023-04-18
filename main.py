@@ -10,6 +10,7 @@ from data import (
     WorkerLoaderBenchmark,
     WorkerLoaderJSON,
     WorkloadLoader,
+    WorkloadLoaderClockwork,
 )
 from schedulers import (
     BranchPredictionScheduler,
@@ -254,6 +255,12 @@ flags.DEFINE_integer(
     "Override the arrival period for all Taskgraphs defined in "
     "the JSON workload definition.",
 )
+flags.DEFINE_integer(
+    "num_instances",
+    -1,
+    "The number of instances to create out of each WorkProfile and Job. "
+    "By default, does not create any additional instances.",
+)
 
 
 def main(args):
@@ -304,9 +311,16 @@ def main(args):
         )
         raise NotImplementedError("Workload has not been specified yet.")
     elif FLAGS.execution_mode == "json":
-        workload_loader = WorkloadLoader(
-            json_path=FLAGS.workload_profile_path, _flags=FLAGS
-        )
+        if FLAGS.num_instances < 0:
+            workload_loader = WorkloadLoader(
+                json_path=FLAGS.workload_profile_path, _flags=FLAGS
+            )
+        else:
+            workload_loader = WorkloadLoaderClockwork(
+                json_path=FLAGS.workload_profile_path,
+                num_instances=FLAGS.num_instances,
+                _flags=FLAGS,
+            )
         workload = workload_loader.workload
 
     # Dilate the time if needed.

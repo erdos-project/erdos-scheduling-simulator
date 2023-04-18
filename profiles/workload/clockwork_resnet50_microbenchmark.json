@@ -1,0 +1,69 @@
+{
+    "graphs": [
+        {
+            "name": "ResNet50",
+            "graph": [
+                {
+                    "name": "Task_One",
+                    "work_profile": "ResNet50"
+                }
+            ],
+            "release_policy": "poisson",
+            "rate": 0.001,
+            "invocations": 1
+        }
+    ],
+    "profiles": [
+        {
+            "name": "ResNet50",
+            "notes": "resnet50_v2 from Clockwork",
+            "loading_strategies": [
+                {
+                    "resource_requirements": {
+                        "RAM:any": 1
+                    },
+                    "notes": "Occupies 102.3 MB",
+                    "batch_size": 1,
+                    "runtime": 8372
+                }
+            ],
+            "execution_strategies": [
+                {
+                    "resource_requirements": {
+                        "GPU:any": 1
+                    },
+                    "batch_size": 1,
+                    "runtime": 3322
+                },
+                {
+                    "resource_requirements": {
+                        "GPU:any": 1
+                    },
+                    "batch_size": 2,
+                    "runtime": 5271
+                },
+                {
+                    "resource_requirements": {
+                        "GPU:any": 1
+                    },
+                    "batch_size": 4,
+                    "runtime": 7495
+                },
+                {
+                    "resource_requirements": {
+                        "GPU:any": 1
+                    },
+                    "batch_size": 8,
+                    "runtime": 12439
+                },
+                {
+                    "resource_requirements": {
+                        "GPU:any": 1
+                    },
+                    "batch_size": 16,
+                    "runtime": 21729
+                }
+            ]
+        }
+    ]
+}
