@@ -1,11 +1,10 @@
 import bisect
 import time
 from collections import defaultdict, deque
-from copy import copy
+from copy import copy, deepcopy
 from dataclasses import dataclass
 from functools import total_ordering
-from operator import attrgetter
-from typing import Callable, Iterator, List, Mapping, Optional, Sequence, Set, Tuple
+from typing import Iterator, List, Mapping, Optional, Sequence, Set, Tuple
 
 import absl  # noqa: F401
 
@@ -416,10 +415,13 @@ class Models:
                 self._model_allocations[(model.id, worker.id)] = 0
 
             # Calculate the total weight of all the workers that has the model loaded.
-            total_weight = 0.0
-            for worker in self._workers.values():
-                if worker.worker.is_available(model.profile) == EventTime.zero():
-                    total_weight += worker.weight
+            total_weight = sum(
+                [
+                    worker.weight
+                    for worker in self._workers.values()
+                    if worker.worker.is_available(model.profile) == EventTime.zero()
+                ]
+            )
 
             # Distribute the outstanding demand according to the proportional weight
             # of each Worker.
@@ -447,10 +449,13 @@ class Models:
         # calculate the priority of each model on each GPU.
         for model in self._models.values():
             # Calculate the weight of the GPUs where the model has been loaded.
-            total_weight = 0.0
-            for worker in self._workers.values():
-                if worker.worker.is_available(model.profile) == EventTime.zero():
-                    total_weight += worker.weight
+            total_weight = sum(
+                [
+                    worker.weight
+                    for worker in self._workers.values()
+                    if worker.worker.is_available(model.profile) == EventTime.zero()
+                ]
+            )
 
             # load_priority is the d_m in the Clockwork paper.
             load_priority = model._outstanding_load_demand.to(EventTime.Unit.US).time
@@ -476,6 +481,32 @@ class Models:
                     ] = model._last_used_at_worker[worker.id]
                 else:
                     self._model_priorities[(model.id, worker.id)] = load_priority
+
+    def get_model_priority(self, worker: Worker) -> Sequence[Model]:
+        """Returns the models sorted by the load priority for the given `Worker`.
+
+        The comparison function is the same as `CompareModelPriority` in the Clockwork
+        scheduler.
+
+        Args:
+            worker (`Worker`): The `Worker` to get the models for.
+
+        Returns:
+            A list of `Model`s sorted by the load priority for the given `Worker`.
+        """
+        models = []
+        for (model_id, worker_id), priority in self._model_priorities.items():
+            if worker_id != worker.id:
+                continue
+
+            model = self._models[model_id]
+            is_empty = (
+                model._outstanding_execution_demand == EventTime.zero()
+                and model._outstanding_load_demand == EventTime.zero()
+            )
+            last_used = model._last_used_at_worker[worker_id]
+            models.append((is_empty, priority, last_used, model))
+        return [model for _, _, _, model in sorted(models)]
 
     def __iter__(self) -> Iterator[Model]:
         for model in self._models.values():
@@ -715,6 +746,136 @@ class ClockworkScheduler(BaseScheduler):
                 )
         return placements
 
+    def run_load(
+        self, current_time: EventTime, worker_pools: WorkerPools
+    ) -> Sequence[Placement]:
+        """Runs the thread that computes what models to load and evict from each Worker.
+
+        Args:
+            current_time (`EventTime`): The current time of the simulation.:w
+            worker_pools (`WorkerPools`): The worker pools to use for determining the
+                placement of the execution strategies.
+
+        Returns:
+            A (possibly empty) `Sequence` of `Placement` instances that represent the
+            loading and eviction of `WorkProfile`s from `Worker`s.
+        """
+        placements = []
+        for worker_pool in worker_pools.worker_pools:
+            for worker in worker_pool.workers:
+                if len(worker.get_pending_profiles()) > 0:
+                    self._logger.debug(
+                        "[%s] Skipping Worker %s since it has pending profiles.",
+                        current_time.to(EventTime.Unit.US).time,
+                        worker,
+                    )
+                    continue
+                models_sorted_by_priority = self._models.get_model_priority(worker)
+                for model_to_load in models_sorted_by_priority:
+                    if worker.is_available(model_to_load.profile) == EventTime.zero():
+                        self._logger.debug(
+                            "[%s] Skipping loading Model %s on Worker %s since "
+                            "it already exists.",
+                            current_time.to(EventTime.Unit.US).time,
+                            model_to_load.profile.name,
+                            worker,
+                        )
+                    elif (
+                        len(
+                            worker.get_compatible_strategies(
+                                model_to_load.profile.loading_strategies
+                            )
+                        )
+                        > 0
+                    ):
+                        self._logger.debug(
+                            "[%s] The Worker can accomodate the Model %s without "
+                            "any evictions.",
+                            current_time.to(EventTime.Unit.US).time,
+                            model_to_load.profile.name,
+                        )
+                        placements.append(
+                            Placement.create_load_profile_placement(
+                                work_profile=model_to_load.profile,
+                                placement_time=current_time,
+                                worker_pool_id=worker_pool.id,
+                                worker_id=worker.id,
+                                loading_strategy=worker.get_compatible_strategies(
+                                    model_to_load.profile.loading_strategies
+                                ).get_fastest_strategy(),
+                            )
+                        )
+                        break
+                    else:
+                        # Find the fastest strategy that can be accomodated into an
+                        # empty Worker.
+                        worker_deepcopy: Worker = copy.deepcopy(worker)
+                        strategy = worker_deepcopy.get_compatible_strategies(
+                            model_to_load.profile.loading_strategies
+                        ).get_fastest_strategy()
+
+                        # We iterate over the models in the reverse order of their
+                        # priority and evict them until we can load the new model.
+                        load_successful = False
+                        for model_to_evict in reversed(models_sorted_by_priority):
+                            if model_to_evict == model_to_load:
+                                self._logger.debug(
+                                    "[%s] Skipping loading Model %s on Worker %s since "
+                                    "no lower priority model can be evicted to "
+                                    "accomodate it.",
+                                    current_time.to(EventTime.Unit.US).time,
+                                    model_to_load.profile.name,
+                                    worker,
+                                )
+                                break
+                            if (
+                                worker.is_available(model_to_evict.profile)
+                                == EventTime.zero()
+                            ):
+                                self._logger.debug(
+                                    "[%s] Evicting Model %s from Worker %s.",
+                                    current_time.to(EventTime.Unit.US).time,
+                                    model_to_evict.profile.name,
+                                    worker,
+                                )
+                                placements.append(
+                                    Placement.create_evict_profile_placement(
+                                        work_profile=model_to_evict.profile,
+                                        placement_time=current_time,
+                                        worker_pool_id=worker_pool.id,
+                                        worker_id=worker.id,
+                                    )
+                                )
+                                worker.evict_profile(model_to_evict.profile)
+                                if worker.can_accomodate_strategy(strategy):
+                                    self._logger.debug(
+                                        "[%s] The Worker can now accomodate the Model "
+                                        "%s with the strategy %s.",
+                                        current_time.to(EventTime.Unit.US).time,
+                                        model_to_evict.profile.name,
+                                        strategy,
+                                    )
+                                    placements.append(
+                                        Placement.create_load_profile_placement(
+                                            work_profile=model_to_evict.profile,
+                                            placement_time=current_time,
+                                            worker_pool_id=worker_pool.id,
+                                            worker_id=worker.id,
+                                            loading_strategy=strategy,
+                                        )
+                                    )
+                                    load_successful = True
+                                    break
+
+                        if not load_successful:
+                            self._logger.debug(
+                                "[%s] The Worker cannot accomodate the Model %s.",
+                                current_time.to(EventTime.Unit.US).time,
+                                model_to_load.profile.name,
+                            )
+                        else:
+                            break
+
     def schedule(
         self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools
     ) -> Placements:
@@ -760,6 +921,19 @@ class ClockworkScheduler(BaseScheduler):
         # Now that the requests are available in the queue, we can refresh the
         # priorities of the models on each Worker.
         self._models.refresh_priorities(worker_pools=worker_pools)
+
+        # Run model loading algorithm on the `Worker`s available for placement.
+        profile_placements = self.run_load(
+            current_time=sim_time, worker_pools=worker_pools
+        )
+        if len(profile_placements) > 0:
+            self._logger.debug(
+                "[%s] A total of %d model loading/evictions will be done on the "
+                "workers.",
+                sim_time.to(EventTime.Unit.US).time,
+                len(profile_placements),
+            )
+            placements.extend(profile_placements)
 
         # Retrieve the available strategies for each `Model` instance, ordered by their
         # execution preference, and find a `Worker` that can execute the strategy.
