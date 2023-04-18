@@ -145,7 +145,23 @@ def test_clockwork_scheduler_start_complex():
 
 def test_model_request_queue():
     """Test that a `Model` instance correctly maintains the request queue."""
-    work_profile = WorkProfile(name="Model_A")
+    work_profile = WorkProfile(
+        name="Model_A",
+        loading_strategies=ExecutionStrategies(
+            strategies=[
+                ExecutionStrategy(
+                    resources=Resources(), runtime=EventTime.zero(), batch_size=1
+                )
+            ]
+        ),
+        execution_strategies=ExecutionStrategies(
+            strategies=[
+                ExecutionStrategy(
+                    resources=Resources(), runtime=EventTime.zero(), batch_size=1
+                )
+            ]
+        ),
+    )
     task_a = create_default_task(
         job=Job(name="Job_A"), deadline=10, profile=work_profile
     )
@@ -159,16 +175,16 @@ def test_model_request_queue():
     # Construct an instance of `Model` and add the tasks to the request queue.
     model = Model(work_profile)
     model.add_task(task_a)
-    assert model._task_priority_queue == [
+    assert list(map(lambda r: r.task, model._request_queue)) == [
         task_a
     ], "Incorrect priority queue for Tasks in the Model."
     model.add_task(task_b)
-    assert model._task_priority_queue == [
+    assert list(map(lambda r: r.task, model._request_queue)) == [
         task_b,
         task_a,
     ], "Incorrect priority queue for Tasks in the Model."
     model.add_task(task_c)
-    assert model._task_priority_queue == [
+    assert list(map(lambda r: r.task, model._request_queue)) == [
         task_c,
         task_b,
         task_a,
@@ -201,6 +217,15 @@ def test_model_available_strategies():
                     batch_size=16,
                     runtime=EventTime(250, EventTime.Unit.US),
                 ),
+            ]
+        ),
+        loading_strategies=ExecutionStrategies(
+            strategies=[
+                ExecutionStrategy(
+                    resources=Resources(),
+                    batch_size=1,
+                    runtime=EventTime(50, EventTime.Unit.US),
+                )
             ]
         ),
     )
@@ -240,6 +265,15 @@ def test_model_create_placements():
                 ),
             ]
         ),
+        loading_strategies=ExecutionStrategies(
+            strategies=[
+                ExecutionStrategy(
+                    resources=Resources(),
+                    batch_size=1,
+                    runtime=EventTime(50, EventTime.Unit.US),
+                )
+            ]
+        ),
     )
     tasks = [
         create_default_task(
@@ -267,9 +301,7 @@ def test_model_create_placements():
     )
     assert len(placements) == 4, "Incorrect number of placements created."
     assert len(model._tasks) == 2, "Incorrect number of tasks in the Model."
-    assert (
-        len(model._task_priority_queue) == 2
-    ), "Incorrect number of tasks in the Model."
+    assert len(model._request_queue) == 2, "Incorrect number of tasks in the Model."
     assert all(
         [placements[i].task == tasks[-(i + 1)] for i in range(4)]
     ), "Incorrect tasks returned in the Placement."
@@ -310,6 +342,15 @@ def test_clockwork_task_placement_success_simple():
                 ),
             ]
         ),
+        loading_strategies=ExecutionStrategies(
+            strategies=[
+                ExecutionStrategy(
+                    resources=Resources(),
+                    batch_size=1,
+                    runtime=EventTime(50, EventTime.Unit.US),
+                )
+            ]
+        ),
     )
     work_profile_b = WorkProfile(
         name="Model_B",
@@ -336,6 +377,15 @@ def test_clockwork_task_placement_success_simple():
                     batch_size=16,
                     runtime=EventTime(200, EventTime.Unit.US),
                 ),
+            ]
+        ),
+        loading_strategies=ExecutionStrategies(
+            strategies=[
+                ExecutionStrategy(
+                    resources=Resources(),
+                    batch_size=1,
+                    runtime=EventTime(50, EventTime.Unit.US),
+                )
             ]
         ),
     )

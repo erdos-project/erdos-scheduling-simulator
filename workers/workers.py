@@ -382,6 +382,15 @@ class Worker(object):
         """
         return list(self._available_profiles.keys())
 
+    def get_pending_profiles(self) -> Sequence[WorkProfile]:
+        """Get the set of `WorkProfile`s that are pending to be loaded on this `Worker`
+        at the current time.
+
+        Returns:
+            A sequence of `WorkProfile`s that are pending to be loaded on this `Worker`.
+        """
+        return list(self._pending_profiles.keys())
+
     def is_full(self) -> bool:
         """Check if the Worker is full.
 
