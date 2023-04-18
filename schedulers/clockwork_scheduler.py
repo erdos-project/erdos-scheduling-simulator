@@ -59,10 +59,15 @@ class Model(object):
 
         Args:
             task (`Task`): The `Task` to construct a request for.
+            num_strategies (`int`): The number of execution strategies that were
+                made available for this `Request`. This serves as a counter to make
+                sure that we accurately maintain the demand and only remove the task
+                once it has been completed or removed from all queues.
         """
 
-        def __init__(self, task: Task) -> None:
+        def __init__(self, task: Task, num_strategies: int) -> None:
             self._task = task
+            self._num_strategies = num_strategies
             # Calculate the SLO for the execution of the task.
             # The execution SLO is the time by which the task must be started for
             # execution by. In the worst case, the task is going to execute with the
@@ -104,6 +109,14 @@ class Model(object):
             return self._task.deadline
 
         @property
+        def num_strategies(self) -> int:
+            return self._num_strategies
+
+        @num_strategies.setter
+        def num_strategies(self, num_strategies: int) -> None:
+            self._num_strategies = num_strategies
+
+        @property
         def execution_slo(self) -> EventTime:
             """The execution SLO for the request. This is the amount of time after the
             arrival of the request that the request must be completed by."""
@@ -123,7 +136,9 @@ class Model(object):
 
     def __init__(self, profile: WorkProfile) -> None:
         self._tasks: Mapping[Task, Model.Request] = {}
-        self._request_queue: List[Model.Request] = []
+        self._request_queues: Mapping[ExecutionStrategy, List[Model.Request]] = {
+            strategy: [] for strategy in profile.execution_strategies
+        }
         self._profile = profile
 
         # Variables that correspond to the ModelLoadTracker in Clockwork.
@@ -162,7 +177,24 @@ class Model(object):
             by their priority as defined by the `key` function.
         """
         available_strategies = ExecutionStrategies()
-        if len(self._request_queue) == 0:
+
+        # We first remove the requests from the queues that cannot meet their deadlines
+        # with that particular execution strategy.
+        for execution_strategy, request_queue in self._request_queues.items():
+            while (
+                len(request_queue) > 0
+                and request_queue[0].deadline
+                < current_time + execution_strategy.runtime
+            ):
+                request = request_queue.pop(0)
+                request.num_strategies -= 1
+                if request.num_strategies == 0:
+                    self.remove_task(request.task)
+
+        if (
+            sum(len(request_queue) for request_queue in self._request_queues.values())
+            == 0
+        ):
             # If there are no available requests, there should be no available
             # strategies.
             return available_strategies
@@ -175,8 +207,9 @@ class Model(object):
             #    the strategy.
             # 2. The execution time of the strategy must be able to meet the deadline
             #    of the earliest request in the queue.
-            if strategy.batch_size <= self.outstanding_requests and (
-                current_time + strategy.runtime <= self._request_queue[0].deadline
+            request_queue = self._request_queues[strategy]
+            if strategy.batch_size <= len(request_queue) and (
+                current_time + strategy.runtime <= request_queue[0].deadline
             ):
                 available_strategies.add_strategy(strategy)
         return available_strategies
@@ -201,9 +234,10 @@ class Model(object):
             )
         if task not in self._tasks:
             # Create a new request and add it to the queue.
-            request = Model.Request(task)
+            request = Model.Request(task, num_strategies=len(self._request_queues))
             self._tasks[task] = request
-            bisect.insort(self._request_queue, request)
+            for request_queue in self._request_queues.values():
+                bisect.insort(request_queue, request)
 
             # Update the demand counters as per the request.
             load_demand, execution_demand = request.get_demand()
@@ -228,8 +262,10 @@ class Model(object):
             self._outstanding_load_demand -= load_demand
             self._outstanding_execution_demand -= execution_demand
 
-            # Remove the request from the queue and the task from the tasks.
-            self._request_queue.remove(request)
+            # Remove the request from all the queues and the task from the tasks.
+            for request_queue in self._request_queues.values():
+                request_queue.remove(request)
+
             del self._tasks[task]
 
     def get_placements(
@@ -263,17 +299,18 @@ class Model(object):
             A `RuntimeError` if the number of tasks in the queue is less than the batch
             size of the provided `ExecutionStrategy`.
         """
-        if len(self._request_queue) < strategy.batch_size:
+        if len(self._request_queues[strategy]) < strategy.batch_size:
             raise RuntimeError(
-                f"The number of tasks in the queue ({len(self._request_queue)}) "
-                f"is less than the batch size ({strategy.batch_size})."
+                f"The number of tasks in the queue "
+                f"({len(self._request_queues[strategy])}) is less than the batch "
+                f"size ({strategy.batch_size})."
             )
 
         # Construct the `Placement` objects.
         batch_strategy = BatchStrategy(execution_strategy=strategy)
         placements = []
         tasks_to_remove = []
-        for request in self._request_queue[: strategy.batch_size]:
+        for request in self._request_queues[strategy][: strategy.batch_size]:
             placement = Placement.create_task_placement(
                 task=request.task,
                 placement_time=sim_time,

@@ -143,7 +143,7 @@ def test_clockwork_scheduler_start_complex():
     ), "The final model should be placed on one worker."
 
 
-def test_model_request_queue():
+def test_model_request_queue_simple():
     """Test that a `Model` instance correctly maintains the request queue."""
     work_profile = WorkProfile(
         name="Model_A",
@@ -175,20 +175,117 @@ def test_model_request_queue():
     # Construct an instance of `Model` and add the tasks to the request queue.
     model = Model(work_profile)
     model.add_task(task_a)
-    assert list(map(lambda r: r.task, model._request_queue)) == [
-        task_a
-    ], "Incorrect priority queue for Tasks in the Model."
+    assert all(
+        list(map(lambda r: r.task, request_queue)) == [task_a]
+        for request_queue in model._request_queues.values()
+    ), "Incorrect priority queue for Tasks in the Model."
     model.add_task(task_b)
-    assert list(map(lambda r: r.task, model._request_queue)) == [
-        task_b,
-        task_a,
-    ], "Incorrect priority queue for Tasks in the Model."
+    assert all(
+        list(map(lambda r: r.task, request_queue))
+        == [
+            task_b,
+            task_a,
+        ]
+        for request_queue in model._request_queues.values()
+    ), "Incorrect priority queue for Tasks in the Model."
     model.add_task(task_c)
-    assert list(map(lambda r: r.task, model._request_queue)) == [
-        task_c,
-        task_b,
-        task_a,
-    ], "Incorrect priority queue for Tasks in the Model."
+    assert all(
+        list(map(lambda r: r.task, request_queue))
+        == [
+            task_c,
+            task_b,
+            task_a,
+        ]
+        for request_queue in model._request_queues.values()
+    ), "Incorrect priority queue for Tasks in the Model."
+
+
+def test_model_request_queue_complex():
+    """Test that the Model correctly maintains queues across different batch sizes."""
+    work_profile = WorkProfile(
+        name="Model_A",
+        loading_strategies=ExecutionStrategies(
+            strategies=[
+                ExecutionStrategy(
+                    resources=Resources(), runtime=EventTime.zero(), batch_size=1
+                ),
+            ]
+        ),
+        execution_strategies=ExecutionStrategies(
+            strategies=[
+                ExecutionStrategy(
+                    resources=Resources(),
+                    runtime=EventTime(50, EventTime.Unit.US),
+                    batch_size=1,
+                ),
+                ExecutionStrategy(
+                    resources=Resources(),
+                    runtime=EventTime(60, EventTime.Unit.US),
+                    batch_size=2,
+                ),
+                ExecutionStrategy(
+                    resources=Resources(),
+                    runtime=EventTime(75, EventTime.Unit.US),
+                    batch_size=4,
+                ),
+                ExecutionStrategy(
+                    resources=Resources(),
+                    runtime=EventTime(80, EventTime.Unit.US),
+                    batch_size=8,
+                ),
+            ]
+        ),
+    )
+    tasks = [
+        create_default_task(name=f"Task_{i}", profile=work_profile, deadline=100 - i)
+        for i in range(10)
+    ]
+
+    # Construct an instance of `Model` and add the tasks to the request queue.
+    model = Model(work_profile)
+    for task in tasks:
+        model.add_task(task)
+    assert all(
+        list(map(lambda r: r.task, request_queue)) == tasks[::-1]
+        for request_queue in model._request_queues.values()
+    ), "Incorrect priority queue for Tasks in the Model."
+
+    # Retrieve the available strategies and ensure that the correct strategies are
+    # returned.
+    available_strategies = model.get_available_execution_strategies(
+        current_time=EventTime.zero()
+    )
+    assert len(available_strategies) == 4, "Incorrect number of strategies returned."
+    assert all(
+        list(map(lambda r: r.task, request_queue)) == tasks[::-1]
+        for request_queue in model._request_queues.values()
+    ), "Incorrect priority queue for Tasks in the Model."
+
+    # Retrieve the available strategies and ensure that the correct strategies are
+    # returned at a future time.
+    available_strategies = model.get_available_execution_strategies(
+        current_time=EventTime(21, EventTime.Unit.US)
+    )
+    assert len(available_strategies) == 3, "Incorrect number of strategies returned."
+    assert (
+        len(
+            model._request_queues[
+                work_profile.execution_strategies.get_slowest_strategy()
+            ]
+        )
+        == 0
+    ), "Incorrect number of requests left in the queue."
+    print([request.num_strategies for request in model._tasks.values()])
+    assert all(
+        request.num_strategies == 3
+        for request in model._tasks.values()
+        if request.deadline >= EventTime(96, EventTime.Unit.US)
+    ), "Incorrect number of strategies left for each request."
+    assert all(
+        request.num_strategies == 2
+        for request in model._tasks.values()
+        if request.deadline < EventTime(96, EventTime.Unit.US)
+    ), "Incorrect number of strategies left for each request."
 
 
 def test_model_available_strategies():
@@ -301,7 +398,9 @@ def test_model_create_placements():
     )
     assert len(placements) == 4, "Incorrect number of placements created."
     assert len(model._tasks) == 2, "Incorrect number of tasks in the Model."
-    assert len(model._request_queue) == 2, "Incorrect number of tasks in the Model."
+    assert (
+        len(model._request_queues[work_profile.execution_strategies[0]]) == 2
+    ), "Incorrect number of tasks in the Model."
     assert all(
         [placements[i].task == tasks[-(i + 1)] for i in range(4)]
     ), "Incorrect tasks returned in the Placement."
