@@ -163,13 +163,17 @@ class WorkloadLoader(object):
                 ),
                 job["graph"],
                 work_profiles,
+                EventTime(_flags.slo, EventTime.Unit.US) if _flags.slo >= 0 else None,
             )
 
         self._workload = Workload.from_job_graphs(job_graph_mapping, _flags=_flags)
 
     @staticmethod
     def load_job_graph(
-        job_graph, json_repr, work_profiles: Mapping[str, WorkProfile]
+        job_graph,
+        json_repr,
+        work_profiles: Mapping[str, WorkProfile],
+        slo: Optional[EventTime],
     ) -> JobGraph:
         """Load a particular JobGraph from its JSON representation.
 
@@ -177,6 +181,7 @@ class WorkloadLoader(object):
             job_graph: The `JobGraph` to populate from JSON.
             json_repr: The JSON representation of the JobGraph.
             work_profiles: The `WorkProfile`s loaded from the JSON.
+            slo: Overrides each job's SLO with this SLO.
 
         Returns:
             A `JobGraph` encoding the serialized JSON representation of the JobGraph.
@@ -199,11 +204,14 @@ class WorkloadLoader(object):
             work_profile = None
             if "work_profile" in node:
                 work_profile = work_profiles[node["work_profile"]]
+            if slo is None and "slo" in node:
+                slo = EventTime(node["slo"], EventTime.Unit.US)
 
             # Create and save the Job.
             job = Job(
                 name=node["name"],
                 profile=work_profile,
+                slo=slo,
                 conditional=conditional_job,
                 probability=probability,
                 terminal=terminal_job,

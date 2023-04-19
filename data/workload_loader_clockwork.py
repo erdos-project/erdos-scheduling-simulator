@@ -186,6 +186,9 @@ class WorkloadLoaderClockwork(WorkloadLoader):
                     ),
                     job["graph"],
                     work_profiles,
+                    EventTime(_flags.slo, EventTime.Unit.US)
+                    if _flags.slo >= 0
+                    else None,
                 )
 
         self._workload = Workload.from_job_graphs(job_graph_mapping, _flags=_flags)

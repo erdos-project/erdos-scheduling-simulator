@@ -150,6 +150,12 @@ flags.DEFINE_bool(
     "If True, all tasks from a graph are released if any of the tasks have "
     "reached their release time.",
 )
+flags.DEFINE_integer(
+    "slo",
+    -1,
+    "The SLO used to set the deadline of each task. "
+    "If this is not set, the deadline is inferred from the task's execution strategy.",
+)
 
 # Scheduler related flags.
 flags.DEFINE_enum(

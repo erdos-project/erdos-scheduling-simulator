@@ -5,11 +5,11 @@
             "graph": [
                 {
                     "name": "Task_One",
-                    "work_profile": "ResNet50"
+                    "work_profile": "ResNet50",
                 }
             ],
             "release_policy": "poisson",
-            "rate": 0.001,
+            "rate": 0.000300,
             "invocations": 1
         }
     ],
