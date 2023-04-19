@@ -1,0 +1,20 @@
+[
+    {
+        "name": "WorkerPool_1",
+        "workers": [
+            {
+                "name": "Worker_1_1",
+                "resources": [
+                    {
+                        "name": "GPU",
+                        "quantity": 1
+                    },
+                    {
+                        "name": "RAM",
+                        "quantity": 32000
+                    }
+                ]
+            }
+        ]
+    }
+]

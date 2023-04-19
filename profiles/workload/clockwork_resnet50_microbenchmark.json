@@ -20,7 +20,7 @@
             "loading_strategies": [
                 {
                     "resource_requirements": {
-                        "RAM:any": 1
+                        "RAM:any": 102
                     },
                     "notes": "Occupies 102.3 MB",
                     "batch_size": 1,
