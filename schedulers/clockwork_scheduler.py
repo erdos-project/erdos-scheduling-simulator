@@ -3,7 +3,7 @@ import time
 from collections import defaultdict, deque
 from copy import copy, deepcopy
 from dataclasses import dataclass
-from functools import total_ordering
+from functools import cmp_to_key, total_ordering
 from typing import Iterator, List, Mapping, Optional, Sequence, Set, Tuple
 
 import absl  # noqa: F401
@@ -34,6 +34,7 @@ class GPU:
     outstanding_demand: float = 0
 
 
+@total_ordering
 class Model(object):
     """A representation of a model that is loaded onto a Worker.
 
@@ -147,6 +148,18 @@ class Model(object):
         # Keep track of when the model was last used on each Worker.
         self._last_used_at_worker = defaultdict(EventTime.zero)
 
+    def __lt__(self, other: "Model") -> bool:
+        return self.id < other.id
+
+    def __eq__(self, other: "Model") -> bool:
+        return self.id == other.id
+
+    def __str__(self) -> str:
+        return f"Model(name={self._profile.name})"
+
+    def __repr__(self) -> str:
+        return str(self)
+
     @property
     def id(self) -> str:
         return self._profile.id
@@ -249,6 +262,11 @@ class Model(object):
             load_demand, execution_demand = request.get_demand()
             self._outstanding_execution_demand += execution_demand
             self._outstanding_load_demand += load_demand
+            print(
+                f"Addeed Task {task} to Model {self} with load demand {self._outstanding_load_demand} and execution demand {self._outstanding_execution_demand}"
+            )
+        else:
+            print(f"Skipping loading Task {task} to Model {self}.")
 
     def remove_task(self, task: Task) -> None:
         """Removes a task from the request queue and ensures correct accounting for
@@ -431,26 +449,27 @@ class Models:
             )
 
             # Distribute the outstanding demand according to the proportional weight
-            # of each Worker.
-            for worker in self._workers.values():
-                if worker.worker.is_available(model.profile) == EventTime.zero():
-                    # Calculate the a_mg as a fraction of the total demand for the
-                    # model.
-                    allocation = model._outstanding_execution_demand.to(
-                        EventTime.Unit.US
-                    ).time * (worker.weight / total_weight)
-                    self._model_allocations[(model.id, worker.id)] = allocation
+            # of each Worker, if the model was loaded on any of the Workers.
+            if total_weight > 0:
+                for worker in self._workers.values():
+                    if worker.worker.is_available(model.profile) == EventTime.zero():
+                        # Calculate the a_mg as a fraction of the total demand for the
+                        # model.
+                        allocation = model._outstanding_execution_demand.to(
+                            EventTime.Unit.US
+                        ).time * (worker.weight / total_weight)
+                        self._model_allocations[(model.id, worker.id)] = allocation
 
-                    # Keep a running sum of the total load on the GPU l_g.
-                    worker.outstanding_demand += allocation
+                        # Keep a running sum of the total load on the GPU l_g.
+                        worker.outstanding_demand += allocation
 
-                    # Update the weight of the `Worker` to be inversely proportional to
-                    # the outstanding demand on the `Worker`.
-                    worker.weight = (
-                        # Clockwork just assumes a default SLO capacity of 100ms.
-                        EventTime(100, EventTime.Unit.MS).to(EventTime.Unit.US).time
-                        / worker.outstanding_demand
-                    )
+                        # Update the weight of the `Worker` to be inversely
+                        # proportional to the outstanding demand on the `Worker`.
+                        worker.weight = (
+                            # Clockwork just assumes a default SLO capacity of 100ms.
+                            EventTime(100, EventTime.Unit.MS).to(EventTime.Unit.US).time
+                            / worker.outstanding_demand
+                        )
 
         # Now that the per-model demands have been allocated to the GPUs, we can
         # calculate the priority of each model on each GPU.
@@ -501,19 +520,54 @@ class Models:
         Returns:
             A list of `Model`s sorted by the load priority for the given `Worker`.
         """
-        models = []
-        for (model_id, worker_id), priority in self._model_priorities.items():
-            if worker_id != worker.id:
-                continue
 
-            model = self._models[model_id]
-            is_empty = (
-                model._outstanding_execution_demand == EventTime.zero()
-                and model._outstanding_load_demand == EventTime.zero()
+        def comparison_function(model_a: Model, model_b: Model) -> int:
+            """Compares the priority of two models on a given `Worker`."""
+            model_a_is_empty = (
+                model_a._outstanding_load_demand == EventTime.zero()
+                and model_a._outstanding_execution_demand == EventTime.zero()
             )
-            last_used = model._last_used_at_worker[worker_id]
-            models.append((is_empty, priority, last_used, model))
-        return [model for _, _, _, model in sorted(models)]
+            model_b_is_empty = (
+                model_b._outstanding_load_demand == EventTime.zero()
+                and model_b._outstanding_execution_demand == EventTime.zero()
+            )
+            model_a_priority = self._model_priorities[(model_a.id, worker.id)]
+            model_b_priority = self._model_priorities[(model_b.id, worker.id)]
+            model_a_last_used = model_a._last_used_at_worker[worker.id]
+            model_b_last_used = model_b._last_used_at_worker[worker.id]
+
+            if model_a_is_empty and model_b_is_empty:
+                # If both models are empty, then we compare the last used time.
+                return (
+                    (model_a_last_used - model_b_last_used).to(EventTime.Unit.US).time
+                )
+            elif not model_a_is_empty and not model_b_is_empty:
+                # If both models are not empty, then we compare the priority.
+                if model_a_priority == model_b_priority:
+                    # If the priorities are equal, then we compare the last used time.
+                    return (
+                        (model_a_last_used - model_b_last_used)
+                        .to(EventTime.Unit.US)
+                        .time
+                    )
+                else:
+                    return model_a_priority - model_b_priority
+            else:
+                if model_a_priority == model_b_priority:
+                    # If the priorities are equal, then we compare the last used time.
+                    return (
+                        (model_a_last_used - model_b_last_used)
+                        .to(EventTime.Unit.US)
+                        .time
+                    )
+                else:
+                    return model_a_priority - model_b_priority
+
+        return list(
+            sorted(
+                self._models.values(), key=cmp_to_key(comparison_function), reverse=True
+            )
+        )
 
     def __iter__(self) -> Iterator[Model]:
         for model in self._models.values():
@@ -882,6 +936,7 @@ class ClockworkScheduler(BaseScheduler):
                             )
                         else:
                             break
+            return placements
 
     def schedule(
         self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools

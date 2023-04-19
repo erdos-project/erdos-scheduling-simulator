@@ -1,5 +1,5 @@
 from schedulers import ClockworkScheduler
-from schedulers.clockwork_scheduler import Model
+from schedulers.clockwork_scheduler import Model, Models
 from tests.utils import create_default_task
 from utils import EventTime
 from workers import Worker, WorkerPool, WorkerPools
@@ -714,3 +714,112 @@ def test_clockwork_task_placement_success_simple():
     assert (
         scheduler._models[work_profile_b.id].outstanding_requests == 0
     ), "Incorrect number of requests remaining for the Model B."
+
+
+def test_clockwork_model_loading_simple():
+    """Test that the model loading works correctly in ClockworkScheduler."""
+    # Create WorkProfiles.
+    work_profile_a = WorkProfile(
+        name="WorkProfile_A",
+        execution_strategies=ExecutionStrategies(
+            strategies=[
+                ExecutionStrategy(
+                    resources=Resources(resource_vector={Resource(name="GPU"): 1}),
+                    batch_size=1,
+                    runtime=EventTime(100, EventTime.Unit.US),
+                ),
+            ]
+        ),
+        loading_strategies=ExecutionStrategies(
+            strategies=[
+                ExecutionStrategy(
+                    resources=Resources(resource_vector={Resource(name="RAM"): 100}),
+                    batch_size=1,
+                    runtime=EventTime(100, EventTime.Unit.US),
+                )
+            ]
+        ),
+    )
+    work_profile_b = WorkProfile(
+        name="WorkProfile_B",
+        execution_strategies=ExecutionStrategies(
+            strategies=[
+                ExecutionStrategy(
+                    resources=Resources(resource_vector={Resource(name="GPU"): 1}),
+                    batch_size=1,
+                    runtime=EventTime(100, EventTime.Unit.US),
+                ),
+            ]
+        ),
+        loading_strategies=ExecutionStrategies(
+            strategies=[
+                ExecutionStrategy(
+                    resources=Resources(resource_vector={Resource(name="RAM"): 100}),
+                    batch_size=1,
+                    runtime=EventTime(100, EventTime.Unit.US),
+                )
+            ]
+        ),
+    )
+    model_a = Model(work_profile_a)
+    model_b = Model(work_profile_b)
+
+    # Create Workers.
+    worker_1 = Worker(
+        name="Worker_1",
+        resources=Resources(
+            resource_vector={Resource(name="GPU"): 1, Resource(name="RAM"): 100}
+        ),
+    )
+    worker_2 = Worker(
+        name="Worker_2",
+        resources=Resources(
+            resource_vector={Resource(name="GPU"): 1, Resource(name="RAM"): 100}
+        ),
+    )
+    worker_pool = WorkerPool(name="WorkerPool_1", workers=[worker_1, worker_2])
+    worker_pools = WorkerPools([worker_pool])
+    models = Models(models=[model_a, model_b], worker_pools=worker_pools)
+
+    # Ensure that all the Workers have the same priority at the start.
+    assert (
+        models._workers[worker_1.id].weight == models._workers[worker_2.id].weight
+    ), "Workers should have the same weight."
+
+    # If we add all tasks of `Model_A`, then the model should be highest priority.
+    tasks = [
+        create_default_task(name=f"Task_{i}", profile=work_profile_a, deadline=500)
+        for i in range(10)
+    ]
+    for task in tasks:
+        models.add_task(task)
+    models.refresh_priorities(worker_pools=worker_pools)
+    prioritized_models = models.get_model_priority(worker_1)
+    assert prioritized_models == [
+        model_a,
+        model_b,
+    ], "Incorrect prioritization of the models."
+
+    # If we add more demand for Model B now, then the model should be highest priority.
+    tasks = [
+        create_default_task(name=f"Task_{i}", profile=work_profile_b, deadline=500)
+        for i in range(20)
+    ]
+    for task in tasks:
+        models.add_task(task)
+    models.refresh_priorities(worker_pools=worker_pools)
+    assert (
+        model_a._outstanding_execution_demand < model_b._outstanding_execution_demand
+    ), "Model B should have more outstanding execution demand."
+    assert (
+        model_a._outstanding_load_demand < model_b._outstanding_load_demand
+    ), "Model B should have more outstanding load demand."
+    assert (
+        models._model_priorities[(model_a.id, worker_1.id)]
+        < models._model_priorities[(model_b.id, worker_1.id)]
+    ), "Model B should have higher priority."
+    prioritized_models = models.get_model_priority(worker_1)
+    assert prioritized_models == [
+        model_b,
+        model_a,
+    ], "Incorrect prioritization of the models."
