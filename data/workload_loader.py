@@ -1,7 +1,9 @@
 import json
 import logging
+import pathlib
 import sys
 from typing import Mapping, Optional, Sequence
+import yaml
 
 import absl  # noqa: F401
 
@@ -19,14 +21,14 @@ from workload import (
 
 
 class WorkloadLoader(object):
-    """Loads a set of applications from a provided JSON.
+    """Loads a set of applications from a provided JSON or YAML file.
 
     Args:
-        json_path (`str`): The path to the JSON file representing the applications.
+        filename (`str`): The path to the file representing the applications.
         _flags (`absl.flags`): The flags used to initialize the app, if any.
     """
 
-    def __init__(self, json_path: str, _flags: Optional["absl.flags"] = None) -> None:
+    def __init__(self, filename: str, _flags: Optional["absl.flags"] = None) -> None:
         # Set up the logger.
         if _flags:
             self._logger = setup_logging(
@@ -57,10 +59,15 @@ class WorkloadLoader(object):
             self._poisson_arrival_rate = None
             self._arrival_period = None
 
-        # Read the JSON file for applications and create a JobGraph for
-        # each application.
-        with open(json_path, "r") as f:
-            workload_data = json.load(f)
+        # Read the file for applications and create a JobGraph for each application.
+        extension = pathlib.Path(filename).suffix.lower()
+        with open(filename, "r") as f:
+            if extension == ".json":
+                workload_data = json.load(f)
+            elif extension == ".yaml" or extension == ".yml":
+                workload_data = yaml.safe_load(f)
+            else:
+                raise ValueError(f"Unsupported extension: {extension}")
 
         if len(workload_data) == 0:
             raise ValueError("Empty Workload generated.")

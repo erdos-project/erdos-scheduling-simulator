@@ -323,7 +323,7 @@ def main(args):
             )
         else:
             workload_loader = WorkloadLoaderClockwork(
-                json_path=FLAGS.workload_profile_path,
+                filename=FLAGS.workload_profile_path,
                 num_instances=FLAGS.num_instances,
                 _flags=FLAGS,
             )
