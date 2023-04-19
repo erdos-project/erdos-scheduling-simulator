@@ -483,7 +483,11 @@ class Models:
                 ]
             )
 
-            # load_priority is the d_m in the Clockwork paper.
+            # load_priority is the p_mg in the Clockwork paper. We set it initially to
+            # the total /load/ demand for the model. The weights are set based on the
+            # /execution/ demand on the Worker. The core idea being that a Worker that
+            # has more outstanding /execution/ demand should be given a lower weight
+            # for /loading/ of new models.
             load_priority = model._outstanding_load_demand.to(EventTime.Unit.US).time
             if total_weight > 0 and load_priority > 0:
                 for worker in self._workers.values():
@@ -491,13 +495,14 @@ class Models:
                         # Update the priority of the model based on the demand at the
                         # Worker. The formula to be used is
                         # d_m - ((a_mg * capacity) / lg).
-                        load_priority -= (
-                            self._model_allocations[(model.id, worker.id)]  # a_mg
-                            * EventTime(100, EventTime.Unit.MS)  # capacity
-                            .to(EventTime.Unit.US)
-                            .time
-                            / worker.outstanding_demand  # l_g
-                        )
+                        required = model._outstanding_load_demand.to(
+                            EventTime.Unit.US
+                        ).time * (worker.weight / total_weight)
+                        served = (
+                            EventTime(100, EventTime.Unit.MS).to(EventTime.Unit.US).time
+                            * required
+                        ) / worker.outstanding_demand
+                        load_priority -= served
 
             # Update the priority of the model on the GPU.
             for worker in self._workers.values():
