@@ -1,5 +1,9 @@
+# Implementation of the comparison microbenchmark in section 6.1 of
+# "Serving DNNs like Clockwork: Performance Predictability from the Bottom Up".
+# While the paper uses closed-loop clients, this implementation simulates
+# open-loop clients which are claimed to have similar performance.
 graphs:
-  - name: ResNet50
+  - name: Inference
     graph:
       - name: Task_One
         work_profile: ResNet50
