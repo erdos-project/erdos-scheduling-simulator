@@ -8,7 +8,7 @@ from data import (
     TaskLoaderPylot,
     TaskLoaderSynthetic,
     WorkerLoaderBenchmark,
-    WorkerLoaderJSON,
+    WorkerLoader,
     WorkloadLoader,
     WorkloadLoaderClockwork,
 )
@@ -445,7 +445,7 @@ def main(args):
 
     # Load the worker topology.
     if FLAGS.execution_mode in ["replay", "synthetic", "json"]:
-        worker_loader = WorkerLoaderJSON(
+        worker_loader = WorkerLoader(
             worker_profile_path=FLAGS.worker_profile_path, _flags=FLAGS
         )
     elif FLAGS.execution_mode == "benchmark":
