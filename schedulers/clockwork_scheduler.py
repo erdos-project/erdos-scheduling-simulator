@@ -29,7 +29,7 @@ class GPU:
 
     id: str
     worker: Worker
-    weight: float = 0.01
+    weight: float
     allocations: int = 0
     outstanding_demand: float = 0
 
@@ -351,10 +351,14 @@ class Models:
     ) -> None:
         self._models = {model.id: model for model in models}
         if worker_pools is not None:
-            self._workers = {
-                worker.id: GPU(worker.id, worker)
+            workers = [
+                worker
                 for worker_pool in worker_pools.worker_pools
                 for worker in worker_pool.workers
+            ]
+            self._workers = {
+                worker.id: GPU(worker.id, worker, 1 / len(workers))
+                for worker in workers
             }
         else:
             self._workers = {}
@@ -398,10 +402,13 @@ class Models:
                 instances of the `Worker`s available during the simulation.
         """
         # Ensure that we have the demand and accumulation for all the Workers.
-        for worker_pool in worker_pools.worker_pools:
-            for worker in worker_pool.workers:
-                if worker.id not in self._workers:
-                    self._workers[worker.id] = GPU(worker.id, worker)
+        workers = [
+            worker
+            for worker_pool in worker_pools.worker_pools
+            for worker in worker_pool.workers
+        ]
+        for worker in workers:
+            self._workers[worker.id] = GPU(worker.id, worker, 1 / len(workers))
 
         # The `add_task` method has already calculated the total execution and loading
         # demand for each model (d_m). We now calculate the demand allocation for each
