@@ -1,4 +1,5 @@
 import bisect
+import sys
 import time
 from collections import defaultdict, deque
 from copy import copy, deepcopy
@@ -32,6 +33,7 @@ class GPU:
     weight: float
     allocations: int = 0
     outstanding_demand: float = 0
+    capacity: EventTime = EventTime(100, EventTime.Unit.MS)
 
 
 @total_ordering
@@ -262,11 +264,6 @@ class Model(object):
             load_demand, execution_demand = request.get_demand()
             self._outstanding_execution_demand += execution_demand
             self._outstanding_load_demand += load_demand
-            print(
-                f"Addeed Task {task} to Model {self} with load demand {self._outstanding_load_demand} and execution demand {self._outstanding_execution_demand}"
-            )
-        else:
-            print(f"Skipping loading Task {task} to Model {self}.")
 
     def remove_task(self, task: Task) -> None:
         """Removes a task from the request queue and ensures correct accounting for
@@ -420,13 +417,16 @@ class Models:
                 instances of the `Worker`s available during the simulation.
         """
         # Ensure that we have the demand and accumulation for all the Workers.
-        workers = [
-            worker
-            for worker_pool in worker_pools.worker_pools
-            for worker in worker_pool.workers
-        ]
-        for worker in workers:
-            self._workers[worker.id] = GPU(worker.id, worker, 1 / len(workers))
+        # new_workers = [
+        #     worker
+        #     for worker_pool in worker_pools.worker_pools
+        #     for worker in worker_pool.workers
+        #     if worker.id not in self._workers
+        # ]
+        # for worker in new_workers:
+        #     self._workers[worker.id] = GPU(
+        #         worker.id, worker, 1 / len(new_workers + self._workers)
+        #     )
 
         # The `add_task` method has already calculated the total execution and loading
         # demand for each model (d_m). We now calculate the demand allocation for each
@@ -467,8 +467,8 @@ class Models:
                         # proportional to the outstanding demand on the `Worker`.
                         worker.weight = (
                             # Clockwork just assumes a default SLO capacity of 100ms.
-                            EventTime(100, EventTime.Unit.MS).to(EventTime.Unit.US).time
-                            / worker.outstanding_demand
+                            worker.capacity.to(EventTime.Unit.US).time
+                            / (worker.outstanding_demand + sys.float_info.epsilon)
                         )
 
         # Now that the per-model demands have been allocated to the GPUs, we can
@@ -499,17 +499,16 @@ class Models:
                             EventTime.Unit.US
                         ).time * (worker.weight / total_weight)
                         served = (
-                            EventTime(100, EventTime.Unit.MS).to(EventTime.Unit.US).time
-                            * required
-                        ) / worker.outstanding_demand
+                            worker.capacity.to(EventTime.Unit.US).time * required
+                        ) / (worker.outstanding_demand + sys.float_info.epsilon)
                         load_priority -= served
 
             # Update the priority of the model on the GPU.
             for worker in self._workers.values():
                 if worker.worker.is_available(model.profile) == EventTime.zero():
-                    self._model_priorities[
-                        (model.id, worker.id)
-                    ] = model._last_used_at_worker[worker.id]
+                    self._model_priorities[(model.id, worker.id)] = (
+                        model._last_used_at_worker[worker.id].to(EventTime.Unit.US).time
+                    )
                 else:
                     self._model_priorities[(model.id, worker.id)] = load_priority
 
@@ -837,6 +836,12 @@ class ClockworkScheduler(BaseScheduler):
                     )
                     continue
                 models_sorted_by_priority = self._models.get_model_priority(worker)
+                self._logger.debug(
+                    "[%s] Received models %s for Worker %s (sorted by priority.)",
+                    current_time.to(EventTime.Unit.US).time,
+                    models_sorted_by_priority,
+                    worker,
+                )
                 for model_to_load in models_sorted_by_priority:
                     if worker.is_available(model_to_load.profile) == EventTime.zero():
                         self._logger.debug(
@@ -875,7 +880,7 @@ class ClockworkScheduler(BaseScheduler):
                     else:
                         # Find the fastest strategy that can be accomodated into an
                         # empty Worker.
-                        worker_deepcopy: Worker = copy.deepcopy(worker)
+                        worker_deepcopy: Worker = deepcopy(worker)
                         strategy = worker_deepcopy.get_compatible_strategies(
                             model_to_load.profile.loading_strategies
                         ).get_fastest_strategy()
@@ -918,12 +923,12 @@ class ClockworkScheduler(BaseScheduler):
                                         "[%s] The Worker can now accomodate the Model "
                                         "%s with the strategy %s.",
                                         current_time.to(EventTime.Unit.US).time,
-                                        model_to_evict.profile.name,
+                                        model_to_load.profile.name,
                                         strategy,
                                     )
                                     placements.append(
                                         Placement.create_load_profile_placement(
-                                            work_profile=model_to_evict.profile,
+                                            work_profile=model_to_load.profile,
                                             placement_time=current_time,
                                             worker_pool_id=worker_pool.id,
                                             worker_id=worker.id,
