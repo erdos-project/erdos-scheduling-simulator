@@ -44,8 +44,6 @@ class WorkloadLoaderClockworkBursty:
             in requests/second.
     """
 
-    NAME_TEMPLATE = "{name}_Instance_{instance}"
-
     def __init__(
         self,
         warmup_duration: EventTime = EventTime(300, EventTime.Unit.S),
