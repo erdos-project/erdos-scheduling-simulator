@@ -89,7 +89,7 @@ class WorkloadLoaderClockworkBursty:
             minor_request_rate, minor_workload_duration
         )
         for i, release_time in enumerate(minor_release_times):
-            name = f"Minor_Request_{i + 1}@{release_time.to(EventTime.Unit.US).time}"
+            name = f"Minor_Request_{i + 1}@{release_time.time}"
             task_graph = WorkloadLoaderClockworkBursty.__generate_task_graph(
                 name, minor_job, minor_work_profile, release_time, self._logger
             )
@@ -114,18 +114,17 @@ class WorkloadLoaderClockworkBursty:
         model_selections = self._rng.integers(
             0, 3600, len(major_release_times), dtype=np.int32
         )
+        # Performance optimization: assume release times are already in microseconds.
+        warmup_duration_us = warmup_duration.to(EventTime.Unit.US).time
+        model_activation_period_us = model_activation_period.to(EventTime.Unit.US).time
         for i, release_time in enumerate(major_release_times):
             num_active_models = min(
                 max_active_models,
-                (release_time - warmup_duration).to(EventTime.Unit.US).time
-                // model_activation_period.to(EventTime.Unit.US).time
+                (release_time.time - warmup_duration_us) // model_activation_period_us
                 + 1,
             )
             chosen_model = model_selections[i] % num_active_models
-            name = (
-                f"Major_Request_{i + 1}_Model_{chosen_model}"
-                f"@{release_time.to(EventTime.Unit.US).time}"
-            )
+            name = f"Major_Request_{i + 1}_Model_{chosen_model}@{release_time.time}"
             task_graph = WorkloadLoaderClockworkBursty.__generate_task_graph(
                 name,
                 major_jobs[chosen_model],
@@ -151,6 +150,7 @@ class WorkloadLoaderClockworkBursty:
     ) -> Sequence[EventTime]:
         inter_arrival_times_us = np.array([], dtype=np.int64)
         min_total_duration_us = min_total_duration.to(EventTime.Unit.US).time
+        start_us = start.to(EventTime.Unit.US).time
         expected_period_us = 1e6 / rate
         while sum(inter_arrival_times_us) < min_total_duration_us:
             last_arrival_us = sum(inter_arrival_times_us)
@@ -163,9 +163,7 @@ class WorkloadLoaderClockworkBursty:
             inter_arrival_times_us = np.concatenate(
                 [inter_arrival_times_us, new_inter_arrival_times_us]
             )
-        arrival_times_us = (
-            np.cumsum(inter_arrival_times_us) + start.to(EventTime.Unit.US).time
-        )
+        arrival_times_us = np.cumsum(inter_arrival_times_us) + start_us
         return [EventTime(int(t), EventTime.Unit.US) for t in arrival_times_us]
 
     def __generate_work_profile(self, name: str) -> WorkProfile:
@@ -242,7 +240,7 @@ class WorkloadLoaderClockworkBursty:
             job=job,
             profile=profile,
             deadline=EventTime(100, EventTime.Unit.MS),
-            timestamp=release_time.to(EventTime.Unit.US).time,
+            timestamp=release_time.time,
             release_time=release_time,
             # start_time=None,
             # completion_time=None,

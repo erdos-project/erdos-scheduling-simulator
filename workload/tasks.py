@@ -4,7 +4,7 @@ import sys
 import uuid
 from collections import defaultdict, deque
 from enum import Enum
-from functools import total_ordering
+from functools import total_ordering, cached_property
 from typing import Mapping, Optional, Sequence, Tuple, Union
 
 from utils import EventTime, fuzz_time, setup_logging
@@ -56,7 +56,6 @@ class Task(object):
             to execute (including the execution strategies for different resources).
         release_time (`EventTime`): The time at which the task was released by the
             job (in us).
-        runtime (`EventTime`): The expected runtime (in us) of this task.
         state (`TaskState`): Defines the state of the task.
         timestamp (`int`): The timestamp for the Task (single dimension).
         start_time (`EventTime`): The time (in us) at which the task was started
@@ -118,6 +117,7 @@ class Task(object):
         self._deadline = deadline
         self._timestamp = timestamp
         self._id = uuid.UUID(int=random.getrandbits(128), version=4)
+        self._hash = hash(self._id)
 
         # The timestamps maintained for each state of the task.
         # (VIRTUAL -> RELEASED)
@@ -588,7 +588,7 @@ class Task(object):
         return str(self)
 
     def __hash__(self):
-        return hash(self.id)
+        return self._hash
 
     def __eq__(self, other):
         return uuid.UUID(self.id) == uuid.UUID(other.id)
@@ -610,7 +610,7 @@ class Task(object):
     def unique_name(self):
         return f"{self._name}@{self._task_graph}"
 
-    @property
+    @cached_property
     def id(self):
         return str(self._id)
 
