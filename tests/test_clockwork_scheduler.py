@@ -1,3 +1,5 @@
+from copy import copy
+
 from schedulers import ClockworkScheduler
 from schedulers.clockwork_scheduler import Model, Models
 from tests.utils import create_default_task
@@ -794,7 +796,7 @@ def test_clockwork_model_loading_simple():
     for task in tasks:
         models.add_task(task)
     models.refresh_priorities(worker_pools=worker_pools)
-    prioritized_models = models.get_model_priority(worker_1)
+    prioritized_models = models.get_load_priority()
     assert prioritized_models == [
         model_a,
         model_b,
@@ -815,10 +817,10 @@ def test_clockwork_model_loading_simple():
         model_a._outstanding_load_demand < model_b._outstanding_load_demand
     ), "Model B should have more outstanding load demand."
     assert (
-        models._model_priorities[(model_a.id, worker_1.id)]
-        < models._model_priorities[(model_b.id, worker_1.id)]
+        models._model_load_priorities[model_a.id]
+        < models._model_load_priorities[model_b.id]
     ), "Model B should have higher priority."
-    prioritized_models = models.get_model_priority(worker_1)
+    prioritized_models = models.get_load_priority()
     assert prioritized_models == [
         model_b,
         model_a,
@@ -934,41 +936,49 @@ def test_clockwork_model_loading_complex():
     for task in tasks:
         models.add_task(task)
 
-    # Ensure that no eviction / loading is required.
+    # Ensure that the system is forced to be in a stable state.
     scheduler = ClockworkScheduler(runtime=EventTime.zero())
     scheduler._models = models
-    models.refresh_priorities(worker_pools=worker_pools)
+    models.refresh_priorities(worker_pools=copy(worker_pools))
 
-    placements = scheduler.run_load(
-        current_time=EventTime(1, EventTime.Unit.US), worker_pools=worker_pools
-    )
-    assert len(placements) == 0, "No evictions / loads should be required."
-
-    # Remove all tasks for model B and ensure that the model is evicted
-    # (with enough work).
-    for task in tasks[10:]:
-        model_b.remove_task(task)
-    assert (
-        model_b._outstanding_execution_demand
-        == model_b._outstanding_load_demand
-        == EventTime.zero()
-    ), "Model B should have no outstanding demand."
-    models.refresh_priorities(worker_pools=worker_pools)
-    placements = scheduler.run_load(EventTime(2, EventTime.Unit.US), worker_pools)
-    assert (
-        len(placements) == 0
-    ), "With the default capacity, no evictions / placements should happen."
-
-    # Reduce the capacity of each Worker, and ensure that the model is evicted.
-    for worker in models._workers.values():
-        worker.capacity = EventTime(2, EventTime.Unit.MS)
-    models.refresh_priorities(worker_pools=worker_pools)
     placements = list(
         sorted(
-            scheduler.run_load(EventTime(3, EventTime.Unit.US), worker_pools),
+            scheduler.run_load(
+                current_time=EventTime(1, EventTime.Unit.US),
+                worker_pools=copy(worker_pools),
+            ),
             key=lambda p: p.placement_type,
         )
     )
+    assert (
+        len(placements) == 2
+        and placements[0].placement_type == Placement.PlacementType.EVICT_WORK_PROFILE
+        and placements[1].placement_type == Placement.PlacementType.LOAD_WORK_PROFILE
+        and placements[0].worker_id == placements[1].worker_id
+    ), "One Worker should be accomodated to the other one."
+
+    # Apply the placements.
+    worker_to_apply_placements_to = (
+        worker_1 if worker_1.id == placements[0].worker_id else worker_2
+    )
+    worker_to_apply_placements_to.evict_profile(profile=placements[0].work_profile)
+    worker_to_apply_placements_to.load_profile(
+        profile=placements[1].work_profile,
+        loading_strategy=ExecutionStrategy(
+            resources=placements[1].loading_strategy.resources,
+            batch_size=placements[1].loading_strategy.batch_size,
+            runtime=EventTime.zero(),
+        ),
+    )
+
+    # Remove all tasks for model B and ensure that the model is evicted.
+    for task in tasks[10:]:
+        model_b.remove_task(task)
+    assert (
+        model_b._outstanding_execution_demand == model_b._outstanding_load_demand == 0.0
+    ), "Model B should have no outstanding demand."
+    models.refresh_priorities(worker_pools=copy(worker_pools))
+    placements = scheduler.run_load(EventTime(2, EventTime.Unit.US), copy(worker_pools))
     assert (
         len(placements) == 2
     ), "Model B should be evicted and Model A should be loaded into Worker 2."
