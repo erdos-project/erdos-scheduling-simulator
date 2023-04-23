@@ -228,6 +228,21 @@ class Placement(object):
                 f"execution_strategy={self.execution_strategy})"
             )
 
+    def __repr__(self) -> str:
+        if self._placement_type in (
+            Placement.PlacementType.LOAD_WORK_PROFILE,
+            Placement.PlacementType.EVICT_WORK_PROFILE,
+        ):
+            return (
+                f"Placement(work_profile={self.work_profile.name}, "
+                f"type={str(self._placement_type)}, worker_id={self.worker_id})"
+            )
+        else:
+            return (
+                f"Placement(task={self.task.unique_name}, "
+                f"type={str(self._placement_type)}, worker_id={self.worker_id})"
+            )
+
     @staticmethod
     def create_task_placement(
         task: "Task",  # noqa: F821
