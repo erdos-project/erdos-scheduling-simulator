@@ -38,6 +38,7 @@ class WorkloadLoaderClockworkBursty:
             in requests/second.
         major_request_rate: The rate at which requests are issued to the major workload,
             in requests/second.
+        _flags (`absl.flags`): The flags used to initialize the app, if any.
     """
 
     def __init__(

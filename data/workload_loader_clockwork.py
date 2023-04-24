@@ -13,6 +13,15 @@ from workload import JobGraph, Workload, WorkProfile
 
 
 class WorkloadLoaderClockwork(WorkloadLoader):
+    """Loads a set of Clockwork applications from a provided JSON or YAML file.
+
+    Args:
+        filename (`str`): The path to the file representing the applications.
+        num_instances (`int`): The number of instances to create for each provided
+            `WorkProfile` and `JobGraph`.
+        _flags (`absl.flags`): The flags used to initialize the app, if any.
+    """
+
     NAME_TEMPLATE = "{name}_Instance_{instance}"
 
     def __init__(
