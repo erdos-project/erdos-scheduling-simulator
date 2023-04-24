@@ -4,7 +4,7 @@ import time
 from collections import defaultdict, deque
 from copy import copy, deepcopy
 from dataclasses import dataclass
-from functools import total_ordering
+from functools import cmp_to_key, total_ordering
 from typing import Iterator, List, Mapping, Optional, Sequence, Set, Tuple
 
 import absl  # noqa: F401
@@ -202,7 +202,7 @@ class Model(object):
         Returns:
             The last time that this model was used on the particular Worker.
         """
-        return self._last_used_at_worker[worker]
+        return self._last_used_at_worker[worker.id]
 
     def get_available_execution_strategies(
         self,
@@ -535,54 +535,66 @@ class Models:
             # Update the priority of the model on the GPU.
             self._model_load_priorities[model.id] = load_priority
 
-    def get_load_priority(self) -> Sequence[Model]:
-        """Returns the models sorted by the load priority.
+    def get_model_priority(self, worker: Worker) -> Sequence[Model]:
+        """Retuns the models sorted by the priority for the given `Worker`.
 
-        The comparison function is the same as `CompareModelPriority` in the Clockwork
-        scheduler.
-
-        Returns:
-            A list of `Model`s sorted by the load priority.
-        """
-        model_priorities = sorted(
-            [
-                # Ties are broken by the total ordering defined over the Model.
-                (priority, self._models[model_id])
-                for model_id, priority in self._model_load_priorities.items()
-            ],
-            reverse=True,
-        )
-        return [model for _, model in model_priorities]
-
-    def get_evict_priority(self, worker: Worker) -> Sequence[Model]:
-        """Returns the models sorted by the eviction priority for the given `Worker`.
-
-        The models are returned in the order of /decreasing/ eviction priority. The
-        first model in the list should be evicted first.
+        This method follows the comparison function of `CompareModelPriority` in
+        ClockworkScheduler.
 
         Args:
             worker (`Worker`): The `Worker` to get the models for.
 
         Returns:
-            A list of `Model`s sorted by the eviction priority for the given `Worker`.
+            A list of `Model`s sorted by the priority.
         """
-        model_priorities = sorted(
-            [
-                (
-                    # Clockwork uses the LRU policy to evict models.
-                    model.get_last_used_at_worker(worker),
-                    # If the models were last used at the same time, then we break ties
-                    # by the priority i.e., the model that has the least amount of
-                    # outstanding work gets evicted for a model that has more
-                    # outstanding work.
-                    self._model_load_priorities[model_id],
-                    # Lastly, ties are broken by the total ordering of the model.
-                    model,
+
+        def comparison_function(model_a: Model, model_b: Model) -> int:
+            """Compares the priority of two models on a given `Worker`."""
+            model_a_is_empty = (
+                abs(model_a._outstanding_load_demand) <= sys.float_info.epsilon
+                and abs(model_a._outstanding_execution_demand) <= sys.float_info.epsilon
+            )
+            model_b_is_empty = (
+                abs(model_b._outstanding_load_demand) <= sys.float_info.epsilon
+                and abs(model_b._outstanding_execution_demand) <= sys.float_info.epsilon
+            )
+            model_a_priority = self._model_load_priorities[model_a.id]
+            model_b_priority = self._model_load_priorities[model_b.id]
+            model_a_last_used = model_a._last_used_at_worker[worker.id]
+            model_b_last_used = model_b._last_used_at_worker[worker.id]
+
+            if model_a_is_empty and model_b_is_empty:
+                # If both models are empty, then we compare the last used time.
+                return (
+                    (model_a_last_used - model_b_last_used).to(EventTime.Unit.US).time
                 )
-                for model_id, model in self._models.items()
-            ]
+            elif not model_a_is_empty and not model_b_is_empty:
+                # If both models are not empty, then we compare the priority.
+                if model_a_priority == model_b_priority:
+                    # If the priorities are equal, then we compare the last used time.
+                    return (
+                        (model_a_last_used - model_b_last_used)
+                        .to(EventTime.Unit.US)
+                        .time
+                    )
+                else:
+                    return model_a_priority - model_b_priority
+            else:
+                if model_a_priority == model_b_priority:
+                    # If the priorities are equal, then we compare the last used time.
+                    return (
+                        (model_a_last_used - model_b_last_used)
+                        .to(EventTime.Unit.US)
+                        .time
+                    )
+                else:
+                    return model_a_priority - model_b_priority
+
+        return list(
+            sorted(
+                self._models.values(), key=cmp_to_key(comparison_function), reverse=True
+            )
         )
-        return [model for _, _, model in model_priorities]
 
     def __iter__(self) -> Iterator[Model]:
         for model in self._models.values():
@@ -838,12 +850,6 @@ class ClockworkScheduler(BaseScheduler):
             loading and eviction of `WorkProfile`s from `Worker`s.
         """
         placements = []
-        models_sorted_by_load_priority = self._models.get_load_priority()
-        self._logger.debug(
-            "[%s] Received models %s sorted in order of their load priority.",
-            current_time.to(EventTime.Unit.US).time,
-            models_sorted_by_load_priority,
-        )
         for worker_pool in worker_pools.worker_pools:
             for worker in worker_pool.workers:
                 if len(worker.get_pending_profiles()) > 0:
@@ -853,17 +859,15 @@ class ClockworkScheduler(BaseScheduler):
                         worker,
                     )
                     continue
-                models_sorted_by_evict_priority = self._models.get_evict_priority(
-                    worker
-                )
+                models_sorted_by_priority = self._models.get_model_priority(worker)
                 self._logger.debug(
                     "[%s] Received models %s for Worker %s sorted in "
-                    "order of their evict priority.",
+                    "order of their priority.",
                     current_time.to(EventTime.Unit.US).time,
-                    models_sorted_by_evict_priority,
+                    models_sorted_by_priority,
                     worker,
                 )
-                for model_to_load in models_sorted_by_load_priority:
+                for model_to_load in models_sorted_by_priority:
                     if worker.is_available(model_to_load.profile) == EventTime.zero():
                         self._logger.debug(
                             "[%s] Skipping loading Model %s on Worker %s since "
@@ -910,7 +914,7 @@ class ClockworkScheduler(BaseScheduler):
                         # and keep evicting models until the current model can be
                         # accomodated.
                         load_successful = False
-                        for model_to_evict in models_sorted_by_evict_priority:
+                        for model_to_evict in models_sorted_by_priority[::-1]:
                             if model_to_evict == model_to_load:
                                 self._logger.debug(
                                     "[%s] Skipping loading Model %s on Worker %s since "

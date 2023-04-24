@@ -796,11 +796,16 @@ def test_clockwork_model_loading_simple():
     for task in tasks:
         models.add_task(task)
     models.refresh_priorities(worker_pools=worker_pools)
-    prioritized_models = models.get_load_priority()
+    prioritized_models = models.get_model_priority(worker=worker_1)
     assert prioritized_models == [
         model_a,
         model_b,
-    ], "Incorrect prioritization of the models."
+    ], "Incorrect prioritization of the models for Worker 1."
+    prioritized_models = models.get_model_priority(worker=worker_2)
+    assert prioritized_models == [
+        model_a,
+        model_b,
+    ], "Incorrect prioritization of the models for Worker 2."
 
     # If we add more demand for Model B now, then the model should be highest priority.
     tasks = [
@@ -820,11 +825,16 @@ def test_clockwork_model_loading_simple():
         models._model_load_priorities[model_a.id]
         < models._model_load_priorities[model_b.id]
     ), "Model B should have higher priority."
-    prioritized_models = models.get_load_priority()
+    prioritized_models = models.get_model_priority(worker_1)
     assert prioritized_models == [
         model_b,
         model_a,
-    ], "Incorrect prioritization of the models."
+    ], "Incorrect prioritization of the models for Worker 1."
+    prioritized_models = models.get_model_priority(worker_2)
+    assert prioritized_models == [
+        model_b,
+        model_a,
+    ], "Incorrect prioritization of the models for Worker 2."
 
 
 def test_clockwork_model_loading_complex():
@@ -950,30 +960,14 @@ def test_clockwork_model_loading_complex():
             key=lambda p: p.placement_type,
         )
     )
-    assert (
-        len(placements) == 2
-        and placements[0].placement_type == Placement.PlacementType.EVICT_WORK_PROFILE
-        and placements[1].placement_type == Placement.PlacementType.LOAD_WORK_PROFILE
-        and placements[0].worker_id == placements[1].worker_id
-    ), "One Worker should be accomodated to the other one."
+    assert len(placements) == 0, "No evictions / loads should happen with equal queues."
 
-    # Apply the placements.
-    worker_to_apply_placements_to = (
-        worker_1 if worker_1.id == placements[0].worker_id else worker_2
-    )
-    worker_to_apply_placements_to.evict_profile(profile=placements[0].work_profile)
-    worker_to_apply_placements_to.load_profile(
-        profile=placements[1].work_profile,
-        loading_strategy=ExecutionStrategy(
-            resources=placements[1].loading_strategy.resources,
-            batch_size=placements[1].loading_strategy.batch_size,
-            runtime=EventTime.zero(),
-        ),
-    )
-
-    # Remove all tasks for model B and ensure that the model is evicted.
+    # Remove all tasks for model B and ensure that the model is evicted
+    # (with reduced capacity).
     for task in tasks[10:]:
         model_b.remove_task(task)
+    for worker in models._workers.values():
+        worker.capacity = EventTime(1, EventTime.Unit.US)
     assert (
         model_b._outstanding_execution_demand == model_b._outstanding_load_demand == 0.0
     ), "Model B should have no outstanding demand."
@@ -990,3 +984,127 @@ def test_clockwork_model_loading_complex():
         placements[1].placement_type == Placement.PlacementType.LOAD_WORK_PROFILE
         and placements[1].work_profile == work_profile_a
     ), "Model A should be loaded."
+
+
+def test_clockwork_lru_eviction_policy():
+    """Test that Clockwork follows the LRU eviction policy."""
+    # Create WorkProfiles.
+    work_profile_a = WorkProfile(
+        name="WorkProfile_A",
+        execution_strategies=ExecutionStrategies(
+            strategies=[
+                ExecutionStrategy(
+                    resources=Resources(
+                        resource_vector={Resource(name="GPU", _id="any"): 1}
+                    ),
+                    batch_size=1,
+                    runtime=EventTime(100, EventTime.Unit.US),
+                ),
+            ]
+        ),
+        loading_strategies=ExecutionStrategies(
+            strategies=[
+                ExecutionStrategy(
+                    resources=Resources(
+                        resource_vector={Resource(name="RAM", _id="any"): 100}
+                    ),
+                    batch_size=1,
+                    runtime=EventTime(100, EventTime.Unit.US),
+                )
+            ]
+        ),
+    )
+    work_profile_b = WorkProfile(
+        name="WorkProfile_B",
+        execution_strategies=ExecutionStrategies(
+            strategies=[
+                ExecutionStrategy(
+                    resources=Resources(
+                        resource_vector={Resource(name="GPU", _id="any"): 1}
+                    ),
+                    batch_size=1,
+                    runtime=EventTime(100, EventTime.Unit.US),
+                ),
+            ]
+        ),
+        loading_strategies=ExecutionStrategies(
+            strategies=[
+                ExecutionStrategy(
+                    resources=Resources(
+                        resource_vector={Resource(name="RAM", _id="any"): 100}
+                    ),
+                    batch_size=1,
+                    runtime=EventTime(100, EventTime.Unit.US),
+                )
+            ]
+        ),
+    )
+    model_a = Model(work_profile_a)
+    model_b = Model(work_profile_b)
+
+    # Create Workers.
+    worker_1 = Worker(
+        name="Worker_1",
+        resources=Resources(
+            resource_vector={Resource(name="GPU"): 1, Resource(name="RAM"): 100}
+        ),
+    )
+    worker_2 = Worker(
+        name="Worker_2",
+        resources=Resources(
+            resource_vector={Resource(name="GPU"): 1, Resource(name="RAM"): 100}
+        ),
+    )
+    worker_pool = WorkerPool(name="WorkerPool_1", workers=[worker_1, worker_2])
+    worker_pools = WorkerPools([worker_pool])
+    models = Models(models=[model_a, model_b], worker_pools=worker_pools)
+
+    # Load one of the models on each of the Workers.
+    worker_1.load_profile(
+        profile=work_profile_a,
+        loading_strategy=ExecutionStrategy(
+            resources=work_profile_a.loading_strategies[0].resources,
+            batch_size=1,
+            runtime=EventTime.zero(),
+        ),
+    )
+    worker_2.load_profile(
+        profile=work_profile_b,
+        loading_strategy=ExecutionStrategy(
+            resources=work_profile_b.loading_strategies[0].resources,
+            batch_size=1,
+            runtime=EventTime.zero(),
+        ),
+    )
+    # Step so that the models are available at the Workers.
+    worker_1.step(current_time=EventTime.zero())
+    worker_2.step(current_time=EventTime.zero())
+
+    # Set the last used time of only one of the models to check that it is evicted on
+    # the correct Worker.
+    model_a._last_used_time = EventTime(1, EventTime.Unit.US)
+    models.refresh_priorities(worker_pools=copy(worker_pools))
+
+    scheduler = ClockworkScheduler(runtime=EventTime.zero())
+    scheduler._models = models
+    placements = list(
+        sorted(
+            scheduler.run_load(
+                current_time=EventTime(2, EventTime.Unit.US),
+                worker_pools=copy(worker_pools),
+            ),
+            key=lambda p: p.placement_type,
+        )
+    )
+    assert len(placements) == 2, "Incorrect number of placements received."
+    assert (
+        placements[0].placement_type == Placement.PlacementType.EVICT_WORK_PROFILE
+    ), "Incorrect placement type."
+    assert placements[0].worker_id == worker_2.id, "Incorrect worker ID."
+    assert placements[0].work_profile == work_profile_b, "Incorrect work profile."
+
+    assert (
+        placements[1].placement_type == Placement.PlacementType.LOAD_WORK_PROFILE
+    ), "Incorrect placement type."
+    assert placements[1].worker_id == worker_2.id, "Incorrect worker ID."
+    assert placements[1].work_profile == work_profile_a, "Incorrect work profile."
