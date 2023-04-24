@@ -7,8 +7,8 @@ from data import (
     TaskLoaderBenchmark,
     TaskLoaderPylot,
     TaskLoaderSynthetic,
-    WorkerLoaderBenchmark,
     WorkerLoader,
+    WorkerLoaderBenchmark,
     WorkloadLoader,
     WorkloadLoaderClockwork,
 )

@@ -1,21 +1,17 @@
-from copy import deepcopy
 import json
 import logging
-import numpy as np
 import pathlib
 import sys
+from copy import deepcopy
 from typing import Mapping, Optional, Sequence
-import yaml
 
 import absl  # noqa: F401
+import numpy as np
+import yaml
 
 from data.workload_loader import WorkloadLoader
 from utils import EventTime, setup_logging
-from workload import (
-    JobGraph,
-    Workload,
-    WorkProfile,
-)
+from workload import JobGraph, Workload, WorkProfile
 from workload.jobs import Job
 from workload.resource import Resource
 from workload.resources import Resources
@@ -240,8 +236,6 @@ class WorkloadLoaderClockworkBursty:
             deadline=EventTime(100, EventTime.Unit.MS),
             timestamp=release_time.time,
             release_time=release_time,
-            # start_time=None,
-            # completion_time=None,
             _logger=logger,
         )
         return TaskGraph(name=task_graph_name, tasks={task: []})

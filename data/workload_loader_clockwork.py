@@ -1,19 +1,15 @@
-from copy import deepcopy
 import json
 import pathlib
 import sys
+from copy import deepcopy
 from typing import Mapping, Optional
-import yaml
 
 import absl  # noqa: F401
+import yaml
 
 from data.workload_loader import WorkloadLoader
 from utils import EventTime, setup_logging
-from workload import (
-    JobGraph,
-    Workload,
-    WorkProfile,
-)
+from workload import JobGraph, Workload, WorkProfile
 
 
 class WorkloadLoaderClockwork(WorkloadLoader):

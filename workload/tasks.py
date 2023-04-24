@@ -4,7 +4,7 @@ import sys
 import uuid
 from collections import defaultdict, deque
 from enum import Enum
-from functools import total_ordering, cached_property
+from functools import cached_property, total_ordering
 from typing import Mapping, Optional, Sequence, Tuple, Union
 
 from utils import EventTime, fuzz_time, setup_logging
@@ -93,7 +93,7 @@ class Task(object):
         _logger: Optional[logging.Logger] = None,
     ):
         if (
-            completion_time == EventTime(-1, EventTime.Unit.US)
+            completion_time != EventTime(-1, EventTime.Unit.US)
             and profile
             and len(profile.execution_strategies) != 1
         ):

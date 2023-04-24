@@ -1,9 +1,9 @@
 import json
 import pathlib
 from typing import Mapping, Optional, Sequence, Type
-import yaml
 
 import absl  # noqa: F401
+import yaml
 
 import utils
 from schedulers import BaseScheduler

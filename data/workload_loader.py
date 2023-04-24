@@ -3,9 +3,9 @@ import logging
 import pathlib
 import sys
 from typing import Mapping, Optional, Sequence
-import yaml
 
 import absl  # noqa: F401
+import yaml
 
 from utils import EventTime, setup_logging
 from workload import (
