@@ -715,86 +715,6 @@ class ClockworkScheduler(BaseScheduler):
             placements=placements,
         )
 
-    def process_model_strategies(
-        self,
-        current_time: EventTime,
-        model: Model,
-        execution_strategies: ExecutionStrategies,
-        worker_pools: WorkerPools,
-    ) -> Sequence[Placement]:
-        """Processes the execution strategies for the given model.
-
-        If the method returns a non-empty `Sequence` of `Placement` instances, the
-        method was able to find a possible instantiation of one of the strategies on
-        some `Worker`. The method is responsible for making sure that the resources
-        for the `Worker` are correctly accounted for. However, the caller must check
-        the return value to see if more tasks from the same `Model` can be scheduled.
-
-        Args:
-            current_time (`EventTime`): The current time of the simulation.
-            model (`Model`): The model to process the execution strategies for.
-            execution_strategies (`ExecutionStrategies`): The execution strategies
-                to process.
-            worker_pools (`WorkerPools`): The worker pools to use for determining the
-                placement of the execution strategies.
-
-        Returns:
-            A (possibly empty) `Sequence` of `Placement` instances that represent the
-            placement of the set of `Task`s that correspond to that execution strategy.
-        """
-        placements = []
-        for execution_strategy in execution_strategies:
-            # We try to find a WorkerPool that has a Worker that can execute the
-            # strategy.
-            for worker_pool in worker_pools.worker_pools:
-                for worker in worker_pool.workers:
-                    if worker.is_available(model.profile) != EventTime.zero():
-                        self._logger.debug(
-                            "[%s] Skipping Worker %s since the Model %s (%s) is not "
-                            "loaded. The model will be available in %s.",
-                            current_time.to(EventTime.Unit.US).time,
-                            worker,
-                            model.profile.name,
-                            model.profile.id,
-                            worker.is_available(model.profile),
-                        )
-                        break
-                    if worker.can_accomodate_strategy(execution_strategy):
-                        task_placements: Sequence[Placement] = model.get_placements(
-                            sim_time=current_time,
-                            strategy=execution_strategy,
-                            worker_pool_id=worker_pool.id,
-                            worker_id=worker.id,
-                        )
-                        for placement in task_placements:
-                            placements.append(placement)
-                            worker.place_task(
-                                task=placement.task,
-                                execution_strategy=placement.execution_strategy,
-                            )
-                            self._logger.debug(
-                                "[%s] Requesting to execute Task %s with Model %s on "
-                                "Worker %s with the strategy %s.",
-                                current_time.to(EventTime.Unit.US).time,
-                                placement.task,
-                                model.profile,
-                                worker,
-                                placement.execution_strategy,
-                            )
-                        return placements
-                    else:
-                        self._logger.debug(
-                            "[%s] Skipping Worker %s since it cannot meet the resource "
-                            "requirements for the strategy %s. The strategy requires "
-                            "%s, but the Worker has %s.",
-                            current_time.to(EventTime.Unit.US).time,
-                            worker,
-                            execution_strategy,
-                            execution_strategy.resources,
-                            worker.resources,
-                        )
-        return placements
-
     def run_admission(
         self, current_time: EventTime, tasks_to_schedule: Sequence[Task]
     ) -> Sequence[Placement]:
@@ -974,6 +894,110 @@ class ClockworkScheduler(BaseScheduler):
                             break
             return placements
 
+    def run_inference(
+        self, current_time: EventTime, worker_pools: WorkerPools
+    ) -> Sequence[Placement]:
+        """Runs the inference algorithm for all of the `Worker`s in the `WorkerPools`
+        and returns the `Placement` objects that represent the execution of requests
+        with the given strategy on the given `Worker`.
+
+        Args:
+            current_time (EventTime): The current simulation time.
+            worker_pools (WorkerPools): The `WorkerPools` to run inference on.
+
+        Returns:
+            A `Sequence` of `Placement` objects that represent the strategy of execution
+            of the `Task`s on the available `Worker`s.
+        """
+        placements = []
+        for worker_pool in worker_pools.worker_pools:
+            for worker in worker_pool.workers:
+                # Retrieve all of the available execution strategies for all models.
+                execution_strategies_queue: Sequence[
+                    Tuple[Model, ExecutionStrategies]
+                ] = deque()
+                for model in self._models:
+                    model_strategies = model.get_available_execution_strategies(
+                        current_time=current_time
+                    )
+                    if len(model_strategies) > 0:
+                        execution_strategies_queue.append((model, model_strategies))
+
+                # Find the set of placements that this `Worker` can accomodate.
+                while len(execution_strategies_queue) > 0:
+                    model, model_strategies = execution_strategies_queue.popleft()
+
+                    # If the model is not loaded on this `Worker`, we can skip it.
+                    if worker.is_available(model.profile) != EventTime.zero():
+                        self._logger.debug(
+                            "[%s] Skipping Worker %s since the Model %s (%s) is not "
+                            "loaded. The model will be available in %s.",
+                            current_time.to(EventTime.Unit.US).time,
+                            worker,
+                            model.profile.name,
+                            model.profile.id,
+                            worker.is_available(model.profile),
+                        )
+                        continue
+
+                    # If the model is loaded, we iterate over the strategies and find
+                    # the first one that can be accomodated by the `Worker`.
+                    model_placed = False
+                    for execution_strategy in model_strategies:
+                        if worker.can_accomodate_strategy(execution_strategy):
+                            task_placements: Sequence[Placement] = model.get_placements(
+                                sim_time=current_time,
+                                strategy=execution_strategy,
+                                worker_pool_id=worker_pool.id,
+                                worker_id=worker.id,
+                            )
+                            for placement in task_placements:
+                                placements.append(placement)
+                                worker.place_task(
+                                    task=placement.task,
+                                    execution_strategy=placement.execution_strategy,
+                                )
+                                self._logger.debug(
+                                    "[%s] Requesting to execute Task %s with Model %s "
+                                    "on Worker %s with the strategy %s.",
+                                    current_time.to(EventTime.Unit.US).time,
+                                    placement.task,
+                                    model.profile,
+                                    worker,
+                                    placement.execution_strategy,
+                                )
+                            model_placed = True
+                            break
+                        else:
+                            self._logger.debug(
+                                "[%s] Skipping strategy %s since the Worker %s cannot "
+                                "meet the resource requirements. The strategy requires "
+                                "%s, but the Worker has %s.",
+                                current_time.to(EventTime.Unit.US).time,
+                                execution_strategy,
+                                worker,
+                                execution_strategy.resources,
+                                worker.resources,
+                            )
+
+                    # If some strategy for the model was placed, we add new strategies
+                    # to the queue for the same model at the end.
+                    if model_placed:
+                        new_model_strategies = model.get_available_execution_strategies(
+                            current_time=current_time
+                        )
+                        if len(new_model_strategies) > 0:
+                            execution_strategies_queue.append(
+                                (model, new_model_strategies)
+                            )
+                    else:
+                        self._logger.debug(
+                            "[%s] No valid placements were found for Model %s.",
+                            current_time.to(EventTime.Unit.US).time,
+                            model.profile.name,
+                        )
+        return placements
+
     def schedule(
         self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools
     ) -> Placements:
@@ -1033,41 +1057,20 @@ class ClockworkScheduler(BaseScheduler):
             )
             placements.extend(profile_placements)
 
-        # Retrieve the available strategies for each `Model` instance, ordered by their
-        # execution preference, and find a `Worker` that can execute the strategy.
-        execution_strategies_queue: Sequence[
-            Tuple[Model, ExecutionStrategies]
-        ] = deque()
-        for model in self._models:
-            model_strategies = model.get_available_execution_strategies(
-                current_time=sim_time
+        # Run the inference algorithm to decide placements of `Task`s on `Worker`s.
+        task_placements = self.run_inference(
+            current_time=sim_time, worker_pools=schedulable_worker_pools
+        )
+        if len(task_placements) > 0:
+            self._logger.debug(
+                "[%s] A total of %d tasks will be placed. These tasks are: [%s].",
+                sim_time.to(EventTime.Unit.US).time,
+                len(task_placements),
+                ", ".join(
+                    [placement.task.unique_name for placement in task_placements]
+                ),
             )
-            if len(model_strategies) > 0:
-                execution_strategies_queue.append((model, model_strategies))
-
-        while len(execution_strategies_queue) > 0:
-            model, model_strategies = execution_strategies_queue.popleft()
-            model_placements = self.process_model_strategies(
-                current_time=sim_time,
-                model=model,
-                execution_strategies=model_strategies,
-                worker_pools=schedulable_worker_pools,
-            )
-            if len(model_placements) > 0:
-                # There were some placements for the model. We add the model back to
-                # the queue, so that we can try to schedule more tasks for it.
-                placements.extend(model_placements)
-                new_model_strategies = model.get_available_execution_strategies(
-                    current_time=sim_time
-                )
-                if len(new_model_strategies) > 0:
-                    execution_strategies_queue.append((model, new_model_strategies))
-            else:
-                self._logger.debug(
-                    "[%s] No valid placements were found for Model %s.",
-                    sim_time.to(EventTime.Unit.US).time,
-                    model.profile.name,
-                )
+            placements.extend(task_placements)
 
         scheduler_end_time = time.time()
         scheduler_runtime = EventTime(
