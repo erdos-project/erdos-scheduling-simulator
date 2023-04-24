@@ -52,7 +52,7 @@ class WorkerLoader(object):
         if len(worker_data) == 0:
             raise ValueError("Empty data returned.")
 
-        # Create the sequence of WorkerPools from the JSON data.
+        # Create the sequence of WorkerPools from the data.
         if _flags:
             self._worker_pools = WorkerPools(
                 WorkerLoader.__create_worker_pools(
@@ -68,7 +68,7 @@ class WorkerLoader(object):
                 WorkerLoader.__create_worker_pools(worker_data, scheduler)
             )
         self._logger.debug(
-            f"Loaded {len(self._worker_pools)} worker pools from the JSON "
+            f"Loaded {len(self._worker_pools)} worker pools from the "
             f"file located at: {worker_profile_path}"
         )
 
@@ -81,11 +81,11 @@ class WorkerLoader(object):
         log_level: Optional[str] = "debug",
     ) -> Sequence[WorkerPool]:
         """Creates a list of WorkerPools that use the given scheduler
-        implementation from the JSON entries in `worker_pools`.
+        implementation from the entries in `worker_pools`.
 
         Args:
-            worker_pools (`Sequence[Mapping[str, str]]`): The JSON entries
-                read from the data file.
+            worker_pools (`Sequence[Mapping[str, str]]`): The entries read from
+                the data file.
             scheduler (`Type[BaseScheduler]`): The scheduler implementation
                 to use for each of the WorkerPools.
             log_dir (`Optional[str]`): The path to the directory where the logs are
@@ -97,7 +97,7 @@ class WorkerLoader(object):
 
         Returns:
             A `Sequence[WorkerPool]` with the `Worker`s in each of the pool
-            set up according to the JSON entries.
+            set up according to the file's entries.
         """
         constructed_worker_pools = []
         for worker_pool in worker_pools:
@@ -145,9 +145,9 @@ class WorkerLoader(object):
         return constructed_worker_pools
 
     def get_worker_pools(self) -> WorkerPools:
-        """Retrieve the `WorkerPool`s loaded by the WorkerLoaderJSON.
+        """Retrieve the `WorkerPool`s loaded by the `WorkerLoader`.
 
         Returns:
-            The `WorkerPools` loaded by the WorkerLoaderJSON.
+            The `WorkerPools` loaded by the `WorkerLoader`.
         """
         return self._worker_pools
