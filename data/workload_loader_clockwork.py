@@ -186,7 +186,8 @@ class WorkloadLoaderClockwork(WorkloadLoader):
                     )
                 else:
                     raise NotImplementedError(
-                        f"The release policy {job['release_policy']} is not implemented."
+                        f"The release policy {job['release_policy']} "
+                        "is not implemented."
                     )
 
                 # Create the JobGraph.
