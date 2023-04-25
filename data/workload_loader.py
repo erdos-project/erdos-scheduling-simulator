@@ -2,6 +2,7 @@ import json
 import logging
 import pathlib
 import sys
+from copy import deepcopy
 from typing import Mapping, Optional, Sequence
 
 import absl  # noqa: F401
@@ -24,11 +25,11 @@ class WorkloadLoader(object):
     """Loads a set of applications from a provided JSON or YAML file.
 
     Args:
-        filename (`str`): The path to the file representing the applications.
+        path (`str`): The path to the file representing the applications.
         _flags (`absl.flags`): The flags used to initialize the app, if any.
     """
 
-    def __init__(self, filename: str, _flags: Optional["absl.flags"] = None) -> None:
+    def __init__(self, path: str, _flags: Optional["absl.flags"] = None) -> None:
         # Set up the logger.
         if _flags:
             self._logger = setup_logging(
@@ -53,15 +54,21 @@ class WorkloadLoader(object):
                 if _flags.override_arrival_period > 0
                 else None
             )
+            self._unique_work_profiles = _flags.unique_work_profiles
+            self._replication_factor = _flags.replication_factor
+            self._slo = _flags.override_slo if _flags.override_slo > 0 else None
         else:
             self._logger = setup_logging(name=self.__class__.__name__)
             self._resource_logger = setup_logging(name="Resources")
             self._poisson_arrival_rate = None
             self._arrival_period = None
+            self._unique_work_profiles = False
+            self._replication_factor = 1
+            self._slo = None
 
         # Read the file for applications and create a JobGraph for each application.
-        extension = pathlib.Path(filename).suffix.lower()
-        with open(filename, "r") as f:
+        extension = pathlib.Path(path).suffix.lower()
+        with open(path, "r") as f:
             if extension == ".json":
                 workload_data = json.load(f)
             elif extension == ".yaml" or extension == ".yml":
@@ -95,11 +102,10 @@ class WorkloadLoader(object):
                         f'was not found in definition of JobGraph ("{job_name}").'
                     )
 
-            # Retrieve the start time from the definition, if provided.
-            if "start" in job:
-                start_time = EventTime(job["start"], EventTime.Unit.US)
-            else:
-                start_time = EventTime.zero()
+            # Retrieve the release policy from the definition.
+            release_policy = WorkloadLoader.__create_release_policy(
+                job, self._arrival_period, self._poisson_arrival_rate
+            )
 
             # Retrieve the deadline variance from the definition, if provided.
             if "deadline_variance" in job:
@@ -107,71 +113,37 @@ class WorkloadLoader(object):
             else:
                 deadline_variance = (0, 0)
 
-            # Construct the ReleasePolicy for the JobGraph.
-            if job["release_policy"] == "periodic":
-                if "period" not in job:
-                    raise ValueError(
-                        f'A "periodic" release policy was requested, but a '
-                        f'`period` was not defined for the JobGraph ("{job_name}").'
-                    )
-                release_policy = JobGraph.ReleasePolicy.periodic(
-                    period=EventTime(
-                        job["period"]
-                        if self._arrival_period is None
-                        else self._arrival_period,
-                        EventTime.Unit.US,
-                    ),
-                    start=start_time,
-                )
-            elif job["release_policy"] == "fixed":
-                if "period" not in job or "invocations" not in job:
-                    raise ValueError(
-                        f'A "fixed" release policy was requested, but either a '
-                        f"`period` or `invocations` was not defined for the "
-                        f'JobGraph ("{job_name}").'
-                    )
-                release_policy = JobGraph.ReleasePolicy.fixed(
-                    period=EventTime(
-                        job["period"]
-                        if self._arrival_period is None
-                        else self._arrival_period,
-                        EventTime.Unit.US,
-                    ),
-                    num_invocations=job["invocations"],
-                    start=start_time,
-                )
-            elif job["release_policy"] == "poisson":
-                if (
-                    "rate" not in job and self._poisson_arrival_rate is None
-                ) or "invocations" not in job:
-                    raise ValueError(
-                        f'A "poisson" release policy was requested, but either a '
-                        f"`rate` or `invocations` was not defined for the "
-                        f'JobGraph ("{job_name}").'
-                    )
-                release_policy = JobGraph.ReleasePolicy.poisson(
-                    rate=job["rate"]
-                    if self._poisson_arrival_rate is None
-                    else self._poisson_arrival_rate,
-                    num_invocations=job["invocations"],
-                    start=start_time,
-                )
-            else:
-                raise NotImplementedError(
-                    f"The release policy {job['release_policy']} is not implemented."
-                )
-
             # Create the JobGraph.
-            job_graph_mapping[job["name"]] = WorkloadLoader.load_job_graph(
-                JobGraph(
-                    name=job_name,
-                    release_policy=release_policy,
-                    deadline_variance=deadline_variance,
-                ),
-                job["graph"],
-                work_profiles,
-                EventTime(_flags.slo, EventTime.Unit.US) if _flags.slo >= 0 else None,
-            )
+            if self._replication_factor > 1:
+                for i in range(1, self._replication_factor + 1):
+                    job_graph_mapping[
+                        f"{job_name}_{i}"
+                    ] = WorkloadLoader.load_job_graph(
+                        JobGraph(
+                            name=f"{job_name}_{i}",
+                            release_policy=release_policy,
+                            deadline_variance=deadline_variance,
+                        ),
+                        job["graph"],
+                        deepcopy(work_profiles)
+                        if self._unique_work_profiles
+                        else work_profiles,
+                        self._slo,
+                    )
+                pass
+            else:
+                job_graph_mapping[job["name"]] = WorkloadLoader.load_job_graph(
+                    JobGraph(
+                        name=job_name,
+                        release_policy=release_policy,
+                        deadline_variance=deadline_variance,
+                    ),
+                    job["graph"],
+                    deepcopy(work_profiles)
+                    if self._unique_work_profiles
+                    else work_profiles,
+                    self._slo,
+                )
 
         self._workload = Workload.from_job_graphs(job_graph_mapping, _flags=_flags)
 
@@ -180,7 +152,7 @@ class WorkloadLoader(object):
         job_graph,
         json_repr,
         work_profiles: Mapping[str, WorkProfile],
-        slo: Optional[EventTime],
+        slo: Optional[EventTime] = None,
     ) -> JobGraph:
         """Load a particular JobGraph from its JSON representation.
 
@@ -240,6 +212,71 @@ class WorkloadLoader(object):
                     job_graph.add_child(node_job, child_node_job)
 
         return job_graph
+
+    @staticmethod
+    def __create_release_policy(
+        job: Mapping[str, str],
+        override_arrival_period: Optional[int] = None,
+        override_poisson_arrival_rate: Optional[float] = None,
+    ) -> JobGraph.ReleasePolicy:
+        # Retrieve the start time from the definition, if provided.
+        if "start" in job:
+            start_time = EventTime(job["start"], EventTime.Unit.US)
+        else:
+            start_time = EventTime.zero()
+
+        if job["release_policy"] == "periodic":
+            if "period" not in job and override_arrival_period is None:
+                raise ValueError(
+                    'A "periodic" release policy was requested, but a '
+                    "`period` was not defined for the JobGraph."
+                )
+            return JobGraph.ReleasePolicy.periodic(
+                period=EventTime(
+                    job["period"]
+                    if override_arrival_period is None
+                    else override_arrival_period,
+                    EventTime.Unit.US,
+                ),
+                start=start_time,
+            )
+        elif job["release_policy"] == "fixed":
+            if (
+                "period" not in job or "invocations" not in job
+            ) and override_arrival_period is None:
+                raise ValueError(
+                    'A "fixed" release policy was requested, but either a '
+                    "`period` or `invocations` was not defined for the JobGraph."
+                )
+            return JobGraph.ReleasePolicy.fixed(
+                period=EventTime(
+                    job["period"]
+                    if override_arrival_period is None
+                    else override_arrival_period,
+                    EventTime.Unit.US,
+                ),
+                num_invocations=job["invocations"],
+                start=start_time,
+            )
+        elif job["release_policy"] == "poisson":
+            if (
+                "rate" not in job and override_poisson_arrival_rate is None
+            ) or "invocations" not in job:
+                raise ValueError(
+                    'A "poisson" release policy was requested, but either a '
+                    "`rate` or `invocations` was not defined for the JobGraph."
+                )
+            return JobGraph.ReleasePolicy.poisson(
+                rate=job["rate"]
+                if override_poisson_arrival_rate is None
+                else override_poisson_arrival_rate,
+                num_invocations=job["invocations"],
+                start=start_time,
+            )
+        else:
+            raise NotImplementedError(
+                f"The release policy {job['release_policy']} is not implemented."
+            )
 
     @staticmethod
     def __create_work_profile(
