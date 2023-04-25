@@ -1098,7 +1098,11 @@ class Simulator(object):
         assert (
             worker_pool is not None
         ), f"No WorkerPool found with ID: {event.placement.worker_pool_id}."
-        success = worker_pool.place_task(task, worker_id=event.placement.worker_id)
+        success = worker_pool.place_task(
+            task,
+            execution_strategy=event.placement.execution_strategy,
+            worker_id=event.placement.worker_id,
+        )
         if success:
             task.start(event.time, variance=self._runtime_variance)
             resource_allocation_str = ",".join(
