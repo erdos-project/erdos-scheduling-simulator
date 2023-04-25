@@ -651,7 +651,7 @@ class ClockworkScheduler(BaseScheduler):
         # system. We simulate this by trying to load all of the models specified in the
         # Workload on top of all the Workers, and log an error if the resource
         # requirements cannot be met.
-        start_time = time.time()
+        scheduler_start_time = time.time()
         placements = []
         for worker_pool in worker_pools.worker_pools:
             for worker in worker_pool.workers:
@@ -706,11 +706,12 @@ class ClockworkScheduler(BaseScheduler):
                             work_profile.id,
                             worker.id,
                         )
-        end_time = time.time()
+        scheduler_end_time = time.time()
         return Placements(
             runtime=EventTime.zero(),
             true_runtime=EventTime(
-                int((end_time - start_time) * 1e6), EventTime.Unit.US
+                int((scheduler_end_time - scheduler_start_time) * 1e6),
+                EventTime.Unit.US,
             ),
             placements=placements,
         )
