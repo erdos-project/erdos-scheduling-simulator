@@ -10,6 +10,7 @@ from data import (
     WorkerLoader,
     WorkerLoaderBenchmark,
     WorkloadLoader,
+    WorkloadLoaderClockworkBursty,
 )
 from schedulers import (
     BranchPredictionScheduler,
@@ -36,6 +37,12 @@ flags.DEFINE_enum(
     "Pylot-like task workload, and in the benchmark mode the simulator generates a "
     "synthetic task workload. 'json' / 'yaml' reads an abstract workload definition "
     "from a JSON / YAML file and simulates its execution.",
+)
+flags.DEFINE_enum(
+    "replay_trace",
+    "pylot",
+    ["pylot", "clockwork_bursty"],
+    "Sets the trace to replay in the replay mode.",
 )
 flags.DEFINE_string(
     "log_file_name", None, "Name of the file to log the results to.", short_name="log"
@@ -292,20 +299,24 @@ def main(args):
 
     # Load the data.
     if FLAGS.execution_mode == "replay":
-        workload_loader = WorkloadLoader(
-            json_path=FLAGS.workload_profile_path, _flags=FLAGS
-        )
-        job_graph = workload_loader.workload.get_job_graph("pylot_dataflow")
-        task_loader = TaskLoaderPylot(
-            job_graph=job_graph,
-            graph_name="pylot_dataflow",
-            profile_path=FLAGS.profile_path,
-            _flags=FLAGS,
-        )
-        workload = Workload.from_task_graphs(
-            {"pylot_dataflow": task_loader.get_task_graph()},
-            _flags=FLAGS,
-        )
+        if FLAGS.replay_trace == "pylot":
+            workload_loader = WorkloadLoader(
+                json_path=FLAGS.workload_profile_path, _flags=FLAGS
+            )
+            job_graph = workload_loader.workload.get_job_graph("pylot_dataflow")
+            task_loader = TaskLoaderPylot(
+                job_graph=job_graph,
+                graph_name="pylot_dataflow",
+                profile_path=FLAGS.profile_path,
+                _flags=FLAGS,
+            )
+            workload = Workload.from_task_graphs(
+                {"pylot_dataflow": task_loader.get_task_graph()},
+                _flags=FLAGS,
+            )
+        else:
+            workload_loader = WorkloadLoaderClockworkBursty()
+            workload = workload_loader.workload
     elif FLAGS.execution_mode == "synthetic":
         task_loader = TaskLoaderSynthetic(
             num_perception_sensors=2,
