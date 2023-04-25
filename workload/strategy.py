@@ -1,6 +1,7 @@
 import random
 import uuid
 from copy import copy
+from functools import cached_property
 from typing import Iterator, Optional, Sequence
 
 from utils import EventTime
@@ -31,18 +32,27 @@ class ExecutionStrategy(object):
         self._resources = resources
         self._batch_size = batch_size
         self._runtime = runtime
+        self._id = uuid.UUID(int=random.getrandbits(128), version=4)
+        self._hash = hash(self._id)
 
     @property
     def resources(self) -> Resources:
         return self._resources
 
     @property
+    def batch_size(self) -> int:
+        return self._batch_size
+
+    @property
     def runtime(self) -> EventTime:
         return self._runtime
 
-    @property
-    def batch_size(self) -> int:
-        return self._batch_size
+    @cached_property
+    def id(self) -> str:
+        return str(self._id)
+
+    def __hash__(self) -> int:
+        return self._hash
 
     def __add__(self, other: "ExecutionStrategy") -> "ExecutionStrategy":
         return ExecutionStrategy(
@@ -91,13 +101,14 @@ class BatchStrategy(ExecutionStrategy):
             runtime=copy(execution_strategy.runtime),
         )
         self._id = uuid.UUID(int=random.getrandbits(128), version=4)
+        self._hash = hash(self._id)
 
-    @property
+    @cached_property
     def id(self) -> str:
         return str(self._id)
 
     def __hash__(self) -> int:
-        return hash(self._id)
+        return self._hash
 
     def __eq__(self, other: "BatchStrategy") -> bool:  # noqa: F821
         return self._id == other._id
