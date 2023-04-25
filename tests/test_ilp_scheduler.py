@@ -6,7 +6,16 @@ from schedulers import ILPScheduler, TetriSchedCPLEXScheduler, TetriSchedGurobiS
 from tests.utils import create_default_task
 from utils import EventTime
 from workers import Worker, WorkerPool, WorkerPools
-from workload import Job, Resource, Resources, TaskGraph, Workload
+from workload import (
+    ExecutionStrategies,
+    ExecutionStrategy,
+    Job,
+    Resource,
+    Resources,
+    TaskGraph,
+    Workload,
+    WorkProfile,
+)
 
 
 @pytest.mark.parametrize(
@@ -931,4 +940,108 @@ def test_ilp_not_work_conserving():
     assert len(camera_task_2_placements) == 1, "Placement for camera_task_2 not found."
     assert camera_task_2_placements[0].placement_time == EventTime(
         21, EventTime.Unit.US
+    ), "Incorrect placement time for camera_task_2."
+
+
+@pytest.mark.parametrize(
+    "scheduler",
+    [
+        pytest.param(
+            TetriSchedCPLEXScheduler(
+                runtime=EventTime.zero(),
+                enforce_deadlines=True,
+                time_discretization=EventTime(10, EventTime.Unit.US),
+            ),
+            marks=pytest.mark.skipif(
+                os.getenv("GITHUB_ACTIONS") == "true",
+                reason="CPLEX is not available in Github Actions.",
+            ),
+        ),
+    ],
+)
+def test_ilp_fits_correct_strategies(scheduler):
+    camera_task_1 = create_default_task(
+        name="Camera_1",
+        job=Job(name="Camera_1"),
+        profile=WorkProfile(
+            name="Camera_1_Profile",
+            execution_strategies=ExecutionStrategies(
+                strategies=[
+                    ExecutionStrategy(
+                        resources=Resources(
+                            resource_vector={Resource(name="CPU", _id="any"): 10}
+                        ),
+                        batch_size=1,
+                        runtime=EventTime(100, EventTime.Unit.US),
+                    ),
+                    ExecutionStrategy(
+                        resources=Resources(
+                            resource_vector={Resource(name="CPU", _id="any"): 1}
+                        ),
+                        batch_size=1,
+                        runtime=EventTime(200, EventTime.Unit.US),
+                    ),
+                ]
+            ),
+        ),
+        deadline=220,
+    )
+    camera_task_2 = create_default_task(
+        name="Camera_2",
+        job=Job(name="Camera_2"),
+        profile=WorkProfile(
+            name="Camera_2_Profile",
+            execution_strategies=ExecutionStrategies(
+                strategies=[
+                    ExecutionStrategy(
+                        resources=Resources(
+                            resource_vector={Resource(name="CPU", _id="any"): 10}
+                        ),
+                        batch_size=1,
+                        runtime=EventTime(150, EventTime.Unit.US),
+                    ),
+                ]
+            ),
+        ),
+        deadline=220,
+    )
+    task_graph = TaskGraph(
+        name="TestTaskGraph",
+        tasks={camera_task_1: [], camera_task_2: []},
+    )
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
+    camera_task_1.release(EventTime.zero())
+    camera_task_2.release(EventTime.zero())
+
+    # Create the Workers.
+    worker_1 = Worker(
+        name="Worker_1",
+        resources=Resources({Resource(name="CPU"): 15}),
+    )
+    worker_pool_1 = WorkerPool(name="WorkerPool_1", workers=[worker_1])
+    worker_pools = WorkerPools(worker_pools=[worker_pool_1])
+
+    # Run the scheduler.
+    placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
+    assert len(placements) == 2, "Incorrect length of placements retrieved."
+
+    camera_task_1_placements = placements.get_placements(camera_task_1)
+    assert len(camera_task_1_placements) == 1, "Placement for camera_task_1 not found."
+    assert camera_task_1_placements[
+        0
+    ].is_placed(), "Placement for camera_task_1 failed."
+    assert (
+        camera_task_1_placements[0].execution_strategy
+        == camera_task_1.profile.execution_strategies[1]
+    ), "Incorrect strategy for camera_task_1."
+
+    camera_task_2_placements = placements.get_placements(camera_task_2)
+    assert len(camera_task_2_placements) == 1, "Placement for camera_task_2 not found."
+    assert camera_task_2_placements[
+        0
+    ].is_placed(), "Placement for camera_task_1 failed."
+    assert (
+        camera_task_2_placements[0].placement_time
+        <= camera_task_2.deadline
+        - camera_task_2_placements[0].execution_strategy.runtime
     ), "Incorrect placement time for camera_task_2."

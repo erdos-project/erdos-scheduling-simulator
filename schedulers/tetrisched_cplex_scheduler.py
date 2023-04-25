@@ -1,7 +1,8 @@
 import multiprocessing
 import time
+from collections import defaultdict
 from copy import copy, deepcopy
-from typing import Mapping, Optional, Sequence, TextIO, Tuple, Union
+from typing import Any, Mapping, Optional, Sequence, TextIO, Tuple, Union
 from uuid import UUID
 
 import absl  # noqa: F401
@@ -13,7 +14,15 @@ from docplex.mp.solution import SolveSolution
 from schedulers import BaseScheduler
 from utils import EventTime
 from workers import Worker, WorkerPools
-from workload import ExecutionStrategy, Placement, Placements, Task, TaskState, Workload
+from workload import (
+    ExecutionStrategies,
+    ExecutionStrategy,
+    Placement,
+    Placements,
+    Task,
+    TaskState,
+    Workload,
+)
 
 
 class TaskOptimizerVariables(object):
@@ -50,10 +59,10 @@ class TaskOptimizerVariables(object):
         self._previously_placed = False
 
         # Placement characteristics.
-        # Set up a matrix of variables that signify the time and the worker where
-        # the task is placed.
-        self._space_time_matrix = {
-            (worker_id, t): 0
+        # Set up a matrix of variables that signify the time, the worker and the
+        # strategy with which the the task is placed.
+        self._space_time_strategy_matrix = {
+            (worker_id, t, strategy): 0
             for worker_id in workers.keys()
             for t in range(
                 current_time.to(EventTime.Unit.US).time,
@@ -62,6 +71,7 @@ class TaskOptimizerVariables(object):
                 + 1,
                 time_discretization.to(EventTime.Unit.US).time,
             )
+            for strategy in self._task.available_execution_strategies
         }
 
         # Warm-Start Cache.
@@ -79,51 +89,64 @@ class TaskOptimizerVariables(object):
             placed_key = (
                 self.__get_worker_index_from_previous_placement(task, workers),
                 current_time.to(EventTime.Unit.US).time,
+                task.current_placement.execution_strategy,
             )
-            self._space_time_matrix[placed_key] = 1
+            self._space_time_strategy_matrix[placed_key] = 1
         else:
             # Initialize all the possible placement opportunities for this task into the
             # space-time matrix. The worker has to be able to accomodate the task, and
             # the timing constraints as requested by the Simulator have to be met.
-            schedulable_workers_to_strategy: Mapping[int, ExecutionStrategy] = {}
+            schedulable_workers_to_strategies: Mapping[int, ExecutionStrategies] = {}
             for worker_id, worker in workers.items():
                 cleared_worker = deepcopy(worker)
                 compatible_strategies = cleared_worker.get_compatible_strategies(
                     self.task.available_execution_strategies
                 )
                 if len(compatible_strategies) != 0:
-                    chosen_strategy = compatible_strategies.get_fastest_strategy()
-                    schedulable_workers_to_strategy[worker_id] = chosen_strategy
+                    schedulable_workers_to_strategies[worker_id] = compatible_strategies
 
-            for worker_id, start_time in self._space_time_matrix.keys():
-                if worker_id not in schedulable_workers_to_strategy:
-                    # The Worker cannot accomodate this task, and so the task should
-                    # not be placed on this Worker.
-                    self._space_time_matrix[(worker_id, start_time)] = 0
+            for (
+                worker_id,
+                start_time,
+                strategy,
+            ) in self._space_time_strategy_matrix.keys():
+                if (
+                    worker_id not in schedulable_workers_to_strategies
+                    or strategy not in schedulable_workers_to_strategies[worker_id]
+                ):
+                    # The Worker cannot accomodate this task or this strategy, and so
+                    # the task should not be placed on this Worker.
+                    self._space_time_strategy_matrix[
+                        (worker_id, start_time, strategy)
+                    ] = 0
                     continue
 
-                chosen_strategy = schedulable_workers_to_strategy[worker_id]
                 if start_time < task.release_time.to(EventTime.Unit.US).time:
                     # The time is before the task gets released, the task cannot be
                     # placed here.
-                    self._space_time_matrix[(worker_id, start_time)] = 0
+                    self._space_time_strategy_matrix[
+                        (worker_id, start_time, strategy)
+                    ] = 0
                 elif (
                     enforce_deadlines
-                    and start_time + chosen_strategy.runtime.to(EventTime.Unit.US).time
+                    and start_time + strategy.runtime.to(EventTime.Unit.US).time
                     > task.deadline.to(EventTime.Unit.US).time
                 ):
                     # The scheduler is asked to only place a task if the deadline can
                     # be met, and scheduling at this particular start_time leads to a
                     # deadline violation, so the task cannot be placed here.
-                    self._space_time_matrix[(worker_id, start_time)] = 0
+                    self._space_time_strategy_matrix[
+                        (worker_id, start_time, strategy)
+                    ] = 0
                 else:
                     # The placement needs to be decided by the optimizer.
-                    self._space_time_matrix[
-                        (worker_id, start_time)
+                    self._space_time_strategy_matrix[
+                        (worker_id, start_time, strategy)
                     ] = optimizer.binary_var(
                         name=(
                             f"{task.unique_name}_placed_at_Worker"
                             f"_{worker_id}_on_Time_{start_time}"
+                            f"_with_strategy_{strategy.id}"
                         )
                     )
 
@@ -133,8 +156,12 @@ class TaskOptimizerVariables(object):
                 placed_key = (
                     self.__get_worker_index_from_previous_placement(task, workers),
                     task.expected_start_time.to(EventTime.Unit.US).time,
+                    task.current_placement.execution_strategy,
                 )
-                for space_time_index, binary_variable in self._space_time_matrix.keys():
+                for (
+                    space_time_index,
+                    binary_variable,
+                ) in self._space_time_strategy_matrix.items():
                     if space_time_index == placed_key:
                         self._warm_start_cache[binary_variable] = 1
                     else:
@@ -144,7 +171,7 @@ class TaskOptimizerVariables(object):
                 # If the task was previously scheduled, and we do not allow retractions,
                 # we allow the start time to be fungible, but the task must be placed.
                 optimizer.add_constraint(
-                    ct=optimizer.sum(self._space_time_matrix.values()) == 1,
+                    ct=optimizer.sum(self._space_time_strategy_matrix.values()) == 1,
                     ctname=f"{task.unique_name}_previously_scheduled_"
                     f"required_worker_placement",
                 )
@@ -152,7 +179,7 @@ class TaskOptimizerVariables(object):
                 # If either the task was not previously placed, or we are allowing
                 # retractions, then the task can be placed or left unplaced.
                 optimizer.add_constraint(
-                    ct=optimizer.sum(self._space_time_matrix.values()) <= 1,
+                    ct=optimizer.sum(self._space_time_strategy_matrix.values()) <= 1,
                     ctname=f"{task.unique_name}_consistent_worker_placement",
                 )
 
@@ -217,7 +244,11 @@ class TaskOptimizerVariables(object):
             # don't have to return a `Placement` object to the Simulator.
             return None
 
-        for (worker_id, start_time), variable in self._space_time_matrix.items():
+        for (
+            worker_id,
+            start_time,
+            strategy,
+        ), variable in self._space_time_strategy_matrix.items():
             if type(variable) != int and solution.get_value(variable) == 1:
                 placement_worker = worker_index_to_worker[worker_id]
                 placement_worker_pool_id = worker_id_to_worker_pool[placement_worker.id]
@@ -226,9 +257,7 @@ class TaskOptimizerVariables(object):
                     placement_time=EventTime(start_time, unit=EventTime.Unit.US),
                     worker_pool_id=placement_worker_pool_id,
                     worker_id=placement_worker.id,
-                    execution_strategy=placement_worker.get_compatible_strategies(
-                        self.task.available_execution_strategies
-                    ).get_fastest_strategy(),
+                    execution_strategy=strategy,
                 )
         return Placement.create_task_placement(
             task=self.task,
@@ -240,7 +269,7 @@ class TaskOptimizerVariables(object):
 
     def get_partition_variable(
         self, time: int, worker_index: int, worker: Worker
-    ) -> Sequence[Union[cpx_var.Var, int]]:
+    ) -> Mapping[ExecutionStrategy, Sequence[Union[cpx_var.Var, int]]]:
         """Get the set of variables that can potentially affect the resource
         utilization of the worker with the given index `worker_index` at the time
         `time`.
@@ -254,23 +283,26 @@ class TaskOptimizerVariables(object):
         Returns:
             A possibly empty sequence of either cplex variables or integers specifying
             all the possible placement options of the given task that may affect the
-            usage of resources on the given Worker at the given time.
+            usage of resources on the given Worker at the given time, mapped to the
+            strategy with which they are being associated..
         """
-        partition_variables = []
+        partition_variables = defaultdict(list)
         available_strategies_for_worker = worker.get_compatible_strategies(
             self.task.available_execution_strategies
         )
         if len(available_strategies_for_worker) != 0:
-            chosen_strategy = available_strategies_for_worker.get_fastest_strategy()
-            for (worker_id, start_time), variable in self._space_time_matrix.items():
+            for (
+                worker_id,
+                start_time,
+                strategy,
+            ), variable in self._space_time_strategy_matrix.items():
                 if (
                     worker_id == worker_index
                     and start_time <= time
-                    and start_time + chosen_strategy.runtime.to(EventTime.Unit.US).time
-                    > time
+                    and start_time + strategy.runtime.to(EventTime.Unit.US).time > time
                     and (type(variable) == cpx_var.Var or variable == 1)
                 ):
-                    partition_variables.append(variable)
+                    partition_variables[strategy].append(variable)
         return partition_variables
 
     @property
@@ -294,7 +326,7 @@ class TaskOptimizerVariables(object):
     def space_time_matrix(self) -> Mapping[Tuple[int, int], cpx.BinaryVarType]:
         """Returns a mapping from the (Worker Index, Time) to the binary variable
         specifying if the task was placed at that time or not."""
-        return self._space_time_matrix
+        return self._space_time_strategy_matrix
 
 
 class TetriSchedCPLEXScheduler(BaseScheduler):
@@ -511,7 +543,7 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
                     placement = task_variable.get_placement(
                         solution, workers, worker_to_worker_pool
                     )
-                    if placement.worker_pool_id:
+                    if placement and placement.is_placed():
                         self._logger.debug(
                             "[%s] Placed %s (with deadline %s and remaining time "
                             "%s) on WorkerPool(%s) to be started at %s.",
@@ -662,16 +694,14 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
             for worker_index, worker in workers.items():
                 # Get all the placement variables that affect the resource utilization
                 # on this worker at this particular time.
-                overlap_variables = {}
-                for task_name, task_variable in tasks_to_variables.items():
+                overlap_variables: Mapping[ExecutionStrategy, Any] = {}
+                for task_variable in tasks_to_variables.values():
                     partition_variables = task_variable.get_partition_variable(
                         time=t,
                         worker_index=worker_index,
                         worker=worker,
                     )
-
-                    if len(partition_variables) != 0:
-                        overlap_variables[task_name] = partition_variables
+                    overlap_variables.update(partition_variables)
 
                 # For each resource in the Worker, find the resource request for all
                 # the tasks and multiply it by the partition variables to ensure that
@@ -681,16 +711,9 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
                     quantity,
                 ) in worker.resources.get_unique_resource_types().items():
                     resource_constraint_terms = []
-                    for task_name, task_overlap_variables in overlap_variables.items():
-                        chosen_strategy_for_task = worker.get_compatible_strategies(
-                            tasks_to_variables[
-                                task_name
-                            ].task.available_execution_strategies
-                        ).get_fastest_strategy()
+                    for strategy, task_overlap_variables in overlap_variables.items():
                         task_request_for_resource = (
-                            chosen_strategy_for_task.resources.get_total_quantity(
-                                resource
-                            )
+                            strategy.resources.get_total_quantity(resource)
                         )
                         if task_request_for_resource == 0:
                             # If the task does not require this resource, we skip adding

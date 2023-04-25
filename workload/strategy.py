@@ -173,6 +173,9 @@ class ExecutionStrategies(object):
             return None
         return max(self._strategies, key=lambda s: s.runtime)
 
+    def __contains__(self, value: ExecutionStrategy) -> bool:
+        return value in self._strategies
+
     def __iter__(self) -> Iterator[ExecutionStrategy]:
         for strategy in self._strategies:
             yield strategy
