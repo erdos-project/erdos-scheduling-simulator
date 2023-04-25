@@ -694,14 +694,15 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
             for worker_index, worker in workers.items():
                 # Get all the placement variables that affect the resource utilization
                 # on this worker at this particular time.
-                overlap_variables: Mapping[ExecutionStrategy, Any] = {}
+                overlap_variables: Mapping[ExecutionStrategy, Any] = defaultdict(list)
                 for task_variable in tasks_to_variables.values():
                     partition_variables = task_variable.get_partition_variable(
                         time=t,
                         worker_index=worker_index,
                         worker=worker,
                     )
-                    overlap_variables.update(partition_variables)
+                    for strategy, variables in partition_variables.items():
+                        overlap_variables[strategy].extend(variables)
 
                 # For each resource in the Worker, find the resource request for all
                 # the tasks and multiply it by the partition variables to ensure that
