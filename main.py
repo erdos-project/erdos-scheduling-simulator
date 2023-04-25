@@ -10,7 +10,6 @@ from data import (
     WorkerLoader,
     WorkerLoaderBenchmark,
     WorkloadLoader,
-    WorkloadLoaderClockwork,
 )
 from schedulers import (
     BranchPredictionScheduler,
