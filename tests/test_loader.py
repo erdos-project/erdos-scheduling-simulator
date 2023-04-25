@@ -257,7 +257,7 @@ def test_create_taskgraph():
 def test_create_worker_pool():
     """Tests the construction of the WorkerPool by the WorkerLoaderJSON."""
     # Create a test WorkerPool topology.
-    worker_pools = WorkerLoader._WorkerLoaderJSON__create_worker_pools(
+    worker_pools = WorkerLoader._WorkerLoader__create_worker_pools(
         [
             {
                 "name": "WorkerPool_1_1",
