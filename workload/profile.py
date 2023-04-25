@@ -37,7 +37,7 @@ class WorkProfile(object):
 
     def __copy__(self) -> "WorkProfile":
         return WorkProfile(
-            name=self.name,
+            name=f"{self.name}_copy",
             execution_strategies=copy(self.execution_strategies),
             loading_strategies=copy(self.loading_strategies),
         )
@@ -47,7 +47,7 @@ class WorkProfile(object):
         instance = cls.__new__(cls)
         cls.__init__(
             instance,
-            name=self.name,
+            name=f"{self.name}_copy",
             execution_strategies=deepcopy(self.execution_strategies),
             loading_strategies=deepcopy(self.loading_strategies),
         )

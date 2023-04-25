@@ -1,4 +1,5 @@
 import os
+from copy import deepcopy
 
 import pytest
 
@@ -7,6 +8,7 @@ from tests.utils import create_default_task
 from utils import EventTime
 from workers import Worker, WorkerPool, WorkerPools
 from workload import (
+    BatchStrategy,
     ExecutionStrategies,
     ExecutionStrategy,
     Job,
@@ -1045,3 +1047,118 @@ def test_ilp_fits_correct_strategies(scheduler):
         <= camera_task_2.deadline
         - camera_task_2_placements[0].execution_strategy.runtime
     ), "Incorrect placement time for camera_task_2."
+
+
+@pytest.mark.parametrize(
+    "scheduler",
+    [
+        pytest.param(
+            TetriSchedCPLEXScheduler(
+                runtime=EventTime.zero(),
+                batching=True,
+                enforce_deadlines=True,
+                time_discretization=EventTime(10, EventTime.Unit.US),
+            ),
+            marks=pytest.mark.skipif(
+                os.getenv("GITHUB_ACTIONS") == "true",
+                reason="CPLEX is not available in Github Actions.",
+            ),
+        ),
+    ],
+)
+def test_ilp_batching(scheduler):
+    work_profile = WorkProfile(
+        name="Camera_Profile",
+        execution_strategies=ExecutionStrategies(
+            strategies=[
+                ExecutionStrategy(
+                    resources=Resources(
+                        resource_vector={Resource(name="CPU", _id="any"): 10}
+                    ),
+                    batch_size=1,
+                    runtime=EventTime(100, EventTime.Unit.US),
+                ),
+                ExecutionStrategy(
+                    resources=Resources(
+                        resource_vector={Resource(name="CPU", _id="any"): 12}
+                    ),
+                    batch_size=2,
+                    runtime=EventTime(110, EventTime.Unit.US),
+                ),
+            ]
+        ),
+    )
+    camera_task_1 = create_default_task(
+        name="Camera_1",
+        job=Job(name="Camera_1"),
+        profile=work_profile,
+        deadline=190,
+    )
+    camera_task_2 = create_default_task(
+        name="Camera_2",
+        job=Job(name="Camera_2"),
+        profile=work_profile,
+        deadline=190,
+    )
+    camera_task_3 = create_default_task(
+        name="Camera_3",
+        job=Job(name="Camera_3"),
+        profile=deepcopy(work_profile),
+        deadline=300,
+    )
+    task_graph = TaskGraph(
+        name="TestTaskGraph",
+        tasks={camera_task_1: [], camera_task_2: [], camera_task_3: []},
+    )
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
+    camera_task_1.release(EventTime.zero())
+    camera_task_2.release(EventTime.zero())
+    camera_task_3.release(EventTime.zero())
+
+    # Create the Workers.
+    worker_1 = Worker(
+        name="Worker_1",
+        resources=Resources({Resource(name="CPU"): 15}),
+    )
+    worker_pool_1 = WorkerPool(name="WorkerPool_1", workers=[worker_1])
+    worker_pools = WorkerPools(worker_pools=[worker_pool_1])
+
+    # Run the scheduler.
+    placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
+    assert len(placements) == 3, "Incorrect length of placements retrieved."
+
+    camera_task_1_placements = placements.get_placements(camera_task_1)
+    assert len(camera_task_1_placements) == 1, "Placement for camera_task_1 not found."
+    assert camera_task_1_placements[
+        0
+    ].is_placed(), "Placement for camera_task_1 failed."
+    assert isinstance(
+        camera_task_1_placements[0].execution_strategy, BatchStrategy
+    ), "Incorrect strategy type for camera_task_1."
+    assert (
+        camera_task_1_placements[0].execution_strategy.batch_size == 2
+    ), "Incorrect batch size for camera_task_1."
+
+    camera_task_2_placements = placements.get_placements(camera_task_2)
+    assert len(camera_task_2_placements) == 1, "Placement for camera_task_2 not found."
+    assert camera_task_2_placements[
+        0
+    ].is_placed(), "Placement for camera_task_1 failed."
+    assert isinstance(
+        camera_task_2_placements[0].execution_strategy, BatchStrategy
+    ), "Incorrect strategy type for camera_task_2."
+    assert (
+        camera_task_2_placements[0].execution_strategy.batch_size == 2
+    ), "Incorrect batch size for camera_task_2."
+
+    camera_task_3_placements = placements.get_placements(camera_task_3)
+    assert len(camera_task_3_placements) == 1, "Placement for camera_task_3 not found."
+    assert camera_task_3_placements[
+        0
+    ].is_placed(), "Placement for camera_task_3 failed."
+    assert isinstance(
+        camera_task_3_placements[0].execution_strategy, BatchStrategy
+    ), "Incorrect strategy type for camera_task_3."
+    assert (
+        camera_task_3_placements[0].execution_strategy.batch_size == 1
+    ), "Incorrect batch size for camera_task_3."
