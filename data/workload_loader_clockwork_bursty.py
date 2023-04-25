@@ -1,22 +1,21 @@
-import json
 import logging
-import pathlib
-import sys
-from copy import deepcopy
-from typing import Mapping, Optional, Sequence
+from typing import Optional, Sequence
 
 import absl  # noqa: F401
 import numpy as np
-import yaml
 
-from data.workload_loader import WorkloadLoader
 from utils import EventTime, setup_logging
-from workload import JobGraph, Workload, WorkProfile
-from workload.jobs import Job
-from workload.resource import Resource
-from workload.resources import Resources
-from workload.strategy import ExecutionStrategies, ExecutionStrategy
-from workload.tasks import Task, TaskGraph
+from workload import (
+    ExecutionStrategies,
+    ExecutionStrategy,
+    Job,
+    Resource,
+    Resources,
+    Task,
+    TaskGraph,
+    Workload,
+    WorkProfile,
+)
 
 
 class WorkloadLoaderClockworkBursty:
