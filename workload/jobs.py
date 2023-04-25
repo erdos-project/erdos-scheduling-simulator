@@ -77,7 +77,7 @@ class Job(object):
         self,
         name: str,
         profile: Optional[WorkProfile] = None,
-        slo: Optional[EventTime] = None,
+        slo: EventTime = EventTime.invalid(),
         pipelined: bool = False,
         conditional: bool = False,
         probability: float = 1.0,
@@ -116,7 +116,7 @@ class Job(object):
         return self._profile.execution_strategies
 
     @property
-    def slo(self) -> Optional[EventTime]:
+    def slo(self) -> EventTime:
         return self._slo
 
     @property
@@ -578,7 +578,7 @@ class JobGraph(Graph[Job]):
         return sum(
             (
                 job.slo
-                if job.slo is not None
+                if job.slo != EventTime.invalid()
                 else job.execution_strategies.get_fastest_strategy().runtime
                 for job in self.get_longest_path(
                     weights=lambda job: job.execution_strategies.get_fastest_strategy()

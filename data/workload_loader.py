@@ -56,7 +56,11 @@ class WorkloadLoader(object):
             )
             self._unique_work_profiles = _flags.unique_work_profiles
             self._replication_factor = _flags.replication_factor
-            self._slo = _flags.override_slo if _flags.override_slo > 0 else None
+            self._slo = (
+                EventTime(_flags.override_slo, EventTime.Unit.US)
+                if _flags.override_slo > 0
+                else EventTime.invalid()
+            )
         else:
             self._logger = setup_logging(name=self.__class__.__name__)
             self._resource_logger = setup_logging(name="Resources")
@@ -64,7 +68,7 @@ class WorkloadLoader(object):
             self._arrival_period = None
             self._unique_work_profiles = False
             self._replication_factor = 1
-            self._slo = None
+            self._slo = EventTime.invalid()
 
         # Read the file for applications and create a JobGraph for each application.
         extension = pathlib.Path(path).suffix.lower()
@@ -149,10 +153,7 @@ class WorkloadLoader(object):
 
     @staticmethod
     def load_job_graph(
-        job_graph,
-        json_repr,
-        work_profiles: Mapping[str, WorkProfile],
-        slo: Optional[EventTime] = None,
+        job_graph, json_repr, work_profiles: Mapping[str, WorkProfile], slo: EventTime
     ) -> JobGraph:
         """Load a particular JobGraph from its JSON representation.
 
@@ -183,7 +184,7 @@ class WorkloadLoader(object):
             work_profile = None
             if "work_profile" in node:
                 work_profile = work_profiles[node["work_profile"]]
-            if slo is None and "slo" in node:
+            if slo == EventTime.invalid() and "slo" in node:
                 slo = EventTime(node["slo"], EventTime.Unit.US)
 
             # Create and save the Job.
