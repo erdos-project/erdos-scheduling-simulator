@@ -30,7 +30,14 @@ from workload import (
 
 class BatchTask(object):
     """A `BatchTask` is a virtual `Task` object that is used to represent a batch of
-    tasks that are to be executed together using the given strategy."""
+    tasks that are to be executed together using the given strategy.
+
+    Args:
+        name (`str`): The name of the batch task.
+        tasks (`Sequence[Task]`): The list of tasks that are to be batched together.
+        strategy (`ExecutionStrategy`): The strategy that is to be used to execute the
+            batch of tasks.
+    """
 
     def __init__(
         self, name: str, tasks: Sequence[Task], strategy: ExecutionStrategy
@@ -1032,11 +1039,7 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
                     lb=0, ub=batch_reward, name=f"{task_name}_reward"
                 )
                 optimizer.add_constraint(
-                    ct=(
-                        task_reward
-                        == batch_reward
-                        * optimizer.sum(task_variables.space_time_matrix.values())
-                    ),
+                    ct=(task_reward == batch_reward * task_variables.is_placed),
                     ctname=f"{task_name}_is_placed_reward",
                 )
                 task_reward_variables.append(task_reward)
