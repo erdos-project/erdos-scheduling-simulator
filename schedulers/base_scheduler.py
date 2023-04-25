@@ -232,7 +232,7 @@ class BaseScheduler(object):
             parents = task_graph.get_parents(placement.task)
             for parent in parents:
                 any_parent_placed = False
-                parent_placement = placements.get_placement(parent)
+                parent_placement = placements.get_placements(parent)[0]
                 if parent.state in (
                     TaskState.VIRTUAL,
                     TaskState.RELEASED,

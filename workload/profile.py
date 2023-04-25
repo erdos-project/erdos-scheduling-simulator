@@ -34,6 +34,12 @@ class WorkProfile(object):
     def __hash__(self) -> int:
         return hash(self._id)
 
+    def __str__(self) -> str:
+        return f"WorkProfile(name={self.name}, id={self.id})"
+
+    def __repr__(self) -> str:
+        return str(self)
+
     @property
     def name(self) -> str:
         return self._name

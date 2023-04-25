@@ -13,6 +13,7 @@ from data import (
 )
 from schedulers import (
     BranchPredictionScheduler,
+    ClockworkScheduler,
     EDFScheduler,
     FIFOScheduler,
     ILPScheduler,
@@ -154,7 +155,16 @@ flags.DEFINE_bool(
 flags.DEFINE_enum(
     "scheduler",
     "EDF",
-    ["FIFO", "EDF", "LSF", "Z3", "BranchPrediction", "ILP", "TetriSched_CPLEX"],
+    [
+        "FIFO",
+        "EDF",
+        "LSF",
+        "Z3",
+        "BranchPrediction",
+        "ILP",
+        "TetriSched_CPLEX",
+        "Clockwork",
+    ],
     "The scheduler to use for this execution.",
 )
 flags.DEFINE_bool(
@@ -417,6 +427,10 @@ def main(args):
             plan_ahead=EventTime(FLAGS.scheduler_plan_ahead, EventTime.Unit.US),
             log_to_file=FLAGS.scheduler_log_to_file,
             _flags=FLAGS,
+        )
+    elif FLAGS.scheduler == "Clockwork":
+        scheduler = ClockworkScheduler(
+            runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US), _flags=FLAGS
         )
     else:
         raise ValueError(

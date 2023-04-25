@@ -324,6 +324,12 @@ class Worker(object):
                     batch_size=loading_strategy.batch_size,
                     runtime=EventTime.zero(),
                 )
+                self._logger.debug(
+                    "[%d] WorkProfile %s has finished loading on %s.",
+                    current_time.to(EventTime.Unit.US).time,
+                    profile.name,
+                    self.name,
+                )
                 invalid_profiles.append(profile)
             else:
                 # The WorkProfile has still not finished loading, update the time
@@ -382,6 +388,15 @@ class Worker(object):
         """
         return list(self._available_profiles.keys())
 
+    def get_pending_profiles(self) -> Sequence[WorkProfile]:
+        """Get the set of `WorkProfile`s that are pending to be loaded on this `Worker`
+        at the current time.
+
+        Returns:
+            A sequence of `WorkProfile`s that are pending to be loaded on this `Worker`.
+        """
+        return list(self._pending_profiles.keys())
+
     def is_full(self) -> bool:
         """Check if the Worker is full.
 
@@ -407,6 +422,12 @@ class Worker(object):
             _logger=self._logger,
         )
         instance._id = uuid.UUID(self.id)
+
+        # Copy the placed and pending profiles.
+        for profile_id, profile in self._available_profiles.items():
+            instance._available_profiles[profile_id] = profile
+        for profile_id, profile in self._pending_profiles.items():
+            instance._pending_profiles[profile_id] = profile
 
         # Copy the placed tasks.
         for task, strategy in self._placed_tasks.items():

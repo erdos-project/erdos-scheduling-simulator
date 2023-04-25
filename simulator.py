@@ -4,7 +4,7 @@ import sys
 from enum import Enum
 from functools import total_ordering
 from operator import attrgetter, itemgetter
-from typing import Optional, Sequence, Type
+from typing import Optional, Sequence
 
 import absl  # noqa: F401
 
