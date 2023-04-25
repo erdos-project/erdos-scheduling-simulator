@@ -7,9 +7,10 @@ from data import (
     TaskLoaderBenchmark,
     TaskLoaderPylot,
     TaskLoaderSynthetic,
+    WorkerLoader,
     WorkerLoaderBenchmark,
-    WorkerLoaderJSON,
     WorkloadLoader,
+    WorkloadLoaderClockworkBursty,
 )
 from schedulers import (
     BranchPredictionScheduler,
@@ -31,12 +32,18 @@ FLAGS = flags.FLAGS
 flags.DEFINE_enum(
     "execution_mode",
     "replay",
-    ["replay", "synthetic", "benchmark", "json"],
+    ["replay", "synthetic", "benchmark", "json", "yaml"],
     "Sets the execution mode of the simulator. In the replay mode the simulator "
     "replays a Pylot log, in the synthetic mode the simulator generates a synthetic "
     "Pylot-like task workload, and in the benchmark mode the simulator generates a "
-    "synthetic task workload. 'json' reads an abstract workload definition from a "
-    "JSON file and simulates its execution.",
+    "synthetic task workload. 'json' / 'yaml' reads an abstract workload definition "
+    "from a JSON / YAML file and simulates its execution.",
+)
+flags.DEFINE_enum(
+    "replay_trace",
+    "pylot",
+    ["pylot", "clockwork_bursty"],
+    "Sets the trace to replay in the replay mode.",
 )
 flags.DEFINE_string(
     "log_file_name", None, "Name of the file to log the results to.", short_name="log"
@@ -251,7 +258,7 @@ flags.DEFINE_bool(
     "log file in a format unique to every scheduler.",
 )
 
-# Override JSON / CONF settings.
+# Workload definition related flags.
 flags.DEFINE_float(
     "override_poisson_arrival_rate",
     0.0,
@@ -263,6 +270,24 @@ flags.DEFINE_integer(
     0,
     "Override the arrival period for all Taskgraphs defined in "
     "the JSON workload definition.",
+)
+flags.DEFINE_integer(
+    "override_slo",
+    -1,
+    "Override the SLO for all TaskGraphs defined in the JSON workload definition."
+    "If this is not set, the deadline is inferred from the task's execution strategy.",
+)
+flags.DEFINE_bool(
+    "unique_work_profiles",
+    False,
+    "If True, then the same WorkProfile is shared by multiple JobGraphs.",
+)
+flags.DEFINE_integer(
+    "replication_factor",
+    1,
+    "The number of times to replicate each JobGraph in the Workload definition."
+    "Set --unique_work_profiles to True to ensure that the same WorkProfile is not "
+    "used for multiple JobGraphs.",
 )
 
 
@@ -284,20 +309,24 @@ def main(args):
 
     # Load the data.
     if FLAGS.execution_mode == "replay":
-        workload_loader = WorkloadLoader(
-            json_path=FLAGS.workload_profile_path, _flags=FLAGS
-        )
-        job_graph = workload_loader.workload.get_job_graph("pylot_dataflow")
-        task_loader = TaskLoaderPylot(
-            job_graph=job_graph,
-            graph_name="pylot_dataflow",
-            profile_path=FLAGS.profile_path,
-            _flags=FLAGS,
-        )
-        workload = Workload.from_task_graphs(
-            {"pylot_dataflow": task_loader.get_task_graph()},
-            _flags=FLAGS,
-        )
+        if FLAGS.replay_trace == "pylot":
+            workload_loader = WorkloadLoader(
+                json_path=FLAGS.workload_profile_path, _flags=FLAGS
+            )
+            job_graph = workload_loader.workload.get_job_graph("pylot_dataflow")
+            task_loader = TaskLoaderPylot(
+                job_graph=job_graph,
+                graph_name="pylot_dataflow",
+                profile_path=FLAGS.profile_path,
+                _flags=FLAGS,
+            )
+            workload = Workload.from_task_graphs(
+                {"pylot_dataflow": task_loader.get_task_graph()},
+                _flags=FLAGS,
+            )
+        else:
+            workload_loader = WorkloadLoaderClockworkBursty()
+            workload = workload_loader.workload
     elif FLAGS.execution_mode == "synthetic":
         task_loader = TaskLoaderSynthetic(
             num_perception_sensors=2,
@@ -313,10 +342,8 @@ def main(args):
             _flags=FLAGS,
         )
         raise NotImplementedError("Workload has not been specified yet.")
-    elif FLAGS.execution_mode == "json":
-        workload_loader = WorkloadLoader(
-            json_path=FLAGS.workload_profile_path, _flags=FLAGS
-        )
+    elif FLAGS.execution_mode == "json" or FLAGS.execution_mode == "yaml":
+        workload_loader = WorkloadLoader(path=FLAGS.workload_profile_path, _flags=FLAGS)
         workload = workload_loader.workload
 
     # Dilate the time if needed.
@@ -439,7 +466,7 @@ def main(args):
 
     # Load the worker topology.
     if FLAGS.execution_mode in ["replay", "synthetic", "json"]:
-        worker_loader = WorkerLoaderJSON(
+        worker_loader = WorkerLoader(
             worker_profile_path=FLAGS.worker_profile_path, _flags=FLAGS
         )
     elif FLAGS.execution_mode == "benchmark":

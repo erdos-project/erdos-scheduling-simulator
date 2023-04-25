@@ -7,5 +7,5 @@ from .task_loader_pylot import TaskLoaderPylot
 from .task_loader_synthetic import TaskLoaderSynthetic
 from .worker_loader import WorkerLoader
 from .worker_loader_benchmark import WorkerLoaderBenchmark
-from .worker_loader_json import WorkerLoaderJSON
 from .workload_loader import WorkloadLoader
+from .workload_loader_clockwork_bursty import WorkloadLoaderClockworkBursty

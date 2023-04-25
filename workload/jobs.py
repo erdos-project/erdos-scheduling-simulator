@@ -61,6 +61,8 @@ class Job(object):
         name (`str`): The name of the ERDOS operator that corresponds to this Job.
         profile (`WorkProfile`): A profile of the computation that the Job is supposed
             to execute (including the execution strategies for different resources).
+        slo (`EventTime`): The desired maximum duration of released `Task`s. If
+            provided, used to derive the deadline as `deadline = release_time + slo`.
         pipelined (`bool`): True if job's tasks from different timestamps can run
             in parallel.
         conditional (`bool`): True if only some of the job's childrens are invoked
@@ -75,6 +77,7 @@ class Job(object):
         self,
         name: str,
         profile: Optional[WorkProfile] = None,
+        slo: Optional[EventTime] = None,
         pipelined: bool = False,
         conditional: bool = False,
         probability: float = 1.0,
@@ -90,6 +93,7 @@ class Job(object):
                 execution_strategies=ExecutionStrategies(),
             )
         )
+        self._slo = slo
         self._pipelined = pipelined
         self._conditional = conditional
         self._probability = probability
@@ -110,6 +114,10 @@ class Job(object):
     @property
     def execution_strategies(self) -> ExecutionStrategies:
         return self._profile.execution_strategies
+
+    @property
+    def slo(self) -> Optional[EventTime]:
+        return self._slo
 
     @property
     def pipelined(self) -> bool:
@@ -569,7 +577,9 @@ class JobGraph(Graph[Job]):
     def __get_completion_time(self, start=EventTime.zero()) -> EventTime:
         return sum(
             (
-                job.execution_strategies.get_fastest_strategy().runtime
+                job.slo
+                if job.slo is not None
+                else job.execution_strategies.get_fastest_strategy().runtime
                 for job in self.get_longest_path(
                     weights=lambda job: job.execution_strategies.get_fastest_strategy()
                     .runtime.to(EventTime.Unit.US)

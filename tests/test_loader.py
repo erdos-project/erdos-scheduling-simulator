@@ -1,4 +1,4 @@
-from data import TaskLoader, TaskLoaderPylot, WorkerLoaderJSON, WorkloadLoader
+from data import TaskLoader, TaskLoaderPylot, WorkerLoader, WorkloadLoader
 from tests.test_tasks import create_default_task
 from utils import EventTime
 from workload import (
@@ -257,7 +257,7 @@ def test_create_taskgraph():
 def test_create_worker_pool():
     """Tests the construction of the WorkerPool by the WorkerLoaderJSON."""
     # Create a test WorkerPool topology.
-    worker_pools = WorkerLoaderJSON._WorkerLoaderJSON__create_worker_pools(
+    worker_pools = WorkerLoader._WorkerLoader__create_worker_pools(
         [
             {
                 "name": "WorkerPool_1_1",

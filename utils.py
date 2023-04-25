@@ -62,6 +62,8 @@ class EventTime:
         def to(self, other):
             return self.value / other.value
 
+    __slots__ = ("_time", "_unit")
+
     def __init__(self, time: int, unit: Unit) -> None:
         if type(unit) != EventTime.Unit:
             raise ValueError(f"The unit: {unit} is not supported.")

@@ -1,5 +1,6 @@
 import random
 import uuid
+from copy import copy, deepcopy
 
 from .strategy import ExecutionStrategies
 
@@ -33,6 +34,26 @@ class WorkProfile(object):
 
     def __hash__(self) -> int:
         return hash(self._id)
+
+    def __copy__(self) -> "WorkProfile":
+        return WorkProfile(
+            name=self.name,
+            execution_strategies=copy(self.execution_strategies),
+            loading_strategies=copy(self.loading_strategies),
+        )
+
+    def __deepcopy__(self, memo) -> "WorkProfile":
+        cls = self.__class__
+        instance = cls.__new__(cls)
+        cls.__init__(
+            instance,
+            name=self.name,
+            execution_strategies=deepcopy(self.execution_strategies),
+            loading_strategies=deepcopy(self.loading_strategies),
+        )
+        instance = copy(self)
+        memo[id(self)] = instance
+        return instance
 
     def __str__(self) -> str:
         return f"WorkProfile(name={self.name}, id={self.id})"

@@ -9,3 +9,4 @@ z3-solver==4.8.14.0 # Cannot import z3.Implies otherwise.
 tabulate
 matplotlib
 docplex
+pyyaml

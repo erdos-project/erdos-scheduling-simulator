@@ -1,6 +1,6 @@
 import random
 import uuid
-from copy import copy
+from copy import copy, deepcopy
 from functools import cached_property
 from typing import Iterator, Optional, Sequence
 
@@ -67,6 +67,11 @@ class ExecutionStrategy(object):
             batch_size=self.batch_size,
             runtime=copy(self.runtime),
         )
+
+    def __deepcopy__(self, memo) -> "ExecutionStrategy":
+        instance = copy(self)
+        memo[id(self)] = instance
+        return instance
 
     def __str__(self) -> str:
         return "ExecutionStrategy(resources={}, batch_size={}, runtime={})".format(
@@ -182,6 +187,18 @@ class ExecutionStrategies(object):
         return "ExecutionStrategies({})".format(
             ", ".join([str(strategy) for strategy in self._strategies])
         )
+
+    def __copy__(self) -> "ExecutionStrategies":
+        return ExecutionStrategies(
+            strategies=[copy(strategy) for strategy in self._strategies]
+        )
+
+    def __deepcopy__(self, memo) -> "ExecutionStrategies":
+        cls = self.__class__
+        instance = cls.__new__(cls)
+        cls.__init__(instance, strategies=[deepcopy(strategy) for strategy in self])
+        memo[id(self)] = instance
+        return instance
 
     def __repr__(self) -> str:
         return str(self)
