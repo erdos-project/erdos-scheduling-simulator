@@ -943,42 +943,32 @@ class ClockworkScheduler(BaseScheduler):
                     # If the model is loaded, we iterate over the strategies and find
                     # the first one that can be accomodated by the `Worker`.
                     model_placed = False
-                    for execution_strategy in model_strategies:
-                        if worker.can_accomodate_strategy(execution_strategy):
-                            task_placements: Sequence[Placement] = model.get_placements(
-                                sim_time=current_time,
-                                strategy=execution_strategy,
-                                worker_pool_id=worker_pool.id,
-                                worker_id=worker.id,
+                    for execution_strategy in worker.get_compatible_strategies(
+                        model_strategies
+                    ):
+                        task_placements: Sequence[Placement] = model.get_placements(
+                            sim_time=current_time,
+                            strategy=execution_strategy,
+                            worker_pool_id=worker_pool.id,
+                            worker_id=worker.id,
+                        )
+                        for placement in task_placements:
+                            placements.append(placement)
+                            worker.place_task(
+                                task=placement.task,
+                                execution_strategy=placement.execution_strategy,
                             )
-                            for placement in task_placements:
-                                placements.append(placement)
-                                worker.place_task(
-                                    task=placement.task,
-                                    execution_strategy=placement.execution_strategy,
-                                )
-                                self._logger.debug(
-                                    "[%s] Requesting to execute Task %s with Model %s "
-                                    "on Worker %s with the strategy %s.",
-                                    current_time.to(EventTime.Unit.US).time,
-                                    placement.task,
-                                    model.profile,
-                                    worker,
-                                    placement.execution_strategy,
-                                )
-                            model_placed = True
-                            break
-                        else:
                             self._logger.debug(
-                                "[%s] Skipping strategy %s since the Worker %s cannot "
-                                "meet the resource requirements. The strategy requires "
-                                "%s, but the Worker has %s.",
+                                "[%s] Requesting to execute Task %s with Model %s "
+                                "on Worker %s with the strategy %s.",
                                 current_time.to(EventTime.Unit.US).time,
-                                execution_strategy,
+                                placement.task,
+                                model.profile,
                                 worker,
-                                execution_strategy.resources,
-                                worker.resources,
+                                placement.execution_strategy,
                             )
+                        model_placed = True
+                        break
 
                     # If some strategy for the model was placed, we add new strategies
                     # to the queue for the same model at the end.
