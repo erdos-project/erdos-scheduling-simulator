@@ -1,3 +1,5 @@
+import random
+import uuid
 from enum import Enum
 from functools import total_ordering
 from typing import Optional, Sequence, Union
@@ -75,6 +77,7 @@ class Placement(object):
         self._worker_pool_id = worker_pool_id
         self._worker_id = worker_id
         self._strategy = strategy
+        self._id = uuid.UUID(int=random.getrandbits(128), version=4)
 
     def is_placed(self) -> bool:
         """Check if the computation associated with this Placement was placed on a
@@ -155,6 +158,11 @@ class Placement(object):
 
     @property
     def id(self) -> str:
+        """Returns the ID of the Placement."""
+        return self._id
+
+    @property
+    def computation_id(self) -> str:
         """Returns the ID of the computation underlying this Placement."""
         return self._computation.id
 
@@ -220,6 +228,21 @@ class Placement(object):
                 f"execution_strategy={self.execution_strategy})"
             )
 
+    def __repr__(self) -> str:
+        if self._placement_type in (
+            Placement.PlacementType.LOAD_WORK_PROFILE,
+            Placement.PlacementType.EVICT_WORK_PROFILE,
+        ):
+            return (
+                f"Placement(work_profile={self.work_profile.name}, "
+                f"type={str(self._placement_type)}, worker_id={self.worker_id})"
+            )
+        else:
+            return (
+                f"Placement(task={self.task.unique_name}, "
+                f"type={str(self._placement_type)}, worker_id={self.worker_id})"
+            )
+
     @staticmethod
     def create_task_placement(
         task: "Task",  # noqa: F821
@@ -240,10 +263,10 @@ class Placement(object):
     @staticmethod
     def create_load_profile_placement(
         work_profile: "WorkProfile",  # noqa: F821
-        placement_time: Optional[EventTime] = None,
-        worker_pool_id: Optional[str] = None,
+        placement_time: EventTime,
+        worker_pool_id: str,
+        loading_strategy: ExecutionStrategy,
         worker_id: Optional[str] = None,
-        loading_strategy: ExecutionStrategy = None,
     ) -> "Placement":
         return Placement(
             type=Placement.PlacementType.LOAD_WORK_PROFILE,
@@ -257,8 +280,8 @@ class Placement(object):
     @staticmethod
     def create_evict_profile_placement(
         work_profile: "WorkProfile",  # noqa: F821
-        placement_time: Optional[EventTime] = None,
-        worker_pool_id: Optional[str] = None,
+        placement_time: EventTime,
+        worker_pool_id: str,
         worker_id: Optional[str] = None,
     ) -> "Placement":
         return Placement(
@@ -311,19 +334,23 @@ class Placements(object):
         """
         self._placements[task.id] = Placement(task, worker_pool_id, placement_time)
 
-    def get_placement(
+    def get_placements(
         self, computation: Union["Task", "WorkProfile"]  # noqa: F821
-    ) -> Optional[Placement]:  # noqa: F821
-        """Retrieves the placement for the corresponding computation (if available).
+    ) -> Sequence[Placement]:
+        """Retrieves all the placement for the corresponding computation.
 
         Args:
             computation (`Union[Task, WorkProfile]`): The computation for which the
                 placement is to be retrieved.
 
         Returns:
-            The `Placement` object if found, `None` otherwise.
+            A (possibly empty) sequence of `Placement` objects.
         """
-        return self._placements.get(computation.id)
+        placements = []
+        for placement in self._placements.values():
+            if placement.computation_id == computation.id:
+                placements.append(placement)
+        return placements
 
     @property
     def runtime(self) -> EventTime:

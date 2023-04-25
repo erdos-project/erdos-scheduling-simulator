@@ -4,14 +4,14 @@ import sys
 from enum import Enum
 from functools import total_ordering
 from operator import attrgetter, itemgetter
-from typing import Optional, Sequence, Type
+from typing import Optional, Sequence
 
 import absl  # noqa: F401
 
 from schedulers import BaseScheduler
 from utils import EventTime, setup_csv_logging, setup_logging
 from workers import WorkerPools
-from workload import Placement, Resource, Task, TaskState, Workload
+from workload import Placement, Placements, Resource, Task, TaskState, Workload
 
 
 @total_ordering
@@ -20,16 +20,18 @@ class EventType(Enum):
 
     SIMULATOR_START = 0  # Signify the start of the simulator loop.
     TASK_CANCEL = 1  # Ask the simulator to cancel the task.
-    TASK_FINISHED = 2  # Notify the simulator of the end of a task.
-    TASK_RELEASE = 3  # Ask the simulator to release the task.
-    TASK_PREEMPT = 4  # Ask the simulator to preempt a task.
-    TASK_MIGRATION = 5  # Ask the simulator to migrate a task.
-    TASK_PLACEMENT = 6  # Ask the simulator to place a task.
-    SCHEDULER_START = 7  # Requires the simulator to invoke the scheduler.
-    SCHEDULER_FINISHED = 8  # Signifies the end of the scheduler loop.
-    SIMULATOR_END = 9  # Signify the end of the simulator loop.
+    EVICT_PROFILE = 2  # Ask the simulator to evict the profile from the WorkerPool.
+    TASK_FINISHED = 3  # Notify the simulator of the end of a task.
+    TASK_RELEASE = 4  # Ask the simulator to release the task.
+    TASK_PREEMPT = 5  # Ask the simulator to preempt a task.
+    TASK_MIGRATION = 6  # Ask the simulator to migrate a task.
+    LOAD_PROFILE = 7  # Ask the simulator to load a profile into the WorkerPool.
+    TASK_PLACEMENT = 8  # Ask the simulator to place a task.
+    SCHEDULER_START = 9  # Requires the simulator to invoke the scheduler.
+    SCHEDULER_FINISHED = 10  # Signifies the end of the scheduler loop.
+    SIMULATOR_END = 11  # Signify the end of the simulator loop.
     LOG_UTILIZATION = (
-        10  # Ask the simulator to log the utilization of the worker pools.
+        12  # Ask the simulator to log the utilization of the worker pools.
     )
 
     def __lt__(self, other):
@@ -58,7 +60,7 @@ class Event(object):
         event_type: EventType,
         time: EventTime,
         task: Optional[Task] = None,
-        placement: Optional[str] = None,
+        placement: Optional[Placement] = None,
     ):
         if event_type in [
             EventType.TASK_CANCEL,
@@ -198,7 +200,7 @@ class Simulator(object):
     def __init__(
         self,
         worker_pools: WorkerPools,
-        scheduler: Type[BaseScheduler],
+        scheduler: BaseScheduler,
         workload: Workload,
         loop_timeout: EventTime = EventTime(time=sys.maxsize, unit=EventTime.Unit.US),
         scheduler_frequency: EventTime = EventTime(time=-1, unit=EventTime.Unit.US),
@@ -275,7 +277,7 @@ class Simulator(object):
         # Internal data.
         self._last_scheduler_start_time = self._simulator_time
         self._next_scheduler_event = None
-        self._last_scheduler_placements = None
+        self._last_scheduler_placements: Optional[Placements] = None
 
         # A Cache from the TaskID to a future Placement event in the EventQueue.
         # The Simulator uses this bookkeeping to revoke / invalidate decisions made
@@ -390,7 +392,13 @@ class Simulator(object):
                 if self.__handle_event(self._event_queue.next()):
                     break
 
-    def __handle_scheduler_start(self, event: Event):
+    def __handle_scheduler_start(self, event: Event) -> None:
+        """Handle the SCHEDULER_START event. The method invokes the scheduler, and adds
+        a SCHEDULER_FINISHED event to the event queue.
+
+        Args:
+            event (`Event`): The event to handle.
+        """
         # Log the required CSV information.
         currently_placed_tasks = self._worker_pools.get_placed_tasks()
         schedulable_tasks = self._workload.get_schedulable_tasks(
@@ -429,7 +437,70 @@ class Simulator(object):
             sched_finished_event,
         )
 
-    def __handle_task_placement_skip(
+    def __handle_profile_eviction(self, event: Event) -> None:
+        """Handles the eviction of `WorkProfile`s from the given `WorkerPool`.
+
+        Args:
+            event (`Event`): The event that contains the `placement` information with
+                the type `Placement.PlacementType.EVICT_WORK_PROFILE`.
+        """
+        if event.placement.placement_type != Placement.PlacementType.EVICT_WORK_PROFILE:
+            raise ValueError(
+                f"The placement type of the event {event.placement.placement_type} is "
+                f"not {Placement.PlacementType.EVICT_WORK_PROFILE}."
+            )
+        self._logger.info(
+            "[%s] The Simulator is requesting the eviction of %s "
+            "from the WorkerPool %s and the Worker %s.",
+            event.time.to(EventTime.Unit.US).time,
+            event.placement.work_profile,
+            event.placement.worker_pool_id,
+            event.placement.worker_id,
+        )
+        worker_pool = self._worker_pools.get_worker_pool(event.placement.worker_pool_id)
+        if worker_pool is None:
+            raise ValueError(
+                f"The WorkerPool {event.placement.worker_pool_id} does not exist."
+            )
+        else:
+            worker_pool.evict_profile(
+                event.placement.work_profile,
+                event.placement.worker_id,
+            )
+
+    def __handle_profile_loading(self, event: Event) -> None:
+        """Handles the loading of a `WorkProfile` into the given `WorkerPool`.
+
+        Args:
+            event (`Event`): The event that contains the `placement` information with
+                the type `Placement.PlacementType.LOAD_WORK_PROFILE`.
+        """
+        if event.placement.placement_type != Placement.PlacementType.LOAD_WORK_PROFILE:
+            raise ValueError(
+                f"The placement type of the event {event.placement.placement_type} is "
+                f"not {Placement.PlacementType.LOAD_WORK_PROFILE}."
+            )
+        self._logger.info(
+            "[%s] The Simulator is requesting the loading of %s "
+            "into the WorkerPool %s and the Worker %s.",
+            event.time.to(EventTime.Unit.US).time,
+            event.placement.work_profile,
+            event.placement.worker_pool_id,
+            event.placement.worker_id,
+        )
+        worker_pool = self._worker_pools.get_worker_pool(event.placement.worker_pool_id)
+        if worker_pool is None:
+            raise ValueError(
+                f"The WorkerPool {event.placement.worker_pool_id} does not exist."
+            )
+        else:
+            worker_pool.load_profile(
+                event.placement.work_profile,
+                event.placement.loading_strategy,
+                event.placement.worker_id,
+            )
+
+    def __create_events_from_task_placement_skip(
         self, time: EventTime, placement: Placement
     ) -> Sequence[Event]:
         """Handles the non-placement of Tasks by the Scheduler.
@@ -480,7 +551,163 @@ class Simulator(object):
             )
         return cancelled_task_events
 
-    def __handle_scheduler_finish(self, event: Event):
+    def __create_events_from_task_placement(
+        self, event_time: EventTime, placement: Placement
+    ) -> Sequence[Event]:
+        """Handle the placement of a Task by the Scheduler.
+
+        Note that the `Placement` must be of type `Placement.PlacementType.PLACE_TASK`.
+
+        Args:
+            event_time (`EventTime`): The time at which the placement was received.
+            placement (`Placement`): The Placement object returned by a Scheduler.
+
+        Returns:
+            A sequence of events that need to be added to the event queue as a result
+            of this Placement.
+        """
+        if placement.placement_type != Placement.PlacementType.PLACE_TASK:
+            raise ValueError(
+                f"Invalid placement type {placement.placement_type} for "
+                f"{placement.task.unique_name}."
+            )
+
+        simulator_events = []
+        if placement.task.state < TaskState.SCHEDULED:
+            if placement.is_placed():
+                # The Task has not been scheduled before, we populate the
+                # required fields and cache the placement event in case
+                # changes need to be made before the task is actually executed.
+                self._logger.debug(
+                    "[%s] Scheduling the Task %s for the first time to be "
+                    "executed on WorkerPool %s at %s.",
+                    event_time.to(EventTime.Unit.US),
+                    placement.task,
+                    placement.worker_pool_id,
+                    placement.placement_time,
+                )
+                placement.task.schedule(event_time, placement)
+
+                simulator_event = Event(
+                    event_type=EventType.TASK_PLACEMENT,
+                    time=placement.placement_time,
+                    task=placement.task,
+                    placement=placement,
+                )
+                self._future_placement_events[placement.task.id] = simulator_event
+                simulator_events.append(simulator_event)
+            else:
+                simulator_events.extend(
+                    self.__create_events_from_task_placement_skip(event_time, placement)
+                )
+        elif placement.task.state == TaskState.SCHEDULED:
+            if placement.is_placed():
+                # The Task was SCHEDULED previously, we update any changes to
+                # both the Task and any future placement events in the queue.
+                if placement.task.id not in self._future_placement_events:
+                    self._logger.debug(
+                        "[%s] The Task %s in %s state did not have any "
+                        "corresponding cached Placement events in the future.",
+                        event_time.to(EventTime.Unit.US).time,
+                        placement.task,
+                        placement.task.state,
+                    )
+                    raise ValueError(
+                        f"Task {placement.task.unique_name} does not have a "
+                        f"cached future Placement event."
+                    )
+                cached_placement_event = self._future_placement_events[
+                    placement.task.id
+                ]
+                self._logger.debug(
+                    "[%s] Updating a prior placement of Task %s from "
+                    "WorkerPool %s and time %s to WorkerPool %s and time %s.",
+                    event_time.to(EventTime.Unit.US).time,
+                    placement.task,
+                    cached_placement_event.placement.worker_pool_id,
+                    cached_placement_event.time,
+                    placement.worker_pool_id,
+                    placement.placement_time,
+                )
+                placement.task.schedule(event_time, placement)
+                cached_placement_event._time = placement.placement_time
+                cached_placement_event._placement = placement
+                # Reheapify since we changed the time of some already cached events.
+                self._event_queue.reheapify()
+            else:
+                simulator_events.extend(
+                    self.__create_events_from_task_placement_skip(event_time, placement)
+                )
+        elif placement.task.state == TaskState.RUNNING:
+            if placement.is_placed():
+                if (
+                    placement.worker_pool_id != placement.task.worker_pool_id
+                    or placement.placement_time > event_time
+                ):
+                    self._logger.debug(
+                        "[%s] The Task %s in state %s was migrated from "
+                        "WorkerPool %s to WorkerPool %s to be started at %s.",
+                        event_time.to(EventTime.Unit.US).time,
+                        placement.task,
+                        placement.task.state,
+                        placement.task.worker_pool_id,
+                        placement.worker_pool_id,
+                        placement.placement_time,
+                    )
+                    simulator_events.append(
+                        Event(
+                            event_type=EventType.TASK_PREEMPT,
+                            time=event_time,
+                            task=placement.task,
+                        )
+                    )
+                    simulator_events.append(
+                        Event(
+                            event_type=EventType.TASK_MIGRATION,
+                            time=placement.placement_time,
+                            task=placement.task,
+                            placement=placement,
+                        )
+                    )
+            else:
+                self._logger.debug(
+                    "[%s] The Task %s in state %s was preempted.",
+                    event_time.to(EventTime.Unit.US).time,
+                    placement.task,
+                    placement.task.state,
+                )
+                simulator_events.append(
+                    Event(
+                        event_type=EventType.TASK_PREEMPT,
+                        time=event_time,
+                        task=placement.task,
+                    )
+                )
+        elif placement.task.state == TaskState.PREEMPTED:
+            raise NotImplementedError(
+                "Rescheduling of PREEMPTED tasks hasn't been implemented yet."
+            )
+        else:
+            # Task was either completed or cancelled before the Scheduler finished,
+            # we skip the application of this Placement decision.
+            self._logger.warning(
+                "[%s] Skipping the application of Placement of Task %s at "
+                "time %s because the Task was in %s state.",
+                event_time.to(EventTime.Unit.US).time,
+                placement.task,
+                placement.placement_time,
+                placement.task.state,
+            )
+
+        return simulator_events
+
+    def __handle_scheduler_finish(self, event: Event) -> None:
+        """Handle the SCHEDULER_FINISHED event. The method places the profiles and tasks
+        on the appropriate workers, and computes the next scheduler start time.
+
+        Args:
+            event (`Event`): The event to handle.
+        """
         # Place the tasks on the assigned worker pool, and reset the
         # available events to the tasks that could not be placed.
         self._logger.info(
@@ -511,145 +738,63 @@ class Simulator(object):
             )
 
         simulator_events = []
-        reheapify = False
         for placement in self._last_scheduler_placements:
-            # Ensure that the Placement always occurs in the present or future.
-            if placement.is_placed() and placement.placement_time < event.time:
-                self._logger.error(
-                    "[%s] A Placement for the Task %s occurred in the past at %s.",
-                    event.time.to(EventTime.Unit.US).time,
-                    placement.task,
-                    placement.placement_time,
-                )
-                raise ValueError(
-                    f"A Placement for the Task {placement.task.unique_name} occurred "
-                    f"in the past at {placement.placement_time}."
-                )
-
-            if placement.task.state < TaskState.SCHEDULED:
-                if placement.is_placed():
-                    # The Task has not been scheduled before, we populate the required
-                    # fields and cache the placement event in case changes need to be
-                    # made before the task is actually executed.
-                    self._logger.debug(
-                        "[%s] Scheduling the Task %s for the first time to be "
-                        "executed on WorkerPool %s at %s.",
-                        event.time.to(EventTime.Unit.US),
-                        placement.task,
-                        placement.worker_pool_id,
-                        placement.placement_time,
-                    )
-                    placement.task.schedule(event.time, placement)
-
-                    simulator_event = Event(
-                        event_type=EventType.TASK_PLACEMENT,
-                        time=placement.placement_time,
-                        task=placement.task,
-                        placement=placement,
-                    )
-                    self._future_placement_events[placement.task.id] = simulator_event
-                    simulator_events.append(simulator_event)
-                else:
-                    simulator_events.extend(
-                        self.__handle_task_placement_skip(event.time, placement)
-                    )
-            elif placement.task.state == TaskState.SCHEDULED:
-                if placement.is_placed():
-                    # The Task was SCHEDULED previously, we update any changes to both
-                    # the Task and any future placement events in the queue.
-                    if placement.task.id not in self._future_placement_events:
-                        self._logger.debug(
-                            "[%s] The Task %s in %s state did not have any "
-                            "corresponding cached Placement events in the future.",
-                            event.time.to(EventTime.Unit.US).time,
-                            placement.task,
-                            placement.task.state,
-                        )
-                        raise ValueError(
-                            f"Task {placement.task.unique_name} does not have a "
-                            f"cached future Placement event."
-                        )
-                    cached_placement_event = self._future_placement_events[
-                        placement.task.id
-                    ]
-                    self._logger.debug(
-                        "[%s] Updating a prior placement of Task %s from WorkerPool "
-                        "%s and time %s to WorkerPool %s and time %s.",
+            if placement.placement_type == Placement.PlacementType.PLACE_TASK:
+                # Ensure that the Placement always occurs in the present or future.
+                if placement.is_placed() and placement.placement_time < event.time:
+                    self._logger.error(
+                        "[%s] A Placement for the Task %s occurred in the past at %s.",
                         event.time.to(EventTime.Unit.US).time,
                         placement.task,
-                        cached_placement_event.placement.worker_pool_id,
-                        cached_placement_event.time,
-                        placement.worker_pool_id,
                         placement.placement_time,
                     )
-                    placement.task.schedule(event.time, placement)
-                    cached_placement_event._time = placement.placement_time
-                    cached_placement_event._placement = placement
-                    reheapify = True
-                else:
-                    simulator_events.extend(
-                        self.__handle_task_placement_skip(event.time, placement)
+                    raise ValueError(
+                        f"A Placement for the Task {placement.task.unique_name} "
+                        f"occurred in the past at {placement.placement_time}."
                     )
-            elif placement.task.state == TaskState.RUNNING:
-                if placement.is_placed():
-                    if (
-                        placement.worker_pool_id != placement.task.worker_pool_id
-                        or placement.placement_time > event.time
-                    ):
-                        self._logger.debug(
-                            "[%s] The Task %s in state %s was migrated from "
-                            "WorkerPool %s to WorkerPool %s to be started at %s.",
-                            event.time.to(EventTime.Unit.US).time,
-                            placement.task,
-                            placement.task.state,
-                            placement.task.worker_pool_id,
-                            placement.worker_pool_id,
-                            placement.placement_time,
-                        )
-                        simulator_events.append(
-                            Event(
-                                event_type=EventType.TASK_PREEMPT,
-                                time=event.time,
-                                task=placement.task,
-                            )
-                        )
-                        simulator_events.append(
-                            Event(
-                                event_type=EventType.TASK_MIGRATION,
-                                time=placement.placement_time,
-                                task=placement.task,
-                                placement=placement,
-                            )
-                        )
-                else:
-                    self._logger.debug(
-                        "[%s] The Task %s in state %s was preempted.",
+                simulator_events.extend(
+                    self.__create_events_from_task_placement(event.time, placement)
+                )
+            elif placement.placement_type == Placement.PlacementType.EVICT_WORK_PROFILE:
+                # Ensure that the Placement always occurs in the present or future.
+                if placement.placement_time < event.time:
+                    self._logger.error(
+                        "[%s] A Placement for the WorkProfile %s occurred in "
+                        "the past at %s.",
                         event.time.to(EventTime.Unit.US).time,
-                        placement.task,
-                        placement.task.state,
+                        placement.work_profile,
+                        placement.placement_time,
                     )
-                    simulator_events.append(
-                        Event(
-                            event_type=EventType.TASK_PREEMPT,
-                            time=event.time,
-                            task=placement.task,
-                        )
+                    raise ValueError(
+                        f"A Placement for the WorkProfile {placement.work_profile} "
+                        f"occurred in the past at {placement.placement_time}."
                     )
-            elif placement.task.state == TaskState.PREEMPTED:
-                raise NotImplementedError(
-                    "Rescheduling of PREEMPTED tasks hasn't been implemented yet."
+                eviction_event = Event(
+                    event_type=EventType.EVICT_PROFILE,
+                    time=placement.placement_time,
+                    placement=placement,
                 )
-            else:
-                # Task was either completed or cancelled before the Scheduler finished,
-                # we skip the application of this Placement decision.
-                self._logger.warning(
-                    "[%s] Skipping the application of Placement of Task %s at "
-                    "time %s because the Task was in %s state.",
-                    event.time.to(EventTime.Unit.US).time,
-                    placement.task,
-                    placement.placement_time,
-                    placement.task.state,
+                simulator_events.append(eviction_event)
+            elif placement.placement_type == Placement.PlacementType.LOAD_WORK_PROFILE:
+                # Ensure that the Placement always occurs in the present or future.
+                if placement.placement_time < event.time:
+                    self._logger.error(
+                        "[%s] A Placement for the WorkProfile %s occurred in "
+                        "the past at %s.",
+                        event.time.to(EventTime.Unit.US).time,
+                        placement.work_profile,
+                        placement.placement_time,
+                    )
+                    raise ValueError(
+                        f"A Placement for the WorkProfile {placement.work_profile} "
+                        f"occurred in the past at {placement.placement_time}."
+                    )
+                profile_load_event = Event(
+                    event_type=EventType.LOAD_PROFILE,
+                    time=placement.placement_time,
+                    placement=placement,
                 )
+                simulator_events.append(profile_load_event)
 
         # Sort the events so that preemptions and migrations happen first.
         for simulator_event in sorted(simulator_events):
@@ -660,12 +805,8 @@ class Simulator(object):
             )
             self._event_queue.add_event(simulator_event)
 
-        # If we changed the start times of some events, then reheapify.
-        if reheapify:
-            self._event_queue.reheapify()
-
         # Reset the available tasks and the last task placement.
-        self._last_scheduler_placements = []
+        self._last_scheduler_placements = None
 
         # The scheduler has finished its execution, insert an event for the next
         # invocation of the scheduler.
@@ -686,7 +827,14 @@ class Simulator(object):
             Event(event_type=EventType.LOG_UTILIZATION, time=event.time)
         )
 
-    def _handle_task_cancellation(self, event: Event):
+    def __handle_task_cancellation(self, event: Event) -> None:
+        """Handle the cancellation of a task. If the scheduler decided to cancel the
+        task or the conditional task was resolved to never be executed, we cancel the
+        Task and remove any future placements queued for this Task.
+
+        Args:
+            event (`Event`): The event containing the task to be cancelled.
+        """
         self._cancelled_tasks += 1
         self._logger.info(
             "[%s] (%d) The Simulator is cancelling the task %s.",
@@ -711,7 +859,14 @@ class Simulator(object):
             self._event_queue.remove_event(placement_event)
             del self._future_placement_events[event.task.id]
 
-    def __handle_task_release(self, event: Event):
+    def __handle_task_release(self, event: Event) -> None:
+        """Handle the release of a task. If the task is not already scheduled and the
+        next scheduler event is too far into the future, we bring the next scheduler
+        event closer to ensure minimal queueing delay.
+
+        Args:
+            event (`Event`): The event containing the task to be released.
+        """
         # Release a task for the scheduler.
         event.task.release(event.time)
         self._csv_logger.debug(
@@ -742,7 +897,16 @@ class Simulator(object):
                 self._next_scheduler_event._time = new_scheduler_event_time
                 self._event_queue.reheapify()
 
-    def __handle_task_finished(self, event: Event):
+    def __handle_task_finished(self, event: Event) -> None:
+        """Handle the completion of a task. The Task is first removed from the Worker
+        where it was placed, and then the Task is marked as finished. If the finishing
+        of this `Task` completes the `TaskGraph`, then the `TaskGraph` is marked as
+        complete and the event is logged. If not, the next `Task`s in the `TaskGraph`
+        are released to the Simulator.
+
+        Args:
+            event (`Event`): The event containing the task that finished.
+        """
         # Remove the Task from the WorkerPool and invoke it's finish method.
         task_placed_at_worker_pool = self._worker_pools.get_worker_pool(
             event.task.worker_pool_id
@@ -853,7 +1017,13 @@ class Simulator(object):
                 task,
             )
 
-    def __handle_task_preempt(self, event: Event):
+    def __handle_task_preempt(self, event: Event) -> None:
+        """Handles the TASK_PREEMPT event. The `Task` is removed from the `WorkerPool`
+        where it was running and the `Task`'s preemption is logged into the CSV.
+
+        Args:
+            event (Event): The event to handle.
+        """
         task = event.task
         self._csv_logger.debug(
             f"{event.time.time},TASK_PREEMPT,{task.name},{task.timestamp},{task.id}"
@@ -862,7 +1032,16 @@ class Simulator(object):
         worker_pool.remove_task(current_time=event.time, task=task)
         task.preempt(event.time)
 
-    def __handle_task_placement(self, event: Event, workload: Workload):
+    def __handle_task_placement(self, event: Event, workload: Workload) -> None:
+        """Handles the TASK_PLACEMENT event. The `Task` is placed on the `WorkerPool`
+        where it was scheduled to run and the placement is moved further in the future
+        if the `WorkerPool` is not ready to run the `Task`.
+
+        Args:
+            event (Event): The event to handle.
+            workload (Workload): The `Workload` where the `TaskGraph`s for the `Task`
+                are stored.
+        """
         self._logger.debug(
             "[%s] Handling TASK_PLACEMENT event: %s.",
             event.time.to(EventTime.Unit.US).time,
@@ -961,7 +1140,15 @@ class Simulator(object):
                 f"{task.id},{event.placement.worker_pool_id}"
             )
 
-    def __handle_task_migration(self, event: Event):
+    def __handle_task_migration(self, event: Event) -> None:
+        """Handles the TASK_MIGRATION event. This event must be followed by a
+        `TASK_PREEMPT` event that preempts the `Task` from the `WorkerPool` where it
+        was last placed. The `Task` is then placed on the `WorkerPool` where it is to
+        be migrated.
+
+        Args:
+            event (Event): The event to handle.
+        """
         task = event.task
         assert (
             task.state == TaskState.PREEMPTED
@@ -1037,7 +1224,50 @@ class Simulator(object):
                 "[%s] Starting the simulator loop.",
                 event.time.to(EventTime.Unit.US).time,
             )
-            self._scheduler.start(event.time, self._workload.work_profiles)
+            placements = self._scheduler.start(
+                event.time, self._workload.work_profiles, self._worker_pools
+            )
+            for placement in placements:
+                if (
+                    placement.placement_type
+                    != Placement.PlacementType.LOAD_WORK_PROFILE
+                ):
+                    raise RuntimeError(
+                        f"A Placement of type {placement.placement_type} was returned "
+                        f"by the scheduler. Only "
+                        f"{Placement.PlacementType.LOAD_WORK_PROFILE} is supported."
+                    )
+                profile_load_event = Event(
+                    event_type=EventType.LOAD_PROFILE,
+                    time=placement.placement_time,
+                    placement=placement,
+                )
+                self._logger.debug(
+                    "[%s] Adding %s to the event queue as part of the scheduler start.",
+                    event.time.time,
+                    profile_load_event,
+                )
+                self._event_queue.add_event(profile_load_event)
+        elif event.event_type == EventType.TASK_CANCEL:
+            self.__handle_task_cancellation(event)
+        elif event.event_type == EventType.EVICT_PROFILE:
+            self.__handle_profile_eviction(event)
+        elif event.event_type == EventType.TASK_FINISHED:
+            self.__handle_task_finished(event)
+        elif event.event_type == EventType.TASK_RELEASE:
+            self.__handle_task_release(event)
+        elif event.event_type == EventType.TASK_PREEMPT:
+            self.__handle_task_preempt(event)
+        elif event.event_type == EventType.TASK_MIGRATION:
+            self.__handle_task_migration(event)
+        elif event.event_type == EventType.LOAD_PROFILE:
+            self.__handle_profile_loading(event)
+        elif event.event_type == EventType.TASK_PLACEMENT:
+            self.__handle_task_placement(event, self._workload)
+        elif event.event_type == EventType.SCHEDULER_START:
+            self.__handle_scheduler_start(event)
+        elif event.event_type == EventType.SCHEDULER_FINISHED:
+            self.__handle_scheduler_finish(event)
         elif event.event_type == EventType.SIMULATOR_END:
             # End of the simulator loop.
             self._csv_logger.debug(
@@ -1049,29 +1279,13 @@ class Simulator(object):
             )
             self._logger.info("[%s] Ending the simulator loop.", event.time.time)
             return True
-        elif event.event_type == EventType.TASK_CANCEL:
-            self._handle_task_cancellation(event)
-        elif event.event_type == EventType.TASK_RELEASE:
-            self.__handle_task_release(event)
-        elif event.event_type == EventType.TASK_FINISHED:
-            self.__handle_task_finished(event)
-        elif event.event_type == EventType.TASK_PREEMPT:
-            self.__handle_task_preempt(event)
-        elif event.event_type == EventType.TASK_PLACEMENT:
-            self.__handle_task_placement(event, self._workload)
-        elif event.event_type == EventType.TASK_MIGRATION:
-            self.__handle_task_migration(event)
-        elif event.event_type == EventType.SCHEDULER_START:
-            self.__handle_scheduler_start(event)
-        elif event.event_type == EventType.SCHEDULER_FINISHED:
-            self.__handle_scheduler_finish(event)
         elif event.event_type == EventType.LOG_UTILIZATION:
             self.__log_utilization(event.time)
         else:
             raise ValueError(f"[{event.time}] Retrieved event of unknown type: {event}")
         return False
 
-    def __step(self, step_size: EventTime = EventTime(1, EventTime.Unit.US)):
+    def __step(self, step_size: EventTime = EventTime(1, EventTime.Unit.US)) -> None:
         """Advances the clock by the given `step_size`.
 
         Args:

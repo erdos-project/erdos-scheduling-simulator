@@ -55,6 +55,12 @@ class WorkProfile(object):
         memo[id(self)] = instance
         return instance
 
+    def __str__(self) -> str:
+        return f"WorkProfile(name={self.name}, id={self.id})"
+
+    def __repr__(self) -> str:
+        return str(self)
+
     @property
     def name(self) -> str:
         return self._name

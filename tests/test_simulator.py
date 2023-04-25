@@ -8,6 +8,8 @@ from tests.utils import create_default_task
 from utils import EventTime
 from workers import Worker, WorkerPool, WorkerPools
 from workload import (
+    ExecutionStrategies,
+    ExecutionStrategy,
     Job,
     Placement,
     Placements,
@@ -15,6 +17,7 @@ from workload import (
     Resources,
     TaskGraph,
     Workload,
+    WorkProfile,
 )
 
 
@@ -419,3 +422,80 @@ def test_simulator_handle_event():
         ),
     )
     assert len(simulator._event_queue) == 7, "Incorrect length of EventQueue."
+
+
+def test_simulator_loads_and_evicts_profiles_correctly():
+    """Test that a Simulator instance reacts correctly to a LOAD_PROFILE event."""
+    worker_pool = __create_default_worker_pool(
+        resources=[
+            Resources(resource_vector={Resource("RAM"): 100, Resource("GPU"): 1})
+        ]
+    )
+    work_profile = WorkProfile(
+        name="TestWorkProfile",
+        loading_strategies=ExecutionStrategies(
+            [
+                ExecutionStrategy(
+                    resources=Resources(
+                        resource_vector={Resource("RAM", _id="any"): 50}
+                    ),
+                    batch_size=1,
+                    runtime=EventTime(50, EventTime.Unit.US),
+                )
+            ]
+        ),
+    )
+    perception_task = create_default_task(
+        job=Job(name="Perception", profile=work_profile)
+    )
+    task_graph = TaskGraph(name="TestTaskGraph", tasks={perception_task: []})
+    simulator = Simulator(
+        worker_pools=WorkerPools([worker_pool]),
+        scheduler=MockScheduler(runtime=EventTime(5, EventTime.Unit.US), placement=[]),
+        workload=Workload.from_task_graphs({perception_task.task_graph: task_graph}),
+    )
+    profile_loading_event = Event(
+        event_type=EventType.LOAD_PROFILE,
+        time=EventTime.zero(),
+        placement=Placement.create_load_profile_placement(
+            work_profile=work_profile,
+            placement_time=EventTime.zero(),
+            worker_pool_id=worker_pool.id,
+            worker_id=worker_pool.workers[0].id,
+            loading_strategy=work_profile.loading_strategies[0],
+        ),
+    )
+    simulator._Simulator__handle_profile_loading(event=profile_loading_event)
+    assert (
+        len(worker_pool.workers[0].get_available_profiles()) == 0
+    ), "The set of available profiles should be empty."
+    assert worker_pool.workers[0].is_available(work_profile) == EventTime(
+        50, EventTime.Unit.US
+    ), "The time until the profile should be available is incorrect."
+    worker_pool.workers[0].step(
+        current_time=EventTime.zero(), step_size=EventTime(50, EventTime.Unit.US)
+    )
+    assert (
+        len(worker_pool.workers[0].get_available_profiles()) == 1
+    ), "The set of available profiles is incorrect."
+    assert (
+        worker_pool.workers[0].is_available(work_profile) == EventTime.zero()
+    ), "The profile should be available now."
+
+    profile_eviction_event = Event(
+        event_type=EventType.EVICT_PROFILE,
+        time=EventTime(60, EventTime.Unit.US),
+        placement=Placement.create_evict_profile_placement(
+            work_profile=work_profile,
+            placement_time=EventTime(60, EventTime.Unit.US),
+            worker_pool_id=worker_pool.id,
+            worker_id=worker_pool.workers[0].id,
+        ),
+    )
+    simulator._Simulator__handle_profile_eviction(event=profile_eviction_event)
+    assert (
+        len(worker_pool.workers[0].get_available_profiles()) == 0
+    ), "The number of available profiles is incorrect."
+    assert (
+        worker_pool.workers[0].is_available(work_profile) == EventTime.invalid()
+    ), "The profile should not be available anymore."

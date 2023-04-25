@@ -3,7 +3,7 @@ from collections import defaultdict
 from typing import Mapping, Optional, Sequence
 
 import absl  # noqa: F401
-import z3
+from z3 import z3
 
 from schedulers import BaseScheduler
 from utils import EventTime

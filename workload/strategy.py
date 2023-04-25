@@ -1,5 +1,8 @@
+import random
+import uuid
 from copy import copy, deepcopy
-from typing import Optional, Sequence
+from functools import cached_property
+from typing import Iterator, Optional, Sequence
 
 from utils import EventTime
 
@@ -29,18 +32,27 @@ class ExecutionStrategy(object):
         self._resources = resources
         self._batch_size = batch_size
         self._runtime = runtime
+        self._id = uuid.UUID(int=random.getrandbits(128), version=4)
+        self._hash = hash(self._id)
 
     @property
     def resources(self) -> Resources:
         return self._resources
 
     @property
+    def batch_size(self) -> int:
+        return self._batch_size
+
+    @property
     def runtime(self) -> EventTime:
         return self._runtime
 
-    @property
-    def batch_size(self) -> int:
-        return self._batch_size
+    @cached_property
+    def id(self) -> str:
+        return str(self._id)
+
+    def __hash__(self) -> int:
+        return self._hash
 
     def __add__(self, other: "ExecutionStrategy") -> "ExecutionStrategy":
         return ExecutionStrategy(
@@ -64,6 +76,51 @@ class ExecutionStrategy(object):
     def __str__(self) -> str:
         return "ExecutionStrategy(resources={}, batch_size={}, runtime={})".format(
             self._resources, self._batch_size, self._runtime
+        )
+
+    def __repr__(self) -> str:
+        return str(self)
+
+
+class BatchStrategy(ExecutionStrategy):
+    """A representation of a unique execution strategy for each batch.
+
+    An execution strategy defines how a set of Tasks would execute under the given
+    set of resources. A `BatchStrategy` differs from `ExecutionStrategy` in that it
+    provides a unique identifier that can be used by the `Worker` to identify the
+    `Task`s that belong to the same strategy and do correct accounting of the resources.
+
+    Args:
+        resources (`Resources`): The number and type of resources required in a
+            `Worker` to execute this strategy.
+        batch_size (`int`): The number of maximum requests that can be batched together
+            under this strategy.
+        runtime (`EventTime`): The total runtime that will be incurred on the `Worker`
+            if this execution strategy is chosen.
+    """
+
+    def __init__(self, execution_strategy=ExecutionStrategy) -> None:
+        super().__init__(
+            resources=copy(execution_strategy.resources),
+            batch_size=execution_strategy.batch_size,
+            runtime=copy(execution_strategy.runtime),
+        )
+        self._id = uuid.UUID(int=random.getrandbits(128), version=4)
+        self._hash = hash(self._id)
+
+    @cached_property
+    def id(self) -> str:
+        return str(self._id)
+
+    def __hash__(self) -> int:
+        return self._hash
+
+    def __eq__(self, other: "BatchStrategy") -> bool:  # noqa: F821
+        return self._id == other._id
+
+    def __str__(self) -> str:
+        return "BatchStrategy(resources={}, batch_size={}, runtime={})".format(
+            self.resources, self.batch_size, self.runtime
         )
 
     def __repr__(self) -> str:
@@ -116,11 +173,11 @@ class ExecutionStrategies(object):
             return None
         return max(self._strategies, key=lambda s: s.runtime)
 
-    def __iter__(self) -> ExecutionStrategy:
+    def __iter__(self) -> Iterator[ExecutionStrategy]:
         for strategy in self._strategies:
             yield strategy
 
-    def __getitem__(self, index):
+    def __getitem__(self, index) -> ExecutionStrategy:
         return self._strategies[index]
 
     def __len__(self) -> int:

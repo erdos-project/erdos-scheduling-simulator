@@ -73,7 +73,10 @@ class BaseScheduler(object):
             self._logger = setup_logging(name=self.__class__.__name__)
 
     def start(
-        self, start_time: EventTime, work_profiles: Set[WorkProfile]
+        self,
+        start_time: EventTime,
+        work_profiles: Set[WorkProfile],
+        worker_pools: "WorkerPools",  # noqa: F821
     ) -> Placements:
         """Initializes the startup phase of a scheduler. This method is invoked before
         requests start arriving to the Scheduler, and allows it to do basic set-up work.
@@ -82,6 +85,8 @@ class BaseScheduler(object):
             start_time (`EventTime`): The time at which the scheduler was invoked.
             work_profiles (`Set[WorkProfile]`): A (possibly) empty set of
                 `WorkProfile`s provided to the scheduler at the start.
+            worker_pools (`WorkerPools`): The set of worker pools available to the
+                Scheduler at the initialization of the simulation.
 
         Returns:
             A `Placements` object that signifies the initial placements to be made by
@@ -89,10 +94,11 @@ class BaseScheduler(object):
         """
         self._logger.info(
             "[%s] Initiated the %s with the default startup implementation "
-            "with the following work profiles: [%s].",
+            "with the following work profiles: [%s] on the worker pools [%s].",
             start_time.to(EventTime.Unit.US).time,
             self.__class__.__name__,
             ", ".join(work_profile.name for work_profile in work_profiles),
+            ", ".join(worker_pool.name for worker_pool in worker_pools.worker_pools),
         )
         return Placements(
             runtime=EventTime.zero(),
@@ -226,7 +232,7 @@ class BaseScheduler(object):
             parents = task_graph.get_parents(placement.task)
             for parent in parents:
                 any_parent_placed = False
-                parent_placement = placements.get_placement(parent)
+                parent_placement = placements.get_placements(parent)[0]
                 if parent.state in (
                     TaskState.VIRTUAL,
                     TaskState.RELEASED,
