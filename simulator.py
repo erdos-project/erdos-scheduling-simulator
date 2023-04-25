@@ -1452,6 +1452,17 @@ class Simulator(object):
                 for task in schedulable_tasks
             )
             or self._worker_pools.is_full()
+            or all(
+                len(
+                    worker.get_compatible_strategies(
+                        schedulable_task.available_execution_strategies
+                    )
+                )
+                == 0
+                for schedulable_task in schedulable_tasks
+                for worker_pool in self._worker_pools.worker_pools
+                for worker in worker_pool.workers
+            )
         ):
             # If there are no schedulable tasks currently, or all schedulable tasks are
             # already running (in a preemptive scheduling scenario), or the WorkerPool
