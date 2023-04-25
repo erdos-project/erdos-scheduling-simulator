@@ -240,9 +240,13 @@ class Worker(object):
                 self,
             )
 
-    def can_accomodate_strategy(self, strategy: ExecutionStrategy) -> bool:
+    def can_accomodate_strategy(
+        self, strategy: Union[ExecutionStrategy, BatchStrategy]
+    ) -> bool:
         """Checks if this `Worker` can accomodate the given `ExecutionStrategy` based
-        on the available resources.
+        on the available resources. If the strategy is of type `BatchStrategy`, then the
+        `Worker` can accomodate the strategy if another `Task` from the same batch was
+        already placed.
 
         Args:
             strategy (`ExecutionStrategy`): The strategy that the `Worker` has to
@@ -252,7 +256,9 @@ class Worker(object):
             `True` if the `Worker` has enough resources to execute this strategy, and
             `False` otherwise.
         """
-        return self._resources > strategy.resources
+        return self._resources > strategy.resources or (
+            isinstance(strategy, BatchStrategy) and strategy in self._placed_batches
+        )
 
     def get_compatible_strategies(
         self, execution_strategies: ExecutionStrategies
@@ -573,9 +579,11 @@ class WorkerPool(object):
             if execution_strategy and not self._workers[
                 worker_id
             ].can_accomodate_strategy(execution_strategy):
+                worker = self._workers[worker_id]
                 raise RuntimeError(
-                    f"The WorkerID {worker_id} cannot accomodate the "
-                    f"strategy {execution_strategy}."
+                    f"{worker.name} ({worker_id}) cannot accomodate the strategy "
+                    f"{execution_strategy} for task {task.unique_name}. It is running: "
+                    f"[{','.join(t.unique_name for t in worker.get_placed_tasks())}]"
                 )
             else:
                 strategy = execution_strategy

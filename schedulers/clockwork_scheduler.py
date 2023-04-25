@@ -750,7 +750,7 @@ class ClockworkScheduler(BaseScheduler):
                 self._logger.debug(
                     "[%s] Added Task %s to the request queue for Model %s.",
                     current_time.to(EventTime.Unit.US).time,
-                    task,
+                    task.unique_name,
                     task.profile.name,
                 )
         return placements
