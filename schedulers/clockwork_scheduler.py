@@ -75,7 +75,7 @@ class Model(object):
             # Calculate the SLO for the execution of the task.
             # The execution SLO is the time by which the task must be started for
             # execution by. In the worst case, the task is going to execute with the
-            # fastest strategy # and so we set the execution SLO as the time of the
+            # fastest strategy, so we set the execution SLO as the time of the
             # fastest strategy.
             self._execution_slo = max(
                 EventTime.zero(),
@@ -85,8 +85,8 @@ class Model(object):
             )
 
             # Calculate the SLO for the loading of the profile for the task.
-            # The loading SLO is the time by which the model must be initiated loading
-            # for by. In the worst case, we are going to execute the task with the
+            # The loading SLO is the time by which the model must have begun
+            # loading. In the worst case, we are going to execute the task with the
             # fastest strategy and pay a cost of the time of the fastest loading.
             self._loadweights_slo = max(
                 EventTime.zero(),
@@ -760,7 +760,7 @@ class ClockworkScheduler(BaseScheduler):
         """Runs the thread that computes what models to load and evict from each Worker.
 
         Args:
-            current_time (`EventTime`): The current time of the simulation.:w
+            current_time (`EventTime`): The current time of the simulation.
             worker_pools (`WorkerPools`): The worker pools to use for determining the
                 placement of the execution strategies. This is assumed to be a shallow
                 copy of the actual worker pools passed by the Simulator.
@@ -823,7 +823,7 @@ class ClockworkScheduler(BaseScheduler):
                         )
                         break
                     else:
-                        # Find the fastest strategy that can be accomodated into an
+                        # Find the fastest strategy that can be accommodated into an
                         # empty Worker.
                         worker_deepcopy: Worker = deepcopy(worker)
                         strategy = worker_deepcopy.get_compatible_strategies(
