@@ -314,7 +314,8 @@ class Model(object):
 
             # Remove the request from all the queues and the task from the tasks.
             for request_queue in self._request_queues.values():
-                request_queue.remove(request)
+                if request in request_queue:
+                    request_queue.remove(request)
 
             del self._tasks[task]
 
