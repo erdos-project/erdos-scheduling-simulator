@@ -241,7 +241,7 @@ flags.DEFINE_bool(
 )
 flags.DEFINE_enum(
     "ilp_goal",
-    "max_slack",
+    "max_goodput",
     ["max_slack", "min_placement_delay", "max_goodput"],
     "Sets the goal of the ILP solver.",
 )
@@ -447,6 +447,7 @@ def main(args):
             enforce_deadlines=FLAGS.enforce_deadlines,
             retract_schedules=FLAGS.retract_schedules,
             goal=FLAGS.ilp_goal,
+            batching=True,
             time_limit=EventTime(FLAGS.scheduler_time_limit, EventTime.Unit.S),
             time_discretization=EventTime(
                 FLAGS.scheduler_time_discretization, EventTime.Unit.US

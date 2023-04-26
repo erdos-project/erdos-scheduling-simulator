@@ -56,6 +56,10 @@ class BatchTask(object):
             return TaskState.RELEASED
 
     @property
+    def expected_start_time(self) -> EventTime:
+        return self._tasks[0].expected_start_time
+
+    @property
     def current_placement(self) -> Placement:
         return (self._tasks[0]).current_placement
 
@@ -207,7 +211,7 @@ class TaskOptimizerVariables(object):
                         )
                     )
 
-            if task.state == TaskState.SCHEDULED:
+            if task.state == TaskState.SCHEDULED and not isinstance(task, BatchTask):
                 # Maintain a warm-start cache that can be used to pass the starting
                 # values to the optimizer.
                 placed_key = (
@@ -219,6 +223,8 @@ class TaskOptimizerVariables(object):
                     space_time_index,
                     binary_variable,
                 ) in self._space_time_strategy_matrix.items():
+                    if not isinstance(binary_variable, cpx_var.Var):
+                        continue
                     if space_time_index == placed_key:
                         self._warm_start_cache[binary_variable] = 1
                     else:
@@ -386,22 +392,18 @@ class TaskOptimizerVariables(object):
             strategy with which they are being associated..
         """
         partition_variables = defaultdict(list)
-        available_strategies_for_worker = worker.get_compatible_strategies(
-            self.task.available_execution_strategies
-        )
-        if len(available_strategies_for_worker) != 0:
-            for (
-                worker_id,
-                start_time,
-                strategy,
-            ), variable in self._space_time_strategy_matrix.items():
-                if (
-                    worker_id == worker_index
-                    and start_time <= time
-                    and start_time + strategy.runtime.to(EventTime.Unit.US).time > time
-                    and (type(variable) == cpx_var.Var or variable == 1)
-                ):
-                    partition_variables[strategy].append(variable)
+        for (
+            worker_id,
+            start_time,
+            strategy,
+        ), variable in self._space_time_strategy_matrix.items():
+            if (
+                worker_id == worker_index
+                and start_time <= time
+                and start_time + strategy.runtime.to(EventTime.Unit.US).time > time
+                and (type(variable) == cpx_var.Var or variable == 1)
+            ):
+                partition_variables[strategy].append(variable)
         return partition_variables
 
     @property
@@ -675,13 +677,14 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
                         self._logger.debug(
                             "[%s] Placed %s (with deadline %s and "
                             "remaining time %s) on WorkerPool(%s) to be "
-                            "started at %s.",
+                            "started at %s and executed with strategy %s.",
                             sim_time.to(EventTime.Unit.US).time,
                             placement.task.unique_name,
                             placement.task.deadline,
                             placement.execution_strategy.runtime,
                             placement.worker_pool_id,
                             placement.placement_time,
+                            placement.execution_strategy,
                         )
                         placements.append(placement)
                     else:
