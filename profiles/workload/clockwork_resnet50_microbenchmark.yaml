@@ -8,8 +8,8 @@ graphs:
       - name: Task_One
         work_profile: ResNet50
     release_policy: poisson
-    rate: 0.0003000 # 300 tasks / sec.
-    invocations: 1
+    rate: 0.000020 # 20 tasks / sec.
+    invocations: 100
 profiles:
   # resnet50_v2 in Clockwork
   - name: ResNet50
