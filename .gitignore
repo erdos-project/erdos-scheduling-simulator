@@ -17,3 +17,7 @@
 # Virtual environment.
 venv
 env
+
+# ILP programs and solutions.
+*.lp
+*.sol
