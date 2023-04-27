@@ -334,6 +334,19 @@ class TaskOptimizerVariables(object):
                     ctname=f"{task.unique_name}_is_placed_reward_constraint",
                 )
 
+            # Set the reward variable according to either `Task` or `BatchTask`.
+            task_reward = (
+                len(self._task.tasks) ** 2 if isinstance(self._task, BatchTask) else 1
+            )
+            placement_reward = [
+                task_reward * -start_time * placement_variable
+                for (
+                    _,
+                    start_time,
+                    _,
+                ), placement_variable in self._space_time_strategy_matrix.items()
+            ]
+
     def __get_worker_index_from_previous_placement(
         self, task: Task, workers: Mapping[int, Worker]
     ) -> int:
