@@ -311,7 +311,7 @@ def main(args):
     if FLAGS.execution_mode == "replay":
         if FLAGS.replay_trace == "pylot":
             workload_loader = WorkloadLoader(
-                json_path=FLAGS.workload_profile_path, _flags=FLAGS
+                path=FLAGS.workload_profile_path, _flags=FLAGS
             )
             job_graph = workload_loader.workload.get_job_graph("pylot_dataflow")
             task_loader = TaskLoaderPylot(
