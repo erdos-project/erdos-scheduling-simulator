@@ -10,3 +10,4 @@ tabulate
 matplotlib
 docplex
 pyyaml
+cplex
