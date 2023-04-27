@@ -1,4 +1,5 @@
 import multiprocessing
+import sys
 import time
 from collections import defaultdict, deque
 from copy import copy, deepcopy
@@ -9,6 +10,8 @@ from uuid import UUID
 import absl  # noqa: F401
 import docplex.mp.dvar as cpx_var
 import docplex.mp.model as cpx
+from cplex.callbacks import MIPInfoCallback
+from docplex.mp.environment import Environment
 from docplex.mp.sdetails import SolveDetails
 from docplex.mp.solution import SolveSolution
 
@@ -26,6 +29,58 @@ from workload import (
     Workload,
     WorkProfile,
 )
+
+
+class TerminationCheckCallback(MIPInfoCallback):
+    def __init__(self, environment: Environment) -> None:
+        MIPInfoCallback.__init__(self, environment)
+        self._sim_time = None
+        self._current_gap = float("inf")
+        self._last_gap_update = time.time()
+        self._solution_found = False
+        self._gap_time_limit = None
+        self._logger = None
+
+    def __call__(self) -> None:
+        # If the gap has changed, update the gap and the time at which it was changed.
+        if (
+            abs(self.get_MIP_relative_gap() - self._current_gap)
+            > sys.float_info.epsilon
+        ):
+            self._logger.debug(
+                "[%s] The gap between the incumbent (%f) and "
+                "the best bound (%f) was updated from %f to %f.",
+                self._sim_time.to(EventTime.Unit.US).time,
+                self.get_incumbent_objective_value(),
+                self.get_best_objective_value(),
+                self._current_gap,
+                self.get_MIP_relative_gap(),
+            )
+            self._solution_found = True
+            self._current_gap = self.get_MIP_relative_gap()
+            self._last_gap_update = time.time()
+
+        # If the time since the last gap update is greater than the gap update, then
+        # we terminate the solution search.
+        solver_time = time.time()
+        if (
+            solver_time - self._last_gap_update > self._gap_time_limit
+        ) and self._solution_found:
+            self._logger.debug(
+                "[%s] The gap between the incumbent and best bound hasn't changed in %f"
+                "seconds, and there is a valid solution available. Terminating.",
+                self._sim_time.to(EventTime.Unit.US).time,
+                solver_time - self._last_gap_update,
+            )
+            self.abort()
+        elif solver_time - self._last_gap_update > self._gap_time_limit:
+            self._logger.debug(
+                "[%s] The gap between the incumbent and best bound hasn't changed in %f"
+                "seconds, and no valid solution has yet been found. Terminating.",
+                self._sim_time.to(EventTime.Unit.US).time,
+                solver_time - self._last_gap_update,
+            )
+            self.abort()
 
 
 class BatchTask(object):
@@ -321,7 +376,7 @@ class TaskOptimizerVariables(object):
             start_time,
             strategy,
         ), variable in self._space_time_strategy_matrix.items():
-            if type(variable) != int and solution.get_value(variable) == 1:
+            if type(variable) != int and int(solution.get_value(variable)) == 1:
                 placement_worker = worker_index_to_worker[worker_id]
                 placement_worker_pool_id = worker_id_to_worker_pool[placement_worker.id]
                 if isinstance(self.task, BatchTask):
@@ -373,7 +428,7 @@ class TaskOptimizerVariables(object):
             ]
 
     def get_partition_variable(
-        self, time: int, worker_index: int, worker: Worker
+        self, time: int, worker_index: int
     ) -> Mapping[ExecutionStrategy, Sequence[Union[cpx_var.Var, int]]]:
         """Get the set of variables that can potentially affect the resource
         utilization of the worker with the given index `worker_index` at the time
@@ -383,7 +438,6 @@ class TaskOptimizerVariables(object):
             time (`int`): The time at which the effect is to be determined.
             worker_index (`int`): The index of the Worker to determine the effect for
                 in the schedule.
-            worker (`Worker`): A reference to the `Worker` that the index refers to.
 
         Returns:
             A possibly empty sequence of either cplex variables or integers specifying
@@ -503,7 +557,7 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
         )
         self._goal = goal
         self._batching = batching
-        self._gap_time_limit = time_limit
+        self._gap_time_limit = time_limit.to(EventTime.Unit.S).time
         self._time_discretization = time_discretization
         self._plan_ahead = plan_ahead
         self._log_to_file = log_to_file
@@ -618,6 +672,16 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
             self._add_objective(
                 optimizer=optimizer, tasks_to_variables=tasks_to_variables
             )
+
+            # Add the termination check callback, and set the initial gap and the time
+            # at which the gap was last updated.
+            termination_check_callback = optimizer.register_callback(
+                TerminationCheckCallback
+            )
+            termination_check_callback._sim_time = sim_time
+            termination_check_callback._logger = self._logger
+            termination_check_callback._gap_time_limit = self._gap_time_limit
+
             # Add the Warm Start caches to the problem.
             warm_start = {}
             for task_variable in tasks_to_variables.values():
@@ -670,6 +734,14 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
                             placement.task not in task_placement_map
                             or not task_placement_map[placement.task].is_placed()
                         ):
+                            self._logger.debug(
+                                "[%s] Placing task %s as part of strategy %s "
+                                "with the placement: %s.",
+                                sim_time.to(EventTime.Unit.US).time,
+                                placement.task.unique_name,
+                                task_variable.task.unique_name,
+                                str(placement),
+                            )
                             task_placement_map[placement.task] = placement
 
                 for task, placement in task_placement_map.items():
@@ -710,15 +782,17 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
                     )
             else:
                 # The solution was infeasible. Retrieve the details.
-                solution_status: SolveDetails = optimizer.solve_details()
+                solution_status: SolveDetails = optimizer.solve_details
                 self._logger.info(
                     "[%s] Failed to place any task because the solver returned %s.",
                     sim_time.to(EventTime.Unit.US).time,
                     solution_status.status,
                 )
+                # Cancel the tasks that were to be scheduled, but keep prior placements
+                # for previously scheduled tasks.
                 for task in tasks_to_be_scheduled:
                     placements.append(
-                        Placement(
+                        Placement.create_task_placement(
                             task=task,
                             placement_time=None,
                             worker_pool_id=None,
@@ -974,7 +1048,6 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
                     partition_variables = task_variable.get_partition_variable(
                         time=t,
                         worker_index=worker_index,
-                        worker=worker,
                     )
                     for strategy, variables in partition_variables.items():
                         overlap_variables[strategy].extend(variables)
