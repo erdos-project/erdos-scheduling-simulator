@@ -646,6 +646,9 @@ class ClockworkScheduler(BaseScheduler):
         for work_profile in work_profiles:
             self._models.add_model(Model(profile=work_profile))
 
+        # Create a copy of the WorkerPools to try placement decisions on.
+        worker_pools_copy = copy(worker_pools)
+
         # Clockwork relies on the Client to initiate `LoadRemoteModel` requests to the
         # controller during the startup phase. The `ControllerStartup` then enqueus
         # the loading of each of the models requested onto all of the workers in the
@@ -654,7 +657,7 @@ class ClockworkScheduler(BaseScheduler):
         # requirements cannot be met.
         scheduler_start_time = time.time()
         placements = []
-        for worker_pool in worker_pools.worker_pools:
+        for worker_pool in worker_pools_copy.worker_pools:
             for worker in worker_pool.workers:
                 # We create a virtual copy of the Worker to simulate the loading of
                 # each model onto the Worker to correctly account for the resources.
@@ -702,8 +705,10 @@ class ClockworkScheduler(BaseScheduler):
                             loading_strategy=adjusted_loading_strategy,
                         )
                         self._logger.debug(
-                            "[%s] Requesting to load WorkProfile %s onto Worker %s.",
-                            start_time,
+                            "[%s] Requesting to load WorkProfile %s "
+                            "(%s) onto Worker %s.",
+                            start_time.to(EventTime.Unit.US).time,
+                            work_profile.name,
                             work_profile.id,
                             worker.id,
                         )
