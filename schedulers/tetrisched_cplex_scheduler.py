@@ -172,6 +172,7 @@ class TaskOptimizerVariables(object):
         self._task = task
         self._previously_placed = False
         self._is_placed_variable = None
+        self._reward_variable = None
 
         # Placement characteristics.
         # Set up a matrix of variables that signify the time, the worker and the
@@ -208,6 +209,7 @@ class TaskOptimizerVariables(object):
             )
             self._space_time_strategy_matrix[placed_key] = 1
             self._is_placed_variable = 1
+            self._reward_variable = 1
         else:
             # Initialize all the possible placement opportunities for this task into the
             # space-time matrix. The worker has to be able to accomodate the task, and
@@ -294,6 +296,7 @@ class TaskOptimizerVariables(object):
                     f"required_worker_placement",
                 )
                 self._is_placed_variable = 1
+                self._reward_variable = 1
             else:
                 # If either the task was not previously placed, or we are allowing
                 # retractions, then the task can be placed or left unplaced.
@@ -308,6 +311,23 @@ class TaskOptimizerVariables(object):
                     ct=self._is_placed_variable
                     == optimizer.sum(self._space_time_strategy_matrix.values()),
                     ctname=f"{task.unique_name}_is_placed_constraint",
+                )
+
+                # Set up the reward variable according to either `Task` or `BatchTask`.
+                placement_reward = (
+                    len(self._task.tasks) ** 2
+                    if isinstance(self._task, BatchTask)
+                    else 1
+                )
+                self._reward_variable = optimizer.integer_var(
+                    lb=0, ub=placement_reward, name=f"{task.unique_name}_reward"
+                )
+                optimizer.add_constraint(
+                    ct=(
+                        self._reward_variable
+                        == placement_reward * self._is_placed_variable
+                    ),
+                    ctname=f"{task.unique_name}_is_placed_reward_constraint",
                 )
 
     def __get_worker_index_from_previous_placement(
@@ -487,6 +507,12 @@ class TaskOptimizerVariables(object):
     def is_placed(self) -> Optional[Union[int, cpx.BinaryVarType]]:
         """Returns the binary variable that specifies if the task was placed or not."""
         return self._is_placed_variable
+
+    @property
+    def reward(self) -> Optional[Union[int, cpx.IntegerVarType]]:
+        """Returns the integer variable that denotes the reward obtained from the
+        placement of this task."""
+        return self._reward_variable
 
 
 class TetriSchedCPLEXScheduler(BaseScheduler):
@@ -1104,22 +1130,14 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
             # Define reward variables for each of the tasks, that is a sum of their
             # space-time matrices. Maximizing the sum of these rewards is the goal of
             # the scheduler.
-            task_reward_variables = []
-            for task_name, task_variables in tasks_to_variables.items():
-                batch_reward = (
-                    len(task_variables.task.tasks)
-                    if isinstance(task_variables.task, BatchTask)
-                    else 1
+            optimizer.maximize(
+                optimizer.sum(
+                    [
+                        task_variable.reward
+                        for task_variable in tasks_to_variables.values()
+                    ]
                 )
-                task_reward = optimizer.integer_var(
-                    lb=0, ub=batch_reward, name=f"{task_name}_reward"
-                )
-                optimizer.add_constraint(
-                    ct=(task_reward == batch_reward * task_variables.is_placed),
-                    ctname=f"{task_name}_is_placed_reward",
-                )
-                task_reward_variables.append(task_reward)
-            optimizer.maximize(optimizer.sum(task_reward_variables))
+            )
         else:
             raise RuntimeError(
                 f"The goal {self._goal} is not supported yet by "
