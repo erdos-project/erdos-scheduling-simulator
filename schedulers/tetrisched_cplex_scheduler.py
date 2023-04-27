@@ -209,7 +209,9 @@ class TaskOptimizerVariables(object):
             )
             self._space_time_strategy_matrix[placed_key] = 1
             self._is_placed_variable = 1
-            self._reward_variable = 1
+            self._reward_variable = (
+                len(self._task.tasks) if isinstance(self._task, BatchTask) else 1
+            )
         else:
             # Initialize all the possible placement opportunities for this task into the
             # space-time matrix. The worker has to be able to accomodate the task, and
@@ -296,7 +298,9 @@ class TaskOptimizerVariables(object):
                     f"required_worker_placement",
                 )
                 self._is_placed_variable = 1
-                self._reward_variable = 1
+                self._reward_variable = (
+                    len(self._task.tasks) if isinstance(self._task, BatchTask) else 1
+                )
             else:
                 # If either the task was not previously placed, or we are allowing
                 # retractions, then the task can be placed or left unplaced.
