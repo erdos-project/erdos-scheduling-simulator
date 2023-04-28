@@ -162,6 +162,23 @@ class EventQueue(object):
             return None
         return self._event_queue[0]
 
+    def get_next_event_of_type(self, event_type: EventType) -> Optional[Event]:
+        """Retrieve the next event of the given type from the queue.
+
+        Note that this method iterates over the entire queue, and can be slow.
+
+        Args:
+            event_type (`EventType`): The type of the event to retrieve.
+
+        Returns:
+            The next event of the given type in the queue ordered according to the
+            release time.
+        """
+        filtered_values = list(
+            filter(lambda event: event.event_type == event_type, self._event_queue)
+        )
+        return min(filtered_values) if len(filtered_values) > 1 else None
+
     def reheapify(self):
         """Reheapify the current queue.
 
@@ -1423,6 +1440,9 @@ class Simulator(object):
             [task.unique_name for task in schedulable_tasks],
             [task.unique_name for task in running_tasks],
         )
+        next_task_release_event = self._event_queue.get_next_event_of_type(
+            EventType.TASK_RELEASE
+        )
         next_event = self._event_queue.peek()
         self._logger.debug(
             "[%s] The next event in the queue is %s.", event.time.time, next_event
@@ -1508,42 +1528,45 @@ class Simulator(object):
                 + self._scheduler_delay
             )
 
-            next_event_invocation_time = (
-                next_event.time + self._scheduler_delay
-                if next_event is not None
+            next_task_release_event_invocation_time = (
+                next_task_release_event.to(EventTime.Unit.US).time
+                + self._scheduler_delay.to(EventTime.Unit.US).time
+                if next_task_release_event is not None
                 else EventTime.zero()
             )
 
             next_event_time = None
             if len(running_tasks) == 0:
-                next_event_time = next_event_invocation_time
-            elif next_event is None:
+                next_event_time = next_task_release_event_invocation_time
+            elif next_task_release_event is None:
                 next_event_time = minimum_running_task_completion_time
             else:
                 next_event_time = min(
-                    minimum_running_task_completion_time, next_event_invocation_time
+                    minimum_running_task_completion_time,
+                    next_task_release_event_invocation_time,
                 )
             self._logger.debug(
                 "[%s] The next event time was %s because the minimum running task "
-                "completion time was %s and the next event in the queue was at %s.",
+                "completion time was %s and the next TASK_RELEASE event in the queue "
+                "was at %s.",
                 event.time.to(EventTime.Unit.US).time,
                 next_event_time,
                 minimum_running_task_completion_time,
-                next_event_invocation_time,
+                next_task_release_event_invocation_time,
             )
 
             adjusted_scheduler_start_time = max(scheduler_start_time, next_event_time)
 
             if scheduler_start_time != adjusted_scheduler_start_time:
-                self._logger.warn(
+                self._logger.warning(
                     "[%s] The scheduler start time was pushed from %s to %s since "
-                    "either the next running task finishes at %s or the next event "
-                    "is being invoked at %s.",
+                    "either the next running task finishes at %s or the next "
+                    "TASK_RELEASE event is being invoked at %s.",
                     event.time.to(EventTime.Unit.US).time,
                     scheduler_start_time,
                     adjusted_scheduler_start_time,
                     minimum_running_task_completion_time,
-                    next_event_invocation_time,
+                    next_task_release_event_invocation_time,
                 )
                 scheduler_start_time = adjusted_scheduler_start_time
 
