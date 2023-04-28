@@ -1529,8 +1529,8 @@ class Simulator(object):
             )
 
             next_task_release_event_invocation_time = (
-                next_task_release_event.to(EventTime.Unit.US).time
-                + self._scheduler_delay.to(EventTime.Unit.US).time
+                next_task_release_event.time.to(EventTime.Unit.US)
+                + self._scheduler_delay.to(EventTime.Unit.US)
                 if next_task_release_event is not None
                 else EventTime.zero()
             )
