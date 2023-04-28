@@ -10,6 +10,7 @@ from uuid import UUID
 import absl  # noqa: F401
 import docplex.mp.dvar as cpx_var
 import docplex.mp.model as cpx
+import numpy as np
 from cplex.callbacks import MIPInfoCallback
 from docplex.mp.environment import Environment
 from docplex.mp.sdetails import SolveDetails
@@ -177,16 +178,17 @@ class TaskOptimizerVariables(object):
         # Placement characteristics.
         # Set up a matrix of variables that signify the time, the worker and the
         # strategy with which the the task is placed.
+        time_range = range(
+            current_time.to(EventTime.Unit.US).time,
+            current_time.to(EventTime.Unit.US).time
+            + plan_ahead.to(EventTime.Unit.US).time
+            + 1,
+            time_discretization.to(EventTime.Unit.US).time,
+        )
         self._space_time_strategy_matrix = {
             (worker_id, t, strategy): 0
             for worker_id in workers.keys()
-            for t in range(
-                current_time.to(EventTime.Unit.US).time,
-                current_time.to(EventTime.Unit.US).time
-                + plan_ahead.to(EventTime.Unit.US).time
-                + 1,
-                time_discretization.to(EventTime.Unit.US).time,
-            )
+            for t in time_range
             for strategy in self._task.available_execution_strategies
         }
 
@@ -209,9 +211,11 @@ class TaskOptimizerVariables(object):
             )
             self._space_time_strategy_matrix[placed_key] = 1
             self._is_placed_variable = 1
+            # We scale the reward to 2 so that it is in the same range as the rewards
+            # being passed to SCHEDULED / RELEASED tasks (see below).
             self._reward_variable = (
                 len(self._task.tasks) if isinstance(self._task, BatchTask) else 1
-            )
+            ) * 2
         else:
             # Initialize all the possible placement opportunities for this task into the
             # space-time matrix. The worker has to be able to accomodate the task, and
@@ -298,9 +302,6 @@ class TaskOptimizerVariables(object):
                     f"required_worker_placement",
                 )
                 self._is_placed_variable = 1
-                self._reward_variable = (
-                    len(self._task.tasks) if isinstance(self._task, BatchTask) else 1
-                )
             else:
                 # If either the task was not previously placed, or we are allowing
                 # retractions, then the task can be placed or left unplaced.
@@ -317,35 +318,44 @@ class TaskOptimizerVariables(object):
                     ctname=f"{task.unique_name}_is_placed_constraint",
                 )
 
-                # Set up the reward variable according to either `Task` or `BatchTask`.
-                placement_reward = (
-                    len(self._task.tasks) ** 2
-                    if isinstance(self._task, BatchTask)
-                    else 1
-                )
-                self._reward_variable = optimizer.integer_var(
-                    lb=0, ub=placement_reward, name=f"{task.unique_name}_reward"
-                )
-                optimizer.add_constraint(
-                    ct=(
-                        self._reward_variable
-                        == placement_reward * self._is_placed_variable
-                    ),
-                    ctname=f"{task.unique_name}_is_placed_reward_constraint",
-                )
-
-            # Set the reward variable according to either `Task` or `BatchTask`.
+            # The reward for placing the task is the number of tasks in the batch if
+            # the task is a `BatchTask` or 1 if the task is a `Task`.
             task_reward = (
                 len(self._task.tasks) ** 2 if isinstance(self._task, BatchTask) else 1
             )
-            placement_reward = [
-                task_reward * -start_time * placement_variable
-                for (
-                    _,
-                    start_time,
-                    _,
-                ), placement_variable in self._space_time_strategy_matrix.items()
-            ]
+
+            # The placement reward skews the reward towards placing the task earlier.
+            # We interpolate the time range to a range between 2 and 1 and use that to
+            # skew the reward towards earlier placement.
+            placement_rewards = dict(
+                zip(
+                    time_range,
+                    np.interp(time_range, (min(time_range), max(time_range)), (2, 1)),
+                )
+            )
+
+            # Set the reward variable according to the `task_reward`.
+            self._reward_variable = optimizer.continuous_var(
+                lb=0,
+                ub=task_reward * 2,
+                name=f"{task.unique_name}_reward",
+            )
+
+            # TODO (Sukrit): Ideally, this should use the strategy's batch size to
+            # inform the reward as opposed to a fixed value of `task_reward`. However,
+            # we only generate `BatchTask`s with a fixed strategy for now, and so this
+            # formulation works.
+            reward = []
+            for (
+                _,
+                start_time,
+                _,
+            ), variable in self._space_time_strategy_matrix.items():
+                reward.append(task_reward * placement_rewards[start_time] * variable)
+            optimizer.add_constraint(
+                ct=(self._reward_variable == optimizer.sum(reward)),
+                ctname=f"{task.unique_name}_reward_constraint",
+            )
 
     def __get_worker_index_from_previous_placement(
         self, task: Task, workers: Mapping[int, Worker]
@@ -526,7 +536,7 @@ class TaskOptimizerVariables(object):
         return self._is_placed_variable
 
     @property
-    def reward(self) -> Optional[Union[int, cpx.IntegerVarType]]:
+    def reward(self) -> Optional[Union[int, cpx.ContinuousVarType]]:
         """Returns the integer variable that denotes the reward obtained from the
         placement of this task."""
         return self._reward_variable

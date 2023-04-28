@@ -1067,6 +1067,7 @@ def test_ilp_fits_correct_strategies(scheduler):
     ],
 )
 def test_ilp_batching(scheduler):
+    """Test that the ILP-based scheduler batches tasks correctly."""
     work_profile = WorkProfile(
         name="Camera_Profile",
         execution_strategies=ExecutionStrategies(
@@ -1162,3 +1163,90 @@ def test_ilp_batching(scheduler):
     assert (
         camera_task_3_placements[0].execution_strategy.batch_size == 1
     ), "Incorrect batch size for camera_task_3."
+
+
+@pytest.mark.parametrize(
+    "scheduler",
+    [
+        pytest.param(
+            TetriSchedCPLEXScheduler(
+                runtime=EventTime.zero(),
+                batching=True,
+                enforce_deadlines=True,
+                time_discretization=EventTime(10, EventTime.Unit.US),
+            ),
+            marks=pytest.mark.skipif(
+                os.getenv("GITHUB_ACTIONS") == "true",
+                reason="CPLEX is not available in Github Actions.",
+            ),
+        ),
+    ],
+)
+def test_ilp_batching_time(scheduler):
+    """Test that the ILP-based scheduler batches tasks and places them in order."""
+    work_profile = WorkProfile(
+        name="Camera_Profile",
+        execution_strategies=ExecutionStrategies(
+            strategies=[
+                ExecutionStrategy(
+                    resources=Resources(
+                        resource_vector={Resource(name="CPU", _id="any"): 10}
+                    ),
+                    batch_size=16,
+                    runtime=EventTime(110, EventTime.Unit.US),
+                ),
+                ExecutionStrategy(
+                    resources=Resources(
+                        resource_vector={Resource(name="CPU", _id="any"): 10}
+                    ),
+                    batch_size=8,
+                    runtime=EventTime(80, EventTime.Unit.US),
+                ),
+            ]
+        ),
+    )
+    tasks = [
+        create_default_task(
+            name="Camera_{}".format(i),
+            job=Job(name="Camera_{}".format(i)),
+            profile=work_profile,
+            deadline=190,
+        )
+        for i in range(24)
+    ]
+    task_graph = TaskGraph(
+        name="TestTaskGraph",
+        tasks={task: [] for task in tasks},
+    )
+    workload = Workload.from_task_graphs({"TestTaskGraph": task_graph})
+    for task in tasks:
+        task.release(EventTime.zero())
+
+    # Create the Workers.
+    worker_1 = Worker(
+        name="Worker_1",
+        resources=Resources({Resource(name="CPU"): 10}),
+    )
+    worker_pool_1 = WorkerPool(name="WorkerPool_1", workers=[worker_1])
+    worker_pools = WorkerPools(worker_pools=[worker_pool_1])
+
+    # Run the scheduler.
+    placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
+    assert len(placements) == 24, "Incorrect length of placements retrieved."
+
+    batch_16_placements = []
+    batch_8_placements = []
+    for placement in placements:
+        if placement.execution_strategy.batch_size == 16:
+            batch_16_placements.append(placement)
+        elif placement.execution_strategy.batch_size == 8:
+            batch_8_placements.append(placement)
+        else:
+            assert False, (
+                f"Incorrect batch size "
+                f"({placement.execution_strategy.batch_size}) retrieved."
+            )
+
+    assert (
+        batch_16_placements[0].placement_time < batch_8_placements[0].placement_time
+    ), "Incorrect placement order."
