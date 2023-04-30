@@ -257,6 +257,13 @@ flags.DEFINE_bool(
     "If True, the scheduler writes the status of each run to a seperate"
     "log file in a format unique to every scheduler.",
 )
+flags.DEFINE_list(
+    "scheduler_log_times",
+    [],
+    "A list of timestamps (in µs) at which to request extra logging from the Scheduler."
+    "If scheduler_log_to_file is `True`, then extra information will be requested for "
+    "all timestamps.",
+)
 
 # Workload definition related flags.
 flags.DEFINE_float(

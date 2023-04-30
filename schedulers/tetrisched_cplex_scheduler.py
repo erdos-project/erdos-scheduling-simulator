@@ -1,9 +1,11 @@
 import multiprocessing
+import random
 import sys
 import time
 from collections import defaultdict, deque
 from copy import copy, deepcopy
 from itertools import islice
+from operator import attrgetter
 from typing import Any, List, Mapping, Optional, Sequence, Set, TextIO, Tuple, Union
 from uuid import UUID
 
@@ -96,11 +98,18 @@ class BatchTask(object):
     """
 
     def __init__(
-        self, name: str, tasks: Sequence[Task], strategy: ExecutionStrategy
+        self,
+        name: str,
+        tasks: Sequence[Task],
+        strategy: ExecutionStrategy,
+        priority: float,
     ) -> None:
         self._name = name
         self._tasks = tasks
         self._strategy = BatchStrategy(execution_strategy=strategy)
+        self._priority = priority
+        self._id = UUID(int=random.getrandbits(128), version=4)
+        self._hash = hash(self._id)
 
     @property
     def state(self) -> TaskState:
@@ -132,12 +141,23 @@ class BatchTask(object):
         return min(task.deadline for task in self._tasks)
 
     @property
+    def priority(self) -> float:
+        return self._priority
+
+    @priority.setter
+    def priority(self, priority: float) -> None:
+        self._priority = priority
+
+    @property
     def available_execution_strategies(self) -> ExecutionStrategies:
         return ExecutionStrategies(strategies=[self._strategy])
 
     @property
     def tasks(self) -> Sequence[Task]:
         return self._tasks
+
+    def __hash__(self) -> int:
+        return self._hash
 
 
 class TaskOptimizerVariables(object):
@@ -212,9 +232,12 @@ class TaskOptimizerVariables(object):
             self._space_time_strategy_matrix[placed_key] = 1
             self._is_placed_variable = 1
             # We scale the reward to 2 so that it is in the same range as the rewards
-            # being passed to SCHEDULED / RELEASED tasks (see below).
+            # being passed to SCHEDULED / RELEASED tasks (see below). We also multiply
+            # the slack that was left for this Task.
             self._reward_variable = (
-                len(self._task.tasks) if isinstance(self._task, BatchTask) else 1
+                (len(self._task.tasks) ** 2) * self._task.priority
+                if isinstance(self._task, BatchTask)
+                else 1
             ) * 2
         else:
             # Initialize all the possible placement opportunities for this task into the
@@ -334,10 +357,16 @@ class TaskOptimizerVariables(object):
                 )
             )
 
+            # The slack reward skews the reward towards placing tasks with least slack
+            # earlier. The slack reward is normalized to a range between 2 and 1.
+            slack_reward = (
+                self._task.priority if isinstance(self._task, BatchTask) else 1
+            )
+
             # Set the reward variable according to the `task_reward`.
             self._reward_variable = optimizer.continuous_var(
                 lb=0,
-                ub=task_reward * 2,
+                ub=task_reward * 4,
                 name=f"{task.unique_name}_reward",
             )
 
@@ -351,7 +380,12 @@ class TaskOptimizerVariables(object):
                 start_time,
                 _,
             ), variable in self._space_time_strategy_matrix.items():
-                reward.append(task_reward * placement_rewards[start_time] * variable)
+                reward.append(
+                    task_reward
+                    * placement_rewards[start_time]
+                    * slack_reward
+                    * variable
+                )
             optimizer.add_constraint(
                 ct=(self._reward_variable == optimizer.sum(reward)),
                 ctname=f"{task.unique_name}_reward_constraint",
@@ -423,7 +457,7 @@ class TaskOptimizerVariables(object):
             start_time,
             strategy,
         ), variable in self._space_time_strategy_matrix.items():
-            if type(variable) != int and int(solution.get_value(variable)) == 1:
+            if type(variable) != int and round(solution.get_value(variable)) == 1:
                 placement_worker = worker_index_to_worker[worker_id]
                 placement_worker_pool_id = worker_id_to_worker_pool[placement_worker.id]
                 if isinstance(self.task, BatchTask):
@@ -614,6 +648,7 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
         self._time_discretization = time_discretization
         self._plan_ahead = plan_ahead
         self._log_to_file = log_to_file
+        self._log_times = set(map(int, _flags.scheduler_log_times)) if _flags else set()
 
     def _initialize_optimizer(
         self, current_time: EventTime
@@ -635,9 +670,12 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
 
         # Enable very verbose logging of the solution, if requested.
         output_file = None
-        if self._log_to_file:
+        if (
+            self._log_to_file
+            or current_time.to(EventTime.Unit.US).time in self._log_times
+        ):
             output_file = open(
-                f"./cplex_{current_time.to(EventTime.Unit.US).time}.log", "w"
+                f"./tetrisched_cplex_{current_time.to(EventTime.Unit.US).time}.log", "w"
             )
             optimizer.context.cplex_parameters.mip.display = 5
             optimizer.set_log_output(output_file)
@@ -748,7 +786,10 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
                         name="tetrisched_warm_start",
                     )
                 )
-            if self._log_to_file:
+            if (
+                self._log_to_file
+                or sim_time.to(EventTime.Unit.US).time in self._log_times
+            ):
                 with open(
                     f"./tetrisched_cplex_{sim_time.to(EventTime.Unit.US).time}.lp", "w"
                 ) as lp_out:
@@ -769,9 +810,11 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
                 # looked through.
                 task_placement_map: Mapping[Task, Placement] = {}
                 for task_variable in tasks_to_variables.values():
-                    # If the task was previously placed,
+                    # If the task was previously placed, we don't need to return new
+                    # placements.
                     if task_variable.previously_placed:
                         continue
+
                     task_placements = task_variable.get_placements(
                         solution, workers, worker_to_worker_pool
                     )
@@ -802,7 +845,7 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
                         self._logger.debug(
                             "[%s] Placed %s (with deadline %s and "
                             "remaining time %s) on WorkerPool(%s) to be "
-                            "started at %s and executed with strategy %s.",
+                            "started at %s and executed with strategy %s (%s).",
                             sim_time.to(EventTime.Unit.US).time,
                             placement.task.unique_name,
                             placement.task.deadline,
@@ -810,6 +853,7 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
                             placement.worker_pool_id,
                             placement.placement_time,
                             placement.execution_strategy,
+                            placement.execution_strategy.id,
                         )
                         placements.append(placement)
                     else:
@@ -821,7 +865,10 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
                         placements.append(placement)
 
                 # Write the solution to the SOL file, if requested.
-                if self._log_to_file:
+                if (
+                    self._log_to_file
+                    or sim_time.to(EventTime.Unit.US).time in self._log_times
+                ):
                     file_name = (
                         f"tetrisched_cplex_{sim_time.to(EventTime.Unit.US).time}.sol"
                     )
@@ -876,6 +923,163 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
             runtime=runtime, true_runtime=scheduler_runtime, placements=placements
         )
 
+    def _create_batch_task_variables(
+        self,
+        sim_time: EventTime,
+        plan_ahead: EventTime,
+        optimizer: cpx.Model,
+        profile: WorkProfile,
+        tasks: Sequence[Task],
+        workers: Mapping[int, Worker],
+    ) -> Mapping[str, TaskOptimizerVariables]:
+        # Sanity check that all tasks are from the same profile.
+        for task in tasks:
+            if task.profile != profile:
+                raise ValueError(
+                    f"Task {task.unique_name} has profile {task.profile.name}, "
+                    f"but was expected to have profile {profile.name}."
+                )
+
+        # Seperate the tasks into running or unscheduled.
+        running_tasks: Mapping[ExecutionStrategy, List[Task]] = defaultdict(list)
+        unscheduled_tasks: Sequence[Task] = []
+        for task in tasks:
+            if task.state == TaskState.RUNNING or (
+                not self._retract_schedules and task.state == TaskState.SCHEDULED
+            ):
+                running_tasks[task.current_placement.execution_strategy].append(task)
+            else:
+                unscheduled_tasks.append(task)
+
+        # Create `BatchTask`s for all the running tasks.
+        batch_tasks: List[BatchTask] = []
+        batch_counter = 1
+        for execution_strategy, tasks_for_this_strategy in running_tasks.items():
+            batch_tasks.append(
+                BatchTask(
+                    name=f"{profile.name}_{batch_counter}",
+                    tasks=tasks_for_this_strategy,
+                    strategy=execution_strategy,
+                    priority=min(
+                        task.deadline - sim_time - task.remaining_time
+                        for task in tasks_for_this_strategy
+                    )
+                    .to(EventTime.Unit.US)
+                    .time,
+                )
+            )
+            batch_counter += 1
+
+        # Create `BatchTask`s for all the unscheduled tasks.
+        unscheduled_tasks = deque(sorted(unscheduled_tasks, key=attrgetter("deadline")))
+        tasks_to_batch_tasks: Mapping[Task, List[BatchTask]] = defaultdict(list)
+        while len(unscheduled_tasks) > 0:
+            # Get the strategies that satisfy the deadline for the first task.
+            earliest_deadline_task = unscheduled_tasks[0]
+            compatible_strategies = ExecutionStrategies()
+            for strategy in sorted(
+                earliest_deadline_task.available_execution_strategies,
+                key=attrgetter("batch_size"),
+                reverse=True,
+            ):
+                if sim_time + strategy.runtime <= earliest_deadline_task.deadline:
+                    compatible_strategies.add_strategy(strategy)
+
+            # Construct `BatchTask`s for strategies that can satisfy the batch size
+            # requirements.
+            for strategy in compatible_strategies:
+                if len(unscheduled_tasks) < strategy.batch_size:
+                    continue
+
+                # Find the tasks that need to fit into this batch, and create
+                # a new `BatchTask`.
+                tasks_for_this_strategy = list(
+                    islice(unscheduled_tasks, 0, strategy.batch_size)
+                )
+                priority_for_this_strategy = (
+                    min(
+                        task.deadline - sim_time - strategy.runtime
+                        for task in tasks_for_this_strategy
+                    )
+                    .to(EventTime.Unit.US)
+                    .time
+                )
+                self._logger.debug(
+                    "[%s] Creating the batching strategy %s with tasks: [%s], "
+                    "and priority %d.",
+                    sim_time.to(EventTime.Unit.US).time,
+                    f"{profile.name}_{batch_counter}",
+                    ", ".join([t.unique_name for t in tasks_for_this_strategy]),
+                    priority_for_this_strategy,
+                )
+                batch_task = BatchTask(
+                    name=f"{profile.name}_{batch_counter}",
+                    tasks=tasks_for_this_strategy,
+                    strategy=strategy,
+                    priority=priority_for_this_strategy,
+                )
+
+                # Add the `BatchTask` to the list of `BatchTask`s, and keep track of
+                # which `BatchTask`s were associated with each schedulable `Task` so
+                # we can allow only one of them to be scheduled.
+                batch_tasks.append(batch_task)
+                for task in tasks_for_this_strategy:
+                    tasks_to_batch_tasks[task].append(batch_task)
+                batch_counter += 1
+
+            # Move on to the next task.
+            unscheduled_tasks.popleft()
+
+        # Now that we have all the `BatchTask`s, we first renormalize their priorities
+        # and then construct a `BatchTaskVariable` for each of them.
+        batch_priorities = [task.priority for task in batch_tasks]
+        for batch_task, new_priority in zip(
+            batch_tasks,
+            np.interp(
+                batch_priorities, (min(batch_priorities), max(batch_priorities)), (2, 1)
+            ),
+        ):
+            batch_task.priority = new_priority
+
+        # Create the `BatchTaskVariable`s for each of the `BatchTask`s.
+        batch_task_variables: Mapping[str, TaskOptimizerVariables] = {}
+        for batch_task in batch_tasks:
+            batch_task_variables[batch_task.unique_name] = TaskOptimizerVariables(
+                optimizer=optimizer,
+                task=batch_task,
+                workers=workers,
+                current_time=sim_time,
+                plan_ahead=plan_ahead,
+                time_discretization=self._time_discretization,
+                enforce_deadlines=self.enforce_deadlines,
+                retract_schedules=self.retract_schedules,
+            )
+
+        # Ensure that only one of the `BatchTask`s associated with each `Task` is
+        # scheduled.
+        for task, batch_tasks in tasks_to_batch_tasks.items():
+            self._logger.debug(
+                "[%s] Ensuring that only one of [%s] is placed for task %s.",
+                sim_time.to(EventTime.Unit.US).time,
+                ", ".join([batch_task.unique_name for batch_task in batch_tasks]),
+                task.unique_name,
+            )
+            optimizer.add_constraint(
+                ct=optimizer.sum(
+                    [
+                        batch_task_variable.is_placed
+                        for batch_task_variable in map(
+                            lambda task: batch_task_variables[task.unique_name],
+                            batch_tasks,
+                        )
+                    ]
+                )
+                <= 1,
+                ctname=f"{task.unique_name}_unique_batch_placement",
+            )
+
+        return batch_task_variables
+
     def _add_variables(
         self,
         sim_time: EventTime,
@@ -898,7 +1102,7 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
             A mapping from the unique name of the Task to the variables representing
             its optimization objective.
         """
-        tasks_to_variables = {}
+        tasks_to_variables: Mapping[str, TaskOptimizerVariables] = {}
         plan_ahead = self._plan_ahead
         if plan_ahead == EventTime(-1, EventTime.Unit.US):
             for task in tasks_to_be_scheduled:
@@ -911,140 +1115,16 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
                 profile_to_tasks[task.profile].add(task)
 
             for profile, tasks in profile_to_tasks.items():
-                self._logger.debug(
-                    "[%s] Considering the tasks [%s] for batching that "
-                    "belong to the same profile %s.",
-                    sim_time.to(EventTime.Unit.US).time,
-                    ", ".join(task.unique_name for task in tasks),
-                    profile.name,
-                )
-                # Separate the tasks into running or unscheduled.
-                running_tasks: Mapping[ExecutionStrategy, List[Task]] = defaultdict(
-                    list
-                )
-                unscheduled_tasks: Sequence[Task] = []
-                for task in tasks:
-                    if task.state == TaskState.RUNNING or (
-                        not self._retract_schedules
-                        and task.state == TaskState.SCHEDULED
-                    ):
-                        running_tasks[task.current_placement.execution_strategy].append(
-                            task
-                        )
-                    else:
-                        unscheduled_tasks.append(task)
-
-                # Create the variables for the running tasks.
-                profile_counter = 1
-                for (
-                    execution_strategy,
-                    tasks_for_this_strategy,
-                ) in running_tasks.items():
-                    tasks_to_variables[
-                        f"{profile.name}_{profile_counter}"
-                    ] = TaskOptimizerVariables(
-                        optimizer=optimizer,
-                        task=BatchTask(
-                            name=f"{profile.name}_{profile_counter}",
-                            tasks=tasks_for_this_strategy,
-                            strategy=execution_strategy,
-                        ),
-                        workers=workers,
-                        current_time=sim_time,
+                tasks_to_variables.update(
+                    self._create_batch_task_variables(
+                        sim_time=sim_time,
                         plan_ahead=plan_ahead,
-                        time_discretization=self._time_discretization,
-                        enforce_deadlines=self.enforce_deadlines,
-                        retract_schedules=self.retract_schedules,
+                        optimizer=optimizer,
+                        profile=profile,
+                        tasks=tasks,
+                        workers=workers,
                     )
-                    profile_counter += 1
-
-                # Create the variables for the unscheduled tasks.
-                unscheduled_tasks = deque(
-                    sorted(unscheduled_tasks, key=lambda t: t.deadline)
                 )
-                tasks_to_batch_task_variables: Mapping[
-                    Task, List[TaskOptimizerVariables]
-                ] = defaultdict(list)
-                while len(unscheduled_tasks) > 0:
-                    # Get the strategies that satisfy the deadline for the first task.
-                    least_slack_task = unscheduled_tasks[0]
-                    compatible_strategies = ExecutionStrategies()
-                    for strategy in sorted(
-                        least_slack_task.available_execution_strategies,
-                        key=lambda s: s.batch_size,
-                        reverse=True,
-                    ):
-                        if sim_time + strategy.runtime <= least_slack_task.deadline:
-                            compatible_strategies.add_strategy(strategy)
-
-                    # Construct TaskOptimizerVariables for strategies that can satisfy
-                    # the batch size requirements.
-                    for strategy in compatible_strategies:
-                        if len(unscheduled_tasks) < strategy.batch_size:
-                            continue
-
-                        # Find the tasks that need to fit into this batch, and create
-                        # a new variable for this Batch. Save the variable that contain
-                        # each of the Tasks, so we can ensure that no task is scheduled
-                        # more than once.
-                        tasks_for_this_strategy = list(
-                            islice(unscheduled_tasks, 0, strategy.batch_size)
-                        )
-                        self._logger.debug(
-                            "[%s] Creating the batching strategy %s with tasks: [%s]",
-                            sim_time.to(EventTime.Unit.US).time,
-                            f"{profile.name}_{profile_counter}",
-                            ", ".join([t.unique_name for t in tasks_for_this_strategy]),
-                        )
-                        batch_task_variable = TaskOptimizerVariables(
-                            optimizer=optimizer,
-                            task=BatchTask(
-                                name=f"{profile.name}_{profile_counter}",
-                                tasks=tasks_for_this_strategy,
-                                strategy=strategy,
-                            ),
-                            workers=workers,
-                            current_time=sim_time,
-                            plan_ahead=plan_ahead,
-                            time_discretization=self._time_discretization,
-                            enforce_deadlines=self.enforce_deadlines,
-                            retract_schedules=self.retract_schedules,
-                        )
-                        for task in tasks_for_this_strategy:
-                            tasks_to_batch_task_variables[task].append(
-                                batch_task_variable
-                            )
-                        tasks_to_variables[
-                            f"{profile.name}_{profile_counter}"
-                        ] = batch_task_variable
-                        profile_counter += 1
-
-                    unscheduled_tasks.popleft()
-
-                # Add a constraint that only one of the `BatchTask`s for each
-                # actual `Task` can be placed.
-                for (
-                    task,
-                    batch_task_variables,
-                ) in tasks_to_batch_task_variables.items():
-                    self._logger.debug(
-                        "[%s] Ensuring that only one of [%s] is placed for task %s.",
-                        sim_time.to(EventTime.Unit.US).time,
-                        ", ".join(
-                            [btv.task.unique_name for btv in batch_task_variables]
-                        ),
-                        task.unique_name,
-                    )
-                    optimizer.add_constraint(
-                        ct=optimizer.sum(
-                            [
-                                batch_task_variable.is_placed
-                                for batch_task_variable in batch_task_variables
-                            ]
-                        )
-                        <= 1,
-                        ctname=f"{task.unique_name}_unique_batch_placement",
-                    )
         else:
             # If batching is disabled, create a variable for each task.
             for task in tasks_to_be_scheduled:

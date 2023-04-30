@@ -582,7 +582,8 @@ class WorkerPool(object):
                 worker = self._workers[worker_id]
                 raise RuntimeError(
                     f"{worker.name} ({worker_id}) cannot accomodate the strategy "
-                    f"{execution_strategy} for task {task.unique_name}. It is running: "
+                    f"{execution_strategy} ({execution_strategy.id}) for task "
+                    f"{task.unique_name}. It is running: "
                     f"[{','.join(t.unique_name for t in worker.get_placed_tasks())}]"
                 )
             else:
