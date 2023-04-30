@@ -196,6 +196,13 @@ flags.DEFINE_integer(
     -1,
     "The minimum time interval (in µs) to elapse between too scheduler invocations.",
 )
+flags.DEFINE_bool(
+    "scheduler_run_at_worker_free",
+    False,
+    "If `True`, the scheduler is invoked whenever a Task finishes completion and a "
+    "Worker becomes free. This is a way of specifying a coarse-grained scheduler "
+    "frequency that is not tied to the release of Tasks in the system.",
+)
 flags.DEFINE_integer(
     "scheduler_delay",
     1,

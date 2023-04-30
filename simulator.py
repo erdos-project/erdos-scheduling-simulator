@@ -317,6 +317,9 @@ class Simulator(object):
         self._runtime_variance = _flags.runtime_variance if _flags else 0
         self._drop_skipped_tasks = _flags.drop_skipped_tasks if _flags else False
         self._verify_schedule = _flags.verify_schedule if _flags else False
+        self._run_scheduler_at_worker_free = (
+            _flags.scheduler_run_at_worker_free if _flags else False
+        )
 
         # Statistics about the Task.
         self._finished_tasks = 0
@@ -906,8 +909,13 @@ class Simulator(object):
         # If we are not in the midst of a scheduler invocation, and the task hasn't
         # already been scheduled and next scheduled invocation is too late, then
         # bring the invocation sooner to (event time + scheduler_delay), and re-heapify
-        # the event queue.
-        if event.task.state < TaskState.SCHEDULED and self._next_scheduler_event:
+        # the event queue. We don't do this if the user specifically requested to run
+        # the scheduler whenever the `Worker` becomes free.
+        if (
+            event.task.state < TaskState.SCHEDULED
+            and self._next_scheduler_event
+            and not self._run_scheduler_at_worker_free
+        ):
             new_scheduler_event_time = min(
                 self._next_scheduler_event.time, event.time + self._scheduler_delay
             )
@@ -1430,9 +1438,48 @@ class Simulator(object):
             return Event(event_type=EventType.SIMULATOR_END, time=loop_timeout)
 
         # Find sources of existing or ongoing work in the Simulator.
+        # Find the minimum remaining time from all the running / scheduled tasks.
         running_tasks = self._workload.filter(
             lambda task: task.state in (TaskState.SCHEDULED, TaskState.RUNNING)
         )
+        remaining_times = []
+        for task in running_tasks:
+            if task.state == TaskState.SCHEDULED:
+                remaining_times.append(
+                    (
+                        task.unique_name,
+                        task.expected_start_time,
+                        task.expected_start_time + task.remaining_time,
+                    )
+                )
+            elif task.state == TaskState.RUNNING:
+                remaining_times.append(
+                    (
+                        task.unique_name,
+                        self._simulator_time,
+                        self._simulator_time + task.remaining_time,
+                    )
+                )
+            else:
+                raise ValueError(
+                    f"The task {task.unique_name} was in an "
+                    f"unexpected state: {task.state}."
+                )
+        self._logger.debug(
+            "[%d] The running tasks along with their start time "
+            "and expected completion times are: %s.",
+            event.time.to(EventTime.Unit.US).time,
+            [
+                f"{task_name} ({start_time}, {completion_time})"
+                for task_name, start_time, completion_time in remaining_times
+            ],
+        )
+        minimum_running_task_completion_time = (
+            min(map(itemgetter(2), remaining_times), default=EventTime.zero())
+            + self._scheduler_delay
+        )
+
+        # Get the schedulable tasks that are waiting to be executed.
         schedulable_tasks = self._workload.get_schedulable_tasks(
             time=event.time,
             lookahead=self._scheduler.lookahead,
@@ -1444,10 +1491,9 @@ class Simulator(object):
             release_taskgraphs=self._scheduler.release_taskgraphs,
         )
         self._logger.debug(
-            "[%s] The schedulable tasks are %s, and the running tasks are %s.",
+            "[%s] The schedulable tasks are %s.",
             event.time.time,
             [task.unique_name for task in schedulable_tasks],
-            [task.unique_name for task in running_tasks],
         )
         next_task_release_event = self._event_queue.get_next_event_of_type(
             EventType.TASK_RELEASE
@@ -1474,6 +1520,18 @@ class Simulator(object):
                 event_type=EventType.SIMULATOR_END,
                 time=event.time + EventTime(1, EventTime.Unit.US),
             )
+        elif len(running_tasks) > 0 and self._run_scheduler_at_worker_free:
+            # The scheduler was requested to be invoked at the completion of the next
+            # task event. We move the scheduler event to the time when the earliest
+            # task ends.
+            self._logger.debug(
+                "[%s] The scheduler was requested to run when any Worker becomes free. "
+                "The minimum running task completion time is %s, so we invoke the "
+                "scheduler at that time.",
+                event.time.to(EventTime.Unit.US).time,
+                minimum_running_task_completion_time,
+            )
+            scheduler_start_time = minimum_running_task_completion_time
         elif (
             len(schedulable_tasks) == 0
             or all(
@@ -1498,44 +1556,6 @@ class Simulator(object):
             # is full, adjust the scheduler invocation time according to either the
             # time of invocation of the next event, or the minimum completion time
             # of a running task.
-
-            # Find the minimum remaining time from all the running / scheduled tasks.
-            remaining_times = []
-            for task in running_tasks:
-                if task.state == TaskState.SCHEDULED:
-                    remaining_times.append(
-                        (
-                            task.unique_name,
-                            task.expected_start_time,
-                            task.expected_start_time + task.remaining_time,
-                        )
-                    )
-                elif task.state == TaskState.RUNNING:
-                    remaining_times.append(
-                        (
-                            task.unique_name,
-                            self._simulator_time,
-                            self._simulator_time + task.remaining_time,
-                        )
-                    )
-                else:
-                    raise ValueError(
-                        f"The task {task.unique_name} was in an "
-                        f"unexpected state: {task.state}."
-                    )
-            self._logger.debug(
-                "[%d] The running tasks along with their start time "
-                "and expected completion times are: %s.",
-                event.time.to(EventTime.Unit.US).time,
-                [
-                    f"{task_name} ({start_time}, {completion_time})"
-                    for task_name, start_time, completion_time in remaining_times
-                ],
-            )
-            minimum_running_task_completion_time = (
-                min(map(itemgetter(2), remaining_times), default=EventTime.zero())
-                + self._scheduler_delay
-            )
 
             next_task_release_event_invocation_time = (
                 next_task_release_event.time.to(EventTime.Unit.US)
