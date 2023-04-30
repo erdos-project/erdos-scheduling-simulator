@@ -686,7 +686,7 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
         self, sim_time: EventTime, workload: Workload, worker_pools: "WorkerPools"
     ) -> Placements:
         # Retrieve the schedulable tasks from the Workload.
-        tasks_to_be_scheduled = workload.get_schedulable_tasks(
+        tasks_to_be_scheduled: List[Task] = workload.get_schedulable_tasks(
             time=sim_time,
             lookahead=self.lookahead,
             preemption=self.preemptive,
@@ -744,6 +744,31 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
         # Construct the model and the variables for each of the tasks.
         scheduler_start_time = time.time()
         placements = []
+
+        # Run admission control. If `enforce_deadlines` is requested, we will drop the
+        # tasks that are past its deadline.
+        if self.enforce_deadlines:
+            tasks_to_remove: List[Task] = []
+            for task in tasks_to_be_scheduled:
+                if (
+                    task.deadline
+                    < sim_time
+                    + task.available_execution_strategies.get_fastest_strategy().runtime
+                ):
+                    tasks_to_remove.append(task)
+
+            for task in tasks_to_remove:
+                self._logger.debug(
+                    "[%s] Requesting cancellation of %s since its "
+                    "deadline is %s and the fastest strategy takes %s.",
+                    sim_time.to(EventTime.Unit.US).time,
+                    task,
+                    task.deadline.to(EventTime.Unit.US),
+                    task.available_execution_strategies.get_fastest_strategy().runtime,
+                )
+                placements.append(Placement.create_task_cancellation(task))
+                tasks_to_be_scheduled.remove(task)
+
         if len(tasks_to_be_scheduled) != 0:
             # Set up the problem variables, constraints and add the objectives.
             # If requested, log the MIP into a LP file.
@@ -960,9 +985,12 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
                     name=f"{profile.name}_{batch_counter}",
                     tasks=tasks_for_this_strategy,
                     strategy=execution_strategy,
-                    priority=min(
-                        task.deadline - sim_time - task.remaining_time
-                        for task in tasks_for_this_strategy
+                    priority=sum(
+                        [
+                            task.deadline - sim_time - task.remaining_time
+                            for task in tasks_for_this_strategy
+                        ],
+                        start=EventTime.zero(),
                     )
                     .to(EventTime.Unit.US)
                     .time,
@@ -997,9 +1025,12 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
                     islice(unscheduled_tasks, 0, strategy.batch_size)
                 )
                 priority_for_this_strategy = (
-                    min(
-                        task.deadline - sim_time - strategy.runtime
-                        for task in tasks_for_this_strategy
+                    sum(
+                        [
+                            task.deadline - sim_time - strategy.runtime
+                            for task in tasks_for_this_strategy
+                        ],
+                        start=EventTime.zero(),
                     )
                     .to(EventTime.Unit.US)
                     .time
