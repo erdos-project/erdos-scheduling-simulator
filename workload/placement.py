@@ -42,14 +42,18 @@ class Placement(object):
         EVICT_WORK_PROFILE = 1
         # An action that informs the Simulator to load the WorkProfile.
         LOAD_WORK_PROFILE = 2
+        # An action that informs the Simulator to cancel a Task.
+        CANCEL_TASK = 3
         # An action that informs the Simulator to place a Task.
-        PLACE_TASK = 3
+        PLACE_TASK = 4
 
         def __str__(self) -> str:
             if self == Placement.PlacementType.EVICT_WORK_PROFILE:
                 return "EVICT_WORK_PROFILE"
             elif self == Placement.PlacementType.LOAD_WORK_PROFILE:
                 return "LOAD_WORK_PROFILE"
+            elif self == Placement.PlacementType.CANCEL_TASK:
+                return "CANCEL_TASK"
             elif self == Placement.PlacementType.PLACE_TASK:
                 return "PLACE_TASK"
 
@@ -83,7 +87,7 @@ class Placement(object):
         """Check if the computation associated with this Placement was placed on a
         WorkerPool.
 
-        The method is only available for `PLACE_TASK` placement type.
+        The method is only available for `PLACE_TASK`/`CANCEL_TASK` placement type.
 
         Returns:
             `True` if the task was placed, `False` otherwise.
@@ -91,7 +95,10 @@ class Placement(object):
         Raises:
             `RuntimeError` if the type of the placement is not `PLACE_TASK`.
         """
-        if self._placement_type != Placement.PlacementType.PLACE_TASK:
+        if self._placement_type not in (
+            Placement.PlacementType.PLACE_TASK,
+            Placement.PlacementType.CANCEL_TASK,
+        ):
             raise RuntimeError(
                 f"A Placement of type {str(self._placement_type)} cannot invoke "
                 f"the `is_placed` method."
@@ -128,7 +135,10 @@ class Placement(object):
         Raises:
             `RuntimeError` if the type of the placement is not `PLACE_TASK`.
         """
-        if self._placement_type != Placement.PlacementType.PLACE_TASK:
+        if self._placement_type not in (
+            Placement.PlacementType.PLACE_TASK,
+            Placement.PlacementType.CANCEL_TASK,
+        ):
             raise RuntimeError(
                 f"A Placement of type {str(self._placement_type)} does not have a "
                 f"Task object."
@@ -220,6 +230,10 @@ class Placement(object):
                 f"worker_id={self.worker_id}, "
                 f"loading_strategy={self.loading_strategy})"
             )
+        elif self._placement_type == Placement.PlacementType.CANCEL_TASK:
+            return (
+                f"Placement(type={self._placement_type}, task={self.task.unique_name})"
+            )
         elif self._placement_type == Placement.PlacementType.PLACE_TASK:
             return (
                 f"Placement(type={self._placement_type}, task={self.task.unique_name}, "
@@ -237,11 +251,19 @@ class Placement(object):
                 f"Placement(work_profile={self.work_profile.name}, "
                 f"type={str(self._placement_type)}, worker_id={self.worker_id})"
             )
-        else:
+        elif self._placement_type == Placement.PlacementType.CANCEL_TASK:
+            return str(self)
+        elif self._placement_type == Placement.PlacementType.PLACE_TASK:
             return (
                 f"Placement(task={self.task.unique_name}, "
                 f"type={str(self._placement_type)}, worker_id={self.worker_id})"
             )
+
+    @staticmethod
+    def create_task_cancellation(
+        task: "Task",  # noqa: F821
+    ) -> "Placement":
+        return Placement(type=Placement.PlacementType.CANCEL_TASK, computation=task)
 
     @staticmethod
     def create_task_placement(
