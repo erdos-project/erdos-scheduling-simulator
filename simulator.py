@@ -34,10 +34,13 @@ class EventType(Enum):
         12  # Ask the simulator to log the utilization of the worker pools.
     )
 
-    def __lt__(self, other):
+    def __lt__(self, other) -> bool:
         # This method is used to order events in the event queue. We prioritize
         # events that first free resources.
         return self.value < other.value
+
+    def __eq__(self, other) -> bool:
+        return self.value == other.value
 
 
 class Event(object):
@@ -84,8 +87,14 @@ class Event(object):
         self._task = task
         self._placement = placement
 
-    def __lt__(self, other):
+    def __lt__(self, other: "Event") -> bool:
         if self.time == other.time:
+            if (
+                self.event_type == other.event_type
+                and self.task is not None
+                and other.task is not None
+            ):
+                return self.task.unique_name < other.task.unique_name
             return self.event_type < other.event_type
         return self.time < other.time
 
