@@ -744,7 +744,7 @@ class ClockworkScheduler(BaseScheduler):
         placements = []
         for task in tasks_to_schedule:
             if task.deadline < current_time and self.enforce_deadlines:
-                placements.append(Placement.create_task_placement(task=task))
+                placements.append(Placement.create_task_cancellation(task=task))
                 self._logger.debug(
                     "[%s] Task %s has a deadline of %s, which has been missed. ",
                     current_time.to(EventTime.Unit.US).time,
