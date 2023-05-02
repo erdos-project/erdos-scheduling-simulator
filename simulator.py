@@ -186,7 +186,7 @@ class EventQueue(object):
         filtered_values = list(
             filter(lambda event: event.event_type == event_type, self._event_queue)
         )
-        return min(filtered_values) if len(filtered_values) > 1 else None
+        return min(filtered_values) if len(filtered_values) > 0 else None
 
     def reheapify(self):
         """Reheapify the current queue.
@@ -1542,7 +1542,11 @@ class Simulator(object):
         )
         next_event = self._event_queue.peek()
         self._logger.debug(
-            "[%s] The next event in the queue is %s.", event.time.time, next_event
+            "[%s] The next event in the queue is %s, and "
+            "the next TASK_RELEASE event is %s.",
+            event.time.time,
+            next_event,
+            next_task_release_event,
         )
 
         # If there is either existing work in the form of events in the queue or tasks
