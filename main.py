@@ -458,6 +458,7 @@ def main(args):
         scheduler = TetriSchedCPLEXScheduler(
             preemptive=FLAGS.preemption,
             runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
+            lookahead=EventTime(FLAGS.scheduler_lookahead, EventTime.Unit.US),
             enforce_deadlines=FLAGS.enforce_deadlines,
             retract_schedules=FLAGS.retract_schedules,
             goal=FLAGS.ilp_goal,

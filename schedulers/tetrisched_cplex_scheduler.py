@@ -618,7 +618,8 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
     def __init__(
         self,
         preemptive: bool = False,
-        runtime: EventTime = EventTime(time=-1, unit=EventTime.Unit.US),
+        runtime: EventTime = EventTime.invalid(),
+        lookahead: EventTime = EventTime.zero(),
         enforce_deadlines: bool = False,
         retract_schedules: bool = False,
         goal: str = "max_goodput",
@@ -636,7 +637,7 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
         super(TetriSchedCPLEXScheduler, self).__init__(
             preemptive=preemptive,
             runtime=runtime,
-            lookahead=EventTime.zero(),
+            lookahead=lookahead,
             enforce_deadlines=enforce_deadlines,
             retract_schedules=retract_schedules,
             release_taskgraphs=False,
