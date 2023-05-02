@@ -271,6 +271,12 @@ flags.DEFINE_list(
     "If scheduler_log_to_file is `True`, then extra information will be requested for "
     "all timestamps.",
 )
+flags.DEFINE_bool(
+    "scheduler_run_load",
+    False,
+    "If `True`, the scheduler is allowed to make LOAD_PROFILE "
+    "and EVICT_PROFILE actions.",
+)
 
 # Workload definition related flags.
 flags.DEFINE_float(

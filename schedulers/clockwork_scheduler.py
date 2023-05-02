@@ -630,6 +630,7 @@ class ClockworkScheduler(BaseScheduler):
             enforce_deadlines=True,
             _flags=_flags,
         )
+        self._run_load = _flags.scheduler_run_load if _flags else False
 
         # Maintain a set of `Model` instances to keep track of the request queues and
         # construct batching strategies.
@@ -1037,22 +1038,24 @@ class ClockworkScheduler(BaseScheduler):
             )
             placements.extend(failed_admission_control_tasks)
 
-        # Now that the requests are available in the queue, we can refresh the
-        # priorities of the models on each Worker.
-        self._models.refresh_priorities(worker_pools=schedulable_worker_pools)
 
         # Run model loading algorithm on the `Worker`s available for placement.
-        profile_placements = self.run_load(
-            current_time=sim_time, worker_pools=schedulable_worker_pools
-        )
-        if len(profile_placements) > 0:
-            self._logger.debug(
-                "[%s] A total of %d model loading/evictions will be done on the "
-                "workers.",
-                sim_time.to(EventTime.Unit.US).time,
-                len(profile_placements),
+        if self._run_load:
+            # Now that the requests are available in the queue, we can refresh the
+            # priorities of the models on each Worker.
+            self._models.refresh_priorities(worker_pools=schedulable_worker_pools)
+
+            profile_placements = self.run_load(
+                current_time=sim_time, worker_pools=schedulable_worker_pools
             )
-            placements.extend(profile_placements)
+            if len(profile_placements) > 0:
+                self._logger.debug(
+                    "[%s] A total of %d model loading/evictions will be done on the "
+                    "workers.",
+                    sim_time.to(EventTime.Unit.US).time,
+                    len(profile_placements),
+                )
+                placements.extend(profile_placements)
 
         # Run the inference algorithm to decide placements of `Task`s on `Worker`s.
         task_placements = self.run_inference(
