@@ -1597,6 +1597,7 @@ class Simulator(object):
                 for schedulable_task in schedulable_tasks
                 for worker_pool in self._worker_pools.worker_pools
                 for worker in worker_pool.workers
+                if worker.is_available(schedulable_task.profile) == EventTime.zero()
             )
         ):
             # If there are no schedulable tasks currently, or all schedulable tasks are
