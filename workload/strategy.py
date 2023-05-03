@@ -1,7 +1,7 @@
 import random
 import uuid
 from copy import copy, deepcopy
-from functools import cached_property
+from functools import cached_property, total_ordering
 from typing import Iterator, Optional, Sequence
 
 from utils import EventTime
@@ -9,6 +9,7 @@ from utils import EventTime
 from .resources import Resources
 
 
+@total_ordering
 class ExecutionStrategy(object):
     """A representation of a singular execution strategy for each Task.
 
@@ -50,6 +51,20 @@ class ExecutionStrategy(object):
     @cached_property
     def id(self) -> str:
         return str(self._id)
+
+    def __eq__(self, other: "ExecutionStrategy") -> bool:
+        return (
+            self.batch_size == other.batch_size
+            and self.runtime == other.runtime
+            and self.resources == other.resources
+        )
+
+    def __lt__(self, other: "ExecutionStrategy") -> bool:
+        if self.runtime == other.runtime:
+            if self.batch_size == other.batch_size:
+                return self.resources < other.resources
+            return self.batch_size < other.batch_size
+        return self.runtime < other.runtime
 
     def __hash__(self) -> int:
         return self._hash
