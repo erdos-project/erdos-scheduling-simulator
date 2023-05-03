@@ -346,8 +346,7 @@ class TaskOptimizerVariables(object):
             # The reward for placing the task is the number of tasks in the batch if
             # the task is a `BatchTask` or 1 if the task is a `Task`.
             task_reward = (
-                len(self._task.tasks)
-                * (1 + len(self._task.tasks) * 0.01)
+                len(self._task.tasks) * (1 + len(self._task.tasks) * 0.01)
                 if isinstance(self._task, BatchTask)
                 else 1
             )
