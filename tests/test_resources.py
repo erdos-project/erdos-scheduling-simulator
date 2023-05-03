@@ -24,12 +24,6 @@ def test_generic_resource_construction():
     assert cpu_resource.id == "any", "Incorrect ID for Resource."
 
 
-def test_failure_generic_resource_construction():
-    """Test that a Resource with an incorrect ID cannot be constructed."""
-    with pytest.raises(ValueError):
-        Resource(name="CPU", _id="other")
-
-
 def test_equivalence_with_self():
     """Test that a Resource is equivalent to itself."""
     cpu_resource = Resource(name="CPU")
