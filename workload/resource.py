@@ -21,8 +21,8 @@ class Resource(object):
             _id (`Optional[str]`): The ID of the resource. Use `any` to
                 represent a general resource of the given name.
         """
-        if _id is not None and _id != "any":
-            raise ValueError("The acceptable values of _id are None / 'any'")
+        if _id is not None and not isinstance(_id, str):
+            raise ValueError("The acceptable values of _id are None / a string.")
         self._name = name
         self._id = (
             uuid.UUID(int=random.getrandbits(128), version=4) if _id is None else _id
@@ -78,10 +78,6 @@ class Resource(object):
            type.
         """
         if self.name == other.name:
-            if (
-                self.id == "any"
-                or other.id == "any"
-                or uuid.UUID(self.id) == uuid.UUID(other.id)
-            ):
+            if self.id == "any" or other.id == "any" or self.id == other.id:
                 return True
         return False
