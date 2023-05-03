@@ -780,10 +780,19 @@ class Simulator(object):
         )
 
         # Log the required CSV information.
-        num_placed = len(
-            list(filter(lambda p: p.is_placed(), self._last_scheduler_placements))
-        )
-        num_unplaced = len(self._last_scheduler_placements) - num_placed
+        def count_placed_tasks(placements: Placements):
+            return len(
+                list(
+                    filter(
+                        lambda p: p.placement_type == Placement.PlacementType.PLACE_TASK
+                        and p.is_placed(),
+                        placements,
+                    )
+                )
+            )
+
+        num_placed = count_placed_tasks(self._last_scheduler_placements)
+        num_unplaced = count_placed_tasks(self._last_scheduler_placements) - num_placed
         scheduler_runtime = event.time - self._last_scheduler_start_time
         self._csv_logger.debug(
             f"{event.time.time},SCHEDULER_FINISHED,"
