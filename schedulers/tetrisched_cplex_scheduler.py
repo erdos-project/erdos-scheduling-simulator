@@ -33,6 +33,8 @@ from workload import (
     WorkProfile,
 )
 
+UNPLACED_PENALTY = 99999
+
 
 class TerminationCheckCallback(MIPInfoCallback):
     def __init__(self, environment: Environment) -> None:
@@ -344,7 +346,10 @@ class TaskOptimizerVariables(object):
             # The reward for placing the task is the number of tasks in the batch if
             # the task is a `BatchTask` or 1 if the task is a `Task`.
             task_reward = (
-                len(self._task.tasks) ** 2 if isinstance(self._task, BatchTask) else 1
+                len(self._task.tasks)
+                * (1 + len(self._task.tasks) * 0.01)
+                if isinstance(self._task, BatchTask)
+                else 1
             )
 
             # The placement reward skews the reward towards placing the task earlier.
@@ -1269,12 +1274,42 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
             # Define reward variables for each of the tasks, that is a sum of their
             # space-time matrices. Maximizing the sum of these rewards is the goal of
             # the scheduler.
+            task_not_placed_penalty = []
+            if self._batching:
+                tasks_to_batch_tasks: Mapping[
+                    Task, Set[TaskOptimizerVariables]
+                ] = defaultdict(set)
+                for batch_task_variable in tasks_to_variables.values():
+                    for task in batch_task_variable.task.tasks:
+                        tasks_to_batch_tasks[task].add(batch_task_variable)
+
+                for task, batch_task_variables in tasks_to_batch_tasks.items():
+                    task_not_placed_variable = optimizer.integer_var(
+                        lb=-1, ub=0, name=f"{task.unique_name}_not_placed"
+                    )
+                    optimizer.add_constraint(
+                        task_not_placed_variable
+                        == (
+                            optimizer.sum(
+                                [
+                                    batch_task_variable.is_placed
+                                    for batch_task_variable in batch_task_variables
+                                ]
+                            )
+                            - 1
+                        )
+                    )
+                    task_not_placed_penalty.append(
+                        task_not_placed_variable * UNPLACED_PENALTY
+                    )
+
             optimizer.maximize(
                 optimizer.sum(
                     [
                         task_variable.reward
                         for task_variable in tasks_to_variables.values()
                     ]
+                    + task_not_placed_penalty
                 )
             )
         else:

@@ -1038,7 +1038,6 @@ class ClockworkScheduler(BaseScheduler):
             )
             placements.extend(failed_admission_control_tasks)
 
-
         # Run model loading algorithm on the `Worker`s available for placement.
         if self._run_load:
             # Now that the requests are available in the queue, we can refresh the
