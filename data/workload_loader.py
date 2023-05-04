@@ -139,7 +139,7 @@ class WorkloadLoader(object):
                         ),
                         job["graph"],
                         deepcopy(work_profiles)
-                        if self._unique_work_profiles
+                        if not self._unique_work_profiles
                         else work_profiles,
                         self._slo,
                     )
@@ -153,7 +153,7 @@ class WorkloadLoader(object):
                     ),
                     job["graph"],
                     deepcopy(work_profiles)
-                    if self._unique_work_profiles
+                    if not self._unique_work_profiles
                     else work_profiles,
                     self._slo,
                 )
