@@ -742,10 +742,11 @@ class TetriSchedGurobiScheduler(BaseScheduler):
                     vtype=GRB.BINARY,
                     name=f"{task_variable.name}_meets_deadline",
                 )
-                optimizer.addConstr(
-                    meets_deadline == task_variable.meets_deadline,
-                    name=f"{task_variable.name}_meets_deadline_constraint",
-                )
+                if self.enforce_deadlines:
+                    optimizer.addConstr(
+                        meets_deadline == task_variable.meets_deadline,
+                        name=f"{task_variable.name}_meets_deadline_constraint",
+                    )
                 # Compute the reward.
                 task_reward = optimizer.addVar(
                     vtype=GRB.BINARY, name=f"{task_variable.name}_reward"

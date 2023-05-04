@@ -249,11 +249,11 @@ def test_ilp_scheduler_limited_resources(scheduler):
             enforce_deadlines=True,
             goal="max_slack",
         ),
-        # TetriSchedGurobiScheduler(
-        #     runtime=EventTime.zero(),
-        #     enforce_deadlines=True,
-        #     time_discretization=EventTime(10, EventTime.Unit.US),
-        # ),
+        TetriSchedGurobiScheduler(
+            runtime=EventTime.zero(),
+            enforce_deadlines=True,
+            time_discretization=EventTime(10, EventTime.Unit.US),
+        ),
         pytest.param(
             TetriSchedCPLEXScheduler(
                 runtime=EventTime.zero(),
@@ -266,8 +266,7 @@ def test_ilp_scheduler_limited_resources(scheduler):
             ),
         ),
     ],
-    # ids=["ILP", "TetriSchedGurobi", "TetriSchedCPLEX"],
-    ids=["ILP", "TetriSchedCPLEX"],
+    ids=["ILP", "TetriSchedGurobi", "TetriSchedCPLEX"],
 )
 def test_ilp_scheduling_deadline_enforcement(scheduler):
     """Tests that ILP tries to schedule the task under soft deadline enforcement."""
