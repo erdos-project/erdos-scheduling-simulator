@@ -808,7 +808,7 @@ def test_periodic_release_policy():
     task_graphs = job_graph.generate_task_graphs(
         completion_time=EventTime(500, EventTime.Unit.US)
     )
-    assert len(task_graphs) == 6, "Incorrect number of task graphs returned."
+    assert len(task_graphs) == 5, "Incorrect number of task graphs returned."
     perception_task_1 = task_graphs["test_graph@0"].get_sources()[0]
     perception_task_2 = task_graphs["test_graph@1"].get_sources()[0]
     assert (
