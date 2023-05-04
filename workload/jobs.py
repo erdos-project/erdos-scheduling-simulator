@@ -479,8 +479,13 @@ class JobGraph(Graph[Job]):
                 current_release += EventTime(inter_arrival_time, EventTime.Unit.US)
                 releases.append(current_release)
         elif self.release_policy.policy_type == self.ReleasePolicyType.GAMMA:
+            release_policy_rng = (
+                np.random.default_rng()
+                if _flags is None
+                else np.random.default_rng(seed=_flags.random_seed)
+            )
             inter_arrival_times = np.clip(
-                np.random.gamma(
+                release_policy_rng.gamma(
                     (1 / self.release_policy.coefficient),
                     self.release_policy.coefficient / self.release_policy.rate,
                     size=self.release_policy.num_invocations - 1,
