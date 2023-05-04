@@ -9,13 +9,15 @@ do
   slo=${SLOS[$i]}
   goodput=${GOODPUTS[$i]}
   echo "Running Clockwork microbenchmark with $scheduler, SLO $slo, goodput $goodput"
-  slo=$((slo * 1000)) # Convert to us
   request_rate=$(bc -l <<< "$goodput / (15 * 1000000)")
   filename="clockwork-microbenchmark-$scheduler-slo-$slo-goodput-$goodput"
+  slo=$((slo * 1000)) # Convert to us
   python3 main.py \
       --flagfile=configs/clockwork_resnet50_microbenchmark.conf \
       --override_poisson_arrival_rate=$request_rate \
       --override_slo=$slo \
       --log="$filename.log" \
-      --csv="$filename.csv"
+      --csv="$filename.csv" &
 done
+
+wait
