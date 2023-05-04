@@ -112,7 +112,6 @@ class Model(object):
                 execution_demand = (
                     size * CAPACITY.to(EventTime.Unit.US).time
                 ) / self._execution_slo.to(EventTime.Unit.US).time
-
             load_demand = 0
             if self._loadweights_slo != EventTime.zero():
                 load_demand = (
@@ -147,6 +146,9 @@ class Model(object):
             """The loading SLO for the request. This is the amount of time after the
             arrival of the request that the model must be initiated loading for by."""
             return self._loadweights_slo
+
+        def __repr__(self) -> str:
+            return f"Request(task={self.task.unique_name}, deadline={self.deadline})"
 
         def __lt__(self, other: "Model.Request") -> bool:
             return self.deadline < other.deadline
@@ -744,7 +746,11 @@ class ClockworkScheduler(BaseScheduler):
         """
         placements = []
         for task in tasks_to_schedule:
-            if task.deadline < current_time and self.enforce_deadlines:
+            if self.enforce_deadlines and (
+                task.deadline
+                < current_time
+                + task.available_execution_strategies.get_fastest_strategy().runtime
+            ):
                 placements.append(Placement.create_task_cancellation(task=task))
                 self._logger.debug(
                     "[%s] Task %s has a deadline of %s, which has been missed. ",
