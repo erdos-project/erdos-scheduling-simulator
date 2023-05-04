@@ -106,7 +106,8 @@ class WorkerLoader(object):
                 resources = {}
                 for resource in worker["resources"]:
                     name, quantity = resource["name"], resource["quantity"]
-                    resources[Resource(name=name)] = quantity
+                    resource_id = resource["id"] if "id" in resource else None
+                    resources[Resource(name=name, _id=resource_id)] = quantity
                 resource_logger = utils.setup_logging(
                     name=f"Resources_{worker['name']}",
                     log_dir=log_dir,
