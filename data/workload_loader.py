@@ -49,6 +49,11 @@ class WorkloadLoader(object):
                 if _flags.override_poisson_arrival_rate > sys.float_info.epsilon
                 else None
             )
+            self._gamma_coefficient = (
+                _flags.override_gamma_coefficient
+                if _flags.override_gamma_coefficient > sys.float_info.epsilon
+                else None
+            )
             self._arrival_period = (
                 _flags.override_arrival_period
                 if _flags.override_arrival_period > 0
@@ -65,6 +70,7 @@ class WorkloadLoader(object):
             self._logger = setup_logging(name=self.__class__.__name__)
             self._resource_logger = setup_logging(name="Resources")
             self._poisson_arrival_rate = None
+            self._gamma_coefficient = None
             self._arrival_period = None
             self._unique_work_profiles = False
             self._replication_factor = 1
@@ -108,7 +114,10 @@ class WorkloadLoader(object):
 
             # Retrieve the release policy from the definition.
             release_policy = WorkloadLoader.__create_release_policy(
-                job, self._arrival_period, self._poisson_arrival_rate
+                job,
+                self._arrival_period,
+                self._poisson_arrival_rate,
+                self._gamma_coefficient,
             )
 
             # Retrieve the deadline variance from the definition, if provided.
@@ -219,6 +228,7 @@ class WorkloadLoader(object):
         job: Mapping[str, str],
         override_arrival_period: Optional[int] = None,
         override_poisson_arrival_rate: Optional[float] = None,
+        override_gamma_coefficient: Optional[float] = None,
     ) -> JobGraph.ReleasePolicy:
         # Retrieve the start time from the definition, if provided.
         if "start" in job:
@@ -272,6 +282,24 @@ class WorkloadLoader(object):
                 if override_poisson_arrival_rate is None
                 else override_poisson_arrival_rate,
                 num_invocations=job["invocations"],
+                start=start_time,
+            )
+        elif job["release_policy"] == "gamma":
+            if ("rate" not in job and override_poisson_arrival_rate is None) or (
+                "coefficient" not in job and override_gamma_coefficient is None
+            ):
+                raise ValueError(
+                    'A "gamma" release policy was requested, but either a '
+                    "`rate` or `coefficient` was not defined for the JobGraph."
+                )
+            return JobGraph.ReleasePolicy.gamma(
+                rate=job["rate"]
+                if override_poisson_arrival_rate is None
+                else override_poisson_arrival_rate,
+                num_invocations=job["invocations"],
+                coefficient=job["coefficient"]
+                if override_gamma_coefficient is None
+                else override_gamma_coefficient,
                 start=start_time,
             )
         else:

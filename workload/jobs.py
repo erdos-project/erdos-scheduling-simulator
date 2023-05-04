@@ -6,6 +6,7 @@ from enum import Enum
 from typing import Mapping, Optional, Sequence, Tuple
 
 import absl
+import numpy as np
 
 from utils import EventTime, fuzz_time, setup_logging
 
@@ -198,6 +199,8 @@ class JobGraph(Graph[Job]):
         FIXED = 2
         # Releases a fixed number of TaskGraphs seperated by a Poisson arrival rate.
         POISSON = 3
+        # Releases a fixed number of TaskGraphs seperated by a Gamma arrival rate.
+        GAMMA = 4
 
     class ReleasePolicy(object):
         """A class representing the parameters of the release policy by which the
@@ -214,13 +217,15 @@ class JobGraph(Graph[Job]):
             policy_type: "ReleasePolicyType",  # noqa: F821
             period: EventTime,
             fixed_invocation_nums: int,
-            poisson_rate: float,
+            arrival_rate: float,
+            coefficient: float,
             start: EventTime,
         ) -> None:
             self._policy_type = policy_type
             self._period = period
             self._fixed_invocation_nums = fixed_invocation_nums
-            self._poisson_rate = poisson_rate
+            self._arrival_rate = arrival_rate
+            self._coefficient = coefficient
             self._start = start
 
         @staticmethod
@@ -242,7 +247,8 @@ class JobGraph(Graph[Job]):
                 policy_type=JobGraph.ReleasePolicyType.PERIODIC,
                 period=period,
                 fixed_invocation_nums=-1,
-                poisson_rate=-1.0,
+                arrival_rate=-1.0,
+                coefficient=-1.0,
                 start=start,
             )
 
@@ -268,7 +274,8 @@ class JobGraph(Graph[Job]):
                 policy_type=JobGraph.ReleasePolicyType.FIXED,
                 period=period,
                 fixed_invocation_nums=num_invocations,
-                poisson_rate=-1.0,
+                arrival_rate=-1.0,
+                coefficient=-1.0,
                 start=start,
             )
 
@@ -292,9 +299,26 @@ class JobGraph(Graph[Job]):
             """
             return JobGraph.ReleasePolicy(
                 policy_type=JobGraph.ReleasePolicyType.POISSON,
-                period=EventTime(-1, EventTime.Unit.US),
+                period=EventTime.invalid(),
                 fixed_invocation_nums=num_invocations,
-                poisson_rate=rate,
+                arrival_rate=rate,
+                coefficient=-1.0,
+                start=start,
+            )
+
+        @staticmethod
+        def gamma(
+            rate: float,
+            coefficient: float,
+            num_invocations: int,
+            start: EventTime = EventTime.zero(),
+        ) -> "ReleasePolicy":  # noqa: F821
+            return JobGraph.ReleasePolicy(
+                policy_type=JobGraph.ReleasePolicyType.GAMMA,
+                period=EventTime.invalid(),
+                fixed_invocation_nums=num_invocations,
+                arrival_rate=rate,
+                coefficient=coefficient,
                 start=start,
             )
 
@@ -319,6 +343,7 @@ class JobGraph(Graph[Job]):
             if self.policy_type not in (
                 JobGraph.ReleasePolicyType.FIXED,
                 JobGraph.ReleasePolicyType.POISSON,
+                JobGraph.ReleasePolicyType.GAMMA,
             ):
                 raise ValueError(
                     "The `num_invocations` parameter is only available in `FIXED` "
@@ -328,11 +353,22 @@ class JobGraph(Graph[Job]):
 
         @property
         def rate(self) -> float:
-            if self.policy_type != JobGraph.ReleasePolicyType.POISSON:
+            if self.policy_type not in (
+                JobGraph.ReleasePolicyType.POISSON,
+                JobGraph.ReleasePolicyType.GAMMA,
+            ):
                 raise ValueError(
                     "The `rate` parameter is only available in `POISSON` policy ."
                 )
-            return self._poisson_rate
+            return self._arrival_rate
+
+        @property
+        def coefficient(self) -> float:
+            if self.policy_type != JobGraph.ReleasePolicyType.GAMMA:
+                raise ValueError(
+                    "The `coefficient` parameter is only available in `GAMMA` policy."
+                )
+            return self._coefficient
 
         @property
         def start_time(self) -> EventTime:
@@ -410,26 +446,51 @@ class JobGraph(Graph[Job]):
 
         releases = []
         if self.release_policy.policy_type == self.ReleasePolicyType.PERIODIC:
-            current_release = self.release_policy.start_time
-            while current_release <= completion_time:
-                releases.append(current_release)
-                current_release += self.release_policy.period
+            releases.extend(
+                map(
+                    lambda time: EventTime(int(time), EventTime.Unit.US),
+                    np.arange(
+                        self.release_policy.start_time.to(EventTime.Unit.US).time,
+                        completion_time.to(EventTime.Unit.US).time,
+                        self.release_policy.period.to(EventTime.Unit.US).time,
+                    ),
+                )
+            )
         elif self.release_policy.policy_type == self.ReleasePolicyType.FIXED:
-            current_release = self.release_policy.start_time
-            for _ in range(self.release_policy.num_invocations):
-                releases.append(current_release)
-                current_release += self.release_policy.period
+            releases.extend(
+                map(
+                    lambda time: EventTime(int(time), EventTime.Unit.US),
+                    np.linspace(
+                        self.release_policy.start_time.to(EventTime.Unit.US).time,
+                        self.release_policy.start_time.to(EventTime.Unit.US).time
+                        + (
+                            self.release_policy.period.to(EventTime.Unit.US)
+                            * self.release_policy.num_invocations
+                        ),
+                        endpoint=False,
+                    ),
+                )
+            )
         elif self.release_policy.policy_type == self.ReleasePolicyType.POISSON:
+            # TODO (Sukrit): Create a numpy version of this.
             current_release = self.release_policy.start_time
             for _ in range(self.release_policy.num_invocations):
                 inter_arrival_time = int(random.expovariate(self.release_policy.rate))
-                if inter_arrival_time <= 0:
-                    raise ValueError(
-                        f"An inter-arrival time of {inter_arrival_time} was received. "
-                        f"Adjust rate parameter ({self.release_policy.rate}) in "
-                        f"Poisson arrival of {self.name}."
-                    )
                 current_release += EventTime(inter_arrival_time, EventTime.Unit.US)
+                releases.append(current_release)
+        elif self.release_policy.policy_type == self.ReleasePolicyType.GAMMA:
+            inter_arrival_times = np.clip(
+                np.random.gamma(
+                    (1 / self.release_policy.coefficient),
+                    self.release_policy.coefficient / self.release_policy.rate,
+                    size=self.release_policy.num_invocations - 1,
+                ),
+                a_min=2500,  # Maintain a minimum rate of 2500µs between releases.
+                a_max=None,
+            )
+            current_release = self.release_policy.start_time
+            for inter_arrival_time in inter_arrival_times:
+                current_release += EventTime(int(inter_arrival_time), EventTime.Unit.US)
                 releases.append(current_release)
         else:
             raise NotImplementedError(

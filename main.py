@@ -285,6 +285,12 @@ flags.DEFINE_float(
     "Override the Poisson arrival rate for all TaskGraphs defined"
     "in the JSON workload definition.",
 )
+flags.DEFINE_float(
+    "override_gamma_coefficient",
+    0.0,
+    "Override the coefficient of variation in a Gamma distribution for all "
+    "TaskGraphs defined in the JSON workload definition.",
+)
 flags.DEFINE_integer(
     "override_arrival_period",
     0,
