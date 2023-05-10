@@ -85,11 +85,11 @@ class Task(object):
         job: "Job",  # noqa: F821
         deadline: EventTime,
         profile: Optional[WorkProfile] = None,
-        timestamp: int = None,
-        release_time: Optional[EventTime] = EventTime.invalid(),
-        start_time: Optional[EventTime] = EventTime.invalid(),
-        completion_time: Optional[EventTime] = EventTime.invalid(),
-        probability: float = None,
+        timestamp: Optional[int] = None,
+        release_time: EventTime = EventTime.invalid(),
+        start_time: EventTime = EventTime.invalid(),
+        completion_time: EventTime = EventTime.invalid(),
+        probability: Optional[float] = None,
         _logger: Optional[logging.Logger] = None,
     ):
         if (
@@ -599,71 +599,71 @@ class Task(object):
         return self.deadline < other.deadline
 
     @property
-    def name(self):
+    def name(self) -> str:
         return self._name
 
     @property
-    def task_graph(self):
+    def task_graph(self) -> str:
         return self._task_graph
 
     @property
-    def unique_name(self):
+    def unique_name(self) -> str:
         return f"{self._name}@{self._task_graph}"
 
     @cached_property
-    def id(self):
+    def id(self) -> str:
         return str(self._id)
 
     @property
-    def release_time(self):
+    def release_time(self) -> EventTime:
         return self._release_time
 
     @property
-    def conditional(self):
+    def conditional(self) -> bool:
         return self._creating_job.conditional
 
     @property
-    def probability(self):
+    def probability(self) -> float:
         return self._probability
 
     @property
-    def terminal(self):
+    def terminal(self) -> bool:
         return self._creating_job.terminal
 
     @property
-    def intended_release_time(self):
+    def intended_release_time(self) -> EventTime:
         return self._intended_release_time
 
     @property
-    def deadline(self):
+    def deadline(self) -> EventTime:
         return self._deadline
 
     @property
-    def job(self):
+    def job(self) -> "Job":  # noqa: F821
         return self._creating_job
 
     @property
-    def state(self):
+    def state(self) -> TaskState:
         return self._state
 
     @property
-    def scheduling_time(self):
+    def scheduling_time(self) -> EventTime:
         return self._scheduling_time
 
     @property
-    def cancellation_time(self):
+    def cancellation_time(self) -> EventTime:
         return self._cancellation_time
 
     @property
-    def expected_start_time(self):
+    def expected_start_time(self) -> EventTime:
         return self._scheduler_placement.placement_time
 
     @property
-    def current_placement(self):
+    def current_placement(self) -> Placement:
         return self._scheduler_placement
 
     @property
-    def start_time(self):
+    def start_time(self) -> EventTime:
         return self._start_time
 
     @property
@@ -671,15 +671,15 @@ class Task(object):
         return self._profile
 
     @property
-    def available_execution_strategies(self) -> Optional[ExecutionStrategies]:
+    def available_execution_strategies(self) -> ExecutionStrategies:
         return self._profile.execution_strategies
 
     @property
-    def preemption_time(self):
+    def preemption_time(self) -> EventTime:
         return (
             self.last_preemption.preemption_time
             if self.last_preemption
-            else EventTime(-1, EventTime.Unit.US)
+            else EventTime.invalid()
         )
 
     @property
@@ -704,11 +704,11 @@ class Task(object):
             return self.available_execution_strategies.get_slowest_strategy().runtime
 
     @property
-    def completion_time(self):
+    def completion_time(self) -> EventTime:
         return self._completion_time
 
     @property
-    def timestamp(self):
+    def timestamp(self) -> Optional[int]:
         return self._timestamp
 
     @property
