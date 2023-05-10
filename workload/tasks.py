@@ -712,7 +712,7 @@ class Task(object):
         return self._timestamp
 
     @property
-    def worker_pool_id(self):
+    def worker_pool_id(self) -> Optional[str]:
         return self._worker_pool_id
 
 
