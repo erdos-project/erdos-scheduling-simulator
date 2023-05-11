@@ -195,6 +195,12 @@ class Model(object):
         """Returns the number of requests available in the queue for this `Model`."""
         return len(self._tasks)
 
+    @property
+    def earliest_deadline(self) -> EventTime:
+        if len(self._tasks) == 0:
+            return EventTime.invalid()
+        return sorted([t.deadline for t in self._tasks])[0]
+
     def get_last_used_at_worker(self, worker: Worker) -> EventTime:
         """Returns the last time that this model was used on the particular Worker.
 
@@ -936,6 +942,12 @@ class ClockworkScheduler(BaseScheduler):
                     )
                     if len(model_strategies) > 0:
                         execution_strategies_queue.append((model, model_strategies))
+                # Sort by next deadline.
+                execution_strategies_queue = deque(
+                    sorted(
+                        execution_strategies_queue, key=lambda t: t[0].earliest_deadline
+                    )
+                )
 
                 # Find the set of placements that this `Worker` can accomodate.
                 while len(execution_strategies_queue) > 0:
@@ -993,6 +1005,13 @@ class ClockworkScheduler(BaseScheduler):
                         if len(new_model_strategies) > 0:
                             execution_strategies_queue.append(
                                 (model, new_model_strategies)
+                            )
+                            # Sort by next deadline.
+                            execution_strategies_queue = deque(
+                                sorted(
+                                    execution_strategies_queue,
+                                    key=lambda t: t[0].earliest_deadline,
+                                )
                             )
                     else:
                         self._logger.debug(
