@@ -174,6 +174,32 @@ class Workload(object):
         task_graph = self._task_graphs[task.task_graph]
         return task_graph.notify_task_completion(task, finish_time)
 
+    def notify_task_graph_completion(
+        self, task_graph: TaskGraph, finish_time: EventTime
+    ) -> Sequence[Task]:
+        """Notifies the Workload of the completion of a task graph.
+
+        Args:
+            task_graph: The task graph that finished its execution.
+            finish_time: The time at which the task graph finished its execution.
+
+        Returns:
+            The tasks from the next task graph to be scheduled, if any.
+        """
+        if task_graph.name not in self._task_graphs:
+            raise ValueError(
+                f"The TaskGraph {task_graph} was not found in the Workload."
+            )
+
+        task_graph = task_graph.job_graph.get_next_task_graph(
+            completion_time=finish_time, _flags=self._flags
+        )
+        if task_graph is not None:
+            self._task_graphs[task_graph.name] = task_graph
+            return task_graph.get_releasable_tasks()
+        else:
+            return []
+
     def get_releasable_tasks(self) -> Sequence[Task]:
         """Retrieves the set of Tasks that are ready to run, and can be released
         from each `TaskGraph` in the `Workload`.

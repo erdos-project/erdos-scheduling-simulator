@@ -725,7 +725,6 @@ def test_job_graph_to_task_graph_conversion():
         release_time=EventTime(100, EventTime.Unit.US),
         task_graph_name="test_task_graph",
         timestamp=1,
-        task_logger=None,
     )
     assert len(task_graph) == 3, "Incorrect number of tasks in `TaskGraph`."
 

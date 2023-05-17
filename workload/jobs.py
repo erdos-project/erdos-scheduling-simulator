@@ -201,6 +201,9 @@ class JobGraph(Graph[Job]):
         POISSON = 3
         # Releases a fixed number of TaskGraphs seperated by a Gamma arrival rate.
         GAMMA = 4
+        # Releases a fixed number of TaskGraphs in a closed loop fashion (i.e., a new
+        # job graph is released whenever the previous one completes).
+        CLOSED_LOOP = 5
 
     class ReleasePolicy(object):
         """A class representing the parameters of the release policy by which the
@@ -219,6 +222,7 @@ class JobGraph(Graph[Job]):
             fixed_invocation_nums: int,
             arrival_rate: float,
             coefficient: float,
+            concurrency: int,
             start: EventTime,
         ) -> None:
             self._policy_type = policy_type
@@ -226,6 +230,7 @@ class JobGraph(Graph[Job]):
             self._fixed_invocation_nums = fixed_invocation_nums
             self._arrival_rate = arrival_rate
             self._coefficient = coefficient
+            self._concurrency = concurrency
             self._start = start
 
         @staticmethod
@@ -249,6 +254,7 @@ class JobGraph(Graph[Job]):
                 fixed_invocation_nums=-1,
                 arrival_rate=-1.0,
                 coefficient=-1.0,
+                concurrency=0,
                 start=start,
             )
 
@@ -276,6 +282,7 @@ class JobGraph(Graph[Job]):
                 fixed_invocation_nums=num_invocations,
                 arrival_rate=-1.0,
                 coefficient=-1.0,
+                concurrency=0,
                 start=start,
             )
 
@@ -303,6 +310,7 @@ class JobGraph(Graph[Job]):
                 fixed_invocation_nums=num_invocations,
                 arrival_rate=rate,
                 coefficient=-1.0,
+                concurrency=0,
                 start=start,
             )
 
@@ -319,6 +327,37 @@ class JobGraph(Graph[Job]):
                 fixed_invocation_nums=num_invocations,
                 arrival_rate=rate,
                 coefficient=coefficient,
+                concurrency=0,
+                start=start,
+            )
+
+        @staticmethod
+        def closed_loop(
+            concurrency: int,
+            num_invocations: int,
+            start: EventTime = EventTime.zero(),
+        ) -> "ReleasePolicy":  # noqa: F821
+            """Creates the parameters corresponding to the `CLOSED_LOOP` release policy.
+
+            Args:
+                concurrency (`int`): The number of concurrent `TaskGraph`s to execute.
+                num_invocations (`int`): The total number of invocations of the
+                    `TaskGraph`.
+                start (`EventTime`): The time at which the closed loop execution of the
+                    `TaskGraph`s should begin.
+
+            Returns:
+                A `ReleasePolicy` instance with the required parameters.
+            """
+            if concurrency == 0 or num_invocations == 0:
+                raise RuntimeError("The concurrency and num_invocations must be > 0.")
+            return JobGraph.ReleasePolicy(
+                policy_type=JobGraph.ReleasePolicyType.CLOSED_LOOP,
+                period=EventTime.invalid(),
+                fixed_invocation_nums=num_invocations,
+                arrival_rate=-1.0,
+                coefficient=-1.0,
+                concurrency=concurrency,
                 start=start,
             )
 
@@ -344,10 +383,11 @@ class JobGraph(Graph[Job]):
                 JobGraph.ReleasePolicyType.FIXED,
                 JobGraph.ReleasePolicyType.POISSON,
                 JobGraph.ReleasePolicyType.GAMMA,
+                JobGraph.ReleasePolicyType.CLOSED_LOOP,
             ):
                 raise ValueError(
                     "The `num_invocations` parameter is only available in `FIXED` "
-                    "and `POISSON` release policy types."
+                    ",`POISSON`, `GAMMA` and `CLOSED_LOOP` release policy types."
                 )
             return self._fixed_invocation_nums
 
@@ -369,6 +409,16 @@ class JobGraph(Graph[Job]):
                     "The `coefficient` parameter is only available in `GAMMA` policy."
                 )
             return self._coefficient
+
+        @property
+        def concurrency(self) -> int:
+            """The number of concurrent requests to send out."""
+            if self.policy_type != JobGraph.ReleasePolicyType.CLOSED_LOOP:
+                raise ValueError(
+                    "The `concurrency` parameter is only available in `CLOSED_LOOP` "
+                    "policy."
+                )
+            return self._concurrency
 
         @property
         def start_time(self) -> EventTime:
@@ -397,6 +447,8 @@ class JobGraph(Graph[Job]):
             )
         )
         self._deadline_variance = deadline_variance
+        self._remaining_task_graphs = 0
+        self._task_graph_index = 0
 
     def add_job(self, job: Job, children: Optional[Sequence[Job]] = []):
         """Adds the job to the graph along with the given children.
@@ -412,6 +464,23 @@ class JobGraph(Graph[Job]):
         for job in self.get_sources():
             job._pipelined = True
 
+    def get_next_task_graph(
+        self,
+        completion_time: EventTime,
+        _flags: Optional["absl.flags"] = None,
+    ) -> Optional[TaskGraph]:
+        if self._remaining_task_graphs > 0:
+            self._remaining_task_graphs -= 1
+            self._task_graph_index += 1
+            return self._generate_task_graph(
+                release_time=completion_time + EventTime(1, EventTime.Unit.US),
+                task_graph_name=f"{self.name}@{self._task_graph_index}",
+                timestamp=self._task_graph_index,
+                _flags=_flags,
+            )
+        else:
+            return None
+
     def generate_task_graphs(
         self,
         completion_time: EventTime,
@@ -426,24 +495,6 @@ class JobGraph(Graph[Job]):
         Returns:
             A mapping from the name of the `TaskGraph` to the `TaskGraph`.
         """
-        # Set the seed of the random number generator if provided.
-        if _flags:
-            # random_number_generator = random.Random(_flags.random_seed)
-            random_number_generator = FakeRandomNumberGenerator()
-            resolve_conditionals_at_submission = (
-                _flags.resolve_conditionals_at_submission
-            )
-            task_logger = setup_logging(
-                name="Task",
-                log_dir=_flags.log_dir,
-                log_file=_flags.log_file_name,
-                log_level=_flags.log_level,
-            )
-        else:
-            random_number_generator = None
-            resolve_conditionals_at_submission = False
-            task_logger = setup_logging(name="Task")
-
         releases = []
         if self.release_policy.policy_type == self.ReleasePolicyType.PERIODIC:
             releases.extend(
@@ -497,6 +548,18 @@ class JobGraph(Graph[Job]):
             for inter_arrival_time in inter_arrival_times:
                 current_release += EventTime(int(inter_arrival_time), EventTime.Unit.US)
                 releases.append(current_release)
+        elif self.release_policy.policy_type == self.ReleasePolicyType.CLOSED_LOOP:
+            # Release the first set of Tasks at the start time.
+            num_releases = (
+                self.release_policy.concurrency
+                if self.release_policy.num_invocations
+                >= self.release_policy.concurrency
+                else self.release_policy.num_invocations
+            )
+            self._remaining_task_graphs = (
+                self.release_policy.num_invocations - num_releases
+            )
+            releases.extend([self.release_policy.start_time] * num_releases)
         else:
             raise NotImplementedError(
                 f"The policy {self.release_policy} has not been implemented yet."
@@ -510,11 +573,9 @@ class JobGraph(Graph[Job]):
                 release_time=release_time,
                 task_graph_name=task_graph_name,
                 timestamp=index,
-                task_logger=task_logger,
-                random_number_generator=random_number_generator,
-                resolve_conditionals=resolve_conditionals_at_submission,
                 _flags=_flags,
             )
+        self._task_graph_index = len(task_graphs) - 1
         return task_graphs
 
     def _generate_task_graph(
@@ -522,9 +583,6 @@ class JobGraph(Graph[Job]):
         release_time: EventTime,
         task_graph_name: str,
         timestamp: int,
-        task_logger: logging.Logger,
-        random_number_generator=None,
-        resolve_conditionals: bool = False,
         _flags: Optional["absl.flags"] = None,
     ) -> TaskGraph:
         """Generates a TaskGraph from the structure of the `JobGraph` whose
@@ -535,17 +593,14 @@ class JobGraph(Graph[Job]):
                 `TaskGraph` must be released.
             task_graph_name: The name of the `TaskGraph` being generated.
             timestamp: The timestamp of the `TaskGraph` being generated.
-            random_number_generator: The RNG to use for resolving the
-                probabilities of execution at Job submission time.
-                If `None`, the initial probabilities are forwarded.
-            resolve_conditionals (`bool`): If `True`, resolve the
-                conditionals here instead of at job execution time.
 
         Returns:
             A `TaskGraph` whose source operators are released at the given time.
         """
-        # Retrieve variances from the command line flags.
+        # Retrieve required parameters from the command line flags.
         if _flags:
+            # random_number_generator = random.Random(_flags.random_seed)
+            random_number_generator = FakeRandomNumberGenerator()
             if self._deadline_variance is None:
                 deadline_variance = (
                     _flags.min_deadline_variance,
@@ -554,13 +609,23 @@ class JobGraph(Graph[Job]):
             else:
                 deadline_variance = self._deadline_variance
             use_branch_predicated_deadlines = _flags.use_branch_predicated_deadlines
+            resolve_conditionals = _flags.resolve_conditionals_at_submission
+            task_logger = setup_logging(
+                name="Task",
+                log_dir=_flags.log_dir,
+                log_file=_flags.log_file_name,
+                log_level=_flags.log_level,
+            )
         else:
+            random_number_generator = None
             deadline_variance = (
                 self._deadline_variance
                 if self._deadline_variance is not None
                 else (0, 0)
             )
             use_branch_predicated_deadlines = False
+            resolve_conditionals = False
+            task_logger = setup_logging(name="Task")
 
         # Generate all the `Task`s from the `Job`s in the graph.
         job_to_task_mapping = {}
@@ -614,7 +679,9 @@ class JobGraph(Graph[Job]):
             task_graph_mapping[parent_task] = task_children
 
         # Now that the task probabilities have been set, update the deadlines.
-        task_graph = TaskGraph(name=task_graph_name, tasks=task_graph_mapping)
+        task_graph = TaskGraph(
+            name=task_graph_name, tasks=task_graph_mapping, job_graph=self
+        )
 
         # Compute the deadline based on if the knowledge of branches is assumed or not.
         if use_branch_predicated_deadlines:

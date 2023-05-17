@@ -302,6 +302,17 @@ class WorkloadLoader(object):
                 else override_gamma_coefficient,
                 start=start_time,
             )
+        elif job["release_policy"] == "closed_loop":
+            if "concurrency" not in job or "invocations" not in job:
+                raise ValueError(
+                    'A "closed_loop" release policy was requested, but either a '
+                    "`concurrency` or `invocations` was not defined for the JobGraph."
+                )
+            return JobGraph.ReleasePolicy.closed_loop(
+                concurrency=job["concurrency"],
+                num_invocations=job["invocations"],
+                start=start_time,
+            )
         else:
             raise NotImplementedError(
                 f"The release policy {job['release_policy']} is not implemented."

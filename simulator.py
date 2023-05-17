@@ -555,7 +555,7 @@ class Simulator(object):
             not placement.is_placed()
         ), f"Skipping requested for a placed Task {placement.task.unique_name}."
 
-        cancelled_task_events = []
+        task_events = []
         if drop_skipped_tasks:
             # The configuration requires us to drop tasks that were skipped, we request
             # the Simulator to cancel this Task along with all of its dependents that
@@ -565,13 +565,35 @@ class Simulator(object):
                 raise ValueError(f"No TaskGraph found for {placement.task.task_graph}")
 
             for cancelled_task in task_graph.cancel(placement.task, time):
-                cancelled_task_events.append(
+                task_events.append(
                     Event(
                         event_type=EventType.TASK_CANCEL,
                         time=cancelled_task.cancellation_time,
                         task=cancelled_task,
                     )
                 )
+
+            if task_graph.is_cancelled():
+                released_tasks_from_new_task_graph = (
+                    self._workload.notify_task_graph_completion(
+                        task_graph, cancelled_task.cancellation_time
+                    )
+                )
+                self._logger.info(
+                    "[%s] Notified the Workload of the cancellation of %s, "
+                    "and received %s new Tasks from new TaskGraphs.",
+                    cancelled_task.cancellation_time.time,
+                    task_graph.name,
+                    len(released_tasks_from_new_task_graph),
+                )
+                for released_task in released_tasks_from_new_task_graph:
+                    task_events.append(
+                        Event(
+                            event_type=EventType.TASK_RELEASE,
+                            time=released_task.release_time,
+                            task=released_task,
+                        )
+                    )
         else:
             self._csv_logger.debug(
                 f"{time.to(EventTime.Unit.US).time},TASK_SKIP,{placement.task.name},"
@@ -598,7 +620,7 @@ class Simulator(object):
                     time.to(EventTime.Unit.US).time,
                     placement.task,
                 )
-        return cancelled_task_events
+        return task_events
 
     def __create_events_from_task_placement(
         self, event_time: EventTime, placement: Placement
@@ -1069,6 +1091,21 @@ class Simulator(object):
             event.task.task_graph,
             len(released_tasks),
         )
+
+        # The given TaskGraph has finished execution, unlock new TaskGraphs from the
+        # `Workload`.
+        if task_graph is not None and task_graph.is_complete():
+            released_tasks_from_new_task_graph = (
+                self._workload.notify_task_graph_completion(task_graph, event.time)
+            )
+            self._logger.info(
+                "[%s] Notified the Workload of the completion of %s, "
+                "and received %s new Tasks from new TaskGraphs.",
+                event.time.time,
+                task_graph.name,
+                len(released_tasks_from_new_task_graph),
+            )
+            released_tasks.extend(released_tasks_from_new_task_graph)
 
         # Add events to cancel the required tasks.
         for index, task in enumerate(cancelled_tasks, start=1):

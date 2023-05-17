@@ -728,14 +728,20 @@ class TaskGraph(Graph[Task]):
         name (`str`): The name of this TaskGraph.
         tasks (`Optional[Mapping[Task, Sequence[Task]]]`): An optional
             sequence of mapping between Tasks and their children.
+        job_graph (`Optional[JobGraph]`): An optional reference to the JobGraph that
+            this TaskGraph is associated with.
     """
 
     def __init__(
-        self, name: str, tasks: Optional[Mapping[Task, Sequence[Task]]] = {}
+        self,
+        name: str,
+        tasks: Optional[Mapping[Task, Sequence[Task]]] = {},
+        job_graph: Optional["JobGraph"] = None,  # noqa: F821
     ) -> None:
         if type(name) != str:
             raise ValueError("The name must be a string.")
         self._name = name
+        self._job_graph = job_graph
         super().__init__(tasks)
 
     def add_task(self, task: Task, children: Optional[Sequence[Task]] = []):
@@ -1577,6 +1583,15 @@ class TaskGraph(Graph[Task]):
             A `str` representation of the name of the TaskGraph.
         """
         return self._name
+
+    @property
+    def job_graph(self) -> Optional["JobGraph"]:  # noqa: F821
+        """Retrieves the JobGraph associated with the TaskGraph.
+
+        Returns:
+            A `JobGraph` object representing the JobGraph associated with the TaskGraph.
+        """
+        return self._job_graph
 
     def __str__(self):
         constructed_string = ""
