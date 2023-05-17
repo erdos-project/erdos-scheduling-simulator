@@ -252,6 +252,12 @@ flags.DEFINE_enum(
     ["max_slack", "min_placement_delay", "max_goodput"],
     "Sets the goal of the ILP solver.",
 )
+flags.DEFINE_enum(
+    "clockwork_goal",
+    "clockwork",
+    ["clockwork", "least_slack"],
+    "Sets the goal of the Clockwork scheduler.",
+)
 flags.DEFINE_integer(
     "scheduler_time_limit",
     20,

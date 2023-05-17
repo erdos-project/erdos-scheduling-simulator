@@ -622,8 +622,9 @@ class ClockworkScheduler(BaseScheduler):
     Args:
         runtime (`EventTime`): The runtime to return to the Simulator (in us).
             If -1, the scheduler returns the actual runtime.
-        log_to_file (`bool`): If `True`, the scheduler writes the Gurobi search
-            log to files with the format "gurobi_{sim_time}.log".
+        goal (`str`): The goal with which to run the Clockwork scheduler.
+            `"clockwork"` corresponds to the default Clockwork implementation.
+            `"least_slack"` prioritizes requests with sooner deadlines across models.
         _flags (`Optional[absl.flags]`): The runtime flags that are used to initialize
             a logger instance.
     """
@@ -631,6 +632,7 @@ class ClockworkScheduler(BaseScheduler):
     def __init__(
         self,
         runtime: EventTime = EventTime.invalid(),
+        goal: str = "clockwork",
         _flags: Optional["absl.flags"] = None,
     ):
         super(ClockworkScheduler, self).__init__(
@@ -638,6 +640,7 @@ class ClockworkScheduler(BaseScheduler):
             enforce_deadlines=True,
             _flags=_flags,
         )
+        self._goal = goal
         self._run_load = _flags.scheduler_run_load if _flags else False
 
         # Maintain a set of `Model` instances to keep track of the request queues and
@@ -942,12 +945,15 @@ class ClockworkScheduler(BaseScheduler):
                     )
                     if len(model_strategies) > 0:
                         execution_strategies_queue.append((model, model_strategies))
-                # Sort by next deadline.
-                execution_strategies_queue = deque(
-                    sorted(
-                        execution_strategies_queue, key=lambda t: t[0].earliest_deadline
+
+                if self._goal == "least_slack":
+                    # Sort by next deadline.
+                    execution_strategies_queue = deque(
+                        sorted(
+                            execution_strategies_queue,
+                            key=lambda t: t[0].earliest_deadline,
+                        )
                     )
-                )
 
                 # Find the set of placements that this `Worker` can accomodate.
                 while len(execution_strategies_queue) > 0:
@@ -1006,13 +1012,14 @@ class ClockworkScheduler(BaseScheduler):
                             execution_strategies_queue.append(
                                 (model, new_model_strategies)
                             )
-                            # Sort by next deadline.
-                            execution_strategies_queue = deque(
-                                sorted(
-                                    execution_strategies_queue,
-                                    key=lambda t: t[0].earliest_deadline,
+                            if self._goal == "least_slack":
+                                # Sort by next deadline.
+                                execution_strategies_queue = deque(
+                                    sorted(
+                                        execution_strategies_queue,
+                                        key=lambda t: t[0].earliest_deadline,
+                                    )
                                 )
-                            )
                     else:
                         self._logger.debug(
                             "[%s] No valid placements were found for Model %s.",
