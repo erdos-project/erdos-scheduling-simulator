@@ -7,8 +7,8 @@ graphs:
     graph:
       - name: Task_One
         work_profile: ResNet50
-    release_policy: poisson
-    rate: 0.000020 # 20 tasks / sec.
+    release_policy: closed_loop
+    concurrency: 16
     invocations: 100
 profiles:
   # resnet50_v2 in Clockwork
