@@ -299,6 +299,21 @@ class Worker(object):
             A list of resource allocations whose each element is a (Resource,
             quantity allocated) pair.
         """
+        if task not in self._placed_tasks:
+            raise RuntimeError(
+                f"The task {task.unique_name} was not placed on {self.name}."
+            )
+        execution_strategy = self._placed_tasks[task]
+        if isinstance(execution_strategy, BatchStrategy):
+            # If the Task was executed as part of a `Batch`, then we need to check
+            # for the resource allocations of the virtual batch task.
+            if execution_strategy not in self._batch_tasks_for_strategy:
+                raise RuntimeError(
+                    f"The virtual batch task corresponding to the strategy "
+                    f"{execution_strategy} was not found."
+                )
+            virtual_batch_task = self._batch_tasks_for_strategy[execution_strategy]
+            return self._resources.get_allocated_resources(virtual_batch_task)
         return self._resources.get_allocated_resources(task)
 
     def step(
