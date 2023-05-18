@@ -491,7 +491,9 @@ def main(args):
         )
     elif FLAGS.scheduler == "Clockwork":
         scheduler = ClockworkScheduler(
-            runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US), _flags=FLAGS
+            runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
+            goal=FLAGS.clockwork_goal,
+            _flags=FLAGS,
         )
     else:
         raise ValueError(
