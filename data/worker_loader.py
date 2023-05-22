@@ -105,8 +105,14 @@ class WorkerLoader(object):
             for worker in worker_pool["workers"]:
                 resources = {}
                 for resource in worker["resources"]:
-                    name, quantity = resource["name"], resource["quantity"]
-                    resource_id = resource["id"] if "id" in resource else None
+                    name_elements = resource["name"].split(":")
+                    if len(name_elements) > 2:
+                        raise ValueError(
+                            "Resource name must include at most 1 semicolon."
+                        )
+                    name = name_elements[0]
+                    resource_id = name_elements[1] if len(name_elements) > 1 else None
+                    quantity = resource["quantity"]
                     resources[Resource(name=name, _id=resource_id)] = quantity
                 resource_logger = utils.setup_logging(
                     name=f"Resources_{worker['name']}",
