@@ -947,6 +947,11 @@ def test_ilp_not_work_conserving():
 @pytest.mark.parametrize(
     "scheduler",
     [
+        TetriSchedGurobiScheduler(
+            runtime=EventTime.zero(),
+            enforce_deadlines=True,
+            time_discretization=EventTime(10, EventTime.Unit.US),
+        ),
         pytest.param(
             TetriSchedCPLEXScheduler(
                 runtime=EventTime.zero(),
@@ -959,6 +964,7 @@ def test_ilp_not_work_conserving():
             ),
         ),
     ],
+    ids=["TetriSchedGurobi", "TetriSchedCPLEX"],
 )
 def test_ilp_fits_correct_strategies(scheduler):
     camera_task_1 = create_default_task(
@@ -1051,6 +1057,13 @@ def test_ilp_fits_correct_strategies(scheduler):
 @pytest.mark.parametrize(
     "scheduler",
     [
+        TetriSchedGurobiScheduler(
+            runtime=EventTime.zero(),
+            batching=True,
+            enforce_deadlines=True,
+            time_discretization=EventTime(10, EventTime.Unit.US),
+            log_to_file=True,
+        ),
         pytest.param(
             TetriSchedCPLEXScheduler(
                 runtime=EventTime.zero(),
@@ -1064,6 +1077,7 @@ def test_ilp_fits_correct_strategies(scheduler):
             ),
         ),
     ],
+    ids=["TetriSchedGurobi", "TetriSchedCPLEX"],
 )
 def test_ilp_batching(scheduler):
     """Test that the ILP-based scheduler batches tasks correctly."""
@@ -1167,6 +1181,12 @@ def test_ilp_batching(scheduler):
 @pytest.mark.parametrize(
     "scheduler",
     [
+        TetriSchedGurobiScheduler(
+            runtime=EventTime.zero(),
+            batching=True,
+            enforce_deadlines=True,
+            time_discretization=EventTime(10, EventTime.Unit.US),
+        ),
         pytest.param(
             TetriSchedCPLEXScheduler(
                 runtime=EventTime.zero(),
@@ -1180,6 +1200,7 @@ def test_ilp_batching(scheduler):
             ),
         ),
     ],
+    ids=["TetriSchedGurobi", "TetriSchedCPLEX"],
 )
 def test_ilp_batching_time(scheduler):
     """Test that the ILP-based scheduler batches tasks and places them in order."""
