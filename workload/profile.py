@@ -29,6 +29,11 @@ class WorkProfile(object):
         self._loading_strategies = loading_strategies
         self._execution_strategies = execution_strategies
 
+        # Used to ensure that each copy of this WorkProfile gets a unique name.
+        # This is required because of naming conflicts in ILP solvers and for better
+        # logging.
+        self._next_copy_number = 0
+
     def __eq__(self, __value: object) -> bool:
         return self._id == __value._id
 
@@ -36,8 +41,9 @@ class WorkProfile(object):
         return hash(self._id)
 
     def __copy__(self) -> "WorkProfile":
+        self._next_copy_number += 1
         return WorkProfile(
-            name=f"{self.name}_copy",
+            name=f"{self.name}_{self._next_copy_number}",
             execution_strategies=copy(self.execution_strategies),
             loading_strategies=copy(self.loading_strategies),
         )
@@ -45,9 +51,10 @@ class WorkProfile(object):
     def __deepcopy__(self, memo) -> "WorkProfile":
         cls = self.__class__
         instance = cls.__new__(cls)
+        self._next_copy_number += 1
         cls.__init__(
             instance,
-            name=f"{self.name}_copy",
+            name=f"{self.name}_{self._next_copy_number}",
             execution_strategies=deepcopy(self.execution_strategies),
             loading_strategies=deepcopy(self.loading_strategies),
         )
