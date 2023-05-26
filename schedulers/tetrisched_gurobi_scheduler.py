@@ -1,17 +1,17 @@
-from itertools import islice
 import multiprocessing
-from operator import attrgetter
 import sys
 import time
 from collections import defaultdict, deque
 from copy import copy, deepcopy
+from itertools import islice
+from operator import attrgetter
 from typing import Any, List, Mapping, Optional, Sequence, Set, Union
 from uuid import UUID
 
 import absl  # noqa: F401
 import gurobipy as gp
-from gurobipy import GRB
 import numpy as np
+from gurobipy import GRB
 
 from schedulers import BaseScheduler
 from schedulers.tetrisched_cplex_scheduler import BatchTask
