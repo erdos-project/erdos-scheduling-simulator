@@ -1,3 +1,5 @@
+import time
+from copy import copy
 from operator import itemgetter
 from typing import Optional, Sequence, Set
 
@@ -7,6 +9,8 @@ from utils import EventTime, setup_logging
 from workers import WorkerPool, WorkerPools
 from workload import (
     BranchPredictionPolicy,
+    ExecutionStrategy,
+    Placement,
     Placements,
     Task,
     TaskState,
@@ -81,6 +85,10 @@ class BaseScheduler(object):
         """Initializes the startup phase of a scheduler. This method is invoked before
         requests start arriving to the Scheduler, and allows it to do basic set-up work.
 
+        By default, the method tries to place all the work profiles on all the Workers
+        in the system, and does not place a profile that cannot be accomodated on the
+        Worker.
+
         Args:
             start_time (`EventTime`): The time at which the scheduler was invoked.
             work_profiles (`Set[WorkProfile]`): A (possibly) empty set of
@@ -100,9 +108,75 @@ class BaseScheduler(object):
             ", ".join(work_profile.name for work_profile in work_profiles),
             ", ".join(worker_pool.name for worker_pool in worker_pools.worker_pools),
         )
+
+        # Create a copy of the WorkerPools to try placement decisions on.
+        worker_pools_copy = copy(worker_pools)
+
+        scheduler_start_time = time.time()
+        placements = []
+        for worker_pool in worker_pools_copy.worker_pools:
+            for worker in worker_pool.workers:
+                # We create a virtual copy of the Worker to simulate the loading of
+                # each model onto the Worker to correctly account for the resources.
+                worker_copy = copy(worker)
+                for work_profile in work_profiles:
+                    if worker_copy.is_available(work_profile) == EventTime.invalid():
+                        compatible_strategies = worker_copy.get_compatible_strategies(
+                            work_profile.loading_strategies
+                        )
+                        if len(compatible_strategies) == 0:
+                            self._logger.warning(
+                                "[%s] No compatible strategies found for loading "
+                                "WorkProfile %s onto Worker %s",
+                                start_time,
+                                work_profile.id,
+                                worker.id,
+                            )
+                            continue
+                        # We do not expect more than one strategy to be compatible
+                        # with each Worker.
+                        initial_loading_strategy = (
+                            compatible_strategies.get_fastest_strategy()
+                        )
+
+                        # We load the model onto the Worker with an amended strategy
+                        # such that all the models are available by the time the first
+                        # event executes in the Simulator. This replicates the
+                        # ControllerWithStartupPhase behavior in Clockwork.
+                        adjusted_loading_strategy = ExecutionStrategy(
+                            resources=initial_loading_strategy.resources,
+                            batch_size=initial_loading_strategy.batch_size,
+                            runtime=EventTime.zero(),
+                        )
+                        placements.append(
+                            Placement.create_load_profile_placement(
+                                work_profile=work_profile,
+                                placement_time=start_time,
+                                worker_pool_id=worker_pool.id,
+                                worker_id=worker.id,
+                                loading_strategy=adjusted_loading_strategy,
+                            )
+                        )
+                        worker_copy.load_profile(
+                            profile=work_profile,
+                            loading_strategy=adjusted_loading_strategy,
+                        )
+                        self._logger.debug(
+                            "[%s] Requesting to load WorkProfile %s "
+                            "(%s) onto Worker %s.",
+                            start_time.to(EventTime.Unit.US).time,
+                            work_profile.name,
+                            work_profile.id,
+                            worker.id,
+                        )
+        scheduler_end_time = time.time()
         return Placements(
             runtime=EventTime.zero(),
-            true_runtime=EventTime.zero(),
+            true_runtime=EventTime(
+                int((scheduler_end_time - scheduler_start_time) * 1e6),
+                EventTime.Unit.US,
+            ),
+            placements=placements,
         )
 
     def schedule(

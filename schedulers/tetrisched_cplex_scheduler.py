@@ -346,7 +346,7 @@ class TaskOptimizerVariables(object):
             # The reward for placing the task is the number of tasks in the batch if
             # the task is a `BatchTask` or 1 if the task is a `Task`.
             task_reward = (
-                len(self._task.tasks) * (1 + len(self._task.tasks) * 0.01)
+                len(self._task.tasks) * (1 + (len(self._task.tasks) * 0.01))
                 if isinstance(self._task, BatchTask)
                 else 1
             )
@@ -363,9 +363,9 @@ class TaskOptimizerVariables(object):
 
             # The slack reward skews the reward towards placing tasks with least slack
             # earlier. The slack reward is normalized to a range between 2 and 1.
-            slack_reward = (
-                self._task.priority if isinstance(self._task, BatchTask) else 1
-            )
+            # slack_reward = (
+            #     self._task.priority if isinstance(self._task, BatchTask) else 1
+            # )
 
             # Set the reward variable according to the `task_reward`.
             self._reward_variable = optimizer.continuous_var(
@@ -387,7 +387,7 @@ class TaskOptimizerVariables(object):
                 reward.append(
                     task_reward
                     * placement_rewards[start_time]
-                    * slack_reward
+                    # * slack_reward
                     * variable
                 )
             optimizer.add_constraint(
