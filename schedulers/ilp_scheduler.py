@@ -2,7 +2,7 @@ import multiprocessing
 import sys
 import time
 from copy import copy, deepcopy
-from typing import Mapping, Optional, Sequence, Union
+from typing import List, Mapping, Optional, Sequence, Union
 
 import absl  # noqa: F401
 import gurobipy as gp
@@ -13,6 +13,8 @@ from utils import EventTime
 from workers import Worker, WorkerPools
 from workload import (
     BranchPredictionPolicy,
+    ExecutionStrategies,
+    ExecutionStrategy,
     Placement,
     Placements,
     Task,
@@ -53,11 +55,16 @@ class TaskOptimizerVariables:
         self._enforce_deadlines = enforce_deadlines
 
         # Placement characteristics
-        # Set up individual variables to signify where the task is placed.
-        self._placed_on_worker = {}
+        # Set up individual variables to signify where the task is placed and with what
+        # execution strategy.
+        self._placed_on_worker_with_strategy = {
+            (worker_id, execution_strategy): 0
+            for worker_id in workers.keys()
+            for execution_strategy in self._task.available_execution_strategies
+        }
 
         # Timing characteristics.
-        if task.state == TaskState.RUNNING:
+        if self._task.state == TaskState.RUNNING:
             # The task is already running, set the start time to the current
             # simulation time, since we use the remaining time to count the
             # time at which this Task will relinquish its resources.
@@ -67,50 +74,24 @@ class TaskOptimizerVariables:
             # Find the Worker where the Task was previously placed and add
             # constraints to inform the scheduler of its placement.
             if (
-                task.current_placement is None
-                or task.current_placement.worker_id is None
+                self._task.current_placement is None
+                or self._task.current_placement.worker_id is None
             ):
                 raise ValueError(
-                    f"Task {task.unique_name} in state {task.state} does not have a "
-                    f"cached prior Placement or the Worker ID is empty."
+                    f"Task {self._task.unique_name} in state {self._task.state} does "
+                    f"not have a cached prior Placement or the Worker ID is empty."
                 )
 
-            previously_placed_worker = task.current_placement.worker_id
-            for worker_id, worker in workers.items():
-                if worker.id == previously_placed_worker:
-                    self._placed_on_worker[worker_id] = 1
-                else:
-                    self._placed_on_worker[worker_id] = 0
-        elif task.state == TaskState.SCHEDULED and not retract_schedules:
-            # The task was scheduled and we are not allowing retractions, we allow the
-            # start time to be fungible but the task must be placed.
-            self._previously_placed = False
-            self._start_time = optimizer.addVar(
-                lb=max(
-                    current_time.to(EventTime.Unit.US).time + 1,
-                    task.release_time.to(EventTime.Unit.US).time,
-                ),
-                vtype=GRB.INTEGER,
-                name=f"{task.unique_name}_start",
+            placed_key = (
+                self.__get_worker_index_from_previous_placement(self._task, workers),
+                self._task.current_placement.execution_strategy,
             )
-            self._start_time.Start = task.expected_start_time.to(EventTime.Unit.US).time
-
-            # Set up variables to signify if the Task was placed on a Worker.
-            previously_placed_worker = task.current_placement.worker_id
-            for worker_id, worker in workers.items():
-                self._placed_on_worker[worker_id] = optimizer.addVar(
-                    vtype=GRB.BINARY, name=f"{task.unique_name}_placed_on_{worker.name}"
-                )
-                if worker.id == previously_placed_worker:
-                    self._placed_on_worker[worker_id].Start = 1
-                else:
-                    self._placed_on_worker[worker_id].Start = 0
-
-            # Initialize the constraints for the variables.
-            self.initialize_constraints(optimizer, enforce_deadlines, retract_schedules)
+            self._placed_on_worker_with_strategy[placed_key] = 1
         else:
+            # The task is not currently running, we initialize variables to let the
+            # optimizer decide the start time of the task, along with the worker where
+            # its going to be placed and the execution strategy to run the task with.
             self._previously_placed = False
-            # The task's start time has to be decided.
             self._start_time = optimizer.addVar(
                 lb=max(
                     current_time.to(EventTime.Unit.US).time + 1,
@@ -120,52 +101,56 @@ class TaskOptimizerVariables:
                 name=f"{task.unique_name}_start",
             )
 
-            # Set up variables to signify if the Task was placed on a Worker.
+            schedulable_worker_to_strategies: Mapping[int, ExecutionStrategies] = {}
             for worker_id, worker in workers.items():
-                self._placed_on_worker[worker_id] = optimizer.addVar(
-                    vtype=GRB.BINARY, name=f"{task.unique_name}_placed_on_{worker.name}"
+                cleared_worker = deepcopy(worker)
+                compatible_strategies = cleared_worker.get_compatible_strategies(
+                    self._task.available_execution_strategies
                 )
+                if len(compatible_strategies) != 0:
+                    schedulable_worker_to_strategies[worker_id] = compatible_strategies
 
-            # If the task was previously scheduled, seed the start time
-            # and the worker placement with the previously obtained solution.
+            for (
+                worker_id,
+                execution_strategy,
+            ) in self._placed_on_worker_with_strategy.keys():
+                if (
+                    worker_id in schedulable_worker_to_strategies.keys()
+                    and execution_strategy
+                    in schedulable_worker_to_strategies[worker_id]
+                ):
+                    self._placed_on_worker_with_strategy[
+                        (worker_id, execution_strategy)
+                    ] = optimizer.addVar(
+                        vtype=GRB.BINARY,
+                        name=f"{task.unique_name}_placed_on_{workers[worker_id].name}_"
+                        f"with_batch_size_{execution_strategy.batch_size}_runtime_"
+                        f"{execution_strategy.runtime.to(EventTime.Unit.US).time}",
+                    )
+
+            # If the task was previously SCHEDULED, we seed the previous placement time
+            # and strategies to help the optimizer in making a decision.
             if task.state == TaskState.SCHEDULED:
                 self._start_time.Start = task.expected_start_time.to(
                     EventTime.Unit.US
                 ).time
-                if (
-                    task.current_placement is None
-                    or task.current_placement.worker_id is None
-                ):
-                    raise ValueError(
-                        f"Task {task.unique_name} in state {task.state} does not have "
-                        f"a cached prior Placement or the Worker ID is empty."
-                    )
-                previously_placed_worker = task.current_placement.worker_id
-                for worker_id, worker in workers.items():
-                    worker_placed_on_variable = self._placed_on_worker[worker_id]
-                    if worker.id == previously_placed_worker:
-                        worker_placed_on_variable.Start = 1
-                    else:
-                        worker_placed_on_variable.Start = 0
-
-            # Check that the Workers that can never accomodate a Task are forced
-            # to be 0 in the optimizer.
-            for worker_id, placed_variable in self._placed_on_worker.items():
-                cleared_worker = deepcopy(workers[worker_id])
-                compatible_strategies = cleared_worker.get_compatible_strategies(
-                    self.task.available_execution_strategies
+                placed_key = (
+                    self.__get_worker_index_from_previous_placement(
+                        self._task, workers
+                    ),
+                    self._task.current_placement.execution_strategy,
                 )
-                if len(compatible_strategies) == 0:
-                    worker_name = cleared_worker.name
-                    optimizer.addConstr(
-                        placed_variable == 0,
-                        name=f"{worker_name}_cannot_accomodate_{task.unique_name}",
-                    )
+                for (
+                    placement_key,
+                    placement_variable,
+                ) in self._placed_on_worker_with_strategy.items():
+                    if placement_key == placed_key:
+                        placement_variable.Start = 1
+                    else:
+                        placement_variable.Start = 0
 
             # Initialize the constraints for the variables.
-            self.initialize_constraints(
-                optimizer, enforce_deadlines, retract_schedules, workers
-            )
+            self.initialize_constraints(optimizer, enforce_deadlines, retract_schedules)
 
     @property
     def start_time(self) -> Union[int, gp.Var]:
@@ -192,11 +177,15 @@ class TaskOptimizerVariables:
     def enforce_deadlines(self) -> bool:
         return self._enforce_deadlines
 
-    def placed_on_worker(self, worker_id: int) -> Optional[Union[int, gp.Var]]:
-        """Check if the Task was placed on a particular Worker.
+    def placed_on_worker_with_strategy(
+        self, worker_id: int, execution_strategy: ExecutionStrategy
+    ) -> Optional[Union[int, gp.Var]]:
+        """Check if the Task was placed on a particular Worker with the given execution
+        strategy.
 
         Args:
             worker_id (`int`): The ID of the Worker to check.
+            execution_strategy (`ExecutionStrategy`): The execution strategy to check.
 
         Returns:
             The method has the following return values:
@@ -204,13 +193,13 @@ class TaskOptimizerVariables:
                 - `int`: If the `Task` was forced to not be placed on this `Worker`.
                 - `gp.Var`: A Gurobi variable representing the placement solution.
         """
-        return self._placed_on_worker.get(worker_id)
+        return self._placed_on_worker_with_strategy.get((worker_id, execution_strategy))
 
     @property
     def placed_on_workers(self) -> Sequence[Union[int, gp.Var]]:
         """Retrieves the binary Gurobi variables representing the placement of the
         task on the collection of `Worker`s registered with the instance."""
-        return self._placed_on_worker.values()
+        return self._placed_on_worker_with_strategy.values()
 
     def __str__(self) -> str:
         return f"TaskOptimizerVariables(name={self.name})"
@@ -222,26 +211,19 @@ class TaskOptimizerVariables:
         self,
         optimizer: gp.Model,
         enforce_deadlines: bool,
-        workers: Mapping[int, Worker],
     ) -> None:
         # Add a constraint to ensure that if enforcing deadlines is required, then
         # we are setting the start time to something that meets the deadline.
         if enforce_deadlines:
             deadline_enforcement_expression = gp.LinExpr(self.start_time)
-            for worker_id, worker in workers.items():
-                compatible_strategies = worker.get_compatible_strategies(
-                    self.task.available_execution_strategies
-                )
-                if len(compatible_strategies) == 0:
-                    # No compatible strategy is available for this worker. We can skip
-                    # adding it to the constraint, since the placement variable for this
-                    # will always be 0.
-                    continue
-                chosen_strategy = compatible_strategies.get_fastest_strategy()
-                worker_placed_variable = self.placed_on_worker(worker_id)
+            for (
+                placement_key,
+                placement_variable,
+            ) in self._placed_on_worker_with_strategy.items():
+                _, execution_strategy = placement_key
                 deadline_enforcement_expression.add(
-                    worker_placed_variable
-                    * chosen_strategy.runtime.to(EventTime.Unit.US).time
+                    placement_variable
+                    * execution_strategy.runtime.to(EventTime.Unit.US).time
                 )
             optimizer.addConstr(
                 deadline_enforcement_expression
@@ -258,13 +240,13 @@ class TaskOptimizerVariables:
         # A sum of 0 implies that the task was not placed on any Worker.
         if self.task.state == TaskState.SCHEDULED and not retract_schedules:
             optimizer.addConstr(
-                gp.quicksum(self._placed_on_worker.values()) == 1,
-                name=f"{self.name}_previously_scheduled_required_worker_placement",
+                gp.quicksum(self._placed_on_worker_with_strategy.values()) == 1,
+                name=f"{self.name}_previously_scheduled_required_placement",
             )
         else:
             optimizer.addConstr(
-                gp.quicksum(self._placed_on_worker.values()) <= 1,
-                name=f"{self.name}_consistent_worker_placement",
+                gp.quicksum(self._placed_on_worker_with_strategy.values()) <= 1,
+                name=f"{self.name}_consistent_placement",
             )
 
     def initialize_constraints(
@@ -272,7 +254,6 @@ class TaskOptimizerVariables:
         optimizer: gp.Model,
         enforce_deadlines: bool,
         retract_schedules: bool,
-        workers: Mapping[int, Worker],
     ) -> None:
         """Initializes the constraints for the particular `Task`.
 
@@ -280,8 +261,42 @@ class TaskOptimizerVariables:
             optimizer (`gp.Model`): The Gurobi model to which the constraints must
                 be added.
         """
-        self._initialize_timing_constraints(optimizer, enforce_deadlines, workers)
+        self._initialize_timing_constraints(optimizer, enforce_deadlines)
         self._initialize_placement_constraints(optimizer, retract_schedules)
+
+    def __get_worker_index_from_previous_placement(
+        self, task: Task, workers: Mapping[int, Worker]
+    ) -> int:
+        """Maps the ID of the Worker that the Task was previously placed to the index
+        that it was assigned for this invocation of the Scheduler.
+
+        Args:
+            task (`Task`): The Task for which the previous placed Worker is to be
+                retrieved.
+            workers (`Mapping[int, Worker]`): The current mapping of indices to the
+                Workers.
+
+        Returns:
+            The index of the Worker in this instance of the Scheduler, if found.
+            Otherwise, a ValueError is raised with the appropriate information.
+        """
+        if task.current_placement is None or task.current_placement.worker_id is None:
+            raise ValueError(
+                f"Task {task.unique_name} in state {task.state} does not have a "
+                f"cached prior Placement or the Worker ID is empty."
+            )
+        worker_index = None
+        for worker_id, worker in workers.items():
+            if worker.id == task.current_placement.worker_id:
+                worker_index = worker_id
+                break
+        if worker_index is None:
+            raise ValueError(
+                f"Task {task.unique_name} in state {task.state} was previously placed "
+                f"on {task.current_placement.worker_id}, which was no longer found in "
+                f"the current set of available Workers."
+            )
+        return worker_index
 
 
 class ILPScheduler(BaseScheduler):
@@ -346,6 +361,7 @@ class ILPScheduler(BaseScheduler):
         self._goal = goal
         self._gap_time_limit = time_limit.to(EventTime.Unit.S).time
         self._log_to_file = log_to_file
+        self._log_times = set(map(int, _flags.scheduler_log_times)) if _flags else set()
         self._allowed_to_miss_deadlines = set()
 
     def _initialize_optimizer(self, current_time: EventTime) -> gp.Model:
@@ -363,7 +379,10 @@ class ILPScheduler(BaseScheduler):
 
         # Don't log the output to the console, instead log it to a file.
         optimizer.Params.LogToConsole = 0
-        if self._log_to_file:
+        if (
+            self._log_to_file
+            or current_time.to(EventTime.Unit.US).time in self._log_times
+        ):
             optimizer.Params.LogFile = (
                 f"./gurobi_{current_time.to(EventTime.Unit.US).time}.log"
             )
@@ -474,14 +493,19 @@ class ILPScheduler(BaseScheduler):
             # Add the constraints to ensure that dependency constraints are met and
             # resources are not oversubscribed.
             self._add_task_dependency_constraints(
-                optimizer, tasks_to_variables, workload
+                optimizer, tasks_to_variables, workload, workers
             )
             self._add_resource_constraints(
                 optimizer, tasks_to_variables, workload, workers
             )
 
             # Add the objectives and optimize the model.
-            self._add_objective(optimizer, tasks_to_variables, workload)
+            self._add_objective(optimizer, tasks_to_variables, workload, workers)
+
+            if self._log_to_file or (
+                sim_time.to(EventTime.Unit.US).time in self._log_times
+            ):
+                optimizer.write(f"./gurobi_{sim_time.to(EventTime.Unit.US).time}.lp")
             optimizer.optimize(
                 callback=lambda optimizer, where: self._termination_check_callback(
                     sim_time, optimizer, where
@@ -500,6 +524,15 @@ class ILPScheduler(BaseScheduler):
                     f"[{sim_time.to(EventTime.Unit.US).time}] The scheduler returned "
                     f"the objective value {optimizer.objVal}."
                 )
+
+                # Write the solution to the SOL file, if requested.
+                if self._log_to_file or (
+                    sim_time.to(EventTime.Unit.US).time in self._log_times
+                ):
+                    optimizer.write(
+                        f"./gurobi_{sim_time.to(EventTime.Unit.US).time}.sol"
+                    )
+
                 for task_variables in tasks_to_variables.values():
                     if task_variables.previously_placed:
                         continue
@@ -512,16 +545,29 @@ class ILPScheduler(BaseScheduler):
                     start_time = EventTime(
                         int(task_variables.start_time.X), EventTime.Unit.US
                     )
-                    meets_deadline = start_time + task.remaining_time <= task.deadline
 
                     # Find the Worker and the WorkerPool where the Task was placed.
                     placement_worker = None
+                    placement_strategy = None
                     for worker_id, worker in workers.items():
-                        if isinstance(
-                            task_variables.placed_on_worker(worker_id), gp.Var
-                        ):
-                            if task_variables.placed_on_worker(worker_id).X == 1:
-                                placement_worker = worker
+                        for (
+                            strategy
+                        ) in task_variables.task.available_execution_strategies:
+                            if isinstance(
+                                task_variables.placed_on_worker_with_strategy(
+                                    worker_id, strategy
+                                ),
+                                gp.Var,
+                            ):
+                                if (
+                                    task_variables.placed_on_worker_with_strategy(
+                                        worker_id, strategy
+                                    ).X
+                                    == 1
+                                ):
+                                    placement_worker = worker
+                                    placement_strategy = strategy
+                                    break
 
                     # Check if all the tasks from this TaskGraph were placed.
                     all_tasks_placed = True
@@ -543,7 +589,10 @@ class ILPScheduler(BaseScheduler):
                                 break
 
                     # If the task was placed, find the start time.
-                    if placement_worker:
+                    if placement_worker and placement_strategy:
+                        meets_deadline = (
+                            start_time + placement_strategy.runtime <= task.deadline
+                        )
                         if task_variables.enforce_deadlines and not meets_deadline:
                             self._logger.debug(
                                 "[%s] Failed to place %s because the deadline "
@@ -586,14 +635,9 @@ class ILPScheduler(BaseScheduler):
                                 sim_time.to(EventTime.Unit.US).time,
                                 task.unique_name,
                                 task.deadline,
-                                task.remaining_time,
+                                strategy.runtime,
                                 worker_to_worker_pool[placement_worker.id],
                                 start_time,
-                            )
-                            execution_strategy = (
-                                placement_worker.get_compatible_strategies(
-                                    task_variables.task.available_execution_strategies
-                                ).get_fastest_strategy()
                             )
                             placements.append(
                                 Placement.create_task_placement(
@@ -603,7 +647,7 @@ class ILPScheduler(BaseScheduler):
                                         placement_worker.id
                                     ],
                                     worker_id=placement_worker.id,
-                                    execution_strategy=execution_strategy,
+                                    execution_strategy=strategy,
                                 )
                             )
                     else:
@@ -726,6 +770,7 @@ class ILPScheduler(BaseScheduler):
         optimizer: gp.Model,
         tasks_to_variables: Mapping[str, TaskOptimizerVariables],
         workload: Workload,
+        workers: Mapping[int, Worker],
     ) -> None:
         """Generates the variables and constraints to ensure that the dependencies
         due to a TaskGraph are respected.
@@ -737,6 +782,8 @@ class ILPScheduler(BaseScheduler):
                 from the name of the Task to its corresponding variables inside the
                 optimizer.
             workload (`Workload`): The workload with which the scheduler was invoked.
+            workers (`Mapping[int, Worker]`): A mapping of the unique index of the
+                Worker to its instance.
         """
         for task_name, variable in tasks_to_variables.items():
             if variable.previously_placed:
@@ -760,13 +807,22 @@ class ILPScheduler(BaseScheduler):
                 )
                 parent_placements = []
                 for parent_variable in parent_variables:
-                    optimizer.addConstr(
-                        variable.start_time
-                        >= parent_variable.start_time
-                        + parent_variable.task.remaining_time.to(EventTime.Unit.US).time
-                        + 1,
-                        name=f"{task_name}_start_after_{parent_variable.name}",
-                    )
+                    for worker_id, worker in workers.items():
+                        for (
+                            strategy
+                        ) in parent_variable.task.available_execution_strategies:
+                            optimizer.addConstr(
+                                variable.start_time
+                                >= parent_variable.start_time
+                                + parent_variable.placed_on_worker_with_strategy(
+                                    worker_id, strategy
+                                )
+                                * (strategy.runtime.to(EventTime.Unit.US).time + 1),
+                                name=f"{task_name}_start_after_{parent_variable.name}_"
+                                f"on_worker_{worker.name}_with_batch_size_"
+                                f"{strategy.batch_size}_runtime_"
+                                f"{strategy.runtime.to(EventTime.Unit.US).time}",
+                            )
                     parent_placements.extend(parent_variable.placed_on_workers)
 
                 # Construct an indicator variable that checks if all the parents were
@@ -874,6 +930,7 @@ class ILPScheduler(BaseScheduler):
                             optimizer,
                             task_1_variable,
                             task_2_variable,
+                            workers,
                             task_pair_overlap_variable,
                         )
                 else:
@@ -881,104 +938,101 @@ class ILPScheduler(BaseScheduler):
                         optimizer,
                         task_1_variable,
                         task_2_variable,
+                        workers,
                         task_pair_overlap_variable,
                     )
 
         # Now, for each task, we ensure that the cumulative sum of the resource
-        # requirements for all the tasks running at the start time doesn't end up
+        # requirements for all the tasks that overlap with this one doesn't end up
         # oversubscribing any Worker's resources.
         for task_1_name, task_1_variable in tasks_to_variables.items():
-            task_dependencies = []
+            task_dependencies: List[str, TaskOptimizerVariables] = []
             for task_2_name, task_2_variable in tasks_to_variables.items():
                 if task_1_name != task_2_name:
                     task_dependencies.append((task_2_name, task_2_variable))
 
             # For each Worker and each of its resources, ensure no oversubscription.
             for worker_index, worker in workers.items():
-                if (
-                    task_1_variable.previously_placed
-                    and task_1_variable.placed_on_worker(worker_index) == 0
+                if task_1_variable.previously_placed and all(
+                    task_1_variable.placed_on_worker_with_strategy(
+                        worker_index, strategy
+                    )
+                    == 0
+                    for strategy in task_1_variable.task.available_execution_strategies
                 ):
                     # The task was previously placed, but not on this worker. Thus,
                     # we should skip adding the constraints here.
                     continue
 
-                compatible_strategies_for_task_1 = worker.get_compatible_strategies(
-                    task_1_variable.task.available_execution_strategies
-                )
-                if len(compatible_strategies_for_task_1) == 0:
-                    # There are no compatible strategies for this Task on this
-                    # particular Worker. So, there is no possibility of overlap since
-                    # this Task will never be placed on this Worker.
-                    continue
-                task_1_strategy_for_worker = (
-                    compatible_strategies_for_task_1.get_fastest_strategy()
-                )
-
                 for (
                     resource,
                     quantity,
                 ) in worker.resources.get_unique_resource_types().items():
-                    task_1_request_for_resource = (
-                        task_1_strategy_for_worker.resources.get_total_quantity(
-                            resource
+                    resource_constraint_expression = gp.QuadExpr()
+                    # We check each of the strategies for the Task to see which one
+                    # has requirements for this resource, and use its placement variable
+                    # to check for resource oversubscription.
+                    for (
+                        execution_strategy
+                    ) in task_1_variable.task.available_execution_strategies:
+                        task_1_request_for_resource = (
+                            execution_strategy.resources.get_total_quantity(resource)
                         )
-                    )
-                    if quantity == 0 or task_1_request_for_resource == 0:
-                        # We ensure earlier that the Worker has enough space to
-                        # accomodate each task. If the quantity of the resource is
-                        # 0 or the task does not need this resource, then we can
-                        # skip the addition of a constraint since the task would not
-                        # have been placed on this worker or taken up this resource.
-                        continue
+                        if task_1_request_for_resource == 0:
+                            # We ensure earlier that the Worker has enough space to
+                            # accomodate each task. If the task does not need this
+                            # resource, then we can skip the addition of a constraint
+                            # since the task would not have taken up this resource.
+                            continue
+
+                        resource_constraint_expression.add(
+                            task_1_variable.placed_on_worker_with_strategy(
+                                worker_index, execution_strategy
+                            )
+                            * task_1_request_for_resource
+                        )
 
                     # If the dependency overlaps and the dependency is placed on this
                     # worker, then ensure that the resource type is not oversubscribed.
-                    resource_constraint_expression = gp.QuadExpr(
-                        task_1_variable.placed_on_worker(worker_index)
-                        * task_1_request_for_resource
-                    )
                     for task_2_name, task_2_variable in task_dependencies:
-                        task_2_placed_on_worker_var = task_2_variable.placed_on_worker(
-                            worker_index
-                        )
-                        compatible_strategies_for_task_2 = (
-                            worker.get_compatible_strategies(
+                        if task_2_variable.previously_placed and all(
+                            task_2_variable.placed_on_worker_with_strategy(
+                                worker_index, strategy
+                            )
+                            == 0
+                            for strategy in (
                                 task_2_variable.task.available_execution_strategies
                             )
-                        )
-                        if (
-                            task_2_variable.previously_placed
-                            and task_2_placed_on_worker_var == 0
-                        ) or len(compatible_strategies_for_task_2) == 0:
-                            # The task was either not placed on this Worker, or there
-                            # were no available execution strategies for this Task on
-                            # this particular Worker. Hence, this Task cannot effect
-                            # oversubscription.
-                            continue
-
-                        task_2_chosen_strategy = (
-                            compatible_strategies_for_task_2.get_fastest_strategy()
-                        )
-                        task_2_resource_reqs = (
-                            task_2_chosen_strategy.resources.get_total_quantity(
-                                resource
-                            )
-                        )
-                        if task_2_resource_reqs == 0:
-                            # The second Task has no requirement for this Resource so
-                            # its placement will not affect oversubscription, we can
-                            # skip adding it to the constraint.
+                        ):
+                            # The task was previously placed, but not on this worker.
+                            # Thus, any overlap of these two tasks will not affect the
+                            # oversubscription of resources here.
                             continue
 
                         overlap_variable = task_pair_overlap_variables[
                             (task_1_name, task_2_name)
                         ]
-                        resource_constraint_expression.add(
-                            task_2_placed_on_worker_var
-                            * overlap_variable
-                            * task_2_resource_reqs
-                        )
+                        for (
+                            execution_strategy
+                        ) in task_2_variable.task.available_execution_strategies:
+                            task_2_resource_reqs = (
+                                execution_strategy.resources.get_total_quantity(
+                                    resource
+                                )
+                            )
+                            if task_2_resource_reqs == 0:
+                                # The second Task has no requirement for this Resource
+                                # so its placement will not affect oversubscription, we
+                                # can skip adding it to the constraint.
+                                continue
+
+                            resource_constraint_expression.add(
+                                task_2_variable.placed_on_worker_with_strategy(
+                                    worker_index, execution_strategy
+                                )
+                                * overlap_variable
+                                * task_2_resource_reqs
+                            )
 
                     # Add the constraint to the optimizer.
                     optimizer.addConstr(
@@ -991,6 +1045,7 @@ class ILPScheduler(BaseScheduler):
         optimizer: gp.Model,
         task_1: TaskOptimizerVariables,
         task_2: TaskOptimizerVariables,
+        workers: Mapping[int, Worker],
         overlap_variable: Optional[gp.Var] = None,
     ) -> gp.Var:
         """Insert an indicator variable that specifies if the two tasks overlap in
@@ -1017,43 +1072,57 @@ class ILPScheduler(BaseScheduler):
         task_1_starts_after_task_2_ends = optimizer.addVar(
             vtype=GRB.BINARY, name=f"{task_1.name}_starts_after_{task_2.name}_ends"
         )
+        task_2_remaining_time_expr = gp.LinExpr()
+        for worker_id in workers.keys():
+            for strategy in task_2.task.available_execution_strategies:
+                task_2_remaining_time_expr.add(
+                    task_2.placed_on_worker_with_strategy(worker_id, strategy)
+                    * strategy.runtime.to(EventTime.Unit.US).time
+                )
         optimizer.addGenConstrIndicator(
             task_1_starts_after_task_2_ends,
             0,
-            task_1.start_time - task_2.start_time,
+            task_1.start_time - task_2.start_time - task_2_remaining_time_expr,
             GRB.LESS_EQUAL,
-            task_2.task.remaining_time.to(EventTime.Unit.US).time,
+            0,
             name=f"{task_1.name}_starts_after_{task_2.name}_ends_False",
         )
         optimizer.addGenConstrIndicator(
             task_1_starts_after_task_2_ends,
             1,
-            task_1.start_time - task_2.start_time,
+            task_1.start_time - task_2.start_time - task_2_remaining_time_expr,
             GRB.GREATER_EQUAL,
-            task_2.task.remaining_time.to(EventTime.Unit.US).time + 1,
+            1,
             name=f"{task_1.name}_starts_after_{task_2.name}_ends_True",
         )
 
         # Add an indicator variable that checks if the first task starts before the
         # second task starts.
-        task_1_starts_before_task_2_starts = optimizer.addVar(
-            vtype=GRB.BINARY, name=f"{task_1.name}_starts_before_{task_2.name}_starts"
+        task_1_ends_before_task_2_starts = optimizer.addVar(
+            vtype=GRB.BINARY, name=f"{task_1.name}_ends_before_{task_2.name}_starts"
         )
+        task_1_remaining_time_expr = gp.LinExpr()
+        for worker_id in workers.keys():
+            for strategy in task_1.task.available_execution_strategies:
+                task_1_remaining_time_expr.add(
+                    task_1.placed_on_worker_with_strategy(worker_id, strategy)
+                    * strategy.runtime.to(EventTime.Unit.US).time
+                )
         optimizer.addGenConstrIndicator(
-            task_1_starts_before_task_2_starts,
+            task_1_ends_before_task_2_starts,
             0,
-            task_1.start_time - task_2.start_time,
+            task_1.start_time + task_1_remaining_time_expr - task_2.start_time,
             GRB.GREATER_EQUAL,
             0,
-            name=f"{task_1.name}_starts_before_{task_2.name}_starts_False",
+            name=f"{task_1.name}_ends_before_{task_2.name}_starts_False",
         )
         optimizer.addGenConstrIndicator(
-            task_1_starts_before_task_2_starts,
+            task_1_ends_before_task_2_starts,
             1,
-            task_1.start_time - task_2.start_time,
+            task_1.start_time + task_1_remaining_time_expr - task_2.start_time,
             GRB.LESS_EQUAL,
             -1,
-            name=f"{task_1.name}_starts_before_{task_2.name}_starts_True",
+            name=f"{task_1.name}_ends_before_{task_2.name}_starts_True",
         )
 
         # Add an indicator variable that is set to 1 if neither of the above
@@ -1064,7 +1133,7 @@ class ILPScheduler(BaseScheduler):
             )
         optimizer.addConstr(
             task_1_starts_after_task_2_ends
-            + task_1_starts_before_task_2_starts
+            + task_1_ends_before_task_2_starts
             + overlap_variable
             == 1,
             name=f"{task_1.name}_overlap_{task_2.name}",
@@ -1076,6 +1145,7 @@ class ILPScheduler(BaseScheduler):
         optimizer: gp.Model,
         tasks_to_variables: Mapping[str, TaskOptimizerVariables],
         workload: Workload,
+        workers: Mapping[int, Worker],
     ):
         # Construct the reward variables for each of the TaskGraphs were
         # made available for scheduling.
@@ -1149,13 +1219,21 @@ class ILPScheduler(BaseScheduler):
                             vtype=GRB.BINARY,
                             name=f"{task_variable.name}_meets_deadline",
                         )
+                        task_remaining_time_expr = gp.LinExpr()
+                        for worker_id in workers.keys():
+                            for (
+                                strategy
+                            ) in task_variable.task.available_execution_strategies:
+                                task_remaining_time_expr.add(
+                                    task_variable.placed_on_worker_with_strategy(
+                                        worker_id, strategy
+                                    )
+                                    * strategy.runtime.to(EventTime.Unit.US).time
+                                )
                         optimizer.addGenConstrIndicator(
                             meets_deadline,
                             0,
-                            task_variable.start_time
-                            + task_variable.task.remaining_time.to(
-                                EventTime.Unit.US
-                            ).time,
+                            task_variable.start_time + task_remaining_time_expr,
                             GRB.GREATER_EQUAL,
                             task_variable.task.deadline.to(EventTime.Unit.US).time + 1,
                             name=f"{task_variable.name}_meets_deadline_FALSE",
@@ -1163,10 +1241,7 @@ class ILPScheduler(BaseScheduler):
                         optimizer.addGenConstrIndicator(
                             meets_deadline,
                             1,
-                            task_variable.start_time
-                            + task_variable.task.remaining_time.to(
-                                EventTime.Unit.US
-                            ).time,
+                            task_variable.start_time + task_remaining_time_expr,
                             GRB.LESS_EQUAL,
                             task_variable.task.deadline.to(EventTime.Unit.US).time,
                             name=f"{task_variable.name}_meets_deadline_TRUE",

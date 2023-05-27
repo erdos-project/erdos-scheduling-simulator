@@ -947,6 +947,12 @@ def test_ilp_not_work_conserving():
 @pytest.mark.parametrize(
     "scheduler",
     [
+        ILPScheduler(
+            preemptive=False,
+            runtime=EventTime.zero(),
+            lookahead=EventTime.zero(),
+            enforce_deadlines=True,
+        ),
         pytest.param(
             TetriSchedCPLEXScheduler(
                 runtime=EventTime.zero(),
@@ -1046,6 +1052,180 @@ def test_ilp_fits_correct_strategies(scheduler):
         <= camera_task_2.deadline
         - camera_task_2_placements[0].execution_strategy.runtime
     ), "Incorrect placement time for camera_task_2."
+
+
+@pytest.mark.parametrize(
+    "scheduler",
+    [
+        ILPScheduler(
+            preemptive=False,
+            runtime=EventTime.zero(),
+            lookahead=EventTime.zero(),
+            enforce_deadlines=True,
+            release_taskgraphs=True,
+        ),
+    ],
+)
+def test_ilp_fits_correct_strategies_graph(scheduler):
+    camera_task_1 = create_default_task(
+        name="Camera_1",
+        job=Job(name="Camera_1"),
+        profile=WorkProfile(
+            name="Camera_1_Profile",
+            execution_strategies=ExecutionStrategies(
+                strategies=[
+                    ExecutionStrategy(
+                        resources=Resources(
+                            resource_vector={Resource(name="CPU", _id="any"): 10}
+                        ),
+                        batch_size=1,
+                        runtime=EventTime(100, EventTime.Unit.US),
+                    ),
+                    ExecutionStrategy(
+                        resources=Resources(
+                            resource_vector={Resource(name="CPU", _id="any"): 1}
+                        ),
+                        batch_size=1,
+                        runtime=EventTime(200, EventTime.Unit.US),
+                    ),
+                ]
+            ),
+        ),
+        deadline=380,
+        task_graph_name="TestGraph1",
+    )
+    perception_task_1 = create_default_task(
+        name="Perception_1",
+        job=Job(name="Perception_1"),
+        profile=WorkProfile(
+            name="Perception_1_Profile",
+            execution_strategies=ExecutionStrategies(
+                strategies=[
+                    ExecutionStrategy(
+                        resources=Resources(
+                            resource_vector={Resource(name="CPU", _id="any"): 10}
+                        ),
+                        batch_size=1,
+                        runtime=EventTime(100, EventTime.Unit.US),
+                    ),
+                    ExecutionStrategy(
+                        resources=Resources(
+                            resource_vector={Resource(name="CPU", _id="any"): 1}
+                        ),
+                        batch_size=1,
+                        runtime=EventTime(200, EventTime.Unit.US),
+                    ),
+                ]
+            ),
+        ),
+        deadline=380,
+        task_graph_name="TestGraph1",
+    )
+    task_graph_1 = TaskGraph(
+        name="TestGraph1",
+        tasks={camera_task_1: [perception_task_1], perception_task_1: []},
+    )
+
+    camera_task_2 = create_default_task(
+        name="Camera_2",
+        job=Job(name="Camera_2"),
+        profile=WorkProfile(
+            name="Camera_2_Profile",
+            execution_strategies=ExecutionStrategies(
+                strategies=[
+                    ExecutionStrategy(
+                        resources=Resources(
+                            resource_vector={Resource(name="CPU", _id="any"): 10}
+                        ),
+                        batch_size=1,
+                        runtime=EventTime(100, EventTime.Unit.US),
+                    ),
+                    ExecutionStrategy(
+                        resources=Resources(
+                            resource_vector={Resource(name="CPU", _id="any"): 1}
+                        ),
+                        batch_size=1,
+                        runtime=EventTime(200, EventTime.Unit.US),
+                    ),
+                ]
+            ),
+        ),
+        deadline=380,
+        task_graph_name="TestGraph2",
+    )
+    perception_task_2 = create_default_task(
+        name="Perception_2",
+        job=Job(name="Perception_2"),
+        profile=WorkProfile(
+            name="Perception_2_Profile",
+            execution_strategies=ExecutionStrategies(
+                strategies=[
+                    ExecutionStrategy(
+                        resources=Resources(
+                            resource_vector={Resource(name="CPU", _id="any"): 10}
+                        ),
+                        batch_size=1,
+                        runtime=EventTime(100, EventTime.Unit.US),
+                    ),
+                    ExecutionStrategy(
+                        resources=Resources(
+                            resource_vector={Resource(name="CPU", _id="any"): 1}
+                        ),
+                        batch_size=1,
+                        runtime=EventTime(200, EventTime.Unit.US),
+                    ),
+                ]
+            ),
+        ),
+        deadline=380,
+        task_graph_name="TestGraph2",
+    )
+    task_graph_2 = TaskGraph(
+        name="TestGraph2",
+        tasks={camera_task_2: [perception_task_2], perception_task_2: []},
+    )
+
+    workload = Workload.from_task_graphs(
+        {"TestGraph1": task_graph_1, "TestGraph2": task_graph_2}
+    )
+    camera_task_1.release(EventTime.zero())
+    camera_task_2.release(EventTime.zero())
+
+    # Create the Workers.
+    worker_1 = Worker(
+        name="Worker1",
+        resources=Resources(resource_vector={Resource(name="CPU"): 15}),
+    )
+    worker_pool_1 = WorkerPool(name="WorkerPool_1", workers=[worker_1])
+    worker_pools = WorkerPools(worker_pools=[worker_pool_1])
+
+    # Run the scheduler.
+    placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
+    assert len(placements) == 4, "Incorrect number of placements."
+
+    camera_task_1_placements = placements.get_placements(camera_task_1)
+    assert len(camera_task_1_placements) == 1, "Incorrect number of placements."
+    assert camera_task_1_placements[
+        0
+    ].is_placed(), "Placement for camera_task_1 failed."
+
+    perception_task_1_placements = placements.get_placements(perception_task_1)
+    assert len(perception_task_1_placements) == 1, "Incorrect number of placements."
+    assert perception_task_1_placements[
+        0
+    ].is_placed(), "Placement for perception_task_1 failed."
+
+    camera_task_2_placements = placements.get_placements(camera_task_2)
+    assert len(camera_task_2_placements) == 1, "Incorrect number of placements."
+    assert camera_task_2_placements[
+        0
+    ].is_placed(), "Placement for camera_task_2 failed."
+
+    perception_task_2_placements = placements.get_placements(perception_task_2)
+    assert len(perception_task_2_placements) == 1, "Incorrect number of placements."
+    assert perception_task_2_placements[
+        0
+    ].is_placed(), "Placement for perception_task_2 failed."
 
 
 @pytest.mark.parametrize(
