@@ -283,6 +283,12 @@ flags.DEFINE_bool(
     "If `True`, the scheduler is allowed to make LOAD_PROFILE "
     "and EVICT_PROFILE actions.",
 )
+flags.DEFINE_bool(
+    "scheduler_enable_batching",
+    True,
+    "If `True`, the scheduler is allowed to batch tasks "
+    "that share a WorkProfile together.",
+)
 
 # Workload definition related flags.
 flags.DEFINE_float(
@@ -468,6 +474,7 @@ def main(args):
             retract_schedules=FLAGS.retract_schedules,
             release_taskgraphs=FLAGS.release_taskgraphs,
             goal=FLAGS.ilp_goal,
+            batching=FLAGS.scheduler_enable_batching,
             time_limit=EventTime(FLAGS.scheduler_time_limit, EventTime.Unit.S),
             log_to_file=FLAGS.scheduler_log_to_file,
             _flags=FLAGS,
@@ -480,7 +487,7 @@ def main(args):
             enforce_deadlines=FLAGS.enforce_deadlines,
             retract_schedules=FLAGS.retract_schedules,
             goal=FLAGS.ilp_goal,
-            batching=True,
+            batching=FLAGS.scheduler_enable_batching,
             time_limit=EventTime(FLAGS.scheduler_time_limit, EventTime.Unit.S),
             time_discretization=EventTime(
                 FLAGS.scheduler_time_discretization, EventTime.Unit.US

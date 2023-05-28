@@ -338,6 +338,7 @@ class ILPScheduler(BaseScheduler):
         retract_schedules: bool = False,
         release_taskgraphs: bool = False,
         goal: str = "max_goodput",
+        batching: bool = False,
         time_limit: EventTime = EventTime(20, EventTime.Unit.S),
         log_to_file: bool = False,
         _flags: Optional["absl.flags"] = None,
@@ -359,6 +360,7 @@ class ILPScheduler(BaseScheduler):
             _flags=_flags,
         )
         self._goal = goal
+        self._batching = batching
         self._gap_time_limit = time_limit.to(EventTime.Unit.S).time
         self._log_to_file = log_to_file
         self._log_times = set(map(int, _flags.scheduler_log_times)) if _flags else set()
