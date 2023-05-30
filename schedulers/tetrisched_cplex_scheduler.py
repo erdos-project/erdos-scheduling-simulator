@@ -97,6 +97,9 @@ class BatchTask(object):
         tasks (`Sequence[Task]`): The list of tasks that are to be batched together.
         strategy (`ExecutionStrategy`): The strategy that is to be used to execute the
             batch of tasks.
+        priority (`float`): The priority of the batch task.  Usually defined as the
+            normalized slack attributed to this BatchTask. The slack is defined as the
+            minimum of the slack across all the tasks in this batch.
     """
 
     def __init__(

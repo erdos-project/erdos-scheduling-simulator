@@ -1,8 +1,13 @@
 import multiprocessing
+import random
 import sys
 import time
+from collections import defaultdict, deque
 from copy import copy, deepcopy
-from typing import List, Mapping, Optional, Sequence, Union
+from itertools import combinations, islice
+from operator import attrgetter
+from typing import List, Mapping, Optional, Sequence, Set, Union
+from uuid import UUID
 
 import absl  # noqa: F401
 import gurobipy as gp
@@ -12,6 +17,7 @@ from schedulers import BaseScheduler
 from utils import EventTime
 from workers import Worker, WorkerPools
 from workload import (
+    BatchStrategy,
     BranchPredictionPolicy,
     ExecutionStrategies,
     ExecutionStrategy,
@@ -20,10 +26,70 @@ from workload import (
     Task,
     TaskState,
     Workload,
+    WorkProfile,
 )
 
 
-class TaskOptimizerVariables:
+class BatchTask(object):
+    """A `BatchTask` is a virtual `Task` object that is used to represent a batch of
+    tasks that are to be executed together using the given strategy.
+
+    Args:
+        name (`str`): The name of the batch task.
+        tasks (`Sequence[Task]`): The list of tasks that are to be batched together.
+        strategy (`ExecutionStrategy`): The strategy that is to be used to execute the
+            batch of tasks.
+    """
+
+    def __init__(self, name: str, tasks: Sequence[Task], strategy: ExecutionStrategy):
+        self._name = name
+        self._tasks = tasks
+        self._strategy = BatchStrategy(execution_strategy=strategy)
+        self._id = UUID(int=random.getrandbits(128), version=4)
+        self._hash = hash(self._id)
+
+    @property
+    def state(self) -> TaskState:
+        if all(task.state == TaskState.RUNNING for task in self._tasks):
+            return TaskState.RUNNING
+        elif all(task.state == TaskState.SCHEDULED for task in self._tasks):
+            return TaskState.SCHEDULED
+        else:
+            return TaskState.RELEASED
+
+    @property
+    def expected_start_time(self) -> EventTime:
+        return self._tasks[0].expected_start_time
+
+    @property
+    def current_placement(self) -> Placement:
+        return (self._tasks[0]).current_placement
+
+    @property
+    def unique_name(self) -> str:
+        return self._name
+
+    @property
+    def release_time(self) -> EventTime:
+        return max(task.release_time for task in self._tasks)
+
+    @property
+    def deadline(self) -> EventTime:
+        return min(task.deadline for task in self._tasks)
+
+    @property
+    def available_execution_strategies(self) -> ExecutionStrategies:
+        return ExecutionStrategies(strategies=[self._strategy])
+
+    @property
+    def tasks(self) -> Sequence[Task]:
+        return self._tasks
+
+    def __hash__(self) -> int:
+        return self._hash
+
+
+class TaskOptimizerVariables(object):
     """TaskOptimizerVariables is used to represent the optimizer variables for
     every particular task to be scheduled by the Scheduler.
 
@@ -45,7 +111,7 @@ class TaskOptimizerVariables:
     def __init__(
         self,
         current_time: EventTime,
-        task: Task,
+        task: Union[Task, BatchTask],
         workers: Mapping[int, Worker],
         optimizer: gp.Model,
         enforce_deadlines: bool = True,
@@ -130,7 +196,7 @@ class TaskOptimizerVariables:
 
             # If the task was previously SCHEDULED, we seed the previous placement time
             # and strategies to help the optimizer in making a decision.
-            if task.state == TaskState.SCHEDULED:
+            if task.state == TaskState.SCHEDULED and not isinstance(task, BatchTask):
                 self._start_time.Start = task.expected_start_time.to(
                     EventTime.Unit.US
                 ).time
@@ -297,6 +363,66 @@ class TaskOptimizerVariables:
                 f"the current set of available Workers."
             )
         return worker_index
+
+    def get_placements(
+        self,
+        worker_index_to_workers: Mapping[int, Worker],
+        worker_id_to_worker_pool: Mapping[UUID, UUID],
+    ) -> Sequence[Placement]:
+        """Retrieves the details of the solution and constructs the `Placement`
+        objects for the Scheduler to return to the Simulator.
+
+        Args:
+            worker_index_to_worker (`Mapping[int, Worker]`): A mapping from the index
+                that the Worker was assigned for this scheduling run to a reference to
+                the `Worker` itself.
+            worker_id_to_worker_pool (`Mapping[UUID, UUID]`): A mapping from the ID of
+                the `Worker` to the ID of the `WorkerPool` which it is a part of.
+
+        Returns:
+            A sequence of `Placement` objects depicting the time when the Task(s) are
+            to be started, and the Worker where the Task(s) are to be executed.
+        """
+        # If the task corresponding to these variables was previously placed, then
+        # no new Placements will be returned.
+        if self.previously_placed:
+            return []
+
+        # Find the start time of the task, and the Worker it was placed on along with
+        # the strategy that is to be used to execute this Task.
+        start_time = EventTime(int(self.start_time.X), EventTime.Unit.US)
+        placement_worker_id = None
+        placement_worker_pool_id = None
+        placement_strategy = None
+        for worker_id, worker in worker_index_to_workers.items():
+            for strategy in self.task.available_execution_strategies:
+                placement_variable = self.placed_on_worker_with_strategy(
+                    worker_id, strategy
+                )
+                if isinstance(placement_variable, gp.Var) and placement_variable.X == 1:
+                    placement_worker_id = worker.id
+                    placement_worker_pool_id = worker_id_to_worker_pool[worker.id]
+                    placement_strategy = strategy
+                    break
+
+        # Construct the Placement object for the Task.
+        tasks_to_place = []
+        if isinstance(self.task, BatchTask):
+            tasks_to_place.extend(self.task.tasks)
+        else:
+            tasks_to_place.append(self.task)
+        return [
+            Placement.create_task_placement(
+                task=task,
+                placement_time=start_time
+                if placement_worker_id and placement_strategy
+                else None,
+                worker_pool_id=placement_worker_pool_id,
+                worker_id=placement_worker_id,
+                execution_strategy=placement_strategy,
+            )
+            for task in tasks_to_place
+        ]
 
 
 class ILPScheduler(BaseScheduler):
@@ -469,7 +595,7 @@ class ILPScheduler(BaseScheduler):
         # Construct the model and the variables for each of the tasks.
         scheduler_start_time = time.time()
         placements = []
-        if len(tasks_to_be_scheduled) != 0:
+        if len(tasks_to_be_scheduled) > 0:
             optimizer = self._initialize_optimizer(sim_time)
             tasks_to_variables = self._add_variables(
                 sim_time,
@@ -477,19 +603,6 @@ class ILPScheduler(BaseScheduler):
                 workload,
                 tasks_to_be_scheduled + previously_placed_tasks,
                 workers,
-            )
-            assert all(
-                not tasks_to_variables[task.unique_name].previously_placed
-                for task in tasks_to_be_scheduled
-            ), (
-                "The tasks to be scheduled were incorrectly assumed to"
-                "be previously scheduled by the Optimizer."
-            )
-            assert all(
-                tasks_to_variables[task.unique_name] for task in previously_placed_tasks
-            ), (
-                "The previously placed tasks were incorrectly assumed "
-                "to be schedulable by the Optimizer."
             )
 
             # Add the constraints to ensure that dependency constraints are met and
@@ -535,139 +648,51 @@ class ILPScheduler(BaseScheduler):
                         f"./gurobi_{sim_time.to(EventTime.Unit.US).time}.sol"
                     )
 
-                for task_variables in tasks_to_variables.values():
-                    if task_variables.previously_placed:
+                task_placement_map: Mapping[Task, Placement] = {}
+                for task_variable in tasks_to_variables.values():
+                    if task_variable.previously_placed:
                         continue
-                    task = task_variables.task
-                    # Find the starting time of the Task.
-                    assert type(task_variables.start_time) == gp.Var, (
-                        f"Incorrect type retrieved for start time of "
-                        f"{task.unique_name}: {type(task_variables.start_time)}"
+
+                    task_placements = task_variable.get_placements(
+                        workers, worker_to_worker_pool
                     )
-                    start_time = EventTime(
-                        int(task_variables.start_time.X), EventTime.Unit.US
-                    )
+                    for placement in task_placements:
+                        if (
+                            placement.task not in task_placement_map
+                            or not task_placement_map[placement.task].is_placed()
+                        ):
+                            self._logger.debug(
+                                "[%s] Placing task %s as part of strategy %s "
+                                "with the placement: %s.",
+                                sim_time.to(EventTime.Unit.US).time,
+                                placement.task.unique_name,
+                                task_variable.task.unique_name,
+                                str(placement),
+                            )
+                            task_placement_map[placement.task] = placement
 
-                    # Find the Worker and the WorkerPool where the Task was placed.
-                    placement_worker = None
-                    placement_strategy = None
-                    for worker_id, worker in workers.items():
-                        for (
-                            strategy
-                        ) in task_variables.task.available_execution_strategies:
-                            if isinstance(
-                                task_variables.placed_on_worker_with_strategy(
-                                    worker_id, strategy
-                                ),
-                                gp.Var,
-                            ):
-                                if (
-                                    task_variables.placed_on_worker_with_strategy(
-                                        worker_id, strategy
-                                    ).X
-                                    == 1
-                                ):
-                                    placement_worker = worker
-                                    placement_strategy = strategy
-                                    break
-
-                    # Check if all the tasks from this TaskGraph were placed.
-                    all_tasks_placed = True
-                    task_not_placed = None
-                    task_graph = workload.get_task_graph(task.task_graph)
-                    for other_task in task_graph.get_nodes():
-                        if other_task.unique_name in tasks_to_variables:
-                            placed_on_worker = []
-                            for val in tasks_to_variables[
-                                other_task.unique_name
-                            ].placed_on_workers:
-                                if isinstance(val, gp.Var):
-                                    placed_on_worker.append(val.X)
-                                else:
-                                    placed_on_worker.append(val)
-                            if sum(placed_on_worker) == 0:
-                                all_tasks_placed = False
-                                task_not_placed = other_task.unique_name
-                                break
-
-                    # If the task was placed, find the start time.
-                    if placement_worker and placement_strategy:
-                        meets_deadline = (
-                            start_time + placement_strategy.runtime <= task.deadline
+                for task, placement in task_placement_map.items():
+                    if placement.is_placed():
+                        self._logger.debug(
+                            "[%s] Placed %s (with deadline %s and "
+                            "remaining time %s) on WorkerPool(%s) to be "
+                            "started at %s and executed with strategy %s (%s).",
+                            sim_time.to(EventTime.Unit.US).time,
+                            placement.task.unique_name,
+                            placement.task.deadline,
+                            placement.execution_strategy.runtime,
+                            placement.worker_pool_id,
+                            placement.placement_time,
+                            placement.execution_strategy,
+                            placement.execution_strategy.id,
                         )
-                        if task_variables.enforce_deadlines and not meets_deadline:
-                            self._logger.debug(
-                                "[%s] Failed to place %s because the deadline "
-                                "could not be met with the suggested start time of %s.",
-                                sim_time.to(EventTime.Unit.US).time,
-                                task.unique_name,
-                                start_time,
-                            )
-                            placements.append(
-                                Placement.create_task_placement(
-                                    task=task_variables.task,
-                                    placement_time=None,
-                                    worker_pool_id=None,
-                                    worker_id=None,
-                                    execution_strategy=None,
-                                )
-                            )
-                        elif self.release_taskgraphs and not all_tasks_placed:
-                            self._logger.debug(
-                                "[%s] Failed to place %s because the task %s from the "
-                                "TaskGraph %s could not be placed.",
-                                sim_time.to(EventTime.Unit.US).time,
-                                task.unique_name,
-                                task_not_placed,
-                                task.task_graph,
-                            )
-                            placements.append(
-                                Placement.create_task_placement(
-                                    task=task_variables.task,
-                                    placement_time=None,
-                                    worker_pool_id=None,
-                                    worker_id=None,
-                                    execution_strategy=None,
-                                )
-                            )
-                        else:
-                            self._logger.debug(
-                                "[%s] Placed %s (with deadline %s and remaining time "
-                                "%s) on WorkerPool(%s) to be started at %s.",
-                                sim_time.to(EventTime.Unit.US).time,
-                                task.unique_name,
-                                task.deadline,
-                                strategy.runtime,
-                                worker_to_worker_pool[placement_worker.id],
-                                start_time,
-                            )
-                            placements.append(
-                                Placement.create_task_placement(
-                                    task=task_variables.task,
-                                    placement_time=start_time,
-                                    worker_pool_id=worker_to_worker_pool[
-                                        placement_worker.id
-                                    ],
-                                    worker_id=placement_worker.id,
-                                    execution_strategy=strategy,
-                                )
-                            )
                     else:
                         self._logger.debug(
-                            "[%s] Failed to place %s because no WorkerPool "
-                            "could accomodate the resource requirements.",
+                            "[%s] Failed to find a valid Placement for %s.",
                             sim_time.to(EventTime.Unit.US).time,
                             task.unique_name,
                         )
-                        placements.append(
-                            Placement.create_task_placement(
-                                task=task_variables.task,
-                                placement_time=None,
-                                worker_pool_id=None,
-                                worker_id=None,
-                                execution_strategy=None,
-                            )
-                        )
+                    placements.append(placement)
             else:
                 # No feasible solution was found, cancel the tasks that were required
                 # to be scheduled, and assume the prior placement for all the other
@@ -698,6 +723,145 @@ class ILPScheduler(BaseScheduler):
         return Placements(
             runtime=runtime, true_runtime=scheduler_runtime, placements=placements
         )
+
+    def _create_batch_task_variables(
+        self,
+        sim_time: EventTime,
+        optimizer: gp.Model,
+        profile: WorkProfile,
+        tasks: Sequence[Task],
+        workers: Mapping[int, Worker],
+    ) -> Mapping[str, TaskOptimizerVariables]:
+        # Sanity check that all tasks are from the same profile.
+        for task in tasks:
+            if task.profile != profile:
+                raise ValueError(
+                    f"Task {task.unique_name} has profile {task.profile.name}, "
+                    f"but was expected to have profile {profile.name}."
+                )
+
+        # Seperate the tasks into running or unscheduled.
+        running_tasks: Mapping[ExecutionStrategy, List[Task]] = defaultdict(list)
+        unscheduled_tasks: Sequence[Task] = []
+        for task in tasks:
+            if task.state == TaskState.RUNNING or (
+                not self._retract_schedules and task.state == TaskState.SCHEDULED
+            ):
+                running_tasks[task.current_placement.execution_strategy].append(task)
+            else:
+                unscheduled_tasks.append(task)
+
+        # Create `BatchTask`s for all the running tasks.
+        batch_tasks: List[BatchTask] = []
+        batch_counter = 1
+        for execution_strategy, tasks_for_this_strategy in running_tasks.items():
+            batch_tasks.append(
+                BatchTask(
+                    name=f"{profile.name}_{batch_counter}",
+                    tasks=tasks_for_this_strategy,
+                    strategy=execution_strategy,
+                )
+            )
+            batch_counter += 1
+
+        # Create `BatchTask`s for all the unscheduled tasks.
+        # Tasks that are allowed to miss deadlines are assigned a deadline of infinity.
+        unscheduled_tasks = deque(
+            sorted(
+                unscheduled_tasks,
+                key=lambda t: t.deadline
+                if t.task_graph not in self._allowed_to_miss_deadlines
+                else float("inf"),
+            )
+        )
+        tasks_to_batch_tasks: Mapping[Task, List[BatchTask]] = defaultdict(list)
+        while len(unscheduled_tasks) > 0:
+            # Get the strategies that satisfy the deadline for the first task.
+            earliest_deadline_task = unscheduled_tasks[0]
+            compatible_strategies = ExecutionStrategies()
+            for strategy in sorted(
+                earliest_deadline_task.available_execution_strategies,
+                key=attrgetter("batch_size"),
+                reverse=True,
+            ):
+                if sim_time + strategy.runtime <= earliest_deadline_task.deadline:
+                    compatible_strategies.add_strategy(strategy)
+
+            # Construct `BatchTask`s for strategies that can satisfy the batch size
+            # requirements.
+            for strategy in compatible_strategies:
+                if len(unscheduled_tasks) < strategy.batch_size:
+                    continue
+
+                # Find the tasks that need to fit into this batch, and create a new
+                # `BatchTask` for them.
+                tasks_for_this_strategy = list(
+                    islice(unscheduled_tasks, 0, strategy.batch_size)
+                )
+                self._logger.debug(
+                    "[%s] Creating the batching strategy %s with tasks: [%s].",
+                    sim_time.to(EventTime.Unit.US).time,
+                    f"{profile.name}_{batch_counter}",
+                    ", ".join([t.unique_name for t in tasks_for_this_strategy]),
+                )
+                batch_task = BatchTask(
+                    name=f"{profile.name}_{batch_counter}",
+                    tasks=tasks_for_this_strategy,
+                    strategy=strategy,
+                )
+
+                # Add the `BatchTask` to the list of `BatchTask`s, and keep track of
+                # which `BatchTask`s were associated with each schedulable `Task` so
+                # we can allow only one of them to be scheduled.
+                batch_tasks.append(batch_task)
+                for task in tasks_for_this_strategy:
+                    tasks_to_batch_tasks[task].append(batch_task)
+                batch_counter += 1
+
+            # Move on to the next task.
+            unscheduled_tasks.popleft()
+
+        # Create the `BatchTaskVariable`s for each of the `BatchTask`s.
+        batch_task_variables: Mapping[str, TaskOptimizerVariables] = {}
+        for batch_task in batch_tasks:
+            batch_task_variables[batch_task.unique_name] = TaskOptimizerVariables(
+                current_time=sim_time,
+                task=batch_task,
+                workers=workers,
+                optimizer=optimizer,
+                # Deadlines are not to be enforced if the tasks in this batch are all
+                # allowed to miss their deadlines. Otherwise, we conservatively aim to
+                # enforce deadlines.
+                enforce_deadlines=False
+                if all(
+                    task.task_graph in self._allowed_to_miss_deadlines
+                    for task in batch_task.tasks
+                )
+                else self.enforce_deadlines,
+                retract_schedules=self.retract_schedules,
+            )
+
+        # Ensure that only one of the `BatchTask`s associated with each `Task` is
+        # scheduled.
+        for task, batch_tasks in tasks_to_batch_tasks.items():
+            self._logger.debug(
+                "[%s] Ensuring that only one of [%s] is placed for task %s.",
+                sim_time.to(EventTime.Unit.US).time,
+                ", ".join([batch_task.unique_name for batch_task in batch_tasks]),
+                task.unique_name,
+            )
+
+            placement_variables = []
+            for batch_task_variable in map(
+                lambda bt: batch_task_variables[bt.unique_name], batch_tasks
+            ):
+                placement_variables.extend(batch_task_variable.placed_on_workers)
+            optimizer.addConstr(
+                gp.quicksum(placement_variables) <= 1,
+                name=f"{task.unique_name}_unique_batch_placement",
+            )
+
+        return batch_task_variables
 
     def _add_variables(
         self,
@@ -750,21 +914,35 @@ class ILPScheduler(BaseScheduler):
             self._allowed_to_miss_deadlines,
         )
 
-        for task in tasks_to_be_scheduled:
-            enforce_deadlines = self.enforce_deadlines
-            if (
-                self.release_taskgraphs
-                and task.task_graph in self._allowed_to_miss_deadlines
-            ):
-                enforce_deadlines = False
-            tasks_to_variables[task.unique_name] = TaskOptimizerVariables(
-                sim_time,
-                task,
-                workers,
-                optimizer,
-                enforce_deadlines,
-                self.retract_schedules,
-            )
+        if self._batching:
+            # If batching is enabled, find the tasks that share a `WorkProfile` and
+            # can be batched together.
+            profile_to_tasks: Mapping[WorkProfile, Set[Task]] = defaultdict(set)
+            for task in tasks_to_be_scheduled:
+                profile_to_tasks[task.profile].add(task)
+
+            for profile, tasks in profile_to_tasks.items():
+                tasks_to_variables.update(
+                    self._create_batch_task_variables(
+                        sim_time, optimizer, profile, tasks, workers
+                    )
+                )
+        else:
+            for task in tasks_to_be_scheduled:
+                enforce_deadlines = self.enforce_deadlines
+                if (
+                    self.release_taskgraphs
+                    and task.task_graph in self._allowed_to_miss_deadlines
+                ):
+                    enforce_deadlines = False
+                tasks_to_variables[task.unique_name] = TaskOptimizerVariables(
+                    sim_time,
+                    task,
+                    workers,
+                    optimizer,
+                    enforce_deadlines,
+                    self.retract_schedules,
+                )
         return tasks_to_variables
 
     def _add_task_dependency_constraints(
@@ -793,13 +971,44 @@ class ILPScheduler(BaseScheduler):
                 # for this Task.
                 continue
 
-            # Retrieve the variables for all the parents of this Task.
-            task_graph = workload.get_task_graph(variable.task.task_graph)
-            parent_variables = [
-                tasks_to_variables[parent.unique_name]
-                for parent in task_graph.get_parents(variable.task)
-                if parent.unique_name in tasks_to_variables
-            ]
+            parent_tasks = []
+            parent_variables = []
+            if isinstance(variable.task, BatchTask):
+                # If the task is a `BatchTask`, we need to ensure the following:
+                # 1. The BatchTask is placed only if all the parent tasks of each Task
+                #    in the BatchTask are placed.
+                # 2. The BatchTask is placed after a BatchTask containing the last
+                #    parent of each Task in the BatchTask to finish has finished.
+                for task in variable.task.tasks:
+                    task_graph = workload.get_task_graph(task.task_graph)
+                    parent_tasks.extend(task_graph.get_parents(task))
+
+                parent_variables = [
+                    variable
+                    for variable in tasks_to_variables.values()
+                    if isinstance(variable.task, BatchTask)
+                    and any(
+                        parent_task in variable.task.tasks
+                        for parent_task in parent_tasks
+                    )
+                ]
+                for variable in tasks_to_variables.values():
+                    if isinstance(variable.task, BatchTask) and any(
+                        parent_task in variable.task.tasks
+                        for parent_task in parent_tasks
+                    ):
+                        parent_variables.append(variable)
+            else:
+                # If the task is a `Task`, we need to ensure the following:
+                # 1. The Task is only placed if all of its parents are placed.
+                # 2. The Task is started after the last parent has finished.
+                task_graph = workload.get_task_graph(variable.task.task_graph)
+                parent_tasks = task_graph.get_parents(variable.task)
+                parent_variables = [
+                    tasks_to_variables[parent.unique_name]
+                    for parent in parent_tasks
+                    if parent.unique_name in tasks_to_variables
+                ]
 
             # Ensure that the task is only placed if all of its parents are placed,
             # and that it is started after the last parent has finished.
@@ -834,7 +1043,7 @@ class ILPScheduler(BaseScheduler):
                     0,
                     gp.quicksum(parent_placements),
                     GRB.LESS_EQUAL,
-                    len(parent_variables) - 1,
+                    len(parent_tasks) - 1,
                     name=f"{task_name}_parents_placed_False",
                 )
                 optimizer.addGenConstrIndicator(
@@ -842,7 +1051,7 @@ class ILPScheduler(BaseScheduler):
                     1,
                     gp.quicksum(parent_placements),
                     GRB.EQUAL,
-                    len(parent_variables),
+                    len(parent_tasks),
                     name=f"{task_name}_parents_placed_True",
                 )
 
@@ -912,30 +1121,40 @@ class ILPScheduler(BaseScheduler):
 
                 # If the tasks belong to the same graph, then they need to be checked
                 # for overlap, otherwise, the two tasks can always overlap.
-                if task_1_variable.task.task_graph == task_2_variable.task.task_graph:
-                    task_graph = workload.get_task_graph(
-                        task_1_variable.task.task_graph
+                task_graph_to_tasks: Mapping[str, List[Task]] = defaultdict(list)
+                if isinstance(task_1_variable.task, BatchTask) and isinstance(
+                    task_2_variable.task, BatchTask
+                ):
+                    for task in task_1_variable.task.tasks:
+                        task_graph_to_tasks[task.task_graph].append(task)
+                    for task in task_2_variable.task.tasks:
+                        task_graph_to_tasks[task.task_graph].append(task)
+                else:
+                    task_graph_to_tasks[task_1_variable.task.task_graph].append(
+                        task_1_variable.task
                     )
-                    if task_graph.are_dependent(
-                        task_1_variable.task, task_2_variable.task
+                    task_graph_to_tasks[task_2_variable.task.task_graph].append(
+                        task_2_variable.task
+                    )
+
+                overlaps = True
+                for task_graph_name, tasks in task_graph_to_tasks.items():
+                    task_graph = workload.get_task_graph(task_graph_name)
+                    if any(
+                        task_graph.are_dependent(task_1, task_2)
+                        for task_1, task_2 in combinations(tasks, r=2)
                     ):
-                        # If the tasks are dependent on each other,
-                        # they can never overlap.
+                        # If any of the tasks are dependent on each other,
+                        # these pair of task variables can never overlap.
                         optimizer.addConstr(
                             task_pair_overlap_variable == 0,
                             name=f"{task_1_name}_no_overlap_{task_2_name}_dependent",
                         )
-                    else:
-                        # If the tasks are not dependent on each other,
-                        # they may overlap.
-                        self._overlaps(
-                            optimizer,
-                            task_1_variable,
-                            task_2_variable,
-                            workers,
-                            task_pair_overlap_variable,
-                        )
-                else:
+                        overlaps = False
+                        break
+
+                if overlaps:
+                    # If the tasks are not dependent on each other, they may overlap.
                     self._overlaps(
                         optimizer,
                         task_1_variable,
@@ -1153,14 +1372,20 @@ class ILPScheduler(BaseScheduler):
         # made available for scheduling.
         task_graph_reward_variables = {}
         for task_variable in tasks_to_variables.values():
-            task_graph = workload.get_task_graph(task_variable.task.task_graph)
-            if task_graph.name not in task_graph_reward_variables:
-                task_graph_reward_variables[task_graph.name] = optimizer.addVar(
-                    vtype=GRB.INTEGER,
-                    name=f"{task_graph.name}_reward",
-                    lb=-GRB.INFINITY,
-                    ub=GRB.INFINITY,
-                )
+            tasks = (
+                task_variable.task.tasks
+                if isinstance(task_variable.task, BatchTask)
+                else [task_variable.task]
+            )
+            for task in tasks:
+                task_graph = workload.get_task_graph(task.task_graph)
+                if task_graph.name not in task_graph_reward_variables:
+                    task_graph_reward_variables[task_graph.name] = optimizer.addVar(
+                        vtype=GRB.INTEGER,
+                        name=f"{task_graph.name}_reward",
+                        lb=-GRB.INFINITY,
+                        ub=GRB.INFINITY,
+                    )
 
         if self._goal == "max_goodput":
             for (
@@ -1169,99 +1394,76 @@ class ILPScheduler(BaseScheduler):
             ) in task_graph_reward_variables.items():
                 task_graph = workload.get_task_graph(task_graph_name)
 
-                # Define reward variables for the deepest tasks released during this
-                # invocation. A `deep` task is defined as one whose children either
-                # do not exist (sink task) or that they were not released during
-                # this invocation. If the `release_taskgraphs` option was set, this
-                # defaults to checking the status of the sink nodes in a TaskGraph.
-                task_reward_variables = []
+                # Find the tasks for this TaskGraph that will lead to a reward.
+                # If the `release_taskgraphs` option was set, the sink tasks of the
+                # TaskGraph provide a reward. Otherwise, the reward is provided by
+                # the deepest tasks in the TaskGraph that were schedulable.
+                reward_tasks: List[Task] = []
                 for task_variable in tasks_to_variables.values():
-                    if task_variable.task.task_graph == task_graph_name:
-                        # Check if the task is a sink task.
-                        # Either the task is a sink task (i.e., has no children), or
-                        # none of its children are included in the currently released
-                        # tasks during this invocation of the Scheduler.
-                        if self.release_taskgraphs and not task_graph.is_sink_task(
-                            task_variable.task
+                    # Find the tasks in this variable that belong to this TaskGraph.
+                    tasks_in_this_variable = []
+                    if (
+                        isinstance(task_variable.task, Task)
+                        and task_variable.task.task_graph == task_graph_name
+                    ):
+                        tasks_in_this_variable.append(task_variable.task)
+                    elif isinstance(task_variable.task, BatchTask):
+                        for task in task_variable.task.tasks:
+                            if task.task_graph == task_graph_name:
+                                tasks_in_this_variable.append(task)
+
+                    # From all the tasks in this variable, find the ones that can
+                    # potentially provide a reward.
+                    for task in tasks_in_this_variable:
+                        is_reward_task = True
+                        if self.release_taskgraphs:
+                            is_reward_task = task_graph.is_sink_task(task)
+                        else:
+                            for child_task in task_graph.get_children(task):
+                                for task_variable in tasks_to_variables.values():
+                                    if (
+                                        isinstance(task_variable.task, Task)
+                                        and task_variable.task == child_task
+                                    ) or (
+                                        isinstance(task_variable.task, BatchTask)
+                                        and child_task in task_variable.task.tasks
+                                    ):
+                                        is_reward_task = False
+                                        break
+
+                        if is_reward_task:
+                            reward_tasks.append(task)
+
+                # For all the reward tasks, find the actual reward that is achieved
+                # by placement of the Task itself or across all its BatchTasks.
+                task_reward_variables = []
+                for reward_task in reward_tasks:
+                    # Find the variables that contribute to the reward of this task.
+                    variables_for_reward_task = []
+                    for task_variable in tasks_to_variables.values():
+                        if (
+                            isinstance(task_variable.task, Task)
+                            and task_variable.task == reward_task
+                        ) or (
+                            isinstance(task_variable.task, BatchTask)
+                            and reward_task in task_variable.task.tasks
                         ):
-                            continue
+                            variables_for_reward_task.extend(
+                                task_variable.placed_on_workers
+                            )
 
-                        is_sink_task = not any(
-                            child.unique_name in tasks_to_variables
-                            for child in task_graph.get_children(task_variable.task)
-                        )
+                    # For all the variables that this Task can be placed as a part of,
+                    # construct the reward variable as the placement reward across all
+                    # the variables.
+                    task_reward_variable = optimizer.addVar(
+                        vtype=GRB.BINARY, name=f"{reward_task.unique_name}_reward"
+                    )
+                    optimizer.addConstr(
+                        task_reward_variable == gp.quicksum(variables_for_reward_task),
+                        name=f"{reward_task.unique_name}_reward_constraint",
+                    )
+                    task_reward_variables.append(task_reward_variable)
 
-                        if not self.release_taskgraphs and not is_sink_task:
-                            continue
-
-                        # Check if the task is placed.
-                        is_placed = optimizer.addVar(
-                            vtype=GRB.BINARY,
-                            name=f"{task_variable.name}_is_placed_reward",
-                        )
-                        optimizer.addGenConstrIndicator(
-                            is_placed,
-                            0,
-                            gp.quicksum(task_variable.placed_on_workers),
-                            GRB.EQUAL,
-                            0,
-                            name=f"{task_variable.name}_is_placed_reward_FALSE",
-                        )
-                        optimizer.addGenConstrIndicator(
-                            is_placed,
-                            1,
-                            gp.quicksum(task_variable.placed_on_workers),
-                            GRB.EQUAL,
-                            1,
-                            name=f"{task_variable.name}_is_placed_reward_TRUE",
-                        )
-
-                        # Check if the task meets its deadline.
-                        meets_deadline = optimizer.addVar(
-                            vtype=GRB.BINARY,
-                            name=f"{task_variable.name}_meets_deadline",
-                        )
-                        task_remaining_time_expr = gp.LinExpr()
-                        for worker_id in workers.keys():
-                            for (
-                                strategy
-                            ) in task_variable.task.available_execution_strategies:
-                                task_remaining_time_expr.add(
-                                    task_variable.placed_on_worker_with_strategy(
-                                        worker_id, strategy
-                                    )
-                                    * strategy.runtime.to(EventTime.Unit.US).time
-                                )
-                        optimizer.addGenConstrIndicator(
-                            meets_deadline,
-                            0,
-                            task_variable.start_time + task_remaining_time_expr,
-                            GRB.GREATER_EQUAL,
-                            task_variable.task.deadline.to(EventTime.Unit.US).time + 1,
-                            name=f"{task_variable.name}_meets_deadline_FALSE",
-                        )
-                        optimizer.addGenConstrIndicator(
-                            meets_deadline,
-                            1,
-                            task_variable.start_time + task_remaining_time_expr,
-                            GRB.LESS_EQUAL,
-                            task_variable.task.deadline.to(EventTime.Unit.US).time,
-                            name=f"{task_variable.name}_meets_deadline_TRUE",
-                        )
-
-                        # Compute the reward.
-                        task_reward = optimizer.addVar(
-                            vtype=GRB.BINARY, name=f"{task_variable.name}_reward"
-                        )
-                        optimizer.addGenConstrAnd(
-                            task_reward,
-                            [is_placed, meets_deadline],
-                            name=f"{task_variable.name}_reward_constraint",
-                        )
-                        task_reward_variables.append(task_reward)
-
-                # Now that we have all the rewards for the individual task, compute
-                # the final reward as an AND of all these rewards.
                 optimizer.addGenConstrAnd(
                     task_graph_reward_variable,
                     task_reward_variables,

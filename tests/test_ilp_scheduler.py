@@ -1231,6 +1231,13 @@ def test_ilp_fits_correct_strategies_graph(scheduler):
 @pytest.mark.parametrize(
     "scheduler",
     [
+        ILPScheduler(
+            preemptive=False,
+            runtime=EventTime.zero(),
+            lookahead=EventTime.zero(),
+            enforce_deadlines=True,
+            batching=True,
+        ),
         pytest.param(
             TetriSchedCPLEXScheduler(
                 runtime=EventTime.zero(),
