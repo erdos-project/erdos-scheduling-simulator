@@ -119,6 +119,8 @@ class TaskOptimizerVariables(object):
     ):
         self._task = task
         self._enforce_deadlines = enforce_deadlines
+        self._id = UUID(int=random.getrandbits(128), version=4)
+        self._hash = hash(self._id)
 
         # Placement characteristics
         # Set up individual variables to signify where the task is placed and with what
@@ -272,6 +274,9 @@ class TaskOptimizerVariables(object):
 
     def __repr__(self) -> str:
         return str(self)
+
+    def __hash__(self) -> int:
+        return self._hash
 
     def _initialize_timing_constraints(
         self,
@@ -608,7 +613,7 @@ class ILPScheduler(BaseScheduler):
             # Add the constraints to ensure that dependency constraints are met and
             # resources are not oversubscribed.
             self._add_task_dependency_constraints(
-                optimizer, tasks_to_variables, workload, workers
+                sim_time, optimizer, tasks_to_variables, workload, workers
             )
             self._add_resource_constraints(
                 optimizer, tasks_to_variables, workload, workers
@@ -947,6 +952,7 @@ class ILPScheduler(BaseScheduler):
 
     def _add_task_dependency_constraints(
         self,
+        sim_time: EventTime,
         optimizer: gp.Model,
         tasks_to_variables: Mapping[str, TaskOptimizerVariables],
         workload: Workload,
@@ -956,6 +962,7 @@ class ILPScheduler(BaseScheduler):
         due to a TaskGraph are respected.
 
         Args:
+            sim_time (`EventTime`): The time at which the scheduler is being invoked.
             optimizer (`gp.Model`): The instance of the Gurobi model to which the
                 variables and constraints must be added.
             tasks_to_variables (`Mapping[str, TaskOptimizerVariables]`): A mapping
@@ -965,50 +972,72 @@ class ILPScheduler(BaseScheduler):
             workers (`Mapping[int, Worker]`): A mapping of the unique index of the
                 Worker to its instance.
         """
-        for task_name, variable in tasks_to_variables.items():
-            if variable.previously_placed:
+        for task_name, task_variable in tasks_to_variables.items():
+            if task_variable.previously_placed:
                 # The task was previously placed, we should not add any constraints
                 # for this Task.
                 continue
 
-            parent_tasks = []
-            parent_variables = []
-            if isinstance(variable.task, BatchTask):
+            # A mapping of the parent variables of the Task to the number of parents
+            # that are present in those set of variables.
+            parent_variables: Mapping[TaskOptimizerVariables, int] = {}
+            if isinstance(task_variable.task, BatchTask):
                 # If the task is a `BatchTask`, we need to ensure the following:
                 # 1. The BatchTask is placed only if all the parent tasks of each Task
                 #    in the BatchTask are placed.
                 # 2. The BatchTask is placed after a BatchTask containing the last
                 #    parent of each Task in the BatchTask to finish has finished.
-                for task in variable.task.tasks:
+                parent_tasks: Set[Task] = set()
+                for task in task_variable.task.tasks:
                     task_graph = workload.get_task_graph(task.task_graph)
-                    parent_tasks.extend(task_graph.get_parents(task))
+                    parent_tasks.update(task_graph.get_parents(task))
 
-                parent_variables = [
-                    variable
-                    for variable in tasks_to_variables.values()
-                    if isinstance(variable.task, BatchTask)
-                    and any(
-                        parent_task in variable.task.tasks
-                        for parent_task in parent_tasks
-                    )
-                ]
                 for variable in tasks_to_variables.values():
-                    if isinstance(variable.task, BatchTask) and any(
-                        parent_task in variable.task.tasks
-                        for parent_task in parent_tasks
-                    ):
-                        parent_variables.append(variable)
+                    # Get the number of parent tasks in this variable.
+                    num_parents_in_variable = 0
+                    if isinstance(variable.task, Task):
+                        if variable.task in parent_tasks:
+                            num_parents_in_variable = 1
+                    elif isinstance(variable.task, BatchTask):
+                        for parent_task in parent_tasks:
+                            if parent_task in variable.task.tasks:
+                                num_parents_in_variable += 1
+
+                    if num_parents_in_variable > 0:
+                        parent_variables[variable] = num_parents_in_variable
             else:
                 # If the task is a `Task`, we need to ensure the following:
                 # 1. The Task is only placed if all of its parents are placed.
                 # 2. The Task is started after the last parent has finished.
-                task_graph = workload.get_task_graph(variable.task.task_graph)
-                parent_tasks = task_graph.get_parents(variable.task)
-                parent_variables = [
-                    tasks_to_variables[parent.unique_name]
-                    for parent in parent_tasks
-                    if parent.unique_name in tasks_to_variables
-                ]
+                task_graph = workload.get_task_graph(task_variable.task.task_graph)
+                parent_tasks = set(task_graph.get_parents(task_variable.task))
+                for variable in tasks_to_variables.values():
+                    # Get the number of parent tasks in this variable.
+                    num_parents_in_variable = 0
+                    if isinstance(variable.task, Task):
+                        if variable.task in parent_tasks:
+                            num_parents_in_variable = 1
+                    elif isinstance(variable.task, BatchTask):
+                        for parent_task in parent_tasks:
+                            if parent_task in variable.task.tasks:
+                                num_parents_in_variable += 1
+
+                    if num_parents_in_variable > 0:
+                        parent_variables[variable] = num_parents_in_variable
+            self._logger.debug(
+                "[%s] The task %s is being affected by the following parent "
+                "variables (along with the number of parents in each variable): %s",
+                sim_time.to(EventTime.Unit.US).time,
+                task_name,
+                ", ".join(
+                    [
+                        f"{variable.task.unique_name} ({num_parents})"
+                        for variable, num_parents in parent_variables.items()
+                    ]
+                )
+                if len(parent_variables) > 0
+                else "None",
+            )
 
             # Ensure that the task is only placed if all of its parents are placed,
             # and that it is started after the last parent has finished.
@@ -1016,14 +1045,17 @@ class ILPScheduler(BaseScheduler):
                 all_parents_placed = optimizer.addVar(
                     vtype=GRB.BINARY, name=f"{task_name}_all_parents_placed"
                 )
-                parent_placements = []
-                for parent_variable in parent_variables:
+                parent_placement_expr = gp.LinExpr()
+                for (
+                    parent_variable,
+                    num_parents_in_variable,
+                ) in parent_variables.items():
                     for worker_id, worker in workers.items():
                         for (
                             strategy
                         ) in parent_variable.task.available_execution_strategies:
                             optimizer.addConstr(
-                                variable.start_time
+                                task_variable.start_time
                                 >= parent_variable.start_time
                                 + parent_variable.placed_on_worker_with_strategy(
                                     worker_id, strategy
@@ -1034,14 +1066,18 @@ class ILPScheduler(BaseScheduler):
                                 f"{strategy.batch_size}_runtime_"
                                 f"{strategy.runtime.to(EventTime.Unit.US).time}",
                             )
-                    parent_placements.extend(parent_variable.placed_on_workers)
+
+                    parent_placement_expr.add(
+                        num_parents_in_variable
+                        * gp.quicksum(parent_variable.placed_on_workers)
+                    )
 
                 # Construct an indicator variable that checks if all the parents were
                 # placed on some worker or not.
                 optimizer.addGenConstrIndicator(
                     all_parents_placed,
                     0,
-                    gp.quicksum(parent_placements),
+                    parent_placement_expr,
                     GRB.LESS_EQUAL,
                     len(parent_tasks) - 1,
                     name=f"{task_name}_parents_placed_False",
@@ -1049,7 +1085,7 @@ class ILPScheduler(BaseScheduler):
                 optimizer.addGenConstrIndicator(
                     all_parents_placed,
                     1,
-                    gp.quicksum(parent_placements),
+                    parent_placement_expr,
                     GRB.EQUAL,
                     len(parent_tasks),
                     name=f"{task_name}_parents_placed_True",
@@ -1060,7 +1096,7 @@ class ILPScheduler(BaseScheduler):
                 optimizer.addGenConstrIndicator(
                     all_parents_placed,
                     0,
-                    gp.quicksum(variable.placed_on_workers),
+                    gp.quicksum(task_variable.placed_on_workers),
                     GRB.EQUAL,
                     0,
                     name=f"{task_name}_placement_False",
@@ -1398,7 +1434,7 @@ class ILPScheduler(BaseScheduler):
                 # If the `release_taskgraphs` option was set, the sink tasks of the
                 # TaskGraph provide a reward. Otherwise, the reward is provided by
                 # the deepest tasks in the TaskGraph that were schedulable.
-                reward_tasks: List[Task] = []
+                reward_tasks: Set[Task] = set()
                 for task_variable in tasks_to_variables.values():
                     # Find the tasks in this variable that belong to this TaskGraph.
                     tasks_in_this_variable = []
@@ -1432,7 +1468,7 @@ class ILPScheduler(BaseScheduler):
                                         break
 
                         if is_reward_task:
-                            reward_tasks.append(task)
+                            reward_tasks.add(task)
 
                 # For all the reward tasks, find the actual reward that is achieved
                 # by placement of the Task itself or across all its BatchTasks.
