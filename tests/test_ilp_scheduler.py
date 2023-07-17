@@ -1070,6 +1070,7 @@ def test_ilp_fits_correct_strategies(scheduler):
             enforce_deadlines=True,
             time_discretization=EventTime(10, EventTime.Unit.US),
             log_to_file=True,
+        ),
         ILPScheduler(
             preemptive=False,
             runtime=EventTime.zero(),
