@@ -384,6 +384,7 @@ def test_ilp_scheduling_dependency(scheduler):
 
     camera_task_placements = placements.get_placements(camera_task_1)
     assert len(camera_task_placements) == 1, "The task was not found in placements."
+    assert camera_task_placements[0].is_placed(), "The Task was not placed."
     assert (
         camera_task_placements[0].worker_pool_id == worker_pool_1.id
     ), "Incorrect WorkerPoolID retrieved."
@@ -947,6 +948,12 @@ def test_ilp_not_work_conserving():
 @pytest.mark.parametrize(
     "scheduler",
     [
+        ILPScheduler(
+            preemptive=False,
+            runtime=EventTime.zero(),
+            lookahead=EventTime.zero(),
+            enforce_deadlines=True,
+        ),
         TetriSchedGurobiScheduler(
             runtime=EventTime.zero(),
             enforce_deadlines=True,
@@ -964,7 +971,7 @@ def test_ilp_not_work_conserving():
             ),
         ),
     ],
-    ids=["TetriSchedGurobi", "TetriSchedCPLEX"],
+    ids=["ILP", "TetriSchedGurobi", "TetriSchedCPLEX"],
 )
 def test_ilp_fits_correct_strategies(scheduler):
     camera_task_1 = create_default_task(
@@ -1063,6 +1070,187 @@ def test_ilp_fits_correct_strategies(scheduler):
             enforce_deadlines=True,
             time_discretization=EventTime(10, EventTime.Unit.US),
             log_to_file=True,
+        ILPScheduler(
+            preemptive=False,
+            runtime=EventTime.zero(),
+            lookahead=EventTime.zero(),
+            enforce_deadlines=True,
+            release_taskgraphs=True,
+        ),
+    ],
+    ids=["TetriSchedGurobi", "ILP"],
+)
+def test_ilp_fits_correct_strategies_graph(scheduler):
+    camera_task_1 = create_default_task(
+        name="Camera_1",
+        job=Job(name="Camera_1"),
+        profile=WorkProfile(
+            name="Camera_1_Profile",
+            execution_strategies=ExecutionStrategies(
+                strategies=[
+                    ExecutionStrategy(
+                        resources=Resources(
+                            resource_vector={Resource(name="CPU", _id="any"): 10}
+                        ),
+                        batch_size=1,
+                        runtime=EventTime(100, EventTime.Unit.US),
+                    ),
+                    ExecutionStrategy(
+                        resources=Resources(
+                            resource_vector={Resource(name="CPU", _id="any"): 1}
+                        ),
+                        batch_size=1,
+                        runtime=EventTime(200, EventTime.Unit.US),
+                    ),
+                ]
+            ),
+        ),
+        deadline=380,
+        task_graph_name="TestGraph1",
+    )
+    perception_task_1 = create_default_task(
+        name="Perception_1",
+        job=Job(name="Perception_1"),
+        profile=WorkProfile(
+            name="Perception_1_Profile",
+            execution_strategies=ExecutionStrategies(
+                strategies=[
+                    ExecutionStrategy(
+                        resources=Resources(
+                            resource_vector={Resource(name="CPU", _id="any"): 10}
+                        ),
+                        batch_size=1,
+                        runtime=EventTime(100, EventTime.Unit.US),
+                    ),
+                    ExecutionStrategy(
+                        resources=Resources(
+                            resource_vector={Resource(name="CPU", _id="any"): 1}
+                        ),
+                        batch_size=1,
+                        runtime=EventTime(200, EventTime.Unit.US),
+                    ),
+                ]
+            ),
+        ),
+        deadline=380,
+        task_graph_name="TestGraph1",
+    )
+    task_graph_1 = TaskGraph(
+        name="TestGraph1",
+        tasks={camera_task_1: [perception_task_1], perception_task_1: []},
+    )
+
+    camera_task_2 = create_default_task(
+        name="Camera_2",
+        job=Job(name="Camera_2"),
+        profile=WorkProfile(
+            name="Camera_2_Profile",
+            execution_strategies=ExecutionStrategies(
+                strategies=[
+                    ExecutionStrategy(
+                        resources=Resources(
+                            resource_vector={Resource(name="CPU", _id="any"): 10}
+                        ),
+                        batch_size=1,
+                        runtime=EventTime(100, EventTime.Unit.US),
+                    ),
+                    ExecutionStrategy(
+                        resources=Resources(
+                            resource_vector={Resource(name="CPU", _id="any"): 1}
+                        ),
+                        batch_size=1,
+                        runtime=EventTime(200, EventTime.Unit.US),
+                    ),
+                ]
+            ),
+        ),
+        deadline=380,
+        task_graph_name="TestGraph2",
+    )
+    perception_task_2 = create_default_task(
+        name="Perception_2",
+        job=Job(name="Perception_2"),
+        profile=WorkProfile(
+            name="Perception_2_Profile",
+            execution_strategies=ExecutionStrategies(
+                strategies=[
+                    ExecutionStrategy(
+                        resources=Resources(
+                            resource_vector={Resource(name="CPU", _id="any"): 10}
+                        ),
+                        batch_size=1,
+                        runtime=EventTime(100, EventTime.Unit.US),
+                    ),
+                    ExecutionStrategy(
+                        resources=Resources(
+                            resource_vector={Resource(name="CPU", _id="any"): 1}
+                        ),
+                        batch_size=1,
+                        runtime=EventTime(200, EventTime.Unit.US),
+                    ),
+                ]
+            ),
+        ),
+        deadline=380,
+        task_graph_name="TestGraph2",
+    )
+    task_graph_2 = TaskGraph(
+        name="TestGraph2",
+        tasks={camera_task_2: [perception_task_2], perception_task_2: []},
+    )
+
+    workload = Workload.from_task_graphs(
+        {"TestGraph1": task_graph_1, "TestGraph2": task_graph_2}
+    )
+    camera_task_1.release(EventTime.zero())
+    camera_task_2.release(EventTime.zero())
+
+    # Create the Workers.
+    worker_1 = Worker(
+        name="Worker1",
+        resources=Resources(resource_vector={Resource(name="CPU"): 15}),
+    )
+    worker_pool_1 = WorkerPool(name="WorkerPool_1", workers=[worker_1])
+    worker_pools = WorkerPools(worker_pools=[worker_pool_1])
+
+    # Run the scheduler.
+    placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
+    assert len(placements) == 4, "Incorrect number of placements."
+
+    camera_task_1_placements = placements.get_placements(camera_task_1)
+    assert len(camera_task_1_placements) == 1, "Incorrect number of placements."
+    assert camera_task_1_placements[
+        0
+    ].is_placed(), "Placement for camera_task_1 failed."
+
+    perception_task_1_placements = placements.get_placements(perception_task_1)
+    assert len(perception_task_1_placements) == 1, "Incorrect number of placements."
+    assert perception_task_1_placements[
+        0
+    ].is_placed(), "Placement for perception_task_1 failed."
+
+    camera_task_2_placements = placements.get_placements(camera_task_2)
+    assert len(camera_task_2_placements) == 1, "Incorrect number of placements."
+    assert camera_task_2_placements[
+        0
+    ].is_placed(), "Placement for camera_task_2 failed."
+
+    perception_task_2_placements = placements.get_placements(perception_task_2)
+    assert len(perception_task_2_placements) == 1, "Incorrect number of placements."
+    assert perception_task_2_placements[
+        0
+    ].is_placed(), "Placement for perception_task_2 failed."
+
+
+@pytest.mark.parametrize(
+    "scheduler",
+    [
+        ILPScheduler(
+            preemptive=False,
+            runtime=EventTime.zero(),
+            lookahead=EventTime.zero(),
+            enforce_deadlines=True,
+            batching=True,
         ),
         pytest.param(
             TetriSchedCPLEXScheduler(
@@ -1077,7 +1265,7 @@ def test_ilp_fits_correct_strategies(scheduler):
             ),
         ),
     ],
-    ids=["TetriSchedGurobi", "TetriSchedCPLEX"],
+    ids=["ILP", "TetriSchedCPLEX"],
 )
 def test_ilp_batching(scheduler):
     """Test that the ILP-based scheduler batches tasks correctly."""
@@ -1181,16 +1369,160 @@ def test_ilp_batching(scheduler):
 @pytest.mark.parametrize(
     "scheduler",
     [
+        ILPScheduler(
+            preemptive=False,
+            runtime=EventTime.zero(),
+            lookahead=EventTime.zero(),
+            enforce_deadlines=True,
+            batching=True,
+            release_taskgraphs=True,
+        ),
+    ],
+)
+def test_ilp_batching_graph(scheduler):
+    """Test that the ILP-based scheduler batches taskgraphs correctly."""
+    # Create all the WorkProfiles for the tasks.
+    camera_work_profile = WorkProfile(
+        name="Camera_Profile",
+        execution_strategies=ExecutionStrategies(
+            strategies=[
+                ExecutionStrategy(
+                    resources=Resources(
+                        resource_vector={Resource(name="CPU", _id="any"): 10}
+                    ),
+                    batch_size=1,
+                    runtime=EventTime(100, EventTime.Unit.US),
+                ),
+                ExecutionStrategy(
+                    resources=Resources(
+                        resource_vector={Resource(name="CPU", _id="any"): 12}
+                    ),
+                    batch_size=2,
+                    runtime=EventTime(110, EventTime.Unit.US),
+                ),
+            ]
+        ),
+    )
+    perception_work_profile = WorkProfile(
+        name="Perception_Profile",
+        execution_strategies=ExecutionStrategies(
+            strategies=[
+                ExecutionStrategy(
+                    resources=Resources(
+                        resource_vector={Resource(name="CPU", _id="any"): 10}
+                    ),
+                    batch_size=1,
+                    runtime=EventTime(200, EventTime.Unit.US),
+                ),
+                ExecutionStrategy(
+                    resources=Resources(
+                        resource_vector={Resource(name="CPU", _id="any"): 12}
+                    ),
+                    batch_size=2,
+                    runtime=EventTime(250, EventTime.Unit.US),
+                ),
+            ]
+        ),
+    )
+
+    # Create the first TaskGraph.
+    camera_task_1 = create_default_task(
+        name="Camera_1",
+        job=Job(name="Camera_1"),
+        profile=camera_work_profile,
+        deadline=400,
+        task_graph_name="TestTaskGraph_1",
+    )
+    perception_task_1 = create_default_task(
+        name="Perception_1",
+        job=Job(name="Perception_1"),
+        profile=perception_work_profile,
+        deadline=400,
+        task_graph_name="TestTaskGraph_1",
+    )
+    task_graph_1 = TaskGraph(
+        name="TestTaskGraph_1",
+        tasks={camera_task_1: [perception_task_1], perception_task_1: []},
+    )
+
+    # Create the second TaskGraph.
+    camera_task_2 = create_default_task(
+        name="Camera_2",
+        job=Job(name="Camera_2"),
+        profile=camera_work_profile,
+        deadline=400,
+        task_graph_name="TestTaskGraph_2",
+    )
+    perception_task_2 = create_default_task(
+        name="Perception_2",
+        job=Job(name="Perception_2"),
+        profile=perception_work_profile,
+        deadline=400,
+        task_graph_name="TestTaskGraph_2",
+    )
+    task_graph_2 = TaskGraph(
+        name="TestTaskGraph_2",
+        tasks={camera_task_2: [perception_task_2], perception_task_2: []},
+    )
+
+    # Create the Workload.
+    workload = Workload.from_task_graphs(
+        {"TestTaskGraph_1": task_graph_1, "TestTaskGraph_2": task_graph_2}
+    )
+    camera_task_1.release(EventTime.zero())
+    camera_task_2.release(EventTime.zero())
+    perception_task_1.release(EventTime.zero())
+    perception_task_2.release(EventTime.zero())
+
+    # Create the Workers.
+    worker_1 = Worker(
+        name="Worker_1",
+        resources=Resources(resource_vector={Resource(name="CPU"): 15}),
+    )
+    worker_pool_1 = WorkerPool(name="WorkerPool_1", workers=[worker_1])
+    worker_pools = WorkerPools(worker_pools=[worker_pool_1])
+
+    # Run the scheduler.
+    placements = scheduler.schedule(EventTime.zero(), workload, worker_pools)
+    assert len(placements) == 4, "Incorrect number of placements."
+
+    # Check that all the tasks have been placed.
+    assert all(
+        placement.is_placed() for placement in placements
+    ), "All Tasks were expected to be placed."
+
+    # Check that the dependency of the graphs is requested.
+    camera_task_1_placement = placements.get_placements(camera_task_1)[0]
+    perception_task_1_placement = placements.get_placements(perception_task_1)[0]
+    assert (
+        camera_task_1_placement.placement_time
+        + camera_task_1_placement.execution_strategy.runtime
+        <= perception_task_1_placement.placement_time
+    ), "Incorrect placement time for perception_task_1."
+
+    camera_task_2_placement = placements.get_placements(camera_task_2)[0]
+    perception_task_2_placement = placements.get_placements(perception_task_2)[0]
+    assert (
+        camera_task_2_placement.placement_time
+        + camera_task_2_placement.execution_strategy.runtime
+        <= perception_task_2_placement.placement_time
+    ), "Incorrect placement time for perception_task_2."
+
+    # Check that all the tasks were placed in a batch size of 2.
+    assert all(
+        placement.execution_strategy.batch_size == 2 for placement in placements
+    ), "All Tasks were expected to be placed in a batch size of 2."
+
+
+@pytest.mark.parametrize(
+    "scheduler",
+    [
         pytest.param(
             TetriSchedGurobiScheduler(
                 runtime=EventTime.zero(),
                 batching=True,
                 enforce_deadlines=True,
                 time_discretization=EventTime(10, EventTime.Unit.US),
-            ),
-            marks=pytest.mark.skipif(
-                os.getenv("GITHUB_ACTIONS") == "true",
-                reason="TetriSched's current formulation does not pass this test.",
             ),
         ),
         pytest.param(

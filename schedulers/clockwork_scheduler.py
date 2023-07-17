@@ -657,81 +657,8 @@ class ClockworkScheduler(BaseScheduler):
         # of the request queues and construct batching strategies.
         for work_profile in work_profiles:
             self._models.add_model(Model(profile=work_profile))
-
-        # Create a copy of the WorkerPools to try placement decisions on.
-        worker_pools_copy = copy(worker_pools)
-
-        # Clockwork relies on the Client to initiate `LoadRemoteModel` requests to the
-        # controller during the startup phase. The `ControllerStartup` then enqueus
-        # the loading of each of the models requested onto all of the workers in the
-        # system. We simulate this by trying to load all of the models specified in the
-        # Workload on top of all the Workers, and log an error if the resource
-        # requirements cannot be met.
-        scheduler_start_time = time.time()
-        placements = []
-        for worker_pool in worker_pools_copy.worker_pools:
-            for worker in worker_pool.workers:
-                # We create a virtual copy of the Worker to simulate the loading of
-                # each model onto the Worker to correctly account for the resources.
-                worker_copy = copy(worker)
-                for work_profile in work_profiles:
-                    if worker_copy.is_available(work_profile) == EventTime.invalid():
-                        compatible_strategies = worker_copy.get_compatible_strategies(
-                            work_profile.loading_strategies
-                        )
-                        if len(compatible_strategies) == 0:
-                            self._logger.warning(
-                                "[%s] No compatible strategies found for loading "
-                                "WorkProfile %s onto Worker %s",
-                                start_time,
-                                work_profile.id,
-                                worker.id,
-                            )
-                            continue
-                        # We do not expect more than one strategy to be compatible
-                        # with each Worker.
-                        initial_loading_strategy = (
-                            compatible_strategies.get_fastest_strategy()
-                        )
-
-                        # We load the model onto the Worker with an amended strategy
-                        # such that all the models are available by the time the first
-                        # event executes in the Simulator. This replicates the
-                        # ControllerWithStartupPhase behavior in Clockwork.
-                        adjusted_loading_strategy = ExecutionStrategy(
-                            resources=initial_loading_strategy.resources,
-                            batch_size=initial_loading_strategy.batch_size,
-                            runtime=EventTime.zero(),
-                        )
-                        placements.append(
-                            Placement.create_load_profile_placement(
-                                work_profile=work_profile,
-                                placement_time=start_time,
-                                worker_pool_id=worker_pool.id,
-                                worker_id=worker.id,
-                                loading_strategy=adjusted_loading_strategy,
-                            )
-                        )
-                        worker_copy.load_profile(
-                            profile=work_profile,
-                            loading_strategy=adjusted_loading_strategy,
-                        )
-                        self._logger.debug(
-                            "[%s] Requesting to load WorkProfile %s "
-                            "(%s) onto Worker %s.",
-                            start_time.to(EventTime.Unit.US).time,
-                            work_profile.name,
-                            work_profile.id,
-                            worker.id,
-                        )
-        scheduler_end_time = time.time()
-        return Placements(
-            runtime=EventTime.zero(),
-            true_runtime=EventTime(
-                int((scheduler_end_time - scheduler_start_time) * 1e6),
-                EventTime.Unit.US,
-            ),
-            placements=placements,
+        return super(ClockworkScheduler, self).start(
+            start_time, work_profiles, worker_pools
         )
 
     def run_admission(
