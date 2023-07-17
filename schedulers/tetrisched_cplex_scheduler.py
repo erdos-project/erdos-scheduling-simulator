@@ -566,9 +566,11 @@ class TaskOptimizerVariables(object):
         return self._warm_start_cache
 
     @property
-    def space_time_matrix(self) -> Mapping[Tuple[int, int], cpx.BinaryVarType]:
-        """Returns a mapping from the (Worker Index, Time) to the binary variable
-        specifying if the task was placed at that time or not."""
+    def space_time_matrix(
+        self,
+    ) -> Mapping[Tuple[int, int, ExecutionStrategy], cpx.BinaryVarType]:
+        """Returns a mapping from the (Worker Index, Time, ExecutionStrategy) to the
+        binary variable specifying if the task was placed at that time or not."""
         return self._space_time_strategy_matrix
 
     @property

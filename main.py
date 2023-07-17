@@ -20,6 +20,7 @@ from schedulers import (
     ILPScheduler,
     LSFScheduler,
     TetriSchedCPLEXScheduler,
+    TetriSchedGurobiScheduler,
     Z3Scheduler,
 )
 from simulator import Simulator
@@ -170,6 +171,7 @@ flags.DEFINE_enum(
         "BranchPrediction",
         "ILP",
         "TetriSched_CPLEX",
+        "TetriSched_Gurobi",
         "Clockwork",
     ],
     "The scheduler to use for this execution.",
@@ -486,6 +488,24 @@ def main(args):
             lookahead=EventTime(FLAGS.scheduler_lookahead, EventTime.Unit.US),
             enforce_deadlines=FLAGS.enforce_deadlines,
             retract_schedules=FLAGS.retract_schedules,
+            goal=FLAGS.ilp_goal,
+            batching=FLAGS.scheduler_enable_batching,
+            time_limit=EventTime(FLAGS.scheduler_time_limit, EventTime.Unit.S),
+            time_discretization=EventTime(
+                FLAGS.scheduler_time_discretization, EventTime.Unit.US
+            ),
+            plan_ahead=EventTime(FLAGS.scheduler_plan_ahead, EventTime.Unit.US),
+            log_to_file=FLAGS.scheduler_log_to_file,
+            _flags=FLAGS,
+        )
+    elif FLAGS.scheduler == "TetriSched_Gurobi":
+        scheduler = TetriSchedGurobiScheduler(
+            preemptive=FLAGS.preemption,
+            runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
+            lookahead=EventTime(FLAGS.scheduler_lookahead, EventTime.Unit.US),
+            enforce_deadlines=FLAGS.enforce_deadlines,
+            retract_schedules=FLAGS.retract_schedules,
+            release_taskgraphs=FLAGS.release_taskgraphs,
             goal=FLAGS.ilp_goal,
             batching=FLAGS.scheduler_enable_batching,
             time_limit=EventTime(FLAGS.scheduler_time_limit, EventTime.Unit.S),

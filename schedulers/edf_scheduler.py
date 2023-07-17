@@ -62,7 +62,11 @@ class EDFScheduler(BaseScheduler):
         # Sort the tasks according to their deadlines, and place them on the
         # worker pools.
         start_time = time.time()
-        ordered_tasks = list(sorted(tasks_to_be_scheduled, key=attrgetter("deadline")))
+        ordered_tasks = list(
+            sorted(
+                tasks_to_be_scheduled, key=lambda item: (item.deadline, item.task_graph)
+            )
+        )
 
         task_descriptions = [
             f"{task.unique_name} ({task.deadline})" for task in ordered_tasks

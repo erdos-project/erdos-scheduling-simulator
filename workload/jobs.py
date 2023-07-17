@@ -515,9 +515,10 @@ class JobGraph(Graph[Job]):
                         self.release_policy.start_time.to(EventTime.Unit.US).time,
                         self.release_policy.start_time.to(EventTime.Unit.US).time
                         + (
-                            self.release_policy.period.to(EventTime.Unit.US)
+                            self.release_policy.period.to(EventTime.Unit.US).time
                             * self.release_policy.num_invocations
                         ),
+                        num=self.release_policy.num_invocations,
                         endpoint=False,
                     ),
                 )
