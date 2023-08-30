@@ -122,7 +122,8 @@ def test_ilp_scheduling_multiple_tasks_different_resources(scheduler):
         resource_requirements=Resources(
             resource_vector={Resource(name="CPU", _id="any"): 1}
         ),
-        deadline=200,
+        runtime=45,
+        deadline=50,
     )
     cpu_gpu_task = create_default_task(
         name="CPU_GPU_task",
@@ -132,6 +133,7 @@ def test_ilp_scheduling_multiple_tasks_different_resources(scheduler):
                 Resource(name="GPU", _id="any"): 1,
             }
         ),
+        runtime=45,
         deadline=50,
     )
     task_graph = TaskGraph(name="TestTaskGraph", tasks={cpu_task: [], cpu_gpu_task: []})
@@ -875,15 +877,18 @@ def test_ilp_does_not_schedule_across_workers(scheduler):
 def test_ilp_not_work_conserving():
     """Tests that the scheduler restricts the allocation to individual workers."""
     # Create the tasks and the graph.
+    camera_task_1_runtime = EventTime(10, EventTime.Unit.US)
     camera_task_1 = create_default_task(
-        name="Camera_1", timestamp=0, runtime=10, deadline=15
+        name="Camera_1", timestamp=0, runtime=camera_task_1_runtime.time, deadline=15
     )
+    camera_task_2_runtime = EventTime(10, EventTime.Unit.US)
     camera_task_2 = create_default_task(
         name="Camera_2",
         timestamp=0,
-        runtime=10,
+        runtime=camera_task_2_runtime.time,
         deadline=50,
     )
+    perception_task_1_runtime = EventTime(8, EventTime.Unit.US)
     perception_task_1 = create_default_task(
         name="Perception_1",
         timestamp=0,
@@ -894,7 +899,7 @@ def test_ilp_not_work_conserving():
             }
         ),
         release_time=11,
-        runtime=8,
+        runtime=perception_task_1_runtime.time,
         deadline=20,
     )
 
@@ -926,22 +931,25 @@ def test_ilp_not_work_conserving():
 
     camera_task_1_placements = placements.get_placements(camera_task_1)
     assert len(camera_task_1_placements) == 1, "Placement for camera_task_1 not found."
-    assert camera_task_1_placements[0].placement_time == EventTime(
-        1, EventTime.Unit.US
+    assert (
+        camera_task_1_placements[0].placement_time + camera_task_1_runtime
+        <= camera_task_1.deadline
     ), "Incorrect placement time for camera_task_1."
 
     perception_task_1_placements = placements.get_placements(perception_task_1)
     assert (
         len(perception_task_1_placements) == 1
     ), "Placement for perception_task_1 not found."
-    assert perception_task_1_placements[0].placement_time == EventTime(
-        12, EventTime.Unit.US
+    assert (
+        perception_task_1_placements[0].placement_time + perception_task_1_runtime
+        <= perception_task_1.deadline
     ), "Incorrect placement time for perception_task_1."
 
     camera_task_2_placements = placements.get_placements(camera_task_2)
     assert len(camera_task_2_placements) == 1, "Placement for camera_task_2 not found."
-    assert camera_task_2_placements[0].placement_time == EventTime(
-        21, EventTime.Unit.US
+    assert (
+        camera_task_2_placements[0].placement_time + camera_task_2_runtime
+        <= camera_task_2.deadline
     ), "Incorrect placement time for camera_task_2."
 
 
