@@ -16,6 +16,7 @@ from schedulers import (
     BranchPredictionScheduler,
     ClockworkScheduler,
     EDFScheduler,
+    ERDOSScheduler,
     FIFOScheduler,
     ILPScheduler,
     LSFScheduler,
@@ -173,6 +174,7 @@ flags.DEFINE_enum(
         "TetriSched_CPLEX",
         "TetriSched_Gurobi",
         "Clockwork",
+        "ERDOS",
     ],
     "The scheduler to use for this execution.",
 )
@@ -521,6 +523,11 @@ def main(args):
             runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
             goal=FLAGS.clockwork_goal,
             _flags=FLAGS,
+        )
+    elif FLAGS.scheduler == "ERDOS":
+        scheduler = ERDOSScheduler(
+            preemptive=FLAGS.preemption,
+            runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
         )
     else:
         raise ValueError(

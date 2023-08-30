@@ -5,6 +5,7 @@ from .base_scheduler import BaseScheduler
 from .branch_prediction_scheduler import BranchPredictionScheduler
 from .clockwork_scheduler import ClockworkScheduler
 from .edf_scheduler import EDFScheduler
+from .erdos_scheduler import ERDOSScheduler
 from .fifo_scheduler import FIFOScheduler
 from .ilp_scheduler import ILPScheduler
 from .lsf_scheduler import LSFScheduler
