@@ -1,131 +1,179 @@
-#ifndef _SOLVERMODEL_CPP_
-#define _SOLVERMODEL_CPP_
+#include "tetrisched/SolverModel.hpp"
 
-#include <cassert>
-#include <iostream>
-#include <string>
-#include "SolverModel.hpp"
+namespace tetrisched {
 
-namespace alsched {
-string Variable::toString()
-{
-    string out = this->name;
-    out += "[" + to_string(range.first) + ".." + to_string(range.second) + "]";
-    return out;
+/*
+ * Methods for VariableT.
+ * These methods provide an implementation of the VariableT class.
+ */
+
+template <typename T>
+VariableT<T>::VariableT(VariableType type, std::string name)
+    : variableType(type), variableName(name) {}
+
+template <typename T>
+VariableT<T>::VariableT(VariableType type, std::string name, T lowerBound)
+    : variableType(type), variableName(name), lowerBound(lowerBound) {}
+
+template <typename T>
+VariableT<T>::VariableT(VariableType type, std::string name, T lowerBound,
+                        T upperBound)
+    : variableType(type),
+      variableName(name),
+      lowerBound(lowerBound),
+      upperBound(upperBound) {}
+
+template <typename T>
+VariableT<T>::VariableT(VariableType type, std::string name,
+                        std::pair<T, T> range)
+    : variableType(type),
+      variableName(name),
+      lowerBound(range.first),
+      upperBound(range.second) {}
+
+template <typename T>
+void VariableT<T>::hint(T hintValue) {
+  initialValue = hintValue;
 }
 
-int Constraint::addConstraintTerm(ConstraintTerm term) {
-    this->terms.push_back(pair<double, int>(term.coeff, term.varidx));
-    return this->terms.size() -1;
+template <typename T>
+std::string VariableT<T>::toString() const {
+  return variableName;
 }
 
-// returns the index of the term added
-int Constraint::addConstraintTerm(pair<double,int> term)
-{
-    this->terms.push_back(term);
-    return this->terms.size() -1;
+/*
+ * Methods for Constraint.
+ * These methods provide an implementation of the Constraint class.
+ */
+
+template <typename T>
+ConstraintT<T>::ConstraintT(ConstraintType type, T rightHandSide)
+    : constraintType(type), rightHandSide(rightHandSide) {}
+
+template <typename T>
+void ConstraintT<T>::addTerm(std::pair<T, std::shared_ptr<VariableT<T>>> term) {
+  terms.push_back(term);
 }
 
-string Constraint::toString()
-{
-    string outstr;
-    for (auto &p: this->terms) {
-        string termstr = "(" +to_string(p.first) + "," + to_string(p.second)
-                       + ")";
-        outstr += termstr;
+template <typename T>
+void ConstraintT<T>::addTerm(T coefficient,
+                             std::shared_ptr<VariableT<T>> variable) {
+  this->addTerm(std::make_pair(coefficient, variable));
+}
+
+template <typename T>
+std::string ConstraintT<T>::toString() const {
+  std::string constraintString;
+  for (auto &term : terms) {
+    constraintString +=
+        "(" + std::to_string(term.first) + "*" + term.second->toString() + ")";
+    if (&term != &terms.back()) constraintString += "+";
+  }
+  switch (constraintType) {
+    case CONSTR_EQ:
+      constraintString += " = ";
+      break;
+    case CONSTR_LE:
+      constraintString += " <= ";
+      break;
+    case CONSTR_GE:
+      constraintString += " >= ";
+      break;
+  }
+  constraintString += std::to_string(rightHandSide);
+  return constraintString;
+}
+
+template <typename T>
+size_t ConstraintT<T>::size() const {
+  return terms.size();
+}
+
+/*
+ * Methods for ObjectiveFunction.
+ * These methods provide an implementation of the Constraint class.
+ */
+template <typename T>
+ObjectiveFunctionT<T>::ObjectiveFunctionT(ObjectiveType type)
+    : objectiveType(type) {}
+
+template <typename T>
+void ObjectiveFunctionT<T>::addTerm(T coefficient,
+                                    std::shared_ptr<VariableT<T>> variable) {
+  terms.push_back(std::make_pair(coefficient, variable));
+}
+
+template <typename T>
+std::string ObjectiveFunctionT<T>::toString() const {
+  std::string objectiveString;
+  switch (objectiveType) {
+    case OBJ_MAXIMIZE:
+      objectiveString += "Maximize: ";
+      break;
+    case OBJ_MINIMIZE:
+      objectiveString += "Minimize: ";
+      break;
+  }
+  for (auto &term : terms) {
+    objectiveString +=
+        "(" + std::to_string(term.first) + "*" + term.second->toString() + ")";
+    if (&term != &terms.back()) objectiveString += "+";
+  }
+  return objectiveString;
+}
+
+template <typename T>
+size_t ObjectiveFunctionT<T>::size() const {
+  return terms.size();
+}
+
+/*
+ * Methods for SolverModel.
+ * These methods provide an implementation of the Constraint class.
+ */
+
+template <typename T>
+void SolverModelT<T>::addVariable(std::shared_ptr<VariableT<T>> variable) {
+  variables.push_back(variable);
+}
+
+template <typename T>
+void SolverModelT<T>::addConstraint(
+    std::unique_ptr<ConstraintT<T>> constraint) {
+  constraints.push_back(std::move(constraint));
+}
+
+template <typename T>
+void SolverModelT<T>::setObjectiveFunction(
+    std::unique_ptr<ObjectiveFunctionT<T>> objectiveFunction) {
+  this->objectiveFunction = std::move(objectiveFunction);
+}
+
+template <typename T>
+std::string SolverModelT<T>::toString() const {
+  std::string modelString;
+  modelString += objectiveFunction->toString();
+  modelString += "\nConstraints: \n";
+  for (auto &constraint : constraints) {
+    modelString += "\t" + constraint->toString() + "\n";
+  }
+  modelString += "Variables: ";
+  for (auto &variable : variables) {
+    modelString += variable->toString();
+    if (&variable != &variables.back()) {
+      modelString += ", ";
     }
-    // op
-    switch (this->op) {
-    case OP_EQ:
-        outstr += "="; break;
-    case OP_LE:
-        outstr += "<="; break;
-    case OP_GE:
-        outstr += ">="; break;
-    default:
-        throw "bad stuff happened";
-    }
-    // rhs
-    outstr += to_string(this->rhs);
-    return outstr;
+  }
+  return modelString;
 }
 
-string Constraint::toString(const vector<Variable>& varmap)
-{
-    string outstr;
-    for (auto &p: this->terms) {
-        string termstr = "(" +to_string(p.first) + "," + const_cast<Variable *>(&varmap[p.second])->toString()
-                         + ")";
-        outstr += termstr;
-    }
-    // op
-    switch (this->op) {
-        case OP_EQ:
-            outstr += "="; break;
-        case OP_LE:
-            outstr += "<="; break;
-        case OP_GE:
-            outstr += ">="; break;
-        default:
-            throw "bad stuff happened";
-    }
-    // rhs
-    outstr += to_string(this->rhs);
-    return outstr;
+template <typename T>
+size_t SolverModelT<T>::numVariables() const {
+  return variables.size();
 }
 
-int SolverModel::addVariable(const Variable v)
-{
-    vars.push_back(v);
-    return vars.size()-1; // return variable index
+template <typename T>
+size_t SolverModelT<T>::numConstraints() const {
+  return constraints.size();
 }
-
-// add a single constraint
-void SolverModel::addConstraint(const Constraint c)
-{
-    cons.push_back(c);
-}
-// add multiple constraints at once
-void SolverModel::addConstraints(const vector<Constraint>& cvec)
-{
-    for (auto c: cvec )
-        addConstraint(c);
-}
-
-void SolverModel::setObjective(vector<pair<double,int> > objf, bool max)
-{
-    this->objf = ObjFunction(objf, max);
-}
-
-void SolverModel::printModel(ostream &out)
-{
-    out << "Variables: ";
-    // just print indices for now
-    for (int i=0; i<vars.size(); i++) {
-        out << vars[i].toString() <<",";
-    }
-    out <<endl;
-
-    out << "Constraints: "; printConstraints(out);
-    out << "Objf: "; printObjective(out);
-}
-
-void SolverModel::printConstraints(ostream &out)
-{
-    for (auto &c: this->cons) {
-        out << c.toString(vars) <<endl;
-    }
-
-}
-void SolverModel::printObjective(ostream &out)
-{
-    out << ((this->objf.maximize) ? "max: " : "min: ");
-    for (auto &p: this->objf.objfexpr) {
-        out <<"(" << p.first <<"," <<vars[p.second].toString()<<"), ";
-    }
-    out <<endl;
-}
-
-} //namespace alsched
-
-#endif
+}  // namespace tetrisched

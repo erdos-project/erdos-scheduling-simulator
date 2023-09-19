@@ -16,28 +16,28 @@ int main(int argc, char **argv) {
           [](double a, double b) { return a + b; }, 0, 2.0));
   chooseExpression1->setPartitions(std::move(std::vector<int>{0, 1}));
 
-  boost::shared_ptr<alsched::Choose> chooseExpression2 =
-      boost::make_shared<alsched::Choose>(alsched::Choose(
-          boost::make_shared<std::vector<int>>(std::vector<int>{0, 1}), 1,
-          [](double a, double b) { return a + b; }, 1, 2.0));
-  chooseExpression2->setPartitions(std::move(std::vector<int>{0, 1}));
+//   boost::shared_ptr<alsched::Choose> chooseExpression2 =
+//       boost::make_shared<alsched::Choose>(alsched::Choose(
+//           boost::make_shared<std::vector<int>>(std::vector<int>{0, 1}), 1,
+//           [](double a, double b) { return a + b; }, 1, 2.0));
+//   chooseExpression2->setPartitions(std::move(std::vector<int>{0, 1}));
 
-  boost::shared_ptr<alsched::Choose> chooseExpression3 =
-      boost::make_shared<alsched::Choose>(alsched::Choose(
-          boost::make_shared<std::vector<int>>(std::vector<int>{0, 1}), 1,
-          [](double a, double b) { return a + b; }, 2, 2.0));
-  chooseExpression3->setPartitions(std::move(std::vector<int>{0, 1}));
+//   boost::shared_ptr<alsched::Choose> chooseExpression3 =
+//       boost::make_shared<alsched::Choose>(alsched::Choose(
+//           boost::make_shared<std::vector<int>>(std::vector<int>{0, 1}), 1,
+//           [](double a, double b) { return a + b; }, 2, 2.0));
+//   chooseExpression3->setPartitions(std::move(std::vector<int>{0, 1}));
 
-  boost::shared_ptr<alsched::MaxExpression> rootExpression =
-      boost::make_shared<alsched::MaxExpression>(alsched::MaxExpression());
-  rootExpression->addChild(chooseExpression1);
-  rootExpression->addChild(chooseExpression2);
-  rootExpression->addChild(chooseExpression3);
+//   boost::shared_ptr<alsched::MaxExpression> rootExpression =
+//       boost::make_shared<alsched::MaxExpression>(alsched::MaxExpression());
+//   rootExpression->addChild(chooseExpression1);
+//   rootExpression->addChild(chooseExpression2);
+//   rootExpression->addChild(chooseExpression3);
 
-  alsched::JobPtr job1 = boost::make_shared<alsched::Job>(alsched::Job(1, "job1"));
-  boost::shared_ptr<alsched::JobExpr> jobExpression =
-      boost::make_shared<alsched::JobExpr>(
-          alsched::JobExpr(job1, rootExpression));
+//   alsched::JobPtr job1 = boost::make_shared<alsched::Job>(alsched::Job(1, "job1"));
+//   boost::shared_ptr<alsched::JobExpr> jobExpression =
+//       boost::make_shared<alsched::JobExpr>(
+//           alsched::JobExpr(job1, rootExpression));
 
   alsched::CPLEXSolver *solver = new alsched::CPLEXSolver();
   alsched::SolverModelPtr solverModelPtr = solver->initModel(0.0);
@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
                                           {3.0, std::vector<int>{5, 6}},
                                           {4.0, std::vector<int>{5, 6}},
                                           {5.0, std::vector<int>{5, 6}}}));
-  solver->genModel(jobExpression, partitionCapacityMap);
+  solver->genModel(chooseExpression1, partitionCapacityMap);
   solver->translateModel();
   solver->solve(200);
   solver->exportModel("test.lp");
