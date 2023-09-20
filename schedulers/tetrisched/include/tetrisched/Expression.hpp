@@ -19,6 +19,9 @@ enum ParseResultType {
   /// This occurs if the time bounds for the choices
   /// have evolved past the current time.
   EXPRESSION_PRUNE = 0,
+  /// The expression is known to provide no utility.
+  /// Parent expressions can safely ignore this subtree.
+  EXPRESSION_NO_UTILITY = 1,
 };
 
 /// A `ParseResult` class represents the result of parsing an expression.
@@ -56,9 +59,15 @@ class CapacityConstraintMap {
 
  public:
   CapacityConstraintMap() {}
-  void registerUsageAtTime(PartitionPtr partition, Time time,
+  void registerUsageAtTime(const Partition& partition, Time time,
                            VariablePtr variable);
-  void registerUsageAtTime(PartitionPtr partition, Time time, uint32_t usage);
+  void registerUsageAtTime(const Partition& partition, Time time, uint32_t usage);
+  void registerUsageForDuration(const Partition& partition, Time startTime,
+                                Time duration, VariablePtr variable,
+                                Time granularity = 1);
+  void registerUsageForDuration(const Partition& partition, Time startTime,
+                                Time duration, uint32_t usage,
+                                Time granularity = 1);
 };
 
 /// An Abstract Base Class for all expressions in the STRL language.
@@ -67,6 +76,7 @@ class Expression {
   virtual void addChild(ExpressionPtr child) = 0;
   virtual ParseResult parse(SolverModelPtr solverModel,
                             Partitions availablePartitions,
+                            CapacityConstraintMap& capacityConstraints,
                             Time currentTime) = 0;
 };
 
@@ -93,6 +103,7 @@ class ChooseExpression : public Expression {
                    Time duration);
   void addChild(ExpressionPtr child) override;
   ParseResult parse(SolverModelPtr solverModel, Partitions availablePartitions,
+                    CapacityConstraintMap& capacityConstraints,
                     Time currentTime) override;
 };
 }  // namespace tetrisched

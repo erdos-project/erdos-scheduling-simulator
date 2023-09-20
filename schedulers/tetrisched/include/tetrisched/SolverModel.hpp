@@ -86,7 +86,10 @@ typedef enum ConstraintType {
 template <typename T>
 class ConstraintT {
  private:
+  /// The name of this constraint.
+  std::string constraintName;
   /// The terms in this constraint.
+  /// Note that a nullptr Variable indicates a constant term.
   std::vector<std::pair<T, std::shared_ptr<VariableT<T>>>> terms;
   /// The right hand side of this constraint.
   T rightHandSide;
@@ -95,13 +98,16 @@ class ConstraintT {
 
  public:
   /// Generate a new constraint with the given type and right hand side.
-  ConstraintT(ConstraintType constraintType, T rightHandSide);
+  ConstraintT(std::string constraintName, ConstraintType constraintType, T rightHandSide);
 
   /// Adds a term to the left-hand side constraint.
   void addTerm(std::pair<T, std::shared_ptr<VariableT<T>>> term);
 
-  /// Adds a term to the left-hand side constraint.
+  /// Adds a variable term to the left-hand side constraint.
   void addTerm(T coefficient, std::shared_ptr<VariableT<T>> variable);
+
+  /// Adds a constant term to the left-hand side constraint.
+  void addTerm(T constant);
 
   /// Retrieve a string representation of this Constraint.
   std::string toString() const;

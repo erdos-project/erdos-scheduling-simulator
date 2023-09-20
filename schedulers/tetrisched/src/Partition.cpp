@@ -60,4 +60,13 @@ Partitions Partitions::operator|(const Partitions& other) const {
 
 /// Returns the number of Partition in this Partitions object.
 size_t Partitions::size() const { return partitions.size(); }
+
+/// Returns the Partitions in this Partitions object.
+std::vector<PartitionPtr> Partitions::getPartitions() const {
+  std::vector<PartitionPtr> partitionsVec;
+  for (auto &partition : partitions) {
+    partitionsVec.push_back(partition.second);
+  }
+  return partitionsVec;
+}
 }  // namespace tetrisched

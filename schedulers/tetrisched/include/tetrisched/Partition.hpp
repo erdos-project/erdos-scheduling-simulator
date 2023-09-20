@@ -71,6 +71,10 @@ class Partitions {
 
   /// Returns the number of Partition in this Partitions object.
   size_t size() const;
+
+  /// Returns the Partitions in this Partitions object.
+  std::vector<PartitionPtr> getPartitions() const;
+
 };
 }  // namespace tetrisched
 #endif

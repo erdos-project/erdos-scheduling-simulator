@@ -47,8 +47,11 @@ std::string VariableT<T>::toString() const {
  */
 
 template <typename T>
-ConstraintT<T>::ConstraintT(ConstraintType type, T rightHandSide)
-    : constraintType(type), rightHandSide(rightHandSide) {}
+ConstraintT<T>::ConstraintT(std::string constraintName, ConstraintType type,
+                            T rightHandSide)
+    : constraintName(constraintName),
+      constraintType(type),
+      rightHandSide(rightHandSide) {}
 
 template <typename T>
 void ConstraintT<T>::addTerm(std::pair<T, std::shared_ptr<VariableT<T>>> term) {
@@ -62,11 +65,19 @@ void ConstraintT<T>::addTerm(T coefficient,
 }
 
 template <typename T>
+void ConstraintT<T>::addTerm(T constant) {
+  this->addTerm(std::make_pair(constant, nullptr));
+}
+
+template <typename T>
 std::string ConstraintT<T>::toString() const {
   std::string constraintString;
   for (auto &term : terms) {
-    constraintString +=
-        "(" + std::to_string(term.first) + "*" + term.second->toString() + ")";
+    constraintString += "(" + std::to_string(term.first);
+    if (term.second != nullptr) {
+      constraintString += "*" + term.second->toString();
+    }
+    constraintString += ")";
     if (&term != &terms.back()) constraintString += "+";
   }
   switch (constraintType) {

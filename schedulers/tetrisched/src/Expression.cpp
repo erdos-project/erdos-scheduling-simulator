@@ -1,20 +1,60 @@
 #include "tetrisched/Expression.hpp"
 
+#include <algorithm>
+
 namespace tetrisched {
 
-
-void CapacityConstraintMap::registerUsageAtTime(PartitionPtr partition,
+void CapacityConstraintMap::registerUsageAtTime(const Partition& partition,
                                                 Time time,
                                                 VariablePtr variable) {
   // Get or insert the Constraint corresponding to this partition and time.
-  auto mapKey = std::make_pair(partition->getPartitionId(), time);
+  auto mapKey = std::make_pair(partition.getPartitionId(), time);
   if (capacityConstraints.find(mapKey) == capacityConstraints.end()) {
     capacityConstraints[mapKey] = std::make_unique<Constraint>(
-        ConstraintType::CONSTR_LE, partition->size());
+        ConstraintType::CONSTR_LE, partition.size());
   }
 
   // Add the variable to the Constraint.
   capacityConstraints[mapKey]->addTerm(1, variable);
+}
+
+void CapacityConstraintMap::registerUsageAtTime(const Partition& partition,
+                                                Time time, uint32_t usage) {
+  if (usage == 0) {
+    // No usage was registered. We don't need to add anything.
+    return;
+  }
+  // Get or insert the Constraint corresponding to this partition and time.
+  auto mapKey = std::make_pair(partition.getPartitionId(), time);
+  if (capacityConstraints.find(mapKey) == capacityConstraints.end()) {
+    capacityConstraints[mapKey] = std::make_unique<Constraint>(
+        ConstraintType::CONSTR_LE, partition.size());
+  }
+
+  // Add the variable to the Constraint.
+  capacityConstraints[mapKey]->addTerm(usage);
+}
+
+void CapacityConstraintMap::registerUsageForDuration(const Partition& partition,
+                                                     Time startTime,
+                                                     Time duration,
+                                                     VariablePtr variable,
+                                                     Time granularity) {
+  for (Time time = startTime; time < startTime + duration;
+       time += granularity) {
+    registerUsageAtTime(partition, time, variable);
+  }
+}
+
+void CapacityConstraintMap::registerUsageForDuration(const Partition& partition,
+                                                     Time startTime,
+                                                     Time duration,
+                                                     uint32_t usage,
+                                                     Time granularity) {
+  for (Time time = startTime; time < startTime + duration;
+       time += granularity) {
+    registerUsageAtTime(partition, time, usage);
+  }
 }
 
 ChooseExpression::ChooseExpression(TaskPtr associatedTask,
@@ -40,6 +80,7 @@ void ChooseExpression::addChild(ExpressionPtr child) {
 
 ParseResult ChooseExpression::parse(SolverModelPtr solverModel,
                                     Partitions availablePartitions,
+                                    CapacityConstraintMap& capacityConstraints,
                                     Time currentTime) {
   if (currentTime > startTime) {
     TETRISCHED_DEBUG("Pruning Choose expression for "
@@ -62,6 +103,44 @@ ParseResult ChooseExpression::parse(SolverModelPtr solverModel,
   TETRISCHED_DEBUG("The Choose Expression for "
                    << associatedTask->getTaskName() << " will be limited to "
                    << schedulablePartitions.size() << " partitions.");
+  if (schedulablePartitions.size() == 0) {
+    // There are no schedulable partitions, this expression cannot be satisfied.
+    // and should provide 0 utility.
+    return ParseResult{.type = ParseResultType::EXPRESSION_NO_UTILITY};
+  }
+
+  // This Choose expression needs to be passed to the Solver.
+  // We generate an Indicator variable for the Choose expression signifying
+  // if this expression was satisfied.
+  VariablePtr isSatisfiedVar =
+      std::make_shared<Variable>(VariableType::VAR_INDICATOR,
+                                 associatedTask->getTaskName() + "_placed_at_" +
+                                     std::to_string(startTime));
+  ConstraintPtr fulfillsDemandConstraint =
+      std::make_unique<Constraint>(ConstraintType::CONSTR_EQ, 0);
+  for (PartitionPtr& partition : schedulablePartitions.getPartitions()) {
+    // For each partition, generate an integer that represents how many
+    // resources were taken from this partition.
+    VariablePtr allocationVar = std::make_shared<Variable>(
+        VariableType::VAR_INTEGER,
+        associatedTask->getTaskName() + "_using_partition_" +
+            std::to_string(partition->getPartitionId()) + "_at_" +
+            std::to_string(startTime),
+        0,
+        std::min(static_cast<uint32_t>(partition->size()),
+                 numRequiredPartitions));
+
+    // Register this indicator with the capacity constraints that
+    // are being bubbled up.
+    capacityConstraints.registerUsageForDuration(*partition, startTime,
+                                                 duration, allocationVar, 1);
+  }
+  // Ensure that if the Choose expression is satisfied, it fulfills the
+  // demand for this expression. Pass the constraint to the model.
+  fulfillsDemandConstraint->addTerm(-1 * numRequiredPartitions, isSatisfiedVar);
+  solverModel->addConstraint(std::move(fulfillsDemandConstraint));
+
+  // Construct the
 }
 }  // namespace tetrisched
 
