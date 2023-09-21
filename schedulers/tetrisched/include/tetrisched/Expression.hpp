@@ -22,6 +22,10 @@ enum ParseResultType {
   /// The expression is known to provide no utility.
   /// Parent expressions can safely ignore this subtree.
   EXPRESSION_NO_UTILITY = 1,
+  /// The expression has been parsed successfully.
+  /// The utility is attached with the return along with
+  /// the relevant start and finish times.
+  EXPRESSION_UTILITY = 2,
 };
 
 /// A `ParseResult` class represents the result of parsing an expression.

@@ -12,7 +12,8 @@ TEST(SolverModelTypes, TestVariableConstruction) {
 
 TEST(SolverModelTypes, TestConstraintConstruction) {
   tetrisched::ConstraintPtr constraint =
-      std::make_unique<tetrisched::Constraint>(tetrisched::CONSTR_LE, 10);
+      std::make_unique<tetrisched::Constraint>("TestConstraint",
+                                               tetrisched::CONSTR_LE, 10);
   tetrisched::VariablePtr intVar =
       std::make_shared<tetrisched::Variable>(tetrisched::VAR_INTEGER, "intVar");
 
@@ -36,7 +37,8 @@ TEST(SolverModelTypes, TestSolverModel) {
   tetrisched::VariablePtr intVar =
       std::make_shared<tetrisched::Variable>(tetrisched::VAR_INTEGER, "intVar");
   tetrisched::ConstraintPtr constraint =
-      std::make_unique<tetrisched::Constraint>(tetrisched::CONSTR_LE, 10);
+      std::make_unique<tetrisched::Constraint>("TestConstraint",
+                                               tetrisched::CONSTR_LE, 10);
   constraint->addTerm(1, intVar);
   tetrisched::ObjectiveFunctionPtr objectiveFn =
       std::make_unique<tetrisched::ObjectiveFunction>(tetrisched::OBJ_MAXIMIZE);

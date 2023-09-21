@@ -11,6 +11,8 @@ void CapacityConstraintMap::registerUsageAtTime(const Partition& partition,
   auto mapKey = std::make_pair(partition.getPartitionId(), time);
   if (capacityConstraints.find(mapKey) == capacityConstraints.end()) {
     capacityConstraints[mapKey] = std::make_unique<Constraint>(
+        "CapacityConstraint_" + std::to_string(partition.getPartitionId()) +
+            "_at_" + std::to_string(time),
         ConstraintType::CONSTR_LE, partition.size());
   }
 
@@ -28,6 +30,8 @@ void CapacityConstraintMap::registerUsageAtTime(const Partition& partition,
   auto mapKey = std::make_pair(partition.getPartitionId(), time);
   if (capacityConstraints.find(mapKey) == capacityConstraints.end()) {
     capacityConstraints[mapKey] = std::make_unique<Constraint>(
+        "CapacityConstraint_" + std::to_string(partition.getPartitionId()) +
+            "_at_" + std::to_string(time),
         ConstraintType::CONSTR_LE, partition.size());
   }
 
@@ -116,8 +120,10 @@ ParseResult ChooseExpression::parse(SolverModelPtr solverModel,
       std::make_shared<Variable>(VariableType::VAR_INDICATOR,
                                  associatedTask->getTaskName() + "_placed_at_" +
                                      std::to_string(startTime));
-  ConstraintPtr fulfillsDemandConstraint =
-      std::make_unique<Constraint>(ConstraintType::CONSTR_EQ, 0);
+  ConstraintPtr fulfillsDemandConstraint = std::make_unique<Constraint>(
+      associatedTask->getTaskName() + "_fulfills_demand_at_" +
+          std::to_string(startTime),
+      ConstraintType::CONSTR_EQ, 0);
   for (PartitionPtr& partition : schedulablePartitions.getPartitions()) {
     // For each partition, generate an integer that represents how many
     // resources were taken from this partition.
@@ -140,7 +146,12 @@ ParseResult ChooseExpression::parse(SolverModelPtr solverModel,
   fulfillsDemandConstraint->addTerm(-1 * numRequiredPartitions, isSatisfiedVar);
   solverModel->addConstraint(std::move(fulfillsDemandConstraint));
 
-  // Construct the
+  // Construct the return value.
+  return ParseResult{
+      .type = ParseResultType::EXPRESSION_UTILITY,
+      .startTime = startTime,
+      .endTime = endTime,
+  };
 }
 }  // namespace tetrisched
 
