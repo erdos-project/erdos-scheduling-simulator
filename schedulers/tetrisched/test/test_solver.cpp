@@ -3,6 +3,7 @@
 #include <filesystem>
 
 #include "tetrisched/Solver.hpp"
+#include "tetrisched/CPLEXSolver.hpp"
 #include "tetrisched/SolverModel.hpp"
 
 TEST(SolverModelTypes, TestVariableConstruction) {

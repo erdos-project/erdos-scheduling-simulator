@@ -39,12 +39,18 @@ set(TETRISCHED_SOURCE
      "src/Worker.cpp"
      "src/Partition.cpp"
      "src/SolverModel.cpp"
-     "src/Solver.cpp")
+     "src/CPLEXSolver.cpp")
 
 
 add_library(tetrisched SHARED ${TETRISCHED_SOURCE})
 target_include_directories(tetrisched PRIVATE include)
 target_compile_features(tetrisched PRIVATE cxx_std_17)
+
+# Include and link CPLEX.
+target_include_directories(tetrisched PRIVATE ${CPLEX_INCLUDE_DIRS})
+target_link_directories(tetrisched PRIVATE ${CPLEX_LINK_DIRS})
+target_link_libraries(tetrisched PRIVATE ${CPLEX_LINK_LIBRARIES})
+
 
 # add_executable(tetrisched_main ${TETRISCHED_SOURCE})
 # target_include_directories(tetrisched_main PRIVATE ${CPLEX_INCLUDE_DIRS})
@@ -63,10 +69,17 @@ set(TETRISCHED_TESTS
 add_executable(test_tetrisched ${TETRISCHED_TESTS})
 target_include_directories(test_tetrisched PRIVATE include)
 target_compile_features(test_tetrisched PRIVATE cxx_std_17)
+
+# Include and link CPLEX.
+target_include_directories(test_tetrisched PRIVATE ${CPLEX_INCLUDE_DIRS})
+target_link_directories(test_tetrisched PRIVATE ${CPLEX_LINK_DIRS})
+
 target_link_libraries(
   test_tetrisched
+  PRIVATE
   GTest::gtest_main
   tetrisched
+  ${CPLEX_LINK_LIBRARIES}
 )
 
 include(GoogleTest)

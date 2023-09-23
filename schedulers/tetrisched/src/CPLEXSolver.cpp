@@ -1,4 +1,4 @@
-#include "tetrisched/Solver.hpp"
+#include "tetrisched/CPLEXSolver.hpp"
 
 namespace tetrisched {
 SolverModelPtr CPLEXSolver::getModel() {

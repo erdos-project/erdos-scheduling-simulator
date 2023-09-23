@@ -16,19 +16,6 @@ class Solver {
   /// Export the constructed model to the given file.
   virtual void exportModel(const std::string& fileName) = 0;
 };
-
-class CPLEXSolver : public Solver {
- public:
-  /// Create a new CPLEXSolver.
-  CPLEXSolver() = default;
-
-  /// Retrieve a pointer to the SolverModel.
-  /// The SolverModel is the interface to define STRL expressions over.
-  SolverModelPtr getModel() override;
-
-  /// Export the constructed model to the given file.
-  void exportModel(const std::string& fileName) override;
-};
 }  // namespace tetrisched
 #endif  // _TETRISCHED_SOLVER_HPP_
 // #ifndef _SOLVER_HPP
