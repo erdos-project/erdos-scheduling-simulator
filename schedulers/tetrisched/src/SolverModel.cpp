@@ -96,6 +96,11 @@ std::string ConstraintT<T>::toString() const {
 }
 
 template <typename T>
+std::string ConstraintT<T>::getName() const {
+  return constraintName;
+}
+
+template <typename T>
 size_t ConstraintT<T>::size() const {
   return terms.size();
 }
@@ -164,11 +169,12 @@ template <typename T>
 std::string SolverModelT<T>::toString() const {
   std::string modelString;
   modelString += objectiveFunction->toString();
-  modelString += "\nConstraints: \n";
+  modelString += "\n\nConstraints: \n";
   for (auto &constraint : constraints) {
-    modelString += "\t" + constraint->toString() + "\n";
+    modelString +=
+        constraint->getName() + ": \t" + constraint->toString() + "\n";
   }
-  modelString += "Variables: ";
+  modelString += "\nVariables: \n\t";
   for (auto &variable : variables) {
     modelString += variable->toString();
     if (&variable != &variables.back()) {
@@ -176,6 +182,13 @@ std::string SolverModelT<T>::toString() const {
     }
   }
   return modelString;
+}
+
+template <typename T>
+void SolverModelT<T>::exportModel(std::string filename) const {
+  std::ofstream modelFile(filename);
+  modelFile << this->toString();
+  modelFile.close();
 }
 
 template <typename T>

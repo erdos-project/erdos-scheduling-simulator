@@ -45,7 +45,7 @@ class Partition {
 /// Partitions are being allowed to be constructed once and shared by
 /// multiple Expressions. This allows equivalence checks that currently
 /// rely on the ID of the Partition instead of the actual Workers inside it.
-typedef std::shared_ptr<Partition> PartitionPtr;
+using PartitionPtr = std::shared_ptr<Partition>;
 
 
 /// @brief  A Partitions object represents a collection of Partition.

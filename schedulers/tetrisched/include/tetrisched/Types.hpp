@@ -14,6 +14,14 @@
     std::cout << x << std::endl; \
   }
 
+// Macro for the coefficient and the permissible values for the Variables.
+// (Sukrit): It is unknown if the ILP will perform better if the coefficients
+// and variables are int32_t or double. This is something that we should
+// experiment with. Note that both CPLEX and Gurobi do not like 32-bit floating
+// points (due to documented numerical difficulties) so the only permissible
+// values for this macro is supposed to be int32_t or double.
+#define TETRISCHED_ILP_TYPE int32_t
+
 namespace tetrisched {
 /// Defines the exceptions that the methods can throw.
 namespace exceptions {
@@ -33,11 +41,11 @@ class ExpressionConstructionException : public std::exception {
 /// We currently use a uint32_t since it translates well from the simulator.
 /// When this library is deployed for real use, this might need to change to a
 /// double.
-typedef uint32_t Time;
+using Time = uint32_t;
 
 /// General forward declarations.
 class Expression;
-typedef std::unique_ptr<Expression> ExpressionPtr;
+using ExpressionPtr = std::unique_ptr<Expression>;
 
 /// Forward declarations for Solver instantiations so that we can declare
 /// them as friend classes in the model.

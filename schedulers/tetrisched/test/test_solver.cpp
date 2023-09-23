@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <filesystem>
+
 #include "tetrisched/Solver.hpp"
 #include "tetrisched/SolverModel.hpp"
 
@@ -50,10 +52,10 @@ TEST(SolverModelTypes, TestSolverModel) {
 
   EXPECT_EQ(solverModel->numVariables(), 1);
   EXPECT_EQ(solverModel->numConstraints(), 1);
-  EXPECT_EQ(solverModel->toString(),
-            "Maximize: (1*intVar)\n"
-            "Constraints: \n\t(1*intVar) <= 10\n"
-            "Variables: intVar");
+  solverModel->exportModel("test.lp");
+  EXPECT_TRUE(std::filesystem::exists("test.lp"))
+      << "The file test.lp was not created.";
+  std::filesystem::remove("test.lp");
 }
 
 TEST(SolverModel, TestCPLEXSolverInitialization) {

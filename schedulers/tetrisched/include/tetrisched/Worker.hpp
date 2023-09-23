@@ -20,7 +20,6 @@ class Worker {
   const std::string &getWorkerName() const;
 };
 
-typedef std::shared_ptr<Worker> WorkerPtr;
-
+using WorkerPtr = std::shared_ptr<Worker>;
 }  // namespace tetrisched
 #endif

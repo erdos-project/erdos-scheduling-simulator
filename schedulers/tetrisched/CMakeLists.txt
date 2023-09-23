@@ -1,9 +1,11 @@
 cmake_minimum_required(VERSION 3.5...3.26)
 project(tetrisched LANGUAGES CXX)
 
-# GoogleTest requires at least C++14
-set(CMAKE_CXX_STANDARD 14)
+# Compile with atleast C++20.
+# Set cmake -D CMAKE_CXX_COMPILER=/path/to/C++20/compatible/compiler.
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++2a")
 
 # Include debug information.
 set(CMAKE_BUILD_TYPE Debug)

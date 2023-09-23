@@ -4,6 +4,7 @@
 #include <optional>
 #include <unordered_map>
 #include <variant>
+#include <functional>
 
 #include "tetrisched/Partition.hpp"
 #include "tetrisched/SolverModel.hpp"
@@ -11,6 +12,12 @@
 #include "tetrisched/Types.hpp"
 
 namespace tetrisched {
+
+/// A `UtilityFn` represents the function that is used to calculate the utility
+/// of a particular expression.
+template <typename T>
+using UtilityFnT = std::function<T(Time, Time)>;
+using UtilityFn = UtilityFnT<TETRISCHED_ILP_TYPE>;
 
 /// A `ParseResultType` enumeration represents the types of results that
 /// parsing an expression can return.
@@ -30,14 +37,21 @@ enum ParseResultType {
 
 /// A `ParseResult` class represents the result of parsing an expression.
 struct ParseResult {
+  using TimeOrVariableT = std::variant<Time, VariablePtr>;
+  using IndicatorT = std::variant<uint32_t, VariablePtr>;
   /// The type of the result.
   ParseResultType type;
   /// The start time associated with the parsed result.
   /// Can be either a Time known at runtime or a pointer to a Solver variable.
-  std::optional<std::variant<Time, VariablePtr>> startTime;
+  std::optional<TimeOrVariableT> startTime;
   /// The end time associated with the parsed result.
   /// Can be either a Time known at runtime or a pointer to a Solver variable.
-  std::optional<std::variant<Time, VariablePtr>> endTime;
+  std::optional<TimeOrVariableT> endTime;
+  /// The indicator associated with the parsed result.
+  /// This indicator denotes if the expression was satisfied or not.
+  /// The indicator can return an integer if it is trivially satisfied during parsing.
+  /// Note that the startTime and endTime are only valid if the indicator is 1.
+  std::optional<IndicatorT> indicator;
 };
 
 struct PartitionTimePairHasher {
@@ -65,7 +79,8 @@ class CapacityConstraintMap {
   CapacityConstraintMap() {}
   void registerUsageAtTime(const Partition& partition, Time time,
                            VariablePtr variable);
-  void registerUsageAtTime(const Partition& partition, Time time, uint32_t usage);
+  void registerUsageAtTime(const Partition& partition, Time time,
+                           uint32_t usage);
   void registerUsageForDuration(const Partition& partition, Time startTime,
                                 Time duration, VariablePtr variable,
                                 Time granularity = 1);

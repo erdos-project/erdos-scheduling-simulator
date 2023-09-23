@@ -17,7 +17,6 @@ class Task {
 
   const std::string& getTaskName() const { return taskName; }
 };
-
-typedef std::shared_ptr<Task> TaskPtr;
+using TaskPtr = std::shared_ptr<Task>;
 }  // namespace tetrisched
 #endif // _TETRISCHED_TASK_HPP_

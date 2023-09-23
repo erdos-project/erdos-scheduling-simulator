@@ -151,6 +151,7 @@ ParseResult ChooseExpression::parse(SolverModelPtr solverModel,
       .type = ParseResultType::EXPRESSION_UTILITY,
       .startTime = startTime,
       .endTime = endTime,
+      .indicator = isSatisfiedVar,
   };
 }
 }  // namespace tetrisched

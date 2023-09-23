@@ -5,6 +5,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <fstream>
 
 #include "tetrisched/Types.hpp"
 
@@ -13,11 +14,8 @@ namespace tetrisched {
 /// A `VariableType` enumeration represents the types of variable that we allow
 /// the user to construct. These map to the types of variables that the
 /// underlying solver supports.
-typedef enum VariableType {
-  VAR_CONTINUOUS,
-  VAR_INTEGER,
-  VAR_INDICATOR
-} VariableType;
+enum VariableType { VAR_CONTINUOUS, VAR_INTEGER, VAR_INDICATOR };
+using VariableType = enum VariableType;
 
 /// A `VariableT` class represents a variable in the solver model. Note that
 /// this is an internal representation of a VariableT and does not contain an
@@ -67,21 +65,22 @@ class VariableT {
 };
 
 // Specialize the VariableT class for Integer type.
-template class VariableT<int32_t>;
-typedef VariableT<int32_t> Variable;
-typedef std::shared_ptr<Variable> VariablePtr;
+template class VariableT<TETRISCHED_ILP_TYPE>;
+using Variable = VariableT<TETRISCHED_ILP_TYPE>;
+using VariablePtr = std::shared_ptr<Variable>;
 
 /// A `ConstraintType` enumeration represents the types of constraints that we
 /// allow the user to construct. These map to the types of constraints that the
 /// underlying solver supports.
-typedef enum ConstraintType {
+enum ConstraintType {
   /// LHS <= RHS
   CONSTR_LE,
   /// LHS = RHS
   CONSTR_EQ,
   /// LHS >= RHS
   CONSTR_GE,
-} ConstraintType;
+};
+using ConstraintType = enum ConstraintType;
 
 template <typename T>
 class ConstraintT {
@@ -98,7 +97,8 @@ class ConstraintT {
 
  public:
   /// Generate a new constraint with the given type and right hand side.
-  ConstraintT(std::string constraintName, ConstraintType constraintType, T rightHandSide);
+  ConstraintT(std::string constraintName, ConstraintType constraintType,
+              T rightHandSide);
 
   /// Adds a term to the left-hand side constraint.
   void addTerm(std::pair<T, std::shared_ptr<VariableT<T>>> term);
@@ -112,23 +112,27 @@ class ConstraintT {
   /// Retrieve a string representation of this Constraint.
   std::string toString() const;
 
+  /// Retrieve the name of this Constraint.
+  std::string getName() const;
+
   /// Retrieve the number of terms in this Constraint.
   size_t size() const;
 };
 
 // Specialize the Constraint class for Integer.
-template class ConstraintT<int32_t>;
-typedef ConstraintT<int32_t> Constraint;
-typedef std::unique_ptr<Constraint> ConstraintPtr;
+template class ConstraintT<TETRISCHED_ILP_TYPE>;
+using Constraint = ConstraintT<TETRISCHED_ILP_TYPE>;
+using ConstraintPtr = std::unique_ptr<Constraint>;
 
 /// A `ObjectiveType` enumeration represents the types of objective functions
 /// that we allow the user to construct.
-typedef enum ObjectiveType {
+enum ObjectiveType {
   /// Maximize the objective function.
   OBJ_MAXIMIZE,
   /// Minimize the objective function.
   OBJ_MINIMIZE,
-} ObjectiveType;
+};
+using ObjectiveType = enum ObjectiveType;
 
 template <typename T>
 class ObjectiveFunctionT {
@@ -153,9 +157,9 @@ class ObjectiveFunctionT {
 };
 
 // Specialize the ObjectiveFunction class for Integer.
-template class ObjectiveFunctionT<int32_t>;
-typedef ObjectiveFunctionT<int32_t> ObjectiveFunction;
-typedef std::unique_ptr<ObjectiveFunction> ObjectiveFunctionPtr;
+template class ObjectiveFunctionT<TETRISCHED_ILP_TYPE>;
+using ObjectiveFunction = ObjectiveFunctionT<TETRISCHED_ILP_TYPE>;
+using ObjectiveFunctionPtr = std::unique_ptr<ObjectiveFunction>;
 
 template <typename T>
 class SolverModelT {
@@ -187,6 +191,9 @@ class SolverModelT {
   /// Retrieve a string representation of this SolverModel.
   std::string toString() const;
 
+  /// Export the string representation of this SolverModel to a file.
+  void exportModel(std::string filename) const;
+
   /// Retrieve the number of variables in this SolverModel.
   size_t numVariables() const;
 
@@ -200,10 +207,9 @@ class SolverModelT {
 };
 
 // Specialize the SolverModel class for Integer.
-template class SolverModelT<int32_t>;
-typedef SolverModelT<int32_t> SolverModel;
-typedef std::shared_ptr<SolverModel> SolverModelPtr;
+template class SolverModelT<TETRISCHED_ILP_TYPE>;
+using SolverModel = SolverModelT<TETRISCHED_ILP_TYPE>;
+using SolverModelPtr = std::shared_ptr<SolverModel>;
 
 }  // namespace tetrisched
-
 #endif
