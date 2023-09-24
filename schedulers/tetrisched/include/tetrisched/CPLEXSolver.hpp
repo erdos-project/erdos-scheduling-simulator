@@ -3,17 +3,32 @@
 
 #include <ilcplex/ilocplex.h>
 
+#include <variant>
+
 #include "tetrisched/Solver.hpp"
 
 namespace tetrisched {
 class CPLEXSolver : public Solver {
+ protected:
+  using CPLEXVarType = std::variant<IloNumVar, IloBoolVar, IloIntVar>;
+
  private:
   /// The environment variable for this instance of CPLEX.
   IloEnv cplexEnv;
   /// The SolverModel instance associated with this CPLEXSolver.
   std::shared_ptr<SolverModel> solverModel;
   /// The CPLEX model associated with this CPLEXSolver.
-  IloModel cplexModel;
+  IloCplex cplexInstance;
+
+  /// A map from the ID of the SolverModel variables to internal CPLEX
+  /// variables.
+  std::unordered_map<uint32_t, CPLEXVarType> cplexVariables;
+
+  /// Translates the Variable into a CPLEX variable.
+  CPLEXVarType translateVariable(const VariablePtr& variable) const;
+
+  /// Translates the Constraint into a CPLEX expression.
+  IloRange translateConstraint(const ConstraintPtr& constraint) const;
 
  public:
   /// Create a new CPLEXSolver.

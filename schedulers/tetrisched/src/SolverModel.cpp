@@ -24,7 +24,9 @@ VariableType VariableT<T>::isTypeValid(VariableType type) {
 
 template <typename T>
 VariableT<T>::VariableT(VariableType type, std::string name)
-    : variableType(isTypeValid(type)), variableId(variableIdCounter++), variableName(name) { }
+    : variableType(isTypeValid(type)),
+      variableId(variableIdCounter++),
+      variableName(name) {}
 
 template <typename T>
 VariableT<T>::VariableT(VariableType type, std::string name, T lowerBound)
@@ -58,7 +60,17 @@ void VariableT<T>::hint(T hintValue) {
 
 template <typename T>
 std::string VariableT<T>::toString() const {
+  return getName();
+}
+
+template <typename T>
+std::string VariableT<T>::getName() const {
   return variableName;
+}
+
+template <typename T>
+uint32_t VariableT<T>::getId() const {
+  return variableId;
 }
 
 /*
@@ -127,6 +139,11 @@ std::string ConstraintT<T>::getName() const {
 }
 
 template <typename T>
+uint32_t ConstraintT<T>::getId() const {
+  return constraintId;
+}
+
+template <typename T>
 size_t ConstraintT<T>::size() const {
   return terms.size();
 }
@@ -176,13 +193,13 @@ size_t ObjectiveFunctionT<T>::size() const {
 
 template <typename T>
 void SolverModelT<T>::addVariable(std::shared_ptr<VariableT<T>> variable) {
-  variables.push_back(variable);
+  variables[variable->getId()] = variable;
 }
 
 template <typename T>
 void SolverModelT<T>::addConstraint(
     std::unique_ptr<ConstraintT<T>> constraint) {
-  constraints.push_back(std::move(constraint));
+  constraints[constraint->getId()] = std::move(constraint);
 }
 
 template <typename T>
@@ -194,17 +211,21 @@ void SolverModelT<T>::setObjectiveFunction(
 template <typename T>
 std::string SolverModelT<T>::toString() const {
   std::string modelString;
-  modelString += objectiveFunction->toString();
-  modelString += "\n\nConstraints: \n";
-  for (auto &constraint : constraints) {
-    modelString +=
-        constraint->getName() + ": \t" + constraint->toString() + "\n";
+  if (objectiveFunction != nullptr) {
+    modelString += objectiveFunction->toString() + "\n\n";
   }
-  modelString += "\nVariables: \n\t";
-  for (auto &variable : variables) {
-    modelString += variable->toString();
-    if (&variable != &variables.back()) {
-      modelString += ", ";
+  if (constraints.size() > 0) {
+    modelString += "Constraints: \n";
+    for (auto &constraint : constraints) {
+      modelString += constraint.second->getName() + ": \t" +
+                     constraint.second->toString() + "\n";
+    }
+    modelString += "\n\n";
+  }
+  if (variables.size() > 0) {
+    modelString += "Variables: \n";
+    for (auto &variable : variables) {
+      modelString += "\t" + variable.second->toString();
     }
   }
   return modelString;

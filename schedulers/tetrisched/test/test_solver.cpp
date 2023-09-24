@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <iostream>
 
 #include "tetrisched/CPLEXSolver.hpp"
 #include "tetrisched/Solver.hpp"
@@ -64,11 +65,27 @@ TEST(SolverModelTypes, TestSolverModel) {
   solverModel->exportModel("test.lp");
   EXPECT_TRUE(std::filesystem::exists("test.lp"))
       << "The file test.lp was not created.";
-  // std::filesystem::remove("test.lp");
+  std::filesystem::remove("test.lp");
 }
 
-TEST(SolverModel, TestCPLEXSolverInitialization) {
+TEST(SolverModel, TestCPLEXSolverTranslation) {
   tetrisched::CPLEXSolver cplexSolver;
+  auto solverModelPtr = cplexSolver.getModel();
+  auto intVar =
+      std::make_shared<tetrisched::Variable>(tetrisched::VAR_INTEGER, "intVar");
+  solverModelPtr->addVariable(intVar);
+  auto constraint = std::make_unique<tetrisched::Constraint>(
+      "TestConstraint", tetrisched::ConstraintType::CONSTR_LE, 10);
+  constraint->addTerm(2, intVar);
+  constraint->addTerm(5);
+  solverModelPtr->addConstraint(std::move(constraint));
+  solverModelPtr->exportModel("test_solvermodel.lp");
+  EXPECT_TRUE(std::filesystem::exists("test_solvermodel.lp"))
+              << "The file test_solvermodel.lp was not created.";
+  std::filesystem::remove("test_solvermodel.lp");
+  cplexSolver.translateModel();
+  cplexSolver.exportModel("test_cplexmodel.lp");
+  EXPECT_TRUE(std::filesystem::exists("test_cplexmodel.lp"))
+              << "The file test_cplexmodel.lp was not created.";
+  std::filesystem::remove("test_cplexmodel.lp");
 }
-
-TEST(SolverModel, TestCPLEXModelExport) {}

@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 #include "tetrisched/Types.hpp"
 
@@ -70,6 +71,15 @@ class VariableT {
 
   /// Retrieve a string representation of this VariableT.
   std::string toString() const;
+
+  /// Retrieve the name of this VariableT.
+  std::string getName() const;
+
+  /// Retrieve the ID of this VariableT.
+  uint32_t getId() const;
+
+  /// Annotate friend classes for Solvers so that they have access to internals.
+  friend tetrisched::CPLEXSolver;
 };
 
 // Specialize the VariableT class for Integer type.
@@ -127,8 +137,14 @@ class ConstraintT {
   /// Retrieve the name of this Constraint.
   std::string getName() const;
 
+  /// Retrieve the ID of this Constraint.
+  uint32_t getId() const;
+
   /// Retrieve the number of terms in this Constraint.
   size_t size() const;
+
+  /// Annotate friend classes for Solvers so that they have access to internals.
+  friend tetrisched::CPLEXSolver;
 };
 
 // Specialize the Constraint class for Integer.
@@ -177,9 +193,9 @@ template <typename T>
 class SolverModelT {
  private:
   /// The variables in this model.
-  std::vector<std::shared_ptr<VariableT<T>>> variables;
+  std::unordered_map<uint32_t, std::shared_ptr<VariableT<T>>> variables;
   /// The constraints in this model.
-  std::vector<std::unique_ptr<ConstraintT<T>>> constraints;
+  std::unordered_map<uint32_t, std::unique_ptr<ConstraintT<T>>> constraints;
   /// The objective function in this model.
   std::shared_ptr<ObjectiveFunctionT<T>> objectiveFunction;
 
