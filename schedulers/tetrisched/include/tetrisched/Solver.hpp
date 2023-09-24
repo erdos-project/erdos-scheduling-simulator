@@ -13,6 +13,9 @@ class Solver {
   /// The SolverModel is the interface to define STRL expressions over.
   virtual SolverModelPtr getModel() = 0;
 
+  /// Translate teh SolverModel into a backend-specific model.
+  virtual void translateModel() = 0;
+
   /// Export the constructed model to the given file.
   virtual void exportModel(const std::string& fileName) = 0;
 };

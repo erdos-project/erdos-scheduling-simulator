@@ -2,8 +2,8 @@
 
 #include <filesystem>
 
-#include "tetrisched/Solver.hpp"
 #include "tetrisched/CPLEXSolver.hpp"
+#include "tetrisched/Solver.hpp"
 #include "tetrisched/SolverModel.hpp"
 
 TEST(SolverModelTypes, TestVariableConstruction) {
@@ -11,6 +11,14 @@ TEST(SolverModelTypes, TestVariableConstruction) {
   tetrisched::VariablePtr intVar =
       std::make_shared<tetrisched::Variable>(tetrisched::VAR_INTEGER, varName);
   EXPECT_EQ(intVar->toString(), varName);
+}
+
+/// Throw an error if we try to make an Integer variable continuous.
+TEST(SolverModelTypes, TestIncorrectVariableConstruction) {
+  std::string varName = "intVar";
+  EXPECT_THROW(std::make_shared<tetrisched::Variable>(
+                   tetrisched::VAR_CONTINUOUS, varName),
+               tetrisched::exceptions::SolverException);
 }
 
 TEST(SolverModelTypes, TestConstraintConstruction) {
@@ -56,7 +64,7 @@ TEST(SolverModelTypes, TestSolverModel) {
   solverModel->exportModel("test.lp");
   EXPECT_TRUE(std::filesystem::exists("test.lp"))
       << "The file test.lp was not created.";
-  std::filesystem::remove("test.lp");
+  // std::filesystem::remove("test.lp");
 }
 
 TEST(SolverModel, TestCPLEXSolverInitialization) {

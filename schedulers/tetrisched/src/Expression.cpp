@@ -136,6 +136,9 @@ ParseResult ChooseExpression::parse(SolverModelPtr solverModel,
         std::min(static_cast<uint32_t>(partition->size()),
                  numRequiredPartitions));
 
+    // Add the variable to the demand constraint.
+    fulfillsDemandConstraint->addTerm(1, allocationVar);
+
     // Register this indicator with the capacity constraints that
     // are being bubbled up.
     capacityConstraints.registerUsageForDuration(*partition, startTime,

@@ -6,19 +6,38 @@ namespace tetrisched {
  * Methods for VariableT.
  * These methods provide an implementation of the VariableT class.
  */
+// Initialize the static counter for variable IDs.
+// This is required by compiler.
+template <typename T>
+uint32_t VariableT<T>::variableIdCounter = 0;
+
+template <typename T>
+VariableType VariableT<T>::isTypeValid(VariableType type) {
+  if constexpr (std::is_integral_v<T>) {
+    if (type == VAR_CONTINUOUS) {
+      throw exceptions::SolverException(
+          "Cannot construct a continuous variable with an integral type.");
+    }
+  }
+  return type;
+}
 
 template <typename T>
 VariableT<T>::VariableT(VariableType type, std::string name)
-    : variableType(type), variableName(name) {}
+    : variableType(isTypeValid(type)), variableId(variableIdCounter++), variableName(name) { }
 
 template <typename T>
 VariableT<T>::VariableT(VariableType type, std::string name, T lowerBound)
-    : variableType(type), variableName(name), lowerBound(lowerBound) {}
+    : variableType(isTypeValid(type)),
+      variableId(variableIdCounter++),
+      variableName(name),
+      lowerBound(lowerBound) {}
 
 template <typename T>
 VariableT<T>::VariableT(VariableType type, std::string name, T lowerBound,
                         T upperBound)
-    : variableType(type),
+    : variableType(isTypeValid(type)),
+      variableId(variableIdCounter++),
       variableName(name),
       lowerBound(lowerBound),
       upperBound(upperBound) {}
@@ -26,7 +45,8 @@ VariableT<T>::VariableT(VariableType type, std::string name, T lowerBound,
 template <typename T>
 VariableT<T>::VariableT(VariableType type, std::string name,
                         std::pair<T, T> range)
-    : variableType(type),
+    : variableType(isTypeValid(type)),
+      variableId(variableIdCounter++),
       variableName(name),
       lowerBound(range.first),
       upperBound(range.second) {}
@@ -46,10 +66,16 @@ std::string VariableT<T>::toString() const {
  * These methods provide an implementation of the Constraint class.
  */
 
+// Initialize the static counter for constraint IDs.
+// This is required by compiler.
+template <typename T>
+uint32_t ConstraintT<T>::constraintIdCounter = 0;
+
 template <typename T>
 ConstraintT<T>::ConstraintT(std::string constraintName, ConstraintType type,
                             T rightHandSide)
-    : constraintName(constraintName),
+    : constraintId(constraintIdCounter++),
+      constraintName(constraintName),
       constraintType(type),
       rightHandSide(rightHandSide) {}
 

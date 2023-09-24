@@ -4,14 +4,14 @@
 #include <cstdint>
 #include <cstring>
 #include <exception>
-#include <string>
 #include <iostream>
+#include <string>
 
 // Macros for logging.
 #define TETRISCHED_DEBUG_ENABLED true
-#define TETRISCHED_DEBUG(x) \
+#define TETRISCHED_DEBUG(x)       \
   if (TETRISCHED_DEBUG_ENABLED) { \
-    std::cout << x << std::endl; \
+    std::cout << x << std::endl;  \
   }
 
 // Macro for the coefficient and the permissible values for the Variables.
@@ -33,6 +33,16 @@ class ExpressionConstructionException : public std::exception {
 
  public:
   ExpressionConstructionException(std::string message) : message(message) {}
+  const char* what() const noexcept override { return message.c_str(); }
+};
+
+/// An exception that is thrown when the Solver is used incorrectly.
+class SolverException : public std::exception {
+ private:
+  std::string message;
+
+ public:
+  SolverException(std::string message) : message(message) {}
   const char* what() const noexcept override { return message.c_str(); }
 };
 }  // namespace exceptions

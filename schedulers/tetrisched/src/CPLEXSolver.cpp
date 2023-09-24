@@ -1,9 +1,31 @@
 #include "tetrisched/CPLEXSolver.hpp"
 
+#include "tetrisched/Types.hpp"
+
 namespace tetrisched {
+
+CPLEXSolver::CPLEXSolver()
+    : cplexEnv(IloEnv()),
+      solverModel(nullptr),
+      cplexModel(IloModel(cplexEnv)) {}
+
 SolverModelPtr CPLEXSolver::getModel() {
-  auto a = std::shared_ptr<SolverModel>(new SolverModel());
-  return a;
+  if (!solverModel) {
+    solverModel = std::shared_ptr<SolverModel>(new SolverModel());
+  }
+  return solverModel;
+}
+
+void CPLEXSolver::translateModel() {
+  if (!solverModel) {
+    throw tetrisched::exceptions::SolverException(
+        "Empty SolverModel for CPLEXSolver. Nothing to translate!");
+  }
+
+  // Generate all the variables and keep a cache of the variable indices
+  // to the CPLEX variables.
+
+
 }
 
 void CPLEXSolver::exportModel(const std::string& fname) {

@@ -1,11 +1,11 @@
 #ifndef _TETRISCHED_SOLVERMODEL_HPP_
 #define _TETRISCHED_SOLVERMODEL_HPP_
 
+#include <fstream>
 #include <memory>
 #include <optional>
 #include <string>
 #include <vector>
-#include <fstream>
 
 #include "tetrisched/Types.hpp"
 
@@ -25,8 +25,12 @@ using VariableType = enum VariableType;
 template <typename T>
 class VariableT {
  private:
+  /// Used to generate unique IDs for each Variable.
+  static uint32_t variableIdCounter;
   /// The type of the variable (as supported by the underlying solver).
   VariableType variableType;
+  /// The ID of the variable.
+  uint32_t variableId;
   /// The name for the variable.
   std::string variableName;
   /// An optional initial value for the variable.
@@ -38,6 +42,10 @@ class VariableT {
   /// An optional upper-bound for the variable.
   /// If unspecified, the solver will choose the upper bound for the given T.
   std::optional<T> upperBound;
+  /// Checks if the VariableType is valid.
+  /// Throws an exception if the VariableType is invalid.
+  /// Returns the type if it is valid.
+  static VariableType isTypeValid(VariableType type);
 
  public:
   /// Generate a new variable with the given type and name.
@@ -85,6 +93,10 @@ using ConstraintType = enum ConstraintType;
 template <typename T>
 class ConstraintT {
  private:
+  /// Used to generate unique IDs for each Constraint.
+  static uint32_t constraintIdCounter;
+  /// The ID of this constraint.
+  uint32_t constraintId;
   /// The name of this constraint.
   std::string constraintName;
   /// The terms in this constraint.
