@@ -50,37 +50,36 @@ IloRange CPLEXSolver::translateConstraint(
   IloExpr constraintExpr(cplexEnv);
 
   // Construct all the terms.
-  for (auto& term : constraint->terms) {
-    if (term.second) {
+  for (const auto& [coefficient, variable] : constraint->terms) {
+    if (variable) {
       // If the term has not been translated, throw an error.
-      if (cplexVariables.find(term.second->getId()) == cplexVariables.end()) {
+      if (cplexVariables.find(variable->getId()) == cplexVariables.end()) {
         throw tetrisched::exceptions::SolverException(
-            "Variable " + term.second->getName() +
-            " not found in CPLEX model.");
+            "Variable " + variable->getName() + " not found in CPLEX model.");
       }
       // Call the relevant function to add the term to the constraint.
-      switch (term.second->variableType) {
+      switch (variable->variableType) {
         case tetrisched::VariableType::VAR_INTEGER:
           constraintExpr +=
-              term.first *
-              std::get<IloIntVar>(cplexVariables.at(term.second->getId()));
+              coefficient *
+              std::get<IloIntVar>(cplexVariables.at(variable->getId()));
           break;
         case tetrisched::VariableType::VAR_CONTINUOUS:
           constraintExpr +=
-              term.first *
-              std::get<IloNumVar>(cplexVariables.at(term.second->getId()));
+              coefficient *
+              std::get<IloNumVar>(cplexVariables.at(variable->getId()));
           break;
         case tetrisched::VariableType::VAR_INDICATOR:
           constraintExpr +=
-              term.first *
-              std::get<IloBoolVar>(cplexVariables.at(term.second->getId()));
+              coefficient *
+              std::get<IloBoolVar>(cplexVariables.at(variable->getId()));
           break;
         default:
           throw tetrisched::exceptions::SolverException(
-              "Unsupported variable type: " + term.second->variableType);
+              "Unsupported variable type: " + variable->variableType);
       }
     } else {
-      constraintExpr += term.first;
+      constraintExpr += coefficient;
     }
   }
 
@@ -110,37 +109,36 @@ IloObjective CPLEXSolver::translateObjectiveFunction(
   IloExpr objectiveExpr(cplexEnv);
 
   // Construct all the terms.
-  for (auto& term : objectiveFunction->terms) {
-    if (term.second) {
+  for (const auto& [coefficient, variable] : objectiveFunction->terms) {
+    if (variable) {
       // If the variable has not been translated, throw an error.
-      if (cplexVariables.find(term.second->getId()) == cplexVariables.end()) {
+      if (cplexVariables.find(variable->getId()) == cplexVariables.end()) {
         throw tetrisched::exceptions::SolverException(
-            "Variable " + term.second->getName() +
-            " not found in CPLEX model.");
+            "Variable " + variable->getName() + " not found in CPLEX model.");
       }
       // Call the relevant function to add the term to the constraint.
-      switch (term.second->variableType) {
+      switch (variable->variableType) {
         case tetrisched::VariableType::VAR_INTEGER:
           objectiveExpr +=
-              term.first *
-              std::get<IloIntVar>(cplexVariables.at(term.second->getId()));
+              coefficient *
+              std::get<IloIntVar>(cplexVariables.at(variable->getId()));
           break;
         case tetrisched::VariableType::VAR_CONTINUOUS:
           objectiveExpr +=
-              term.first *
-              std::get<IloNumVar>(cplexVariables.at(term.second->getId()));
+              coefficient *
+              std::get<IloNumVar>(cplexVariables.at(variable->getId()));
           break;
         case tetrisched::VariableType::VAR_INDICATOR:
           objectiveExpr +=
-              term.first *
-              std::get<IloBoolVar>(cplexVariables.at(term.second->getId()));
+              coefficient *
+              std::get<IloBoolVar>(cplexVariables.at(variable->getId()));
           break;
         default:
           throw tetrisched::exceptions::SolverException(
-              "Unsupported variable type: " + term.second->variableType);
+              "Unsupported variable type: " + variable->variableType);
       }
     } else {
-      objectiveExpr += term.first;
+      objectiveExpr += coefficient;
     }
   }
 
@@ -172,19 +170,18 @@ void CPLEXSolver::translateModel() {
 
   // Generate all the variables and keep a cache of the variable indices
   // to the CPLEX variables.
-  for (auto& variable : solverModel->variables) {
-    TETRISCHED_DEBUG("Adding Variable " << variable.second->getName() << "("
-                                        << variable.first
-                                        << ") to CPLEX Model.");
-    cplexVariables[variable.first] = translateVariable(variable.second);
+  for (const auto& [variableId, variable] : solverModel->variables) {
+    TETRISCHED_DEBUG("Adding Variable " << variable->getName() << "("
+                                        << variableId << ") to CPLEX Model.");
+    cplexVariables[variableId] = translateVariable(variable);
   }
 
   // Generate all the constraints and add it to the model.
-  for (auto& constraint : solverModel->constraints) {
-    TETRISCHED_DEBUG("Adding Constraint " << constraint.second->getName() << "("
-                                          << constraint.first
+  for (const auto& [constraintId, constraint] : solverModel->constraints) {
+    TETRISCHED_DEBUG("Adding Constraint " << constraint->getName() << "("
+                                          << constraintId
                                           << ") to CPLEX Model.");
-    cplexModel.add(translateConstraint(constraint.second));
+    cplexModel.add(translateConstraint(constraint));
   }
 
   // Translate the objective function.

@@ -116,12 +116,17 @@ target_compile_features(test_tetrisched PRIVATE cxx_std_17)
 target_include_directories(test_tetrisched PRIVATE ${CPLEX_INCLUDE_DIRS})
 target_link_directories(test_tetrisched PRIVATE ${CPLEX_LINK_DIRS})
 
+# Include and link Gurobi.
+target_include_directories(test_tetrisched PRIVATE ${GUROBI_INCLUDE_DIRS})
+target_link_directories(test_tetrisched PRIVATE ${GUROBI_LINK_DIRS})
+
 target_link_libraries(
   test_tetrisched
   PRIVATE
   GTest::gtest_main
   tetrisched
   ${CPLEX_LINK_LIBRARIES}
+  ${GUROBI_LINK_LIBRARIES}
 )
 
 include(GoogleTest)
