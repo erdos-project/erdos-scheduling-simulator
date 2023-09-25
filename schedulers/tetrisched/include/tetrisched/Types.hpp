@@ -5,8 +5,9 @@
 #include <cstring>
 #include <exception>
 #include <iostream>
-#include <string>
 #include <memory>
+#include <string>
+
 // Macros for logging.
 #define TETRISCHED_DEBUG_ENABLED true
 #define TETRISCHED_DEBUG(x)       \
