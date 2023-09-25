@@ -4,6 +4,7 @@
 #include <iostream>
 
 #include "tetrisched/CPLEXSolver.hpp"
+#include "tetrisched/GurobiSolver.hpp"
 #include "tetrisched/Solver.hpp"
 #include "tetrisched/SolverModel.hpp"
 
@@ -43,7 +44,7 @@ TEST(SolverModelTypes, TestObjectiveFnConstruction) {
   EXPECT_EQ(objectiveFn.size(), 1);
 }
 
-TEST(SolverModelTypes, TestSolverModel) {
+TEST(SolverModelTypes, TestCPLEXSolverModel) {
   tetrisched::CPLEXSolver cplexSolver;
   tetrisched::SolverModelPtr solverModel = cplexSolver.getModel();
   tetrisched::VariablePtr intVar =
@@ -68,9 +69,7 @@ TEST(SolverModelTypes, TestSolverModel) {
   std::filesystem::remove("test.lp");
 }
 
-TEST(SolverModel, TestCPLEXSolverTranslation) {
-  tetrisched::CPLEXSolver cplexSolver;
-  auto solverModelPtr = cplexSolver.getModel();
+void constructModel(tetrisched::SolverModelPtr& solverModelPtr) {
   auto intVar =
       std::make_shared<tetrisched::Variable>(tetrisched::VAR_INTEGER, "intVar");
   solverModelPtr->addVariable(intVar);
@@ -83,6 +82,12 @@ TEST(SolverModel, TestCPLEXSolverTranslation) {
       tetrisched::ObjectiveType::OBJ_MAXIMIZE);
   objectiveFunction->addTerm(1, intVar);
   solverModelPtr->setObjectiveFunction(std::move(objectiveFunction));
+}
+
+TEST(SolverModel, TestCPLEXSolverTranslation) {
+  tetrisched::CPLEXSolver cplexSolver;
+  auto solverModelPtr = cplexSolver.getModel();
+  constructModel(solverModelPtr);
   solverModelPtr->exportModel("test_solvermodel.lp");
   EXPECT_TRUE(std::filesystem::exists("test_solvermodel.lp"))
       << "The file test_solvermodel.lp was not created.";
@@ -91,5 +96,20 @@ TEST(SolverModel, TestCPLEXSolverTranslation) {
   cplexSolver.exportModel("test_cplexmodel.lp");
   EXPECT_TRUE(std::filesystem::exists("test_cplexmodel.lp"))
       << "The file test_cplexmodel.lp was not created.";
-  std::filesystem::remove("test_cplexmodel.lp");
+//   std::filesystem::remove("test_cplexmodel.lp");
+}
+
+TEST(SolverModel, TestGurobiSolverTranslation) {
+  tetrisched::GurobiSolver gurobiSolver;
+  auto solverModelPtr = gurobiSolver.getModel();
+  constructModel(solverModelPtr);
+  solverModelPtr->exportModel("test_solvermodel.lp");
+  EXPECT_TRUE(std::filesystem::exists("test_solvermodel.lp"))
+      << "The file test_solvermodel.lp was not created.";
+  //   std::filesystem::remove("test_solvermodel.lp");
+  gurobiSolver.translateModel();
+  gurobiSolver.exportModel("test_gurobimodel.lp");
+  EXPECT_TRUE(std::filesystem::exists("test_gurobimodel.lp"))
+      << "The file test_gurobimodel.lp was not created.";
+  //   std::filesystem::remove("test_gurobimodel.lp");
 }

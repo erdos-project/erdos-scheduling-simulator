@@ -80,6 +80,7 @@ class VariableT {
 
   /// Annotate friend classes for Solvers so that they have access to internals.
   friend tetrisched::CPLEXSolver;
+  friend tetrisched::GurobiSolver;
 };
 
 // Specialize the VariableT class for Integer type.
@@ -145,6 +146,7 @@ class ConstraintT {
 
   /// Annotate friend classes for Solvers so that they have access to internals.
   friend tetrisched::CPLEXSolver;
+  friend tetrisched::GurobiSolver;
 };
 
 // Specialize the Constraint class for Integer.
@@ -188,6 +190,7 @@ class ObjectiveFunctionT {
 
   /// Annotate friend classes for Solvers so that they have access to internals.
   friend tetrisched::CPLEXSolver;
+  friend tetrisched::GurobiSolver;
 };
 
 // Specialize the ObjectiveFunction class for Integer.
