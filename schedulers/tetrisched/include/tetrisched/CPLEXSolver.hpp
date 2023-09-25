@@ -1,4 +1,3 @@
-#ifdef WITH_CPLEX
 #ifndef _TETRISCHED_CPLEX_SOLVER_HPP_
 #define _TETRISCHED_CPLEX_SOLVER_HPP_
 
@@ -50,4 +49,3 @@ class CPLEXSolver : public Solver {
 };
 }  // namespace tetrisched
 #endif  // _TETRISCHED_CPLEX_SOLVER_HPP_
-#endif //WITH_CPLEX

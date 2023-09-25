@@ -24,7 +24,7 @@ set(GUROBI_DIR "/opt/gurobi1001/linux64")
 
 if (EXISTS "${CPLEX_DIR}")
      message("-- Adding CPLEX : ${CPLEX_DIR}")
-     add_compile_definitions(WITH_CPLEX)
+     add_compile_definitions(_TETRISCHED_WITH_CPLEX_)
 
      set(CPLEX_INCLUDE_DIRS
           "${CPLEX_DIR}/cplex/include/"
@@ -47,7 +47,7 @@ else()
 endif()
 if (EXISTS "${GUROBI_DIR}")
      message("-- Adding GUROBI : ${GUROBI_DIR}")
-     add_compile_definitions(WITH_GUROBI)
+     add_compile_definitions(_TETRISCHED_WITH_GUROBI_)
 
      set(GUROBI_INCLUDE_DIRS
           "${GUROBI_DIR}/include/")
@@ -70,10 +70,14 @@ set(TETRISCHED_SOURCE
      "src/Expression.cpp"
      "src/Worker.cpp"
      "src/Partition.cpp"
-     "src/SolverModel.cpp"
-     "src/CPLEXSolver.cpp"
-     "src/GurobiSolver.cpp")
+     "src/SolverModel.cpp")
 
+if (EXISTS "${CPLEX_DIR}")
+     LIST(APPEND TETRISCHED_SOURCE "src/CPLEXSolver.cpp")
+endif()
+if (EXISTS "${GUROBI_DIR}")
+     LIST(APPEND TETRISCHED_SOURCE "src/GurobiSolver.cpp")
+endif()
 
 add_library(tetrisched SHARED ${TETRISCHED_SOURCE})
 target_include_directories(tetrisched PRIVATE include)

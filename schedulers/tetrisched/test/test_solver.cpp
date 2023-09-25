@@ -2,9 +2,9 @@
 
 #include <filesystem>
 #include <iostream>
-#ifdef WITH_CPLEX
+#ifdef _TETRISCHED_WITH_CPLEX_
 #include "tetrisched/CPLEXSolver.hpp"
-#endif //WITH_CPLEX
+#endif //_TETRISCHED_WITH_CPLEX_
 #include "tetrisched/Solver.hpp"
 #include "tetrisched/SolverModel.hpp"
 
@@ -44,7 +44,7 @@ TEST(SolverModelTypes, TestObjectiveFnConstruction) {
   EXPECT_EQ(objectiveFn.size(), 1);
 }
 
-#ifdef WITH_CPLEX
+#ifdef _TETRISCHED_WITH_CPLEX_
 TEST(SolverModelTypes, TestSolverModel) {
   tetrisched::CPLEXSolver cplexSolver;
   tetrisched::SolverModelPtr solverModel = cplexSolver.getModel();
@@ -95,4 +95,4 @@ TEST(SolverModel, TestCPLEXSolverTranslation) {
       << "The file test_cplexmodel.lp was not created.";
   std::filesystem::remove("test_cplexmodel.lp");
 }
-#endif //WITH_CPLEX
+#endif //_TETRISCHED_WITH_CPLEX_
