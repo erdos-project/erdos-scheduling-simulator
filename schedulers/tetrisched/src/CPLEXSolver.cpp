@@ -1,7 +1,7 @@
 #include "tetrisched/CPLEXSolver.hpp"
 
 #include "tetrisched/Types.hpp"
-
+#ifdef WITH_CPLEX
 namespace tetrisched {
 
 CPLEXSolver::CPLEXSolver()
@@ -199,6 +199,7 @@ void CPLEXSolver::exportModel(const std::string& fname) {
   cplexInstance.exportModel(fname.c_str());
 }
 }  // namespace tetrisched
+#endif //WITH_CPLEX
 // // Spend at least timeLimit sec. on optimization, but once
 // // this limit is reached, quit as soon as the solution is acceptable
 

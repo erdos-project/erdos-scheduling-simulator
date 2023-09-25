@@ -1,3 +1,4 @@
+#ifdef WITH_GUROBI
 #ifndef _TETRISCHED_GUROBI_SOLVER_HPP_
 #define _TETRISCHED_GUROBI_SOLVER_HPP_
 
@@ -26,3 +27,5 @@ class GurobiSolver : public Solver {
 };
 }  // namespace tetrisched
 #endif  // _TETRISCHED_GUROBI_SOLVER_HPP_
+#endif  // WITH_GUROBI
+

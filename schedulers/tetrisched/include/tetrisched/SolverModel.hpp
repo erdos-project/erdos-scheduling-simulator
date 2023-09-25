@@ -78,8 +78,10 @@ class VariableT {
   /// Retrieve the ID of this VariableT.
   uint32_t getId() const;
 
+#ifdef WITH_CPLEX
   /// Annotate friend classes for Solvers so that they have access to internals.
   friend tetrisched::CPLEXSolver;
+#endif //WITH_CPLEX
 };
 
 // Specialize the VariableT class for Integer type.
@@ -142,9 +144,10 @@ class ConstraintT {
 
   /// Retrieve the number of terms in this Constraint.
   size_t size() const;
-
+#ifdef WITH_CPLEX
   /// Annotate friend classes for Solvers so that they have access to internals.
   friend tetrisched::CPLEXSolver;
+#endif //WITH_CPLEX
 };
 
 // Specialize the Constraint class for Integer.
@@ -185,9 +188,10 @@ class ObjectiveFunctionT {
 
   /// Merges this utility with another utility.
   void merge(const ObjectiveFunctionT<T>& other);
-
+#ifdef WITH_CPLEX
   /// Annotate friend classes for Solvers so that they have access to internals.
   friend tetrisched::CPLEXSolver;
+#endif //WITH_CPLEX
 };
 
 // Specialize the ObjectiveFunction class for Integer.
@@ -237,8 +241,12 @@ class SolverModelT {
   /// All the Solver implementations should be a friend of the SolverModel.
   /// This allows Solver implementations to construct the model to pass
   /// back to the user.
+#ifdef WITH_CPLEX
   friend tetrisched::CPLEXSolver;
+#endif //WITH_CPLEX
+#ifdef WITH_GUROBI
   friend tetrisched::GurobiSolver;
+#endif // WITH_GURBOBI
 };
 
 // Specialize the SolverModel class for Integer.

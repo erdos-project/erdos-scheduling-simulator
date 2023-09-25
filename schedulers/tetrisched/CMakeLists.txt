@@ -19,28 +19,51 @@ FetchContent_Declare(
 # For Windows: Prevent overriding the parent project's compiler/linker settings
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
+set(CPLEX_DIR "/opt/ibm/ILOG/CPLEX_Studio2211")
+set(GUROBI_DIR "/opt/gurobi1001/linux64")
 
-set(CPLEX_INCLUDE_DIRS
-     "/opt/ibm/ILOG/CPLEX_Studio2211/cplex/include/"
-     "/opt/ibm/ILOG/CPLEX_Studio2211/concert/include/")
-set(CPLEX_LINK_DIRS
-     "/opt/ibm/ILOG/CPLEX_Studio2211/cplex/lib/x86-64_linux/static_pic/"
-     "/opt/ibm/ILOG/CPLEX_Studio2211/concert/lib/x86-64_linux/static_pic/")
-set(CPLEX_LINK_LIBRARIES
-     "ilocplex"
-     "concert"
-     "cplex"
-     "m"
-     "pthread"
-     "dl")
+if (EXISTS "${CPLEX_DIR}")
+     message("-- Adding CPLEX : ${CPLEX_DIR}")
+     add_compile_definitions(WITH_CPLEX)
 
-set(GUROBI_INCLUDE_DIRS
-     "/opt/gurobi1001/linux64/include/")
-set(GUROBI_LINK_DIRS
-     "/opt/gurobi1001/linux64/lib/")
-set(GUROBI_LINK_LIBRARIES
-     "gurobi_c++"
-     "gurobi100")
+     set(CPLEX_INCLUDE_DIRS
+          "${CPLEX_DIR}/cplex/include/"
+          "${CPLEX_DIR}/concert/include/")
+     set(CPLEX_LINK_DIRS
+          "${CPLEX_DIR}/cplex/lib/x86-64_linux/static_pic/"
+          "${CPLEX_DIR}/concert/lib/x86-64_linux/static_pic/")
+     set(CPLEX_LINK_LIBRARIES
+          "ilocplex"
+          "concert"
+          "cplex"
+          "m"
+          "pthread"
+          "dl")
+else()
+     message("-- Not Adding CPLEX")
+     set(CPLEX_INCLUDE_DIRS "")
+     set(CPLEX_LINK_DIRS "")
+     set(CPLEX_LINK_LIBRARIES "")
+endif()
+if (EXISTS "${GUROBI_DIR}")
+     message("-- Adding GUROBI : ${GUROBI_DIR}")
+     add_compile_definitions(WITH_GUROBI)
+
+     set(GUROBI_INCLUDE_DIRS
+          "${GUROBI_DIR}/include/")
+     set(GUROBI_LINK_DIRS
+          "${GUROBI_DIR}/lib/")
+     set(GUROBI_LINK_LIBRARIES
+          "gurobi_c++"
+          "gurobi100")
+
+else()
+     message("-- Not Adding GUROBI")
+     set(GUROBI_INCLUDE_DIRS "")
+     set(GUROBI_LINK_DIRS "")
+     set(GUROBI_LINK_LIBRARIES "")
+
+endif()
 
 
 set(TETRISCHED_SOURCE
