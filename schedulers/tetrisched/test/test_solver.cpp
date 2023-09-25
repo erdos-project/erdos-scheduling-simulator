@@ -2,9 +2,12 @@
 
 #include <filesystem>
 #include <iostream>
-
+#ifdef _TETRISCHED_WITH_CPLEX_
 #include "tetrisched/CPLEXSolver.hpp"
+#endif //_TETRISCHED_WITH_CPLEX_
+#ifdef _TETRISCHED_WITH_GUROBI_
 #include "tetrisched/GurobiSolver.hpp"
+#endif //_TETRISCHED_WITH_GUROBI_
 #include "tetrisched/Solver.hpp"
 #include "tetrisched/SolverModel.hpp"
 
@@ -44,7 +47,8 @@ TEST(SolverModelTypes, TestObjectiveFnConstruction) {
   EXPECT_EQ(objectiveFn.size(), 1);
 }
 
-TEST(SolverModelTypes, TestCPLEXSolverModel) {
+#ifdef _TETRISCHED_WITH_CPLEX_
+TEST(SolverModelTypes, TestSolverModel) {
   tetrisched::CPLEXSolver cplexSolver;
   tetrisched::SolverModelPtr solverModel = cplexSolver.getModel();
   tetrisched::VariablePtr intVar =
@@ -98,7 +102,9 @@ TEST(SolverModel, TestCPLEXSolverTranslation) {
       << "The file test_cplexmodel.lp was not created.";
 //   std::filesystem::remove("test_cplexmodel.lp");
 }
+#endif //_TETRISCHED_WITH_CPLEX_
 
+#ifdef _TETRISCHED_WITH_GUROBI_
 TEST(SolverModel, TestGurobiSolverTranslation) {
   tetrisched::GurobiSolver gurobiSolver;
   auto solverModelPtr = gurobiSolver.getModel();
@@ -113,3 +119,4 @@ TEST(SolverModel, TestGurobiSolverTranslation) {
       << "The file test_gurobimodel.lp was not created.";
   //   std::filesystem::remove("test_gurobimodel.lp");
 }
+#endif //_TETRISCHED_WITH_GUROBI_

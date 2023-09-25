@@ -1,7 +1,6 @@
 #include "tetrisched/CPLEXSolver.hpp"
 
 #include "tetrisched/Types.hpp"
-
 namespace tetrisched {
 
 CPLEXSolver::CPLEXSolver()

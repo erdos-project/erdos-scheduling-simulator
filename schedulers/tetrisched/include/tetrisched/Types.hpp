@@ -5,6 +5,7 @@
 #include <cstring>
 #include <exception>
 #include <iostream>
+#include <memory>
 #include <string>
 
 // Macros for logging.

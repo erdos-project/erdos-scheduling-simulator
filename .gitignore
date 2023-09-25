@@ -21,3 +21,6 @@ env
 # ILP programs and solutions.
 *.lp
 *.sol
+
+# Ignore build of tetrisched
+schedulers/tetrisched/build/*
