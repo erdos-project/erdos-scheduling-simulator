@@ -79,13 +79,17 @@ TEST(SolverModel, TestCPLEXSolverTranslation) {
   constraint->addTerm(2, intVar);
   constraint->addTerm(5);
   solverModelPtr->addConstraint(std::move(constraint));
+  auto objectiveFunction = std::make_unique<tetrisched::ObjectiveFunction>(
+      tetrisched::ObjectiveType::OBJ_MAXIMIZE);
+  objectiveFunction->addTerm(1, intVar);
+  solverModelPtr->setObjectiveFunction(std::move(objectiveFunction));
   solverModelPtr->exportModel("test_solvermodel.lp");
   EXPECT_TRUE(std::filesystem::exists("test_solvermodel.lp"))
-              << "The file test_solvermodel.lp was not created.";
-  std::filesystem::remove("test_solvermodel.lp");
+      << "The file test_solvermodel.lp was not created.";
+  // std::filesystem::remove("test_solvermodel.lp");
   cplexSolver.translateModel();
   cplexSolver.exportModel("test_cplexmodel.lp");
   EXPECT_TRUE(std::filesystem::exists("test_cplexmodel.lp"))
-              << "The file test_cplexmodel.lp was not created.";
-  std::filesystem::remove("test_cplexmodel.lp");
+      << "The file test_cplexmodel.lp was not created.";
+  // std::filesystem::remove("test_cplexmodel.lp");
 }

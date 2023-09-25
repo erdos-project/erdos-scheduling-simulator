@@ -106,6 +106,62 @@ IloRange CPLEXSolver::translateConstraint(
   return rangeConstraint;
 }
 
+IloObjective CPLEXSolver::translateObjectiveFunction(
+    const ObjectiveFunctionPtr& objectiveFunction) const {
+  IloExpr objectiveExpr(cplexEnv);
+
+  // Construct all the terms.
+  for (auto& term : objectiveFunction->terms) {
+    if (term.second) {
+      // If the variable has not been translated, throw an error.
+      if (cplexVariables.find(term.second->getId()) == cplexVariables.end()) {
+        throw tetrisched::exceptions::SolverException(
+            "Variable " + term.second->getName() +
+            " not found in CPLEX model.");
+      }
+      // Call the relevant function to add the term to the constraint.
+      switch (term.second->variableType) {
+        case tetrisched::VariableType::VAR_INTEGER:
+          objectiveExpr +=
+              term.first *
+              std::get<IloIntVar>(cplexVariables.at(term.second->getId()));
+          break;
+        case tetrisched::VariableType::VAR_CONTINUOUS:
+          objectiveExpr +=
+              term.first *
+              std::get<IloNumVar>(cplexVariables.at(term.second->getId()));
+          break;
+        case tetrisched::VariableType::VAR_INDICATOR:
+          objectiveExpr +=
+              term.first *
+              std::get<IloBoolVar>(cplexVariables.at(term.second->getId()));
+          break;
+        default:
+          throw tetrisched::exceptions::SolverException(
+              "Unsupported variable type: " + term.second->variableType);
+      }
+    } else {
+      objectiveExpr += term.first;
+    }
+  }
+
+  // Construct the Sense of the Constraint.
+  IloObjective objectiveConstraint;
+  switch (objectiveFunction->objectiveType) {
+    case tetrisched::ObjectiveType::OBJ_MAXIMIZE:
+      objectiveConstraint = IloMaximize(cplexEnv, objectiveExpr);
+      break;
+    case tetrisched::ObjectiveType::OBJ_MINIMIZE:
+      objectiveConstraint = IloMinimize(cplexEnv, objectiveExpr);
+      break;
+    default:
+      throw tetrisched::exceptions::SolverException(
+          "Unsupported objective type: " + objectiveFunction->objectiveType);
+  }
+
+  return objectiveConstraint;
+}
+
 void CPLEXSolver::translateModel() {
   if (!solverModel) {
     throw tetrisched::exceptions::SolverException(
@@ -131,6 +187,9 @@ void CPLEXSolver::translateModel() {
                                           << ") to CPLEX Model.");
     cplexModel.add(translateConstraint(constraint.second));
   }
+
+  // Translate the objective function.
+  cplexModel.add(translateObjectiveFunction(solverModel->objectiveFunction));
 
   // Extract the model to the CPLEX instance.
   cplexInstance.extract(cplexModel);

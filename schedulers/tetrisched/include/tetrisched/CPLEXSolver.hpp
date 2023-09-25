@@ -30,6 +30,10 @@ class CPLEXSolver : public Solver {
   /// Translates the Constraint into a CPLEX expression.
   IloRange translateConstraint(const ConstraintPtr& constraint) const;
 
+  /// Translates the ObjectiveFunction into a CPLEX expression.
+  IloObjective translateObjectiveFunction(
+      const ObjectiveFunctionPtr& objectiveFunction) const;
+
  public:
   /// Create a new CPLEXSolver.
   CPLEXSolver();

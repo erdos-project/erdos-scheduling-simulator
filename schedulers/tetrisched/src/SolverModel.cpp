@@ -186,6 +186,13 @@ size_t ObjectiveFunctionT<T>::size() const {
   return terms.size();
 }
 
+template <typename T>
+void ObjectiveFunctionT<T>::merge(const ObjectiveFunctionT<T> &other) {
+  for (auto &term : other.terms) {
+    terms.push_back(term);
+  }
+}
+
 /*
  * Methods for SolverModel.
  * These methods provide an implementation of the Constraint class.

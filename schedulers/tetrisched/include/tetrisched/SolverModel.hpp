@@ -5,8 +5,8 @@
 #include <memory>
 #include <optional>
 #include <string>
-#include <vector>
 #include <unordered_map>
+#include <vector>
 
 #include "tetrisched/Types.hpp"
 
@@ -182,6 +182,12 @@ class ObjectiveFunctionT {
 
   /// Retrieve the number of terms in this ObjectiveFunction.
   size_t size() const;
+
+  /// Merges this utility with another utility.
+  void merge(const ObjectiveFunctionT<T>& other);
+
+  /// Annotate friend classes for Solvers so that they have access to internals.
+  friend tetrisched::CPLEXSolver;
 };
 
 // Specialize the ObjectiveFunction class for Integer.
@@ -197,7 +203,7 @@ class SolverModelT {
   /// The constraints in this model.
   std::unordered_map<uint32_t, std::unique_ptr<ConstraintT<T>>> constraints;
   /// The objective function in this model.
-  std::shared_ptr<ObjectiveFunctionT<T>> objectiveFunction;
+  std::unique_ptr<ObjectiveFunctionT<T>> objectiveFunction;
 
   /// Generate a new solver model.
   /// Construct a Solver to get an instance of the Model.

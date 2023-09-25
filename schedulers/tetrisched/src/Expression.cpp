@@ -63,19 +63,14 @@ void CapacityConstraintMap::registerUsageForDuration(const Partition& partition,
 
 ChooseExpression::ChooseExpression(TaskPtr associatedTask,
                                    Partitions resourcePartitions,
-                                   uint32_t numRequiredPartitions,
-                                   Time startTime, Time duration)
+                                   uint32_t numRequiredMachines, Time startTime,
+                                   Time duration)
     : associatedTask(associatedTask),
       resourcePartitions(resourcePartitions),
-      numRequiredPartitions(numRequiredPartitions),
+      numRequiredMachines(numRequiredMachines),
       startTime(startTime),
       duration(duration),
-      endTime(startTime + duration) {
-  if (numRequiredPartitions > resourcePartitions.size()) {
-    throw tetrisched::exceptions::ExpressionConstructionException(
-        "ChooseExpression requires more partitions than are available.");
-  }
-}
+      endTime(startTime + duration) {}
 
 void ChooseExpression::addChild(ExpressionPtr child) {
   throw tetrisched::exceptions::ExpressionConstructionException(
@@ -134,7 +129,7 @@ ParseResult ChooseExpression::parse(SolverModelPtr solverModel,
             std::to_string(startTime),
         0,
         std::min(static_cast<uint32_t>(partition->size()),
-                 numRequiredPartitions));
+                 numRequiredMachines));
 
     // Add the variable to the demand constraint.
     fulfillsDemandConstraint->addTerm(1, allocationVar);
@@ -146,8 +141,13 @@ ParseResult ChooseExpression::parse(SolverModelPtr solverModel,
   }
   // Ensure that if the Choose expression is satisfied, it fulfills the
   // demand for this expression. Pass the constraint to the model.
-  fulfillsDemandConstraint->addTerm(-1 * numRequiredPartitions, isSatisfiedVar);
+  fulfillsDemandConstraint->addTerm(-1 * numRequiredMachines, isSatisfiedVar);
   solverModel->addConstraint(std::move(fulfillsDemandConstraint));
+
+  // Construct the Utility function for this Choose expression.
+  auto utility =
+      std::make_unique<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
+  utility->addTerm(1, isSatisfiedVar);
 
   // Construct the return value.
   return ParseResult{
@@ -155,7 +155,36 @@ ParseResult ChooseExpression::parse(SolverModelPtr solverModel,
       .startTime = startTime,
       .endTime = endTime,
       .indicator = isSatisfiedVar,
+      .utility = std::move(utility),
   };
+}
+
+ObjectiveExpression::ObjectiveExpression(ObjectiveType objectiveType)
+    : objectiveType(objectiveType) {}
+
+void ObjectiveExpression::addChild(ExpressionPtr child) {
+  children.push_back(std::move(child));
+}
+
+ParseResult ObjectiveExpression::parse(
+    SolverModelPtr solverModel, Partitions availablePartitions,
+    CapacityConstraintMap& capacityConstraints, Time currentTime) {
+  // Construct the overall utility of this expression.
+  auto utility = std::make_unique<ObjectiveFunction>(objectiveType);
+
+  // Parse the children and collect the utiltiies.
+  for (auto& child : children) {
+    auto result = child->parse(solverModel, availablePartitions,
+                               capacityConstraints, currentTime);
+    if (result.type == ParseResultType::EXPRESSION_UTILITY) {
+      utility->merge(*result.utility.value());
+    }
+  }
+
+  // Add the utility to the SolverModel.
+  solverModel->setObjectiveFunction(std::move(utility));
+
+  return ParseResult{.type = ParseResultType::EXPRESSION_NO_UTILITY};
 }
 }  // namespace tetrisched
 

@@ -1,10 +1,10 @@
 #ifndef _TETRISCHED_EXPRESSION_HPP_
 #define _TETRISCHED_EXPRESSION_HPP_
 
+#include <functional>
 #include <optional>
 #include <unordered_map>
 #include <variant>
-#include <functional>
 
 #include "tetrisched/Partition.hpp"
 #include "tetrisched/SolverModel.hpp"
@@ -49,9 +49,12 @@ struct ParseResult {
   std::optional<TimeOrVariableT> endTime;
   /// The indicator associated with the parsed result.
   /// This indicator denotes if the expression was satisfied or not.
-  /// The indicator can return an integer if it is trivially satisfied during parsing.
-  /// Note that the startTime and endTime are only valid if the indicator is 1.
+  /// The indicator can return an integer if it is trivially satisfied during
+  /// parsing. Note that the startTime and endTime are only valid if the
+  /// indicator is 1.
   std::optional<IndicatorT> indicator;
+  /// The utility associated with the parsed result.
+  std::optional<ObjectiveFunctionPtr> utility;
 };
 
 struct PartitionTimePairHasher {
@@ -99,6 +102,9 @@ class Expression {
                             Time currentTime) = 0;
 };
 
+/// A `ChooseExpression` represents a choice of a required number of machines
+/// from the set of resource partitions for the given duration starting at the
+/// provided start_time.
 class ChooseExpression : public Expression {
  private:
   /// The Task instance that this ChooseExpression is being inserted into
@@ -108,7 +114,7 @@ class ChooseExpression : public Expression {
   /// choose resources from.
   Partitions resourcePartitions;
   /// The number of partitions that this ChooseExpression needs to choose.
-  uint32_t numRequiredPartitions;
+  uint32_t numRequiredMachines;
   /// The start time of the choice represented by this Expression.
   Time startTime;
   /// The duration of the choice represented by this Expression.
@@ -118,13 +124,30 @@ class ChooseExpression : public Expression {
 
  public:
   ChooseExpression(TaskPtr associatedTask, Partitions resourcePartitions,
-                   uint32_t numRequiredPartitions, Time startTime,
-                   Time duration);
+                   uint32_t numRequiredMachines, Time startTime, Time duration);
   void addChild(ExpressionPtr child) override;
   ParseResult parse(SolverModelPtr solverModel, Partitions availablePartitions,
                     CapacityConstraintMap& capacityConstraints,
                     Time currentTime) override;
 };
+
+/// An `ObjectiveExpression` collates the objectives from its children and
+/// informs the SolverModel of the objective function.
+class ObjectiveExpression : public Expression {
+ private:
+  /// The sense of this Expression.
+  ObjectiveType objectiveType;
+  /// The children of this Expression.
+  std::vector<ExpressionPtr> children;
+
+ public:
+  ObjectiveExpression(ObjectiveType objectiveType);
+  void addChild(ExpressionPtr child) override;
+  ParseResult parse(SolverModelPtr solverModel, Partitions availablePartitions,
+                    CapacityConstraintMap& capacityConstraints,
+                    Time currentTime) override;
+};
+
 }  // namespace tetrisched
 #endif  // _TETRISCHED_EXPRESSION_HPP_
 
