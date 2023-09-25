@@ -34,12 +34,22 @@ set(CPLEX_LINK_LIBRARIES
      "pthread"
      "dl")
 
+set(GUROBI_INCLUDE_DIRS
+     "/opt/gurobi1001/linux64/include/")
+set(GUROBI_LINK_DIRS
+     "/opt/gurobi1001/linux64/lib/")
+set(GUROBI_LINK_LIBRARIES
+     "gurobi_c++"
+     "gurobi100")
+
+
 set(TETRISCHED_SOURCE
      "src/Expression.cpp"
      "src/Worker.cpp"
      "src/Partition.cpp"
      "src/SolverModel.cpp"
-     "src/CPLEXSolver.cpp")
+     "src/CPLEXSolver.cpp"
+     "src/GurobiSolver.cpp")
 
 
 add_library(tetrisched SHARED ${TETRISCHED_SOURCE})
@@ -50,6 +60,11 @@ target_compile_features(tetrisched PRIVATE cxx_std_17)
 target_include_directories(tetrisched PRIVATE ${CPLEX_INCLUDE_DIRS})
 target_link_directories(tetrisched PRIVATE ${CPLEX_LINK_DIRS})
 target_link_libraries(tetrisched PRIVATE ${CPLEX_LINK_LIBRARIES})
+
+# Include and link Gurobi.
+target_include_directories(tetrisched PRIVATE ${GUROBI_INCLUDE_DIRS})
+target_link_directories(tetrisched PRIVATE ${GUROBI_LINK_DIRS})
+target_link_libraries(tetrisched PRIVATE ${GUROBI_LINK_LIBRARIES})
 
 
 # add_executable(tetrisched_main ${TETRISCHED_SOURCE})

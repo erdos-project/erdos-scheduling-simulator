@@ -60,6 +60,7 @@ using ExpressionPtr = std::unique_ptr<Expression>;
 /// Forward declarations for Solver instantiations so that we can declare
 /// them as friend classes in the model.
 class CPLEXSolver;
+class GurobiSolver;
 }  // namespace tetrisched
 
 #endif

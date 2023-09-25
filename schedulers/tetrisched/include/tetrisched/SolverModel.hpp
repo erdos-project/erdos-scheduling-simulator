@@ -238,6 +238,7 @@ class SolverModelT {
   /// This allows Solver implementations to construct the model to pass
   /// back to the user.
   friend tetrisched::CPLEXSolver;
+  friend tetrisched::GurobiSolver;
 };
 
 // Specialize the SolverModel class for Integer.

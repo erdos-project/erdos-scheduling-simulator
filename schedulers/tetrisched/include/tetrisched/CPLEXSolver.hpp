@@ -9,14 +9,13 @@
 
 namespace tetrisched {
 class CPLEXSolver : public Solver {
- protected:
+ private:
   using CPLEXVarType = std::variant<IloNumVar, IloBoolVar, IloIntVar>;
 
- private:
   /// The environment variable for this instance of CPLEX.
   IloEnv cplexEnv;
   /// The SolverModel instance associated with this CPLEXSolver.
-  std::shared_ptr<SolverModel> solverModel;
+  SolverModelPtr solverModel;
   /// The CPLEX model associated with this CPLEXSolver.
   IloCplex cplexInstance;
 

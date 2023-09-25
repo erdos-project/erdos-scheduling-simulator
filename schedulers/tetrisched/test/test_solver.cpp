@@ -86,10 +86,10 @@ TEST(SolverModel, TestCPLEXSolverTranslation) {
   solverModelPtr->exportModel("test_solvermodel.lp");
   EXPECT_TRUE(std::filesystem::exists("test_solvermodel.lp"))
       << "The file test_solvermodel.lp was not created.";
-  // std::filesystem::remove("test_solvermodel.lp");
+  std::filesystem::remove("test_solvermodel.lp");
   cplexSolver.translateModel();
   cplexSolver.exportModel("test_cplexmodel.lp");
   EXPECT_TRUE(std::filesystem::exists("test_cplexmodel.lp"))
       << "The file test_cplexmodel.lp was not created.";
-  // std::filesystem::remove("test_cplexmodel.lp");
+  std::filesystem::remove("test_cplexmodel.lp");
 }
