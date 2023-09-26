@@ -4,10 +4,13 @@
 #include <iostream>
 #ifdef _TETRISCHED_WITH_CPLEX_
 #include "tetrisched/CPLEXSolver.hpp"
-#endif //_TETRISCHED_WITH_CPLEX_
+#endif  //_TETRISCHED_WITH_CPLEX_
 #ifdef _TETRISCHED_WITH_GUROBI_
 #include "tetrisched/GurobiSolver.hpp"
-#endif //_TETRISCHED_WITH_GUROBI_
+#endif  //_TETRISCHED_WITH_GUROBI_
+// #ifdef _TETRISCHED_WITH_OR_TOOLS_
+// #endif  //_TETRISCHED_WITH_OR_TOOLS_
+#include "tetrisched/GoogleCPSolver.hpp"
 #include "tetrisched/Solver.hpp"
 #include "tetrisched/SolverModel.hpp"
 
@@ -47,6 +50,21 @@ TEST(SolverModelTypes, TestObjectiveFnConstruction) {
   EXPECT_EQ(objectiveFn.size(), 1);
 }
 
+void constructModel(tetrisched::SolverModelPtr& solverModelPtr) {
+  auto intVar = std::make_shared<tetrisched::Variable>(tetrisched::VAR_INTEGER,
+                                                       "intVar", 0, 100);
+  solverModelPtr->addVariable(intVar);
+  auto constraint = std::make_unique<tetrisched::Constraint>(
+      "TestConstraint", tetrisched::ConstraintType::CONSTR_LE, 10);
+  constraint->addTerm(2, intVar);
+  constraint->addTerm(5);
+  solverModelPtr->addConstraint(std::move(constraint));
+  auto objectiveFunction = std::make_unique<tetrisched::ObjectiveFunction>(
+      tetrisched::ObjectiveType::OBJ_MAXIMIZE);
+  objectiveFunction->addTerm(1, intVar);
+  solverModelPtr->setObjectiveFunction(std::move(objectiveFunction));
+}
+
 #ifdef _TETRISCHED_WITH_CPLEX_
 TEST(SolverModelTypes, TestSolverModel) {
   tetrisched::CPLEXSolver cplexSolver;
@@ -73,21 +91,6 @@ TEST(SolverModelTypes, TestSolverModel) {
   std::filesystem::remove("test.lp");
 }
 
-void constructModel(tetrisched::SolverModelPtr& solverModelPtr) {
-  auto intVar =
-      std::make_shared<tetrisched::Variable>(tetrisched::VAR_INTEGER, "intVar");
-  solverModelPtr->addVariable(intVar);
-  auto constraint = std::make_unique<tetrisched::Constraint>(
-      "TestConstraint", tetrisched::ConstraintType::CONSTR_LE, 10);
-  constraint->addTerm(2, intVar);
-  constraint->addTerm(5);
-  solverModelPtr->addConstraint(std::move(constraint));
-  auto objectiveFunction = std::make_unique<tetrisched::ObjectiveFunction>(
-      tetrisched::ObjectiveType::OBJ_MAXIMIZE);
-  objectiveFunction->addTerm(1, intVar);
-  solverModelPtr->setObjectiveFunction(std::move(objectiveFunction));
-}
-
 TEST(SolverModel, TestCPLEXSolverTranslation) {
   tetrisched::CPLEXSolver cplexSolver;
   auto solverModelPtr = cplexSolver.getModel();
@@ -100,9 +103,9 @@ TEST(SolverModel, TestCPLEXSolverTranslation) {
   cplexSolver.exportModel("test_cplexmodel.lp");
   EXPECT_TRUE(std::filesystem::exists("test_cplexmodel.lp"))
       << "The file test_cplexmodel.lp was not created.";
-//   std::filesystem::remove("test_cplexmodel.lp");
+  std::filesystem::remove("test_cplexmodel.lp");
 }
-#endif //_TETRISCHED_WITH_CPLEX_
+#endif  //_TETRISCHED_WITH_CPLEX_
 
 #ifdef _TETRISCHED_WITH_GUROBI_
 TEST(SolverModel, TestGurobiSolverTranslation) {
@@ -112,11 +115,28 @@ TEST(SolverModel, TestGurobiSolverTranslation) {
   solverModelPtr->exportModel("test_solvermodel.lp");
   EXPECT_TRUE(std::filesystem::exists("test_solvermodel.lp"))
       << "The file test_solvermodel.lp was not created.";
-  //   std::filesystem::remove("test_solvermodel.lp");
+  std::filesystem::remove("test_solvermodel.lp");
   gurobiSolver.translateModel();
   gurobiSolver.exportModel("test_gurobimodel.lp");
   EXPECT_TRUE(std::filesystem::exists("test_gurobimodel.lp"))
       << "The file test_gurobimodel.lp was not created.";
-  //   std::filesystem::remove("test_gurobimodel.lp");
+  std::filesystem::remove("test_gurobimodel.lp");
 }
-#endif //_TETRISCHED_WITH_GUROBI_
+#endif  //_TETRISCHED_WITH_GUROBI_
+
+#ifdef _TETRISCHED_WITH_ORTOOLS_
+TEST(SolverModel, TestOrToolsSolverTranslation) {
+  tetrisched::GoogleCPSolver googleCPSolver;
+  auto solverModelPtr = googleCPSolver.getModel();
+  constructModel(solverModelPtr);
+  solverModelPtr->exportModel("test_solvermodel.lp");
+  EXPECT_TRUE(std::filesystem::exists("test_solvermodel.lp"))
+      << "The file test_solvermodel.lp was not created.";
+  std::filesystem::remove("test_solvermodel.lp");
+  googleCPSolver.translateModel();
+  googleCPSolver.exportModel("test_ortoolsmodel.lp");
+  EXPECT_TRUE(std::filesystem::exists("test_ortoolsmodel.lp"))
+      << "The file test_ortoolsmodel.lp was not created.";
+  std::filesystem::remove("test_ortoolsmodel.lp");
+}
+#endif  //_TETRISCHED_WITH_ORTOOLS_

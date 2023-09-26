@@ -62,6 +62,7 @@ using ExpressionPtr = std::unique_ptr<Expression>;
 /// them as friend classes in the model.
 class CPLEXSolver;
 class GurobiSolver;
+class GoogleCPSolver;
 }  // namespace tetrisched
 
 #endif

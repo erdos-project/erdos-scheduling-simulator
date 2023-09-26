@@ -21,6 +21,7 @@ set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 set(CPLEX_DIR "/opt/ibm/ILOG/CPLEX_Studio2211")
 set(GUROBI_DIR "/opt/gurobi1001/linux64")
+set(ORTOOLS_DIR "/usr/local/include/ortools")
 
 if (EXISTS "${CPLEX_DIR}")
      message("-- Adding CPLEX : ${CPLEX_DIR}")
@@ -45,6 +46,7 @@ else()
      set(CPLEX_LINK_DIRS "")
      set(CPLEX_LINK_LIBRARIES "")
 endif()
+
 if (EXISTS "${GUROBI_DIR}")
      message("-- Adding GUROBI : ${GUROBI_DIR}")
      add_compile_definitions(_TETRISCHED_WITH_GUROBI_)
@@ -56,15 +58,23 @@ if (EXISTS "${GUROBI_DIR}")
      set(GUROBI_LINK_LIBRARIES
           "gurobi_c++"
           "gurobi100")
-
 else()
      message("-- Not Adding GUROBI")
      set(GUROBI_INCLUDE_DIRS "")
      set(GUROBI_LINK_DIRS "")
      set(GUROBI_LINK_LIBRARIES "")
-
 endif()
 
+if (EXISTS "${ORTOOLS_DIR}")
+     message("-- Adding Google OR-Tools : ${ORTOOLS_DIR}")
+     add_compile_definitions(_TETRISCHED_WITH_ORTOOLS_)
+
+     set(ORTOOLS_LINK_LIBRARIES
+	     "ortools")
+else()
+     message("-- Not adding OR-Tools")
+     set(ORTOOLS_LINK_LIBRARIES "")
+endif()
 
 set(TETRISCHED_SOURCE
      "src/Expression.cpp"
@@ -77,6 +87,9 @@ if (EXISTS "${CPLEX_DIR}")
 endif()
 if (EXISTS "${GUROBI_DIR}")
      LIST(APPEND TETRISCHED_SOURCE "src/GurobiSolver.cpp")
+endif()
+if (EXISTS "${ORTOOLS_DIR}")
+     LIST(APPEND TETRISCHED_SOURCE "src/GoogleCPSolver.cpp")
 endif()
 
 add_library(tetrisched SHARED ${TETRISCHED_SOURCE})
@@ -92,6 +105,9 @@ target_link_libraries(tetrisched PRIVATE ${CPLEX_LINK_LIBRARIES})
 target_include_directories(tetrisched PRIVATE ${GUROBI_INCLUDE_DIRS})
 target_link_directories(tetrisched PRIVATE ${GUROBI_LINK_DIRS})
 target_link_libraries(tetrisched PRIVATE ${GUROBI_LINK_LIBRARIES})
+
+# Include and link Google-ORTools.
+target_link_libraries(tetrisched PRIVATE ${ORTOOLS_LINK_LIBRARIES})
 
 
 # add_executable(tetrisched_main ${TETRISCHED_SOURCE})
@@ -127,6 +143,7 @@ target_link_libraries(
   tetrisched
   ${CPLEX_LINK_LIBRARIES}
   ${GUROBI_LINK_LIBRARIES}
+  ${ORTOOLS_LINK_LIBRARIES}
 )
 
 include(GoogleTest)
