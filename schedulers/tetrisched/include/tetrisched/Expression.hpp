@@ -148,6 +148,29 @@ class ObjectiveExpression : public Expression {
                     Time currentTime) override;
 };
 
+class MinExpression: public Expression {
+protected:
+    MinExpression(ExpressionPtr  child);
+    
+    /// The sense of this Expression.
+    ObjectiveType objectiveType;
+    /// The children of this Expression.
+    std::vector<ExpressionPtr> children;
+    int minUvaridx;
+    int minUStartTime;
+    int minEndTime;
+
+public:
+    
+    MinExpression(){}
+    virtual ~MinExpression() {}
+    virtual void addChild(ExpressionPtr newchld);    //appends new chld to
+    int GetNumChildren();
+    ParseResult parse(SolverModelPtr solverModel, Partitions availablePartitions,
+                    CapacityConstraintMap& capacityConstraints,
+                    Time currentTime) override;
+};
+
 }  // namespace tetrisched
 #endif  // _TETRISCHED_EXPRESSION_HPP_
 
@@ -482,29 +505,7 @@ class ObjectiveExpression : public Expression {
 // //     virtual string toString() {return child->toString();}
 // // };
 
-// // class NnaryOperator: public Expression {
-// // protected:
-// //     vector<ExpressionPtr> chldarr;
-// //     bool homogeneous_children_nodes;
 
-// //     bool cache_dirty = true; // This is not related to cacheNodeResults
-// // private:
-// //     // cache fields
-// //     pair<int, int> startTimeRangeCache = make_pair(INT_MAX, INT_MIN);
-
-// // public:
-// //     NnaryOperator(bool _homogeneous_children_nodes = false)
-// //             : homogeneous_children_nodes(_homogeneous_children_nodes) {}
-// //     virtual ~NnaryOperator() {}
-// //     virtual void clearMarkers();
-// //     virtual void addChild(ExpressionPtr newchld);    //appends new chld to
-// //     chldarr virtual ExpressionPtr removeChild(const ExpressionPtr &chld);
-// //     virtual void getEquivClasses(EquivClassSet& equivClasses);
-// //     virtual void populatePartitions(const vector<int> &node2part, int
-// //     curtime, int sched_horizon);
-
-// //     pair<int, int> startTimeRange();
-// // };
 // // class MinExpression: public NnaryOperator {
 // // private:
 // //     double cached_minU; // decision variable cache -- owned by
