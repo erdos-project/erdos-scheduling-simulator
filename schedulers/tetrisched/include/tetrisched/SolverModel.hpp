@@ -189,6 +189,9 @@ class ObjectiveFunctionT {
   /// Adds a term to the left-hand side constraint.
   void addTerm(T coefficient, std::shared_ptr<VariableT<T>> variable);
 
+  // The objective is left hand side of the constraint
+  ConstraintT<T> *toConstraint(std::string constraintName, ConstraintType constraintType, T rightHandSide);
+
   /// Retrieve a string representation of this ObjectiveFunction.
   std::string toString() const;
 

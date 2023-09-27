@@ -44,6 +44,17 @@ X XOrVariableT<X>::resolve() const {
   }
 }
 
+template <typename X>
+bool XOrVariableT<X>::isVariable() const {
+  return std::holds_alternative<VariablePtr>(value);
+}
+
+template <typename X>
+template <typename T>
+T XOrVariableT<X>::get() const {
+  return std::get<T>(value);
+}
+
 void CapacityConstraintMap::registerUsageAtTime(const Partition& partition,
                                                 Time time,
                                                 VariablePtr variable) {
@@ -174,8 +185,7 @@ ParseResultPtr ChooseExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMap& capacityConstraints, Time currentTime) {
   // Create and save the ParseResult.
-  ParseResultPtr parseResult = std::make_shared<ParseResult>();
-  parsedResult = parseResult;
+  parsedResult = std::make_shared<ParseResult>();
 
   if (currentTime > startTime) {
     TETRISCHED_DEBUG("Pruning Choose expression for "
@@ -183,8 +193,8 @@ ParseResultPtr ChooseExpression::parse(
                      << " to be placed starting at time " << startTime
                      << " and ending at " << endTime
                      << " because it is in the past.");
-    parseResult->type = ParseResultType::EXPRESSION_PRUNE;
-    return parseResult;
+    parsedResult->type = ParseResultType::EXPRESSION_PRUNE;
+    return parsedResult;
   }
   TETRISCHED_DEBUG("Parsing Choose expression for "
                    << associatedTask->getTaskName()
@@ -202,8 +212,8 @@ ParseResultPtr ChooseExpression::parse(
   if (schedulablePartitions.size() == 0) {
     // There are no schedulable partitions, this expression cannot be satisfied.
     // and should provide 0 utility.
-    parseResult->type = ParseResultType::EXPRESSION_NO_UTILITY;
-    return parseResult;
+    parsedResult->type = ParseResultType::EXPRESSION_NO_UTILITY;
+    return parsedResult;
   }
 
   // This Choose expression needs to be passed to the Solver.
@@ -248,12 +258,12 @@ ParseResultPtr ChooseExpression::parse(
   utility->addTerm(1, isSatisfiedVar);
 
   // Construct the return value.
-  parseResult->type = ParseResultType::EXPRESSION_UTILITY;
-  parseResult->startTime = startTime;
-  parseResult->endTime = endTime;
-  parseResult->indicator = isSatisfiedVar;
-  parseResult->utility = std::move(utility);
-  return parseResult;
+  parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
+  parsedResult->startTime = startTime;
+  parsedResult->endTime = endTime;
+  parsedResult->indicator = isSatisfiedVar;
+  parsedResult->utility = std::move(utility);
+  return parsedResult;
 }
 
 ObjectiveExpression::ObjectiveExpression(ObjectiveType objectiveType)
@@ -283,6 +293,114 @@ ParseResultPtr ObjectiveExpression::parse(
 
   return std::make_shared<ParseResult>(
       ParseResult{.type = ParseResultType::EXPRESSION_NO_UTILITY});
+}
+
+MinExpression::MinExpression(ExpressionPtr child) {
+  children.push_back(std::move(child));
+}
+
+int MinExpression::GetNumChildren() { return children.size(); }
+
+void MinExpression::addChild(ExpressionPtr newchld) {
+  children.push_back(std::move(newchld));
+}
+
+ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
+                                    Partitions availablePartitions,
+                                    CapacityConstraintMap& capacityConstraints,
+                                    Time currentTime) {
+  /// Create and save the ParseResult.
+  parsedResult = std::make_shared<ParseResult>();
+
+  int num_children = children.size();
+
+  // This indicator variable is to ensure all children's indicator's variable
+  // are satisfied.
+  VariablePtr isSatisfiedVar =
+      std::make_shared<Variable>(VariableType::VAR_INDICATOR, "MIN_INDICATOR");
+
+  // sum(all_child_indicator_variables) = num_children
+  ConstraintPtr fulfillsAllChildren = std::make_unique<Constraint>(
+      "MIN_FULFILL_CONSTR", ConstraintType::CONSTR_EQ, 0);
+
+  // start time of MIN
+  VariablePtr min_start_time = std::make_shared<Variable>(
+      VariableType::VAR_CONTINUOUS, "MIN_START_TIME");
+
+  // end time of MIN
+  VariablePtr min_end_time =
+      std::make_shared<Variable>(VariableType::VAR_CONTINUOUS, "MIN_END_TIME");
+
+  // Utility of MIN operator
+  auto min_utility =
+      std::make_unique<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
+  VariablePtr min_variable = std::make_shared<Variable>(
+      VariableType::VAR_CONTINUOUS, "MIN_UTILITY_VARIABLE");
+
+  for (int i = 0; i < num_children; i++) {
+    auto child_parsed_result = children[i]->parse(
+        solverModel, availablePartitions, capacityConstraints, currentTime);
+    ConstraintPtr min_start_time_constraint = std::make_unique<Constraint>(
+        "MIN_START_TIME_CONSTR_CHILD_" + std::to_string(i),
+        ConstraintType::CONSTR_GE, 0);  // min_start_time < child_start_time
+    if (child_parsed_result->startTime.has_value()) {
+      auto child_start_time = child_parsed_result->startTime.value();
+      if (child_start_time.isVariable()) {
+        min_start_time_constraint->addTerm(1, child_start_time.get<VariablePtr>());
+      } else {
+        min_start_time_constraint->addTerm(child_start_time.get<Time>());
+      }
+      min_start_time_constraint->addTerm(-1, min_start_time);
+      // Add the constraint to solver
+      solverModel->addConstraint(std::move(min_start_time_constraint));
+    }
+    // constraint of end time: child_end_time <= min_end_time
+    ConstraintPtr min_end_time_constraint = std::make_unique<Constraint>(
+        "MIN_END_TIME_CONSTR_CHILD_" + std::to_string(i),
+        ConstraintType::CONSTR_LE, 0);
+    if (child_parsed_result->endTime.has_value()) {
+      auto child_end_time = child_parsed_result->endTime.value();
+      if (child_end_time.isVariable()) {
+        min_end_time_constraint->addTerm(1, child_end_time.get<VariablePtr>());
+      } else {
+        min_end_time_constraint->addTerm(child_end_time.get<Time>());
+      }
+      min_end_time_constraint->addTerm(-1, min_end_time);
+      // Add the constraint to solver
+      solverModel->addConstraint(std::move(min_end_time_constraint));
+    }
+
+     if (child_parsed_result->utility.has_value()) {
+       // child_utility - minUVar >= 0
+       auto child_utility_constr = std::unique_ptr<Constraint>(
+           child_parsed_result->utility.value()->toConstraint(
+               "MIN_UTILITY_CONSTRAINT_CHILD_" + std::to_string(i),
+               ConstraintType::CONSTR_GE, 0));
+       child_utility_constr->addTerm(-1, min_variable);
+       solverModel->addConstraint(std::move(child_utility_constr));
+     }
+
+     if (child_parsed_result->indicator.has_value()) {
+       auto child_indicator = child_parsed_result->indicator.value();
+       if (child_indicator.isVariable()) {
+        fulfillsAllChildren->addTerm(1, child_indicator.get<VariablePtr>());
+       } else {
+        fulfillsAllChildren->addTerm(child_indicator.get<uint32_t>());
+       }
+     }
+  }
+
+  fulfillsAllChildren->addTerm(-1 * num_children, isSatisfiedVar);
+  solverModel->addConstraint(std::move(fulfillsAllChildren));
+  // MinU = Max(MinUVar)
+  min_utility->addTerm(1, min_variable);
+
+  parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
+  parsedResult->startTime = min_start_time;
+  parsedResult->endTime = min_end_time;
+  parsedResult->indicator = isSatisfiedVar;
+  parsedResult->utility = std::move(min_utility);
+  return parsedResult;
 }
 
 }  // namespace tetrisched
