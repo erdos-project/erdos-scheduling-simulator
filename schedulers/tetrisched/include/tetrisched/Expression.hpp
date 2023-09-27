@@ -156,9 +156,6 @@ protected:
     ObjectiveType objectiveType;
     /// The children of this Expression.
     std::vector<ExpressionPtr> children;
-    int minUvaridx;
-    int minUStartTime;
-    int minEndTime;
 
 public:
     
