@@ -198,6 +198,30 @@ void ObjectiveFunctionT<T>::merge(const ObjectiveFunctionT<T> &other) {
   }
 }
 
+template <typename T>
+T ObjectiveFunctionT<T>::getValue() const {
+  T value = 0;
+  for (const auto &[coefficient, variable] : terms) {
+    if (variable == nullptr) {
+      value += coefficient;
+    } else {
+      auto variableValue = variable->getValue();
+      if (variableValue) {
+        value += coefficient * variableValue.value();
+      } else {
+        throw exceptions::ExpressionSolutionException(
+            "Cannot retrieve value of variable " + variable->getName() +
+            " in objective function.");
+      }
+    }
+  }
+
+  for (auto &term : terms) {
+    value += term.first * term.second->getValue().value();
+  }
+  return value;
+}
+
 /*
  * Methods for SolverModel.
  * These methods provide an implementation of the Constraint class.
@@ -258,5 +282,10 @@ size_t SolverModelT<T>::numVariables() const {
 template <typename T>
 size_t SolverModelT<T>::numConstraints() const {
   return constraints.size();
+}
+
+template <typename T>
+T SolverModelT<T>::getObjectiveValue() const {
+  return objectiveFunction->getValue();
 }
 }  // namespace tetrisched

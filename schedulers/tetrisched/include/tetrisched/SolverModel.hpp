@@ -198,6 +198,9 @@ class ObjectiveFunctionT {
   /// Merges this utility with another utility.
   void merge(const ObjectiveFunctionT<T>& other);
 
+  /// Retrieves the value of the utility of this ObjectiveFunction.
+  T getValue() const;
+
   /// Annotate friend classes for Solvers so that they have access to internals.
   friend tetrisched::CPLEXSolver;
   friend tetrisched::GurobiSolver;
@@ -247,6 +250,10 @@ class SolverModelT {
 
   /// Retrieve the number of constraints in this SolverModel.
   size_t numConstraints() const;
+
+  /// Retrieves the value of the objective function of this SolverModel.
+  /// Throws an error if the model was not solved first.
+  T getObjectiveValue() const;
 
   /// All the Solver implementations should be a friend of the SolverModel.
   /// This allows Solver implementations to construct the model to pass

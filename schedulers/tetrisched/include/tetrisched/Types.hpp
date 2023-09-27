@@ -37,6 +37,16 @@ class ExpressionConstructionException : public std::exception {
   const char* what() const noexcept override { return message.c_str(); }
 };
 
+/// An exception that is thrown when solving of an Expression fails.
+class ExpressionSolutionException : public std::exception {
+ private:
+  std::string message;
+
+ public:
+  ExpressionSolutionException(std::string message) : message(message) {}
+  const char* what() const noexcept override { return message.c_str(); }
+};
+
 /// An exception that is thrown when the Solver is used incorrectly.
 class SolverException : public std::exception {
  private:

@@ -34,11 +34,32 @@ enum ParseResultType {
   /// the relevant start and finish times.
   EXPRESSION_UTILITY = 2,
 };
+using ParseResultType = enum ParseResultType;
+using SolutionResultType = enum ParseResultType;
+
+template <typename X>
+class XOrVariableT {
+ private:
+  std::variant<std::monostate, X, VariablePtr> value;
+
+ public:
+  /// Constructors and operators.
+  XOrVariableT() = default;
+  XOrVariableT(const X& newValue);
+  XOrVariableT(const VariablePtr& newValue);
+  XOrVariableT(const XOrVariableT& newValue) = default;
+  XOrVariableT(XOrVariableT&& newValue) = default;
+  XOrVariableT& operator=(const X& newValue);
+  XOrVariableT& operator=(const VariablePtr& newValue);
+
+  /// Resolves the value inside this class.
+  X resolve() const;
+};
 
 /// A `ParseResult` class represents the result of parsing an expression.
 struct ParseResult {
-  using TimeOrVariableT = std::variant<Time, VariablePtr>;
-  using IndicatorT = std::variant<uint32_t, VariablePtr>;
+  using TimeOrVariableT = XOrVariableT<Time>;
+  using IndicatorT = XOrVariableT<uint32_t>;
   /// The type of the result.
   ParseResultType type;
   /// The start time associated with the parsed result.
@@ -56,6 +77,23 @@ struct ParseResult {
   /// The utility associated with the parsed result.
   std::optional<ObjectiveFunctionPtr> utility;
 };
+using ParseResultPtr = std::shared_ptr<ParseResult>;
+
+/// A `SolutionResult` class represents the solution attributed to an
+/// expression.
+struct SolutionResult {
+  /// The type of the result.
+  SolutionResultType type;
+  /// The start time associated with the result.
+  std::optional<Time> startTime;
+  /// The end time associated with the result.
+  std::optional<Time> endTime;
+  /// The value of the indicator associated with the result.
+  std::optional<uint32_t> indicator;
+  /// The utility associated with the result.
+  std::optional<TETRISCHED_ILP_TYPE> utility;
+};
+using SolutionResultPtr = std::shared_ptr<SolutionResult>;
 
 struct PartitionTimePairHasher {
   size_t operator()(const std::pair<uint32_t, Time>& pair) const {
@@ -92,14 +130,38 @@ class CapacityConstraintMap {
                                 Time granularity = 1);
 };
 
-/// An Abstract Base Class for all expressions in the STRL language.
+/// A Base Class for all expressions in the STRL language.
 class Expression {
+ protected:
+  /// The parsed result from the Expression.
+  /// Used for retrieving the solution from the solver.
+  ParseResultPtr parsedResult;
+
  public:
+  /// Default construct the base class.
+  Expression() = default;
+
+  /// Adds a child to this epxression.
+  /// May throw tetrisched::excpetions::ExpressionConstructionException
+  /// if an incorrect number of children are registered.
   virtual void addChild(ExpressionPtr child) = 0;
-  virtual ParseResult parse(SolverModelPtr solverModel,
-                            Partitions availablePartitions,
-                            CapacityConstraintMap& capacityConstraints,
-                            Time currentTime) = 0;
+
+  /// Parses the expression into a set of variables and constraints for the
+  /// Solver. Returns a ParseResult that contains the utility of the expression,
+  /// an indicator specifying if the expression was satisfied and variables that
+  /// provide a start and end time bound on this Expression.
+  virtual ParseResultPtr parse(SolverModelPtr solverModel,
+                               Partitions availablePartitions,
+                               CapacityConstraintMap& capacityConstraints,
+                               Time currentTime) = 0;
+
+  /// Solves the subtree rooted at this Expression and returns the solution.
+  /// It assumes that the SolverModelPtr has been populated with values for
+  /// unknown variables and throws a
+  /// tetrisched::exceptions::ExpressionSolutionException if the SolverModelPtr
+  /// is not populated. This method returns the actual values for the variables
+  /// specified in the ParseResult.
+  SolutionResultPtr solve(SolverModelPtr solverModel);
 };
 
 /// A `ChooseExpression` represents a choice of a required number of machines
@@ -126,9 +188,10 @@ class ChooseExpression : public Expression {
   ChooseExpression(TaskPtr associatedTask, Partitions resourcePartitions,
                    uint32_t numRequiredMachines, Time startTime, Time duration);
   void addChild(ExpressionPtr child) override;
-  ParseResult parse(SolverModelPtr solverModel, Partitions availablePartitions,
-                    CapacityConstraintMap& capacityConstraints,
-                    Time currentTime) override;
+  ParseResultPtr parse(SolverModelPtr solverModel,
+                       Partitions availablePartitions,
+                       CapacityConstraintMap& capacityConstraints,
+                       Time currentTime) override;
 };
 
 /// An `ObjectiveExpression` collates the objectives from its children and
@@ -143,9 +206,10 @@ class ObjectiveExpression : public Expression {
  public:
   ObjectiveExpression(ObjectiveType objectiveType);
   void addChild(ExpressionPtr child) override;
-  ParseResult parse(SolverModelPtr solverModel, Partitions availablePartitions,
-                    CapacityConstraintMap& capacityConstraints,
-                    Time currentTime) override;
+  ParseResultPtr parse(SolverModelPtr solverModel,
+                       Partitions availablePartitions,
+                       CapacityConstraintMap& capacityConstraints,
+                       Time currentTime) override;
 };
 
 }  // namespace tetrisched

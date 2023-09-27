@@ -79,7 +79,7 @@ TEST(SolverModelTypes, TestSolverModel) {
   constraint->addTerm(1, intVar);
   tetrisched::ObjectiveFunctionPtr objectiveFn =
       std::make_unique<tetrisched::ObjectiveFunction>(tetrisched::OBJ_MAXIMIZE);
-  objectiveFn->addTerm(1, intVar);
+  objectiveFn->addTerm(2, intVar);
 
   solverModel->addVariable(intVar);
   solverModel->addConstraint(std::move(constraint));
@@ -114,6 +114,8 @@ TEST(SolverModel, TestCPLEXSolverTranslation) {
   auto solutionValue = intVar->getValue();
   EXPECT_TRUE(solutionValue.has_value()) << "No solution found.";
   EXPECT_EQ(solutionValue.value(), 2) << "Solution is not correct.";
+  EXPECT_EQ(solverModelPtr->getObjectiveValue(), 4)
+      << "The objective value is not correct.";
 }
 #endif  //_TETRISCHED_WITH_CPLEX_
 

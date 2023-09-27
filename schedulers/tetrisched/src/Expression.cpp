@@ -4,6 +4,46 @@
 
 namespace tetrisched {
 
+/* Method definitions for XOrVariableT. */
+template <typename X>
+XOrVariableT<X>::XOrVariableT(const X& value) : value(value) {}
+
+template <typename X>
+XOrVariableT<X>::XOrVariableT(const VariablePtr& variable) : value(variable) {}
+
+template <typename X>
+XOrVariableT<X>& XOrVariableT<X>::operator=(const X& newValue) {
+  value = newValue;
+  return *this;
+}
+
+template <typename X>
+XOrVariableT<X>& XOrVariableT<X>::operator=(const VariablePtr& newValue) {
+  value = newValue;
+  return *this;
+}
+
+template <typename X>
+X XOrVariableT<X>::resolve() const {
+  // If the value is the provided type, then return it.
+  if (std::holds_alternative<X>(value)) {
+    return std::get<X>(value);
+  } else if (std::holds_alternative<VariablePtr>(value)) {
+    // If the value is a VariablePtr, then return the value of the variable.
+    auto variable = std::get<VariablePtr>(value);
+    auto variableValue = variable->getValue();
+    if (!variableValue) {
+      throw tetrisched::exceptions::ExpressionSolutionException(
+          "No solution was found for the variable name: " +
+          variable->getName());
+    }
+    return variableValue.value();
+  } else {
+    throw tetrisched::exceptions::ExpressionSolutionException(
+        "XOrVariableT was resolved with an invalid type.");
+  }
+}
+
 void CapacityConstraintMap::registerUsageAtTime(const Partition& partition,
                                                 Time time,
                                                 VariablePtr variable) {
@@ -61,6 +101,59 @@ void CapacityConstraintMap::registerUsageForDuration(const Partition& partition,
   }
 }
 
+SolutionResultPtr Expression::solve(SolverModelPtr solverModel) {
+  // Check that the Expression was parsed before.
+  if (!parsedResult) {
+    throw tetrisched::exceptions::ExpressionSolutionException(
+        "Expression was not parsed before solve.");
+  }
+
+  // Construct the SolutionResult.
+  SolutionResultPtr solutionResult = std::make_shared<SolutionResult>();
+  switch (parsedResult->type) {
+    case ParseResultType::EXPRESSION_PRUNE:
+      solutionResult->type = SolutionResultType::EXPRESSION_PRUNE;
+      return solutionResult;
+    case ParseResultType::EXPRESSION_NO_UTILITY:
+      solutionResult->type = SolutionResultType::EXPRESSION_NO_UTILITY;
+      return solutionResult;
+    case ParseResultType::EXPRESSION_UTILITY:
+      solutionResult->type = SolutionResultType::EXPRESSION_UTILITY;
+      break;
+    default:
+      throw tetrisched::exceptions::ExpressionSolutionException(
+          "Expression was parsed with an invalid ParseResultType: " +
+          std::to_string(static_cast<int>(parsedResult->type)));
+  }
+
+  // Retrieve the start, end times and the indicator from the SolverModel.
+  if (!parsedResult->startTime) {
+    throw tetrisched::exceptions::ExpressionSolutionException(
+        "Expression with a utility was parsed without a start time.");
+  }
+  solutionResult->startTime = parsedResult->startTime->resolve();
+
+  if (!parsedResult->endTime) {
+    throw tetrisched::exceptions::ExpressionSolutionException(
+        "Expression with a utility was parsed without an end time.");
+  }
+  solutionResult->endTime = parsedResult->endTime->resolve();
+
+  if (!parsedResult->indicator) {
+    throw tetrisched::exceptions::ExpressionSolutionException(
+        "Expression with a utility was parsed without an indicator.");
+  }
+  solutionResult->indicator = parsedResult->indicator->resolve();
+
+  if (!parsedResult->utility) {
+    throw tetrisched::exceptions::ExpressionSolutionException(
+        "Expression with a utility was parsed without a utility.");
+  }
+  solutionResult->utility = parsedResult->utility.value()->getValue();
+
+  return solutionResult;
+}
+
 ChooseExpression::ChooseExpression(TaskPtr associatedTask,
                                    Partitions resourcePartitions,
                                    uint32_t numRequiredMachines, Time startTime,
@@ -77,17 +170,21 @@ void ChooseExpression::addChild(ExpressionPtr child) {
       "ChooseExpression cannot have a child.");
 }
 
-ParseResult ChooseExpression::parse(SolverModelPtr solverModel,
-                                    Partitions availablePartitions,
-                                    CapacityConstraintMap& capacityConstraints,
-                                    Time currentTime) {
+ParseResultPtr ChooseExpression::parse(
+    SolverModelPtr solverModel, Partitions availablePartitions,
+    CapacityConstraintMap& capacityConstraints, Time currentTime) {
+  // Create and save the ParseResult.
+  ParseResultPtr parseResult = std::make_shared<ParseResult>();
+  parsedResult = parseResult;
+
   if (currentTime > startTime) {
     TETRISCHED_DEBUG("Pruning Choose expression for "
                      << associatedTask->getTaskName()
                      << " to be placed starting at time " << startTime
                      << " and ending at " << endTime
                      << " because it is in the past.");
-    return ParseResult{.type = ParseResultType::EXPRESSION_PRUNE};
+    parseResult->type = ParseResultType::EXPRESSION_PRUNE;
+    return parseResult;
   }
   TETRISCHED_DEBUG("Parsing Choose expression for "
                    << associatedTask->getTaskName()
@@ -105,7 +202,8 @@ ParseResult ChooseExpression::parse(SolverModelPtr solverModel,
   if (schedulablePartitions.size() == 0) {
     // There are no schedulable partitions, this expression cannot be satisfied.
     // and should provide 0 utility.
-    return ParseResult{.type = ParseResultType::EXPRESSION_NO_UTILITY};
+    parseResult->type = ParseResultType::EXPRESSION_NO_UTILITY;
+    return parseResult;
   }
 
   // This Choose expression needs to be passed to the Solver.
@@ -150,13 +248,12 @@ ParseResult ChooseExpression::parse(SolverModelPtr solverModel,
   utility->addTerm(1, isSatisfiedVar);
 
   // Construct the return value.
-  return ParseResult{
-      .type = ParseResultType::EXPRESSION_UTILITY,
-      .startTime = startTime,
-      .endTime = endTime,
-      .indicator = isSatisfiedVar,
-      .utility = std::move(utility),
-  };
+  parseResult->type = ParseResultType::EXPRESSION_UTILITY;
+  parseResult->startTime = startTime;
+  parseResult->endTime = endTime;
+  parseResult->indicator = isSatisfiedVar;
+  parseResult->utility = std::move(utility);
+  return parseResult;
 }
 
 ObjectiveExpression::ObjectiveExpression(ObjectiveType objectiveType)
@@ -166,7 +263,7 @@ void ObjectiveExpression::addChild(ExpressionPtr child) {
   children.push_back(std::move(child));
 }
 
-ParseResult ObjectiveExpression::parse(
+ParseResultPtr ObjectiveExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMap& capacityConstraints, Time currentTime) {
   // Construct the overall utility of this expression.
@@ -176,16 +273,18 @@ ParseResult ObjectiveExpression::parse(
   for (auto& child : children) {
     auto result = child->parse(solverModel, availablePartitions,
                                capacityConstraints, currentTime);
-    if (result.type == ParseResultType::EXPRESSION_UTILITY) {
-      utility->merge(*result.utility.value());
+    if (result->type == ParseResultType::EXPRESSION_UTILITY) {
+      utility->merge(*(result->utility.value()));
     }
   }
 
   // Add the utility to the SolverModel.
   solverModel->setObjectiveFunction(std::move(utility));
 
-  return ParseResult{.type = ParseResultType::EXPRESSION_NO_UTILITY};
+  return std::make_shared<ParseResult>(
+      ParseResult{.type = ParseResultType::EXPRESSION_NO_UTILITY});
 }
+
 }  // namespace tetrisched
 
 // // standard C/C++ libraries
