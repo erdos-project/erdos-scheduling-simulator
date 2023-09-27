@@ -134,7 +134,7 @@ TEST(SolverModel, TestGurobiSolverTranslation) {
 }
 #endif  //_TETRISCHED_WITH_GUROBI_
 
-#ifdef _TETRISCHED_WITH_ORTOOLS_
+#ifdef _TETRISCHED_WITH_OR_TOOLS_
 TEST(SolverModel, TestOrToolsSolverTranslation) {
   tetrisched::GoogleCPSolver googleCPSolver;
   auto solverModelPtr = googleCPSolver.getModel();
