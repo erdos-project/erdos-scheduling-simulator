@@ -18,6 +18,9 @@ class Solver {
 
   /// Export the constructed model to the given file.
   virtual void exportModel(const std::string& fileName) = 0;
+
+  /// Solve the constructed model.
+  virtual void solveModel() = 0;
 };
 }  // namespace tetrisched
 #endif  // _TETRISCHED_SOLVER_HPP_

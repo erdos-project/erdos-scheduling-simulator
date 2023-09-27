@@ -46,6 +46,12 @@ class CPLEXSolver : public Solver {
 
   /// Export the constructed model to the given file.
   void exportModel(const std::string& fileName) override;
+
+  /// Solve the constructed model.
+  void solveModel() override;
+
+  /// Destroy the CPLEXSolver.
+  ~CPLEXSolver();
 };
 }  // namespace tetrisched
 #endif  // _TETRISCHED_CPLEX_SOLVER_HPP_

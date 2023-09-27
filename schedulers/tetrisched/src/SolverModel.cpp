@@ -73,6 +73,11 @@ uint32_t VariableT<T>::getId() const {
   return variableId;
 }
 
+template <typename T>
+std::optional<T> VariableT<T>::getValue() const {
+  return solutionValue;
+}
+
 /*
  * Methods for Constraint.
  * These methods provide an implementation of the Constraint class.

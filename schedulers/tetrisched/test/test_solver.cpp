@@ -8,9 +8,9 @@
 #ifdef _TETRISCHED_WITH_GUROBI_
 #include "tetrisched/GurobiSolver.hpp"
 #endif  //_TETRISCHED_WITH_GUROBI_
-// #ifdef _TETRISCHED_WITH_OR_TOOLS_
-// #endif  //_TETRISCHED_WITH_OR_TOOLS_
+#ifdef _TETRISCHED_WITH_OR_TOOLS_
 #include "tetrisched/GoogleCPSolver.hpp"
+#endif  //_TETRISCHED_WITH_OR_TOOLS_
 #include "tetrisched/Solver.hpp"
 #include "tetrisched/SolverModel.hpp"
 
@@ -50,7 +50,8 @@ TEST(SolverModelTypes, TestObjectiveFnConstruction) {
   EXPECT_EQ(objectiveFn.size(), 1);
 }
 
-void constructModel(tetrisched::SolverModelPtr& solverModelPtr) {
+tetrisched::VariablePtr constructModel(
+    tetrisched::SolverModelPtr& solverModelPtr) {
   auto intVar = std::make_shared<tetrisched::Variable>(tetrisched::VAR_INTEGER,
                                                        "intVar", 0, 100);
   solverModelPtr->addVariable(intVar);
@@ -63,6 +64,7 @@ void constructModel(tetrisched::SolverModelPtr& solverModelPtr) {
       tetrisched::ObjectiveType::OBJ_MAXIMIZE);
   objectiveFunction->addTerm(1, intVar);
   solverModelPtr->setObjectiveFunction(std::move(objectiveFunction));
+  return intVar;
 }
 
 #ifdef _TETRISCHED_WITH_CPLEX_
@@ -94,7 +96,7 @@ TEST(SolverModelTypes, TestSolverModel) {
 TEST(SolverModel, TestCPLEXSolverTranslation) {
   tetrisched::CPLEXSolver cplexSolver;
   auto solverModelPtr = cplexSolver.getModel();
-  constructModel(solverModelPtr);
+  auto intVar = constructModel(solverModelPtr);
   solverModelPtr->exportModel("test_solvermodel.lp");
   EXPECT_TRUE(std::filesystem::exists("test_solvermodel.lp"))
       << "The file test_solvermodel.lp was not created.";
@@ -104,6 +106,14 @@ TEST(SolverModel, TestCPLEXSolverTranslation) {
   EXPECT_TRUE(std::filesystem::exists("test_cplexmodel.lp"))
       << "The file test_cplexmodel.lp was not created.";
   std::filesystem::remove("test_cplexmodel.lp");
+
+  // Solve the model.
+  cplexSolver.solveModel();
+
+  // Check if solution is correct.
+  auto solutionValue = intVar->getValue();
+  EXPECT_TRUE(solutionValue.has_value()) << "No solution found.";
+  EXPECT_EQ(solutionValue.value(), 2) << "Solution is not correct.";
 }
 #endif  //_TETRISCHED_WITH_CPLEX_
 

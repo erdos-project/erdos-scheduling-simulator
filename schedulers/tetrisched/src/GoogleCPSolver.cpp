@@ -162,4 +162,8 @@ void GoogleCPSolver::exportModel(const std::string& fileName) {
   cpModel->ExportToFile(fileName);
 }
 
+void GoogleCPSolver::solveModel() {
+  throw exceptions::SolverException("Not implemented yet!");
+}
+
 }  // namespace tetrisched

@@ -43,6 +43,9 @@ class VariableT {
   /// An optional upper-bound for the variable.
   /// If unspecified, the solver will choose the upper bound for the given T.
   std::optional<T> upperBound;
+  /// An optional solution value for the variable.
+  /// If unspecified, the solver has not found a solution for this problem yet.
+  std::optional<T> solutionValue;
   /// Checks if the VariableType is valid.
   /// Throws an exception if the VariableType is invalid.
   /// Returns the type if it is valid.
@@ -77,6 +80,11 @@ class VariableT {
 
   /// Retrieve the ID of this VariableT.
   uint32_t getId() const;
+
+  /// Retrieve the solution value for this VariableT.
+  /// If the solution value is not set, then the solver hasn't found a solution
+  /// (yet).
+  std::optional<T> getValue() const;
 
   /// Annotate friend classes for Solvers so that they have access to internals.
   friend tetrisched::CPLEXSolver;

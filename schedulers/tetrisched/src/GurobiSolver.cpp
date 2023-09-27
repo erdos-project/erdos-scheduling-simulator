@@ -133,5 +133,8 @@ void GurobiSolver::translateModel() {
 void GurobiSolver::exportModel(const std::string& fileName) {
   gurobiModel->write(fileName);
 }
-}  // namespace tetrisched
 
+void GurobiSolver::solveModel() {
+  throw exceptions::SolverException("Not implemented yet!");
+}
+}  // namespace tetrisched

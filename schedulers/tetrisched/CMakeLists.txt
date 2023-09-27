@@ -67,7 +67,7 @@ endif()
 
 if (EXISTS "${ORTOOLS_DIR}")
      message("-- Adding Google OR-Tools : ${ORTOOLS_DIR}")
-     add_compile_definitions(_TETRISCHED_WITH_ORTOOLS_)
+     add_compile_definitions(_TETRISCHED_WITH_OR_TOOLS_)
 
      set(ORTOOLS_LINK_LIBRARIES
 	     "ortools")

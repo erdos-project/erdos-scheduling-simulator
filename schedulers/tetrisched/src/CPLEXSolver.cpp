@@ -194,6 +194,38 @@ void CPLEXSolver::translateModel() {
 void CPLEXSolver::exportModel(const std::string& fname) {
   cplexInstance.exportModel(fname.c_str());
 }
+
+void CPLEXSolver::solveModel() {
+  cplexInstance.solve();
+
+  // Retrieve all the variables from the CPLEX model into the SolverModel.
+  for (const auto& [variableId, variable] : solverModel->variables) {
+    if (cplexVariables.find(variableId) == cplexVariables.end()) {
+      throw tetrisched::exceptions::SolverException(
+          "Variable " + variable->getName() + " not found in CPLEX model.");
+    }
+    switch (variable->variableType) {
+      case tetrisched::VariableType::VAR_INTEGER:
+        variable->solutionValue = cplexInstance.getValue(
+            std::get<IloIntVar>(cplexVariables.at(variableId)));
+        break;
+      case tetrisched::VariableType::VAR_CONTINUOUS:
+        variable->solutionValue = cplexInstance.getValue(
+            std::get<IloNumVar>(cplexVariables.at(variableId)));
+        break;
+      case tetrisched::VariableType::VAR_INDICATOR:
+        variable->solutionValue = cplexInstance.getValue(
+            std::get<IloBoolVar>(cplexVariables.at(variableId)));
+        break;
+      default:
+        throw tetrisched::exceptions::SolverException(
+            "Unsupported variable type: " + variable->variableType);
+    }
+  }
+}
+
+CPLEXSolver::~CPLEXSolver() { cplexEnv.end(); }
+
 }  // namespace tetrisched
 // // Spend at least timeLimit sec. on optimization, but once
 // // this limit is reached, quit as soon as the solution is acceptable
