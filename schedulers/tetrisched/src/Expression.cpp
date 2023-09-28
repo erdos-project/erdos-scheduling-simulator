@@ -181,6 +181,10 @@ void ChooseExpression::addChild(ExpressionPtr child) {
       "ChooseExpression cannot have a child.");
 }
 
+int ChooseExpression::getNumChildren(){
+  return 0;
+}
+
 ParseResultPtr ChooseExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMap& capacityConstraints, Time currentTime) {
@@ -272,6 +276,9 @@ ObjectiveExpression::ObjectiveExpression(ObjectiveType objectiveType)
 void ObjectiveExpression::addChild(ExpressionPtr child) {
   children.push_back(std::move(child));
 }
+int ObjectiveExpression::getNumChildren(){
+  return children.size();
+}
 
 ParseResultPtr ObjectiveExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
@@ -295,11 +302,9 @@ ParseResultPtr ObjectiveExpression::parse(
       ParseResult{.type = ParseResultType::EXPRESSION_NO_UTILITY});
 }
 
-MinExpression::MinExpression(ExpressionPtr child) {
-  children.push_back(std::move(child));
-}
+MinExpression::MinExpression(std::string name): expressionName(name) {}
 
-int MinExpression::GetNumChildren() { return children.size(); }
+int MinExpression::getNumChildren() { return children.size(); }
 
 void MinExpression::addChild(ExpressionPtr newchld) {
   children.push_back(std::move(newchld));
@@ -313,93 +318,73 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
   parsedResult = std::make_shared<ParseResult>();
 
   int num_children = children.size();
-
-  // This indicator variable is to ensure all children's indicator's variable
-  // are satisfied.
-  VariablePtr isSatisfiedVar =
-      std::make_shared<Variable>(VariableType::VAR_INDICATOR, "MIN_INDICATOR");
-
-  // sum(all_child_indicator_variables) = num_children
-  ConstraintPtr fulfillsAllChildren = std::make_unique<Constraint>(
-      "MIN_FULFILL_CONSTR", ConstraintType::CONSTR_EQ, 0);
-
+  if (num_children == 0){
+    throw tetrisched::exceptions::ExpressionSolutionException(
+        "Number of children should be >=1 for MIN");
+  }
   // start time of MIN
-  VariablePtr min_start_time = std::make_shared<Variable>(
-      VariableType::VAR_CONTINUOUS, "MIN_START_TIME");
+  VariablePtr minStartTime = std::make_shared<Variable>(
+      VariableType::VAR_INTEGER, expressionName + "_MIN_START_TIME");
 
   // end time of MIN
-  VariablePtr min_end_time =
-      std::make_shared<Variable>(VariableType::VAR_CONTINUOUS, "MIN_END_TIME");
+  VariablePtr minEndTime =
+      std::make_shared<Variable>(VariableType::VAR_INTEGER, expressionName + "_MIN_END_TIME");
 
   // Utility of MIN operator
-  auto min_utility =
+  auto minUtility =
       std::make_unique<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
   VariablePtr min_variable = std::make_shared<Variable>(
-      VariableType::VAR_CONTINUOUS, "MIN_UTILITY_VARIABLE");
+      VariableType::VAR_INTEGER, expressionName + "_MIN_UTILITY_VARIABLE");
 
   for (int i = 0; i < num_children; i++) {
-    auto child_parsed_result = children[i]->parse(
+    auto childParsedResult = children[i]->parse(
         solverModel, availablePartitions, capacityConstraints, currentTime);
-    ConstraintPtr min_start_time_constraint = std::make_unique<Constraint>(
-        "MIN_START_TIME_CONSTR_CHILD_" + std::to_string(i),
-        ConstraintType::CONSTR_GE, 0);  // min_start_time < child_start_time
-    if (child_parsed_result->startTime.has_value()) {
-      auto child_start_time = child_parsed_result->startTime.value();
-      if (child_start_time.isVariable()) {
-        min_start_time_constraint->addTerm(1, child_start_time.get<VariablePtr>());
+    ConstraintPtr minStartTimeConstraint = std::make_unique<Constraint>(
+        expressionName + "_MIN_START_TIME_CONSTR_CHILD_" + std::to_string(i),
+        ConstraintType::CONSTR_GE, 0); // minStartTime < childStartTime
+    if (childParsedResult->startTime.has_value()) {
+      auto childStartTime = childParsedResult->startTime.value();
+      if (childStartTime.isVariable()) {
+        minStartTimeConstraint->addTerm(1, childStartTime.get<VariablePtr>());
       } else {
-        min_start_time_constraint->addTerm(child_start_time.get<Time>());
+        minStartTimeConstraint->addTerm(childStartTime.get<Time>());
       }
-      min_start_time_constraint->addTerm(-1, min_start_time);
+      minStartTimeConstraint->addTerm(-1, minStartTime);
       // Add the constraint to solver
-      solverModel->addConstraint(std::move(min_start_time_constraint));
+      solverModel->addConstraint(std::move(minStartTimeConstraint));
     }
-    // constraint of end time: child_end_time <= min_end_time
-    ConstraintPtr min_end_time_constraint = std::make_unique<Constraint>(
-        "MIN_END_TIME_CONSTR_CHILD_" + std::to_string(i),
+    // constraint of end time: childEndTime <= minEndTime
+    ConstraintPtr minEndTimeConstraint = std::make_unique<Constraint>(
+        expressionName + "_MIN_END_TIME_CONSTR_CHILD_" + std::to_string(i),
         ConstraintType::CONSTR_LE, 0);
-    if (child_parsed_result->endTime.has_value()) {
-      auto child_end_time = child_parsed_result->endTime.value();
-      if (child_end_time.isVariable()) {
-        min_end_time_constraint->addTerm(1, child_end_time.get<VariablePtr>());
+    if (childParsedResult->endTime.has_value()) {
+      auto childEndTime = childParsedResult->endTime.value();
+      if (childEndTime.isVariable()) {
+        minEndTimeConstraint->addTerm(1, childEndTime.get<VariablePtr>());
       } else {
-        min_end_time_constraint->addTerm(child_end_time.get<Time>());
+        minEndTimeConstraint->addTerm(childEndTime.get<Time>());
       }
-      min_end_time_constraint->addTerm(-1, min_end_time);
+      minEndTimeConstraint->addTerm(-1, minEndTime);
       // Add the constraint to solver
-      solverModel->addConstraint(std::move(min_end_time_constraint));
+      solverModel->addConstraint(std::move(minEndTimeConstraint));
     }
 
-     if (child_parsed_result->utility.has_value()) {
+     if (childParsedResult->utility.has_value()) {
        // child_utility - minUVar >= 0
-       auto child_utility_constr = std::unique_ptr<Constraint>(
-           child_parsed_result->utility.value()->toConstraint(
-               "MIN_UTILITY_CONSTRAINT_CHILD_" + std::to_string(i),
-               ConstraintType::CONSTR_GE, 0));
-       child_utility_constr->addTerm(-1, min_variable);
-       solverModel->addConstraint(std::move(child_utility_constr));
-     }
-
-     if (child_parsed_result->indicator.has_value()) {
-       auto child_indicator = child_parsed_result->indicator.value();
-       if (child_indicator.isVariable()) {
-        fulfillsAllChildren->addTerm(1, child_indicator.get<VariablePtr>());
-       } else {
-        fulfillsAllChildren->addTerm(child_indicator.get<uint32_t>());
-       }
+       auto childUtilityConstr = childParsedResult->utility.value()->toConstraint(
+           expressionName + "_MIN_UTILITY_CONSTRAINT_CHILD_" + std::to_string(i),
+           ConstraintType::CONSTR_GE, 0);
+       childUtilityConstr->addTerm(-1, min_variable);
+       solverModel->addConstraint(std::move(childUtilityConstr));
      }
   }
-
-  fulfillsAllChildren->addTerm(-1 * num_children, isSatisfiedVar);
-  solverModel->addConstraint(std::move(fulfillsAllChildren));
   // MinU = Max(MinUVar)
-  min_utility->addTerm(1, min_variable);
+  minUtility->addTerm(1, min_variable);
 
   parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
-  parsedResult->startTime = min_start_time;
-  parsedResult->endTime = min_end_time;
-  parsedResult->indicator = isSatisfiedVar;
-  parsedResult->utility = std::move(min_utility);
+  parsedResult->startTime = minStartTime;
+  parsedResult->endTime = minEndTime;
+  parsedResult->utility = std::move(minUtility);
   return parsedResult;
 }
 

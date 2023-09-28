@@ -33,5 +33,5 @@ TEST(Expression, TestMinExpressionIsNOTLeaf) {
       std::make_unique<tetrisched::MinExpression>();
   minExpression->addChild(std::move(chooseExpression2));
   minExpression->addChild(std::move(chooseExpression));
-  EXPECT_TRUE(minExpression->GetNumChildren() == 2);
+  EXPECT_TRUE(minExpression->getNumChildren() == 2);
 }

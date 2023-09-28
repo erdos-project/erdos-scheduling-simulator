@@ -143,8 +143,10 @@ class Expression {
   /// The parsed result from the Expression.
   /// Used for retrieving the solution from the solver.
   ParseResultPtr parsedResult;
+  /// The children of this Expression.
+  std::vector<ExpressionPtr> children;
 
- public:
+public:
   /// Default construct the base class.
   Expression() = default;
 
@@ -161,6 +163,9 @@ class Expression {
                                Partitions availablePartitions,
                                CapacityConstraintMap& capacityConstraints,
                                Time currentTime) = 0;
+  
+  // returns the number of children in this expression
+  virtual int getNumChildren() = 0;
 
   /// Solves the subtree rooted at this Expression and returns the solution.
   /// It assumes that the SolverModelPtr has been populated with values for
@@ -195,10 +200,11 @@ class ChooseExpression : public Expression {
   ChooseExpression(TaskPtr associatedTask, Partitions resourcePartitions,
                    uint32_t numRequiredMachines, Time startTime, Time duration);
   void addChild(ExpressionPtr child) override;
+  virtual int getNumChildren() override;
   ParseResultPtr parse(SolverModelPtr solverModel,
-                       Partitions availablePartitions,
-                       CapacityConstraintMap& capacityConstraints,
-                       Time currentTime) override;
+                           Partitions availablePartitions,
+                           CapacityConstraintMap &capacityConstraints,
+                           Time currentTime) override;
 };
 
 /// An `ObjectiveExpression` collates the objectives from its children and
@@ -213,6 +219,7 @@ class ObjectiveExpression : public Expression {
  public:
   ObjectiveExpression(ObjectiveType objectiveType);
   void addChild(ExpressionPtr child) override;
+  virtual int getNumChildren() override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
                        CapacityConstraintMap& capacityConstraints,
@@ -221,22 +228,20 @@ class ObjectiveExpression : public Expression {
 
 class MinExpression: public Expression {
 protected:
-    MinExpression(ExpressionPtr  child);
+    MinExpression(std::string name);
 
     /// The sense of this Expression.
     ObjectiveType objectiveType;
-    /// The children of this Expression.
-    std::vector<ExpressionPtr> children;
+    std::string expressionName;
 
 public:
-
-    MinExpression(){}
-    virtual ~MinExpression() {}
-    virtual void addChild(ExpressionPtr newchld);    //appends new chld to
-    int GetNumChildren();
-    ParseResultPtr parse(SolverModelPtr solverModel, Partitions availablePartitions,
-                    CapacityConstraintMap& capacityConstraints,
-                    Time currentTime) override;
+  MinExpression() : expressionName("") {}
+  virtual ~MinExpression() {}
+  virtual void addChild(ExpressionPtr newchld) override; // appends new chld to
+  virtual int getNumChildren() override;
+  ParseResultPtr parse(SolverModelPtr solverModel, Partitions availablePartitions,
+                       CapacityConstraintMap &capacityConstraints,
+                       Time currentTime) override;
 };
 
 }  // namespace tetrisched
