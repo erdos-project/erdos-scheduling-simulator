@@ -44,6 +44,17 @@ X XOrVariableT<X>::resolve() const {
   }
 }
 
+template <typename X>
+bool XOrVariableT<X>::isVariable() const {
+  return std::holds_alternative<VariablePtr>(value);
+}
+
+template <typename X>
+template <typename T>
+T XOrVariableT<X>::get() const {
+  return std::get<T>(value);
+}
+
 void CapacityConstraintMap::registerUsageAtTime(const Partition& partition,
                                                 Time time,
                                                 VariablePtr variable) {

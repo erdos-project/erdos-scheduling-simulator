@@ -54,6 +54,13 @@ class XOrVariableT {
 
   /// Resolves the value inside this class.
   X resolve() const;
+
+  /// Checks if the class contains a Variable.
+  bool isVariable() const;
+
+  /// Returns the (unresolved) value in the container.
+  template <typename T>
+  T get() const;
 };
 
 /// A `ParseResult` class represents the result of parsing an expression.
