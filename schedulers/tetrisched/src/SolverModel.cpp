@@ -168,6 +168,16 @@ void ObjectiveFunctionT<T>::addTerm(T coefficient,
 }
 
 template <typename T>
+std::unique_ptr<ConstraintT<T>> ObjectiveFunctionT<T>::toConstraint(std::string constraintName, ConstraintType constraintType, T rightHandSide)
+{
+  auto constraint = std::make_unique<ConstraintT<T>>(constraintName, constraintType, rightHandSide);
+  for (auto &term : terms){
+    constraint->addTerm(term);
+  }
+  return constraint;
+}
+
+template <typename T>
 std::string ObjectiveFunctionT<T>::toString() const {
   std::string objectiveString;
   switch (objectiveType) {

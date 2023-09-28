@@ -143,8 +143,10 @@ class Expression {
   /// The parsed result from the Expression.
   /// Used for retrieving the solution from the solver.
   ParseResultPtr parsedResult;
+  /// The children of this Expression.
+  std::vector<ExpressionPtr> children;
 
- public:
+public:
   /// Default construct the base class.
   Expression() = default;
 
@@ -161,6 +163,9 @@ class Expression {
                                Partitions availablePartitions,
                                CapacityConstraintMap& capacityConstraints,
                                Time currentTime) = 0;
+  
+  // returns the number of children in this expression
+  virtual size_t getNumChildren() = 0;
 
   /// Solves the subtree rooted at this Expression and returns the solution.
   /// It assumes that the SolverModelPtr has been populated with values for
@@ -195,27 +200,42 @@ class ChooseExpression : public Expression {
   ChooseExpression(TaskPtr associatedTask, Partitions resourcePartitions,
                    uint32_t numRequiredMachines, Time startTime, Time duration);
   void addChild(ExpressionPtr child) override;
+  virtual size_t getNumChildren() override;
   ParseResultPtr parse(SolverModelPtr solverModel,
-                       Partitions availablePartitions,
-                       CapacityConstraintMap& capacityConstraints,
-                       Time currentTime) override;
+                           Partitions availablePartitions,
+                           CapacityConstraintMap &capacityConstraints,
+                           Time currentTime) override;
 };
 
 /// An `ObjectiveExpression` collates the objectives from its children and
 /// informs the SolverModel of the objective function.
 class ObjectiveExpression : public Expression {
  private:
-  /// The sense of this Expression.
-  ObjectiveType objectiveType;
   /// The children of this Expression.
   std::vector<ExpressionPtr> children;
 
  public:
-  ObjectiveExpression(ObjectiveType objectiveType);
+  ObjectiveExpression();
   void addChild(ExpressionPtr child) override;
+  virtual size_t getNumChildren() override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
                        CapacityConstraintMap& capacityConstraints,
+                       Time currentTime) override;
+};
+
+class MinExpression: public Expression {
+protected:
+    
+    std::string expressionName;
+
+public:
+  MinExpression(std::string name);
+  virtual ~MinExpression() {}
+  virtual void addChild(ExpressionPtr child) override;
+  virtual size_t getNumChildren() override;
+  ParseResultPtr parse(SolverModelPtr solverModel, Partitions availablePartitions,
+                       CapacityConstraintMap &capacityConstraints,
                        Time currentTime) override;
 };
 
@@ -553,29 +573,7 @@ class ObjectiveExpression : public Expression {
 // //     virtual string toString() {return child->toString();}
 // // };
 
-// // class NnaryOperator: public Expression {
-// // protected:
-// //     vector<ExpressionPtr> chldarr;
-// //     bool homogeneous_children_nodes;
 
-// //     bool cache_dirty = true; // This is not related to cacheNodeResults
-// // private:
-// //     // cache fields
-// //     pair<int, int> startTimeRangeCache = make_pair(INT_MAX, INT_MIN);
-
-// // public:
-// //     NnaryOperator(bool _homogeneous_children_nodes = false)
-// //             : homogeneous_children_nodes(_homogeneous_children_nodes) {}
-// //     virtual ~NnaryOperator() {}
-// //     virtual void clearMarkers();
-// //     virtual void addChild(ExpressionPtr newchld);    //appends new chld to
-// //     chldarr virtual ExpressionPtr removeChild(const ExpressionPtr &chld);
-// //     virtual void getEquivClasses(EquivClassSet& equivClasses);
-// //     virtual void populatePartitions(const vector<int> &node2part, int
-// //     curtime, int sched_horizon);
-
-// //     pair<int, int> startTimeRange();
-// // };
 // // class MinExpression: public NnaryOperator {
 // // private:
 // //     double cached_minU; // decision variable cache -- owned by
