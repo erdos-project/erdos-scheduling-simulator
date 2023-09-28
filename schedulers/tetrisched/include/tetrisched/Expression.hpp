@@ -66,7 +66,6 @@ class XOrVariableT {
 /// A `ParseResult` class represents the result of parsing an expression.
 struct ParseResult {
   using TimeOrVariableT = XOrVariableT<Time>;
-  using IndicatorT = XOrVariableT<uint32_t>;
   /// The type of the result.
   ParseResultType type;
   /// The start time associated with the parsed result.
@@ -75,13 +74,8 @@ struct ParseResult {
   /// The end time associated with the parsed result.
   /// Can be either a Time known at runtime or a pointer to a Solver variable.
   std::optional<TimeOrVariableT> endTime;
-  /// The indicator associated with the parsed result.
-  /// This indicator denotes if the expression was satisfied or not.
-  /// The indicator can return an integer if it is trivially satisfied during
-  /// parsing. Note that the startTime and endTime are only valid if the
-  /// indicator is 1.
-  std::optional<IndicatorT> indicator;
   /// The utility associated with the parsed result.
+  /// The utility is positive if the expression was satisfied, and 0 otherwise.
   std::optional<ObjectiveFunctionPtr> utility;
 };
 using ParseResultPtr = std::shared_ptr<ParseResult>;
@@ -95,8 +89,6 @@ struct SolutionResult {
   std::optional<Time> startTime;
   /// The end time associated with the result.
   std::optional<Time> endTime;
-  /// The value of the indicator associated with the result.
-  std::optional<uint32_t> indicator;
   /// The utility associated with the result.
   std::optional<TETRISCHED_ILP_TYPE> utility;
 };
@@ -123,6 +115,10 @@ class CapacityConstraintMap {
                      PartitionTimePairHasher>
       capacityConstraints;
 
+  /// The ObjectiveExpression is allowed to translate this map.
+  void translate(SolverModelPtr solverModel);
+  friend class ObjectiveExpression;
+
  public:
   CapacityConstraintMap() {}
   void registerUsageAtTime(const Partition& partition, Time time,
@@ -135,6 +131,7 @@ class CapacityConstraintMap {
   void registerUsageForDuration(const Partition& partition, Time startTime,
                                 Time duration, uint32_t usage,
                                 Time granularity = 1);
+  size_t size() const;
 };
 
 /// A Base Class for all expressions in the STRL language.
@@ -266,6 +263,25 @@ class ScaleExpression : public Expression {
 
  public:
   ScaleExpression(std::string name, TETRISCHED_ILP_TYPE scaleFactor);
+  void addChild(ExpressionPtr child) override;
+  ParseResultPtr parse(SolverModelPtr solverModel,
+                       Partitions availablePartitions,
+                       CapacityConstraintMap& capacityConstraints,
+                       Time currentTime) override;
+};
+
+/// A `LessThanExpression` orders the two children of its expression in an
+/// ordered relationship such that the second child occurs after the first
+/// child.
+class LessThanExpression : public Expression {
+ private:
+  /// The name for this Expression.
+  std::string name;
+  /// The children of this Expression.
+  std::vector<ExpressionPtr> children;
+
+ public:
+  LessThanExpression(std::string name);
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,

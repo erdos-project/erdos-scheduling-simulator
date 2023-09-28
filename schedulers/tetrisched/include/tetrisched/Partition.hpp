@@ -23,6 +23,7 @@ class Partition {
 
   /// Constructs a Partition with a collection of Workers.
   Partition(std::vector<WorkerPtr>& workers);
+  Partition(std::initializer_list<WorkerPtr> workers);
 
   /// Add a Worker to this Partition.
   void addWorker(WorkerPtr worker);
@@ -61,6 +62,7 @@ class Partitions {
 
   /// Constructs a Partitions object with a collection of Partitions.
   Partitions(std::vector<PartitionPtr>& partitions);
+  Partitions(std::initializer_list<PartitionPtr> partitions);
 
   /// Add a Partition to this Partitions object.
   void addPartition(PartitionPtr partition);

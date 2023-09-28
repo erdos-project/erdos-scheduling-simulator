@@ -141,6 +141,10 @@ class ConstraintT {
   /// Adds a constant term to the left-hand side constraint.
   void addTerm(T constant);
 
+  /// Adds a variable term to the left-hand side of the constraint
+  /// with the coefficient of 1.
+  void addTerm(std::shared_ptr<VariableT<T>> variable);
+
   /// Retrieve a string representation of this Constraint.
   std::string toString() const;
 
@@ -187,6 +191,8 @@ class ObjectiveFunctionT {
   ObjectiveType objectiveType;
 
  public:
+  ObjectiveFunctionT(const ObjectiveFunctionT& other) = default;
+
   /// Generate a new objective function with the given type.
   ObjectiveFunctionT(ObjectiveType objectiveType);
 

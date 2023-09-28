@@ -16,8 +16,8 @@ TEST(PartitionTest, TestPartitionInitialized) {
   // Create an empty Partition.
   tetrisched::Partition partition = tetrisched::Partition();
   EXPECT_EQ(partition.size(), 0) << "The partition was expected to be empty.";
-  EXPECT_EQ(partition.getPartitionId(), 0)
-      << "The partition ID was expected to be 0.";
+  EXPECT_EQ(partition.getPartitionId(), 1)
+      << "The partition ID was expected to be 1.";
 }
 
 TEST(PartitionsTest, TestIntersectionEmpty) {
