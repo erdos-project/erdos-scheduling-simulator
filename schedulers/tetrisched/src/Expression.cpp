@@ -323,25 +323,25 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
   }
   // start time of MIN
   VariablePtr minStartTime = std::make_shared<Variable>(
-      VariableType::VAR_INTEGER, expressionName + "_MIN_START_TIME");
+      VariableType::VAR_INTEGER, expressionName + "_min_start_time");
   solverModel->addVariable(minStartTime);
 
   // end time of MIN
-  VariablePtr minEndTime = std::make_shared<Variable>(VariableType::VAR_INTEGER, expressionName + "_MIN_END_TIME");
+  VariablePtr minEndTime = std::make_shared<Variable>(VariableType::VAR_INTEGER, expressionName + "_min_end_time");
   solverModel->addVariable(minEndTime);
 
   // Utility of MIN operator
   auto minUtility =
       std::make_unique<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
   VariablePtr minUtilityVariable = std::make_shared<Variable>(
-      VariableType::VAR_INTEGER, expressionName + "_MIN_UTILITY_VARIABLE");
+      VariableType::VAR_INTEGER, expressionName + "_min_utility_variable");
   solverModel->addVariable(minUtilityVariable);
 
   for (int i = 0; i < numChildren; i++) {
     auto childParsedResult = children[i]->parse(
         solverModel, availablePartitions, capacityConstraints, currentTime);
     ConstraintPtr minStartTimeConstraint = std::make_unique<Constraint>(
-        expressionName + "_MIN_START_TIME_CONSTR_CHILD_" + std::to_string(i),
+        expressionName + "_min_start_time_constr_child_" + std::to_string(i),
         ConstraintType::CONSTR_GE, 0); // minStartTime < childStartTime
     if (childParsedResult->startTime.has_value()) {
       auto childStartTime = childParsedResult->startTime.value();
@@ -359,7 +359,7 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
     }
     // constraint of end time: childEndTime <= minEndTime
     ConstraintPtr minEndTimeConstraint = std::make_unique<Constraint>(
-        expressionName + "_MIN_END_TIME_CONSTR_CHILD_" + std::to_string(i),
+        expressionName + "_min_end_time_constr_child_" + std::to_string(i),
         ConstraintType::CONSTR_LE, 0);
     if (childParsedResult->endTime.has_value()) {
       auto childEndTime = childParsedResult->endTime.value();
@@ -379,7 +379,7 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
     if (childParsedResult->utility.has_value()) {
       // child_utility - minUVar >= 0
       auto childUtilityConstr = childParsedResult->utility.value()->toConstraint(
-          expressionName + "_MIN_UTILITY_CONSTRAINT_CHILD_" + std::to_string(i),
+          expressionName + "_min_utility_constraint_child_" + std::to_string(i),
           ConstraintType::CONSTR_GE, 0);
       childUtilityConstr->addTerm(-1, minUtilityVariable);
       solverModel->addConstraint(std::move(childUtilityConstr));
