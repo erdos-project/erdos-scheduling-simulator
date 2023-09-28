@@ -15,6 +15,13 @@ Partition::Partition(std::vector<WorkerPtr>& workers)
   }
 }
 
+Partition::Partition(std::initializer_list<WorkerPtr> workers)
+    : partitionId(partitionIdCounter++) {
+  for (auto worker : workers) {
+    this->workers[worker->getWorkerId()] = worker;
+  }
+}
+
 /// Add a Worker to this Partition.
 void Partition::addWorker(WorkerPtr worker) {
   workers[worker->getWorkerId()] = worker;
@@ -36,6 +43,12 @@ Partitions::Partitions() {}
 
 /// Constructs a Partitions object with a collection of Partitions.
 Partitions::Partitions(std::vector<PartitionPtr>& partitions) {
+  for (auto partition : partitions) {
+    this->partitions[partition->getPartitionId()] = partition;
+  }
+}
+
+Partitions::Partitions(std::initializer_list<PartitionPtr> partitions) {
   for (auto partition : partitions) {
     this->partitions[partition->getPartitionId()] = partition;
   }
@@ -64,7 +77,7 @@ size_t Partitions::size() const { return partitions.size(); }
 /// Returns the Partitions in this Partitions object.
 std::vector<PartitionPtr> Partitions::getPartitions() const {
   std::vector<PartitionPtr> partitionsVec;
-  for (auto &partition : partitions) {
+  for (auto& partition : partitions) {
     partitionsVec.push_back(partition.second);
   }
   return partitionsVec;

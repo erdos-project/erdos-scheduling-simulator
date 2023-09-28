@@ -141,6 +141,10 @@ class ConstraintT {
   /// Adds a constant term to the left-hand side constraint.
   void addTerm(T constant);
 
+  /// Adds a variable term to the left-hand side of the constraint
+  /// with the coefficient of 1.
+  void addTerm(std::shared_ptr<VariableT<T>> variable);
+
   /// Retrieve a string representation of this Constraint.
   std::string toString() const;
 
@@ -183,6 +187,8 @@ class ObjectiveFunctionT {
   ObjectiveType objectiveType;
 
  public:
+  ObjectiveFunctionT(const ObjectiveFunctionT& other) = default;
+
   /// Generate a new objective function with the given type.
   ObjectiveFunctionT(ObjectiveType objectiveType);
 
@@ -200,6 +206,11 @@ class ObjectiveFunctionT {
 
   /// Retrieves the value of the utility of this ObjectiveFunction.
   T getValue() const;
+
+  /// Converts the ObjectiveFunction to a Constraint.
+  std::unique_ptr<ConstraintT<T>> toConstraint(std::string constraintName,
+                                               ConstraintType constraintType,
+                                               T rightHandSide) const;
 
   /// Annotate friend classes for Solvers so that they have access to internals.
   friend tetrisched::CPLEXSolver;

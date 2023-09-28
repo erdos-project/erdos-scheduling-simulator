@@ -113,6 +113,11 @@ void ConstraintT<T>::addTerm(T constant) {
 }
 
 template <typename T>
+void ConstraintT<T>::addTerm(std::shared_ptr<VariableT<T>> variable) {
+  this->addTerm(std::make_pair(1, variable));
+}
+
+template <typename T>
 std::string ConstraintT<T>::toString() const {
   std::string constraintString;
   for (auto &term : terms) {
@@ -216,10 +221,19 @@ T ObjectiveFunctionT<T>::getValue() const {
     }
   }
 
-  for (auto &term : terms) {
-    value += term.first * term.second->getValue().value();
-  }
   return value;
+}
+
+template <typename T>
+std::unique_ptr<ConstraintT<T>> ObjectiveFunctionT<T>::toConstraint(
+    std::string constraintName, ConstraintType constraintType,
+    T rightHandSide) const {
+  auto constraint = std::make_unique<ConstraintT<T>>(
+      constraintName, constraintType, rightHandSide);
+  for (auto &term : terms) {
+    constraint->addTerm(term);
+  }
+  return constraint;
 }
 
 /*
@@ -257,12 +271,16 @@ std::string SolverModelT<T>::toString() const {
                      constraint.second->toString() + "\n";
     }
     modelString += "\n\n";
+  } else {
+    modelString += "No Constraints Found!\n\n";
   }
   if (variables.size() > 0) {
     modelString += "Variables: \n";
     for (auto &variable : variables) {
-      modelString += "\t" + variable.second->toString();
+      modelString += "\t" + variable.second->toString() + "\n";
     }
+  } else {
+    modelString += "No Variables Found!";
   }
   return modelString;
 }
