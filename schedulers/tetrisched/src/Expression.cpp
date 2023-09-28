@@ -181,7 +181,7 @@ void ChooseExpression::addChild(ExpressionPtr child) {
       "ChooseExpression cannot have a child.");
 }
 
-int ChooseExpression::getNumChildren(){
+size_t ChooseExpression::getNumChildren(){
   return 0;
 }
 
@@ -275,7 +275,7 @@ ObjectiveExpression::ObjectiveExpression() {}
 void ObjectiveExpression::addChild(ExpressionPtr child) {
   children.push_back(std::move(child));
 }
-int ObjectiveExpression::getNumChildren(){
+size_t ObjectiveExpression::getNumChildren(){
   return children.size();
 }
 
@@ -303,7 +303,7 @@ ParseResultPtr ObjectiveExpression::parse(
 
 MinExpression::MinExpression(std::string name): expressionName(name) {}
 
-int MinExpression::getNumChildren() { return children.size(); }
+size_t MinExpression::getNumChildren() { return children.size(); }
 
 void MinExpression::addChild(ExpressionPtr child) {
   children.push_back(std::move(child));

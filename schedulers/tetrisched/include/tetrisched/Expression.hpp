@@ -165,7 +165,7 @@ public:
                                Time currentTime) = 0;
   
   // returns the number of children in this expression
-  virtual int getNumChildren() = 0;
+  virtual size_t getNumChildren() = 0;
 
   /// Solves the subtree rooted at this Expression and returns the solution.
   /// It assumes that the SolverModelPtr has been populated with values for
@@ -200,7 +200,7 @@ class ChooseExpression : public Expression {
   ChooseExpression(TaskPtr associatedTask, Partitions resourcePartitions,
                    uint32_t numRequiredMachines, Time startTime, Time duration);
   void addChild(ExpressionPtr child) override;
-  virtual int getNumChildren() override;
+  virtual size_t getNumChildren() override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                            Partitions availablePartitions,
                            CapacityConstraintMap &capacityConstraints,
@@ -217,7 +217,7 @@ class ObjectiveExpression : public Expression {
  public:
   ObjectiveExpression();
   void addChild(ExpressionPtr child) override;
-  virtual int getNumChildren() override;
+  virtual size_t getNumChildren() override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
                        CapacityConstraintMap& capacityConstraints,
@@ -233,7 +233,7 @@ public:
   MinExpression(std::string name);
   virtual ~MinExpression() {}
   virtual void addChild(ExpressionPtr child) override;
-  virtual int getNumChildren() override;
+  virtual size_t getNumChildren() override;
   ParseResultPtr parse(SolverModelPtr solverModel, Partitions availablePartitions,
                        CapacityConstraintMap &capacityConstraints,
                        Time currentTime) override;
