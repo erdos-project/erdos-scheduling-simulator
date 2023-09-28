@@ -270,8 +270,7 @@ ParseResultPtr ChooseExpression::parse(
   return parsedResult;
 }
 
-ObjectiveExpression::ObjectiveExpression(ObjectiveType objectiveType)
-    : objectiveType(objectiveType) {}
+ObjectiveExpression::ObjectiveExpression() {}
 
 void ObjectiveExpression::addChild(ExpressionPtr child) {
   children.push_back(std::move(child));
@@ -284,7 +283,7 @@ ParseResultPtr ObjectiveExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMap& capacityConstraints, Time currentTime) {
   // Construct the overall utility of this expression.
-  auto utility = std::make_unique<ObjectiveFunction>(objectiveType);
+  auto utility = std::make_unique<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
 
   // Parse the children and collect the utiltiies.
   for (auto& child : children) {
@@ -306,8 +305,8 @@ MinExpression::MinExpression(std::string name): expressionName(name) {}
 
 int MinExpression::getNumChildren() { return children.size(); }
 
-void MinExpression::addChild(ExpressionPtr newchld) {
-  children.push_back(std::move(newchld));
+void MinExpression::addChild(ExpressionPtr child) {
+  children.push_back(std::move(child));
 }
 
 ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
@@ -317,26 +316,28 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
   /// Create and save the ParseResult.
   parsedResult = std::make_shared<ParseResult>();
 
-  int num_children = children.size();
-  if (num_children == 0){
+  auto numChildren = this->getNumChildren();
+  if (numChildren == 0){
     throw tetrisched::exceptions::ExpressionSolutionException(
         "Number of children should be >=1 for MIN");
   }
   // start time of MIN
   VariablePtr minStartTime = std::make_shared<Variable>(
       VariableType::VAR_INTEGER, expressionName + "_MIN_START_TIME");
+  solverModel->addVariable(minStartTime);
 
   // end time of MIN
-  VariablePtr minEndTime =
-      std::make_shared<Variable>(VariableType::VAR_INTEGER, expressionName + "_MIN_END_TIME");
+  VariablePtr minEndTime = std::make_shared<Variable>(VariableType::VAR_INTEGER, expressionName + "_MIN_END_TIME");
+  solverModel->addVariable(minEndTime);
 
   // Utility of MIN operator
   auto minUtility =
       std::make_unique<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
-  VariablePtr min_variable = std::make_shared<Variable>(
+  VariablePtr minUtilityVariable = std::make_shared<Variable>(
       VariableType::VAR_INTEGER, expressionName + "_MIN_UTILITY_VARIABLE");
+  solverModel->addVariable(minUtilityVariable);
 
-  for (int i = 0; i < num_children; i++) {
+  for (int i = 0; i < numChildren; i++) {
     auto childParsedResult = children[i]->parse(
         solverModel, availablePartitions, capacityConstraints, currentTime);
     ConstraintPtr minStartTimeConstraint = std::make_unique<Constraint>(
@@ -346,12 +347,15 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
       auto childStartTime = childParsedResult->startTime.value();
       if (childStartTime.isVariable()) {
         minStartTimeConstraint->addTerm(1, childStartTime.get<VariablePtr>());
-      } else {
+      }else {
         minStartTimeConstraint->addTerm(childStartTime.get<Time>());
       }
       minStartTimeConstraint->addTerm(-1, minStartTime);
       // Add the constraint to solver
       solverModel->addConstraint(std::move(minStartTimeConstraint));
+    } else{
+      throw tetrisched::exceptions::ExpressionSolutionException(
+          "Start Time needed from child-" + std::to_string(i) + " for MIN. But not present!");
     }
     // constraint of end time: childEndTime <= minEndTime
     ConstraintPtr minEndTimeConstraint = std::make_unique<Constraint>(
@@ -367,19 +371,25 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
       minEndTimeConstraint->addTerm(-1, minEndTime);
       // Add the constraint to solver
       solverModel->addConstraint(std::move(minEndTimeConstraint));
+    } else{
+      throw tetrisched::exceptions::ExpressionSolutionException(
+          "End Time needed from child-" + std::to_string(i) + " for MIN. But not present!");
     }
 
-     if (childParsedResult->utility.has_value()) {
-       // child_utility - minUVar >= 0
-       auto childUtilityConstr = childParsedResult->utility.value()->toConstraint(
-           expressionName + "_MIN_UTILITY_CONSTRAINT_CHILD_" + std::to_string(i),
-           ConstraintType::CONSTR_GE, 0);
-       childUtilityConstr->addTerm(-1, min_variable);
-       solverModel->addConstraint(std::move(childUtilityConstr));
-     }
+    if (childParsedResult->utility.has_value()) {
+      // child_utility - minUVar >= 0
+      auto childUtilityConstr = childParsedResult->utility.value()->toConstraint(
+          expressionName + "_MIN_UTILITY_CONSTRAINT_CHILD_" + std::to_string(i),
+          ConstraintType::CONSTR_GE, 0);
+      childUtilityConstr->addTerm(-1, minUtilityVariable);
+      solverModel->addConstraint(std::move(childUtilityConstr));
+    } else{
+      throw tetrisched::exceptions::ExpressionSolutionException(
+          "Utility needed from child-" + std::to_string(i) + " for MIN. But not present!");
+    }
   }
   // MinU = Max(MinUVar)
-  minUtility->addTerm(1, min_variable);
+  minUtility->addTerm(1, minUtilityVariable);
 
   parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
   parsedResult->startTime = minStartTime;

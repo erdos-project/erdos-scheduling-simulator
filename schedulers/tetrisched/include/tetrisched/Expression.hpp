@@ -211,13 +211,11 @@ class ChooseExpression : public Expression {
 /// informs the SolverModel of the objective function.
 class ObjectiveExpression : public Expression {
  private:
-  /// The sense of this Expression.
-  ObjectiveType objectiveType;
   /// The children of this Expression.
   std::vector<ExpressionPtr> children;
 
  public:
-  ObjectiveExpression(ObjectiveType objectiveType);
+  ObjectiveExpression();
   void addChild(ExpressionPtr child) override;
   virtual int getNumChildren() override;
   ParseResultPtr parse(SolverModelPtr solverModel,
@@ -228,16 +226,13 @@ class ObjectiveExpression : public Expression {
 
 class MinExpression: public Expression {
 protected:
-    MinExpression(std::string name);
-
-    /// The sense of this Expression.
-    ObjectiveType objectiveType;
+    
     std::string expressionName;
 
 public:
-  MinExpression() : expressionName("") {}
+  MinExpression(std::string name);
   virtual ~MinExpression() {}
-  virtual void addChild(ExpressionPtr newchld) override; // appends new chld to
+  virtual void addChild(ExpressionPtr child) override;
   virtual int getNumChildren() override;
   ParseResultPtr parse(SolverModelPtr solverModel, Partitions availablePartitions,
                        CapacityConstraintMap &capacityConstraints,
