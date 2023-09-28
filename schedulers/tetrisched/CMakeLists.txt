@@ -126,7 +126,6 @@ set(TETRISCHED_TESTS
 
 add_executable(test_tetrisched ${TETRISCHED_TESTS})
 target_include_directories(test_tetrisched PRIVATE include)
-target_compile_features(test_tetrisched PRIVATE cxx_std_17)
 
 # Include and link CPLEX.
 target_include_directories(test_tetrisched PRIVATE ${CPLEX_INCLUDE_DIRS})
@@ -148,3 +147,27 @@ target_link_libraries(
 
 include(GoogleTest)
 gtest_discover_tests(test_tetrisched)
+
+# Compilation for the Python bindings.
+# Define a Python frontend tetrisched_py and add the relevant sources.
+project(tetrisched_py LANGUAGES CXX)
+add_subdirectory(extern/pybind11)
+pybind11_add_module(
+  tetrisched_py
+  MODULE
+  python/TetrischedPy.cpp
+)
+
+# Include the headers from Tetrisched.
+target_include_directories(tetrisched_py PRIVATE include)
+
+# Include and link CPLEX.
+target_include_directories(tetrisched_py PRIVATE ${CPLEX_INCLUDE_DIRS})
+target_link_directories(tetrisched_py PRIVATE ${CPLEX_LINK_DIRS})
+
+# Link all the relevant libraries.
+target_link_libraries(
+  tetrisched_py
+  PRIVATE
+  tetrisched
+)

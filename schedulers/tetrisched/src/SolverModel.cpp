@@ -60,7 +60,16 @@ void VariableT<T>::hint(T hintValue) {
 
 template <typename T>
 std::string VariableT<T>::toString() const {
-  return getName();
+  switch (variableType) {
+    case VAR_CONTINUOUS:
+      return "Variable<Continuous, " + getName() + ">";
+    case VAR_INTEGER:
+      return "Variable<Integer, " + getName() + ">";
+    case VAR_INDICATOR:
+      return "Variable<Indicator, " + getName() + ">";
+    default:
+      return "Variable<Unknown, " + getName() + ">";
+  }
 }
 
 template <typename T>
@@ -118,7 +127,7 @@ std::string ConstraintT<T>::toString() const {
   for (auto &term : terms) {
     constraintString += "(" + std::to_string(term.first);
     if (term.second != nullptr) {
-      constraintString += "*" + term.second->toString();
+      constraintString += "*" + term.second->getName();
     }
     constraintString += ")";
     if (&term != &terms.back()) constraintString += "+";
@@ -168,10 +177,12 @@ void ObjectiveFunctionT<T>::addTerm(T coefficient,
 }
 
 template <typename T>
-std::unique_ptr<ConstraintT<T>> ObjectiveFunctionT<T>::toConstraint(std::string constraintName, ConstraintType constraintType, T rightHandSide)
-{
-  auto constraint = std::make_unique<ConstraintT<T>>(constraintName, constraintType, rightHandSide);
-  for (auto &term : terms){
+std::shared_ptr<ConstraintT<T>> ObjectiveFunctionT<T>::toConstraint(
+    std::string constraintName, ConstraintType constraintType,
+    T rightHandSide) {
+  auto constraint = std::make_shared<ConstraintT<T>>(
+      constraintName, constraintType, rightHandSide);
+  for (auto &term : terms) {
     constraint->addTerm(term);
   }
   return constraint;
@@ -190,7 +201,7 @@ std::string ObjectiveFunctionT<T>::toString() const {
   }
   for (auto &term : terms) {
     objectiveString +=
-        "(" + std::to_string(term.first) + "*" + term.second->toString() + ")";
+        "(" + std::to_string(term.first) + "*" + term.second->getName() + ")";
     if (&term != &terms.back()) objectiveString += "+";
   }
   return objectiveString;
@@ -225,10 +236,6 @@ T ObjectiveFunctionT<T>::getValue() const {
       }
     }
   }
-
-  for (auto &term : terms) {
-    value += term.first * term.second->getValue().value();
-  }
   return value;
 }
 
@@ -244,14 +251,14 @@ void SolverModelT<T>::addVariable(std::shared_ptr<VariableT<T>> variable) {
 
 template <typename T>
 void SolverModelT<T>::addConstraint(
-    std::unique_ptr<ConstraintT<T>> constraint) {
-  constraints[constraint->getId()] = std::move(constraint);
+    std::shared_ptr<ConstraintT<T>> constraint) {
+  constraints[constraint->getId()] = constraint;
 }
 
 template <typename T>
 void SolverModelT<T>::setObjectiveFunction(
-    std::unique_ptr<ObjectiveFunctionT<T>> objectiveFunction) {
-  this->objectiveFunction = std::move(objectiveFunction);
+    std::shared_ptr<ObjectiveFunctionT<T>> objectiveFunction) {
+  this->objectiveFunction = objectiveFunction;
 }
 
 template <typename T>
@@ -262,16 +269,16 @@ std::string SolverModelT<T>::toString() const {
   }
   if (constraints.size() > 0) {
     modelString += "Constraints: \n";
-    for (auto &constraint : constraints) {
-      modelString += constraint.second->getName() + ": \t" +
-                     constraint.second->toString() + "\n";
+    for (auto &[_, constraint] : constraints) {
+      modelString +=
+          constraint->getName() + ": \t" + constraint->toString() + "\n";
     }
     modelString += "\n\n";
   }
   if (variables.size() > 0) {
     modelString += "Variables: \n";
-    for (auto &variable : variables) {
-      modelString += "\t" + variable.second->toString();
+    for (auto &[_, variable] : variables) {
+      modelString += "\t" + variable->toString();
     }
   }
   return modelString;

@@ -162,7 +162,11 @@ class ConstraintT {
 // Specialize the Constraint class for Integer.
 template class ConstraintT<TETRISCHED_ILP_TYPE>;
 using Constraint = ConstraintT<TETRISCHED_ILP_TYPE>;
-using ConstraintPtr = std::unique_ptr<Constraint>;
+// NOTE (Sukrit): I would have liked to kept this as a unique_ptr, since only
+// the SolverModel should own the constraint. But, I have to move to a
+// shared_ptr to satisfy Python's referencing mechanism. Inside C++, we should
+// try to use std::move(...) as much as possible to maintain single ownership.
+using ConstraintPtr = std::shared_ptr<Constraint>;
 
 /// A `ObjectiveType` enumeration represents the types of objective functions
 /// that we allow the user to construct.
@@ -190,7 +194,9 @@ class ObjectiveFunctionT {
   void addTerm(T coefficient, std::shared_ptr<VariableT<T>> variable);
 
   // The objective is left hand side of the constraint
-  std::unique_ptr<ConstraintT<T>> toConstraint(std::string constraintName, ConstraintType constraintType, T rightHandSide);
+  std::shared_ptr<ConstraintT<T>> toConstraint(std::string constraintName,
+                                               ConstraintType constraintType,
+                                               T rightHandSide);
 
   /// Retrieve a string representation of this ObjectiveFunction.
   std::string toString() const;
@@ -213,7 +219,8 @@ class ObjectiveFunctionT {
 // Specialize the ObjectiveFunction class for Integer.
 template class ObjectiveFunctionT<TETRISCHED_ILP_TYPE>;
 using ObjectiveFunction = ObjectiveFunctionT<TETRISCHED_ILP_TYPE>;
-using ObjectiveFunctionPtr = std::unique_ptr<ObjectiveFunction>;
+// NOTE(Sukrit): Similar to above, try to enforce single ownership.
+using ObjectiveFunctionPtr = std::shared_ptr<ObjectiveFunction>;
 
 template <typename T>
 class SolverModelT {
@@ -221,9 +228,9 @@ class SolverModelT {
   /// The variables in this model.
   std::unordered_map<uint32_t, std::shared_ptr<VariableT<T>>> variables;
   /// The constraints in this model.
-  std::unordered_map<uint32_t, std::unique_ptr<ConstraintT<T>>> constraints;
+  std::unordered_map<uint32_t, std::shared_ptr<ConstraintT<T>>> constraints;
   /// The objective function in this model.
-  std::unique_ptr<ObjectiveFunctionT<T>> objectiveFunction;
+  std::shared_ptr<ObjectiveFunctionT<T>> objectiveFunction;
 
   /// Generate a new solver model.
   /// Construct a Solver to get an instance of the Model.
@@ -235,12 +242,12 @@ class SolverModelT {
 
   /// Add a constraint to the model.
   /// This method consumes the Constraint.
-  void addConstraint(std::unique_ptr<ConstraintT<T>> constraint);
+  void addConstraint(std::shared_ptr<ConstraintT<T>> constraint);
 
   /// Set the objective function for the model.
   /// This method consumes the ObjectiveFunction.
   void setObjectiveFunction(
-      std::unique_ptr<ObjectiveFunctionT<T>> objectiveFunction);
+      std::shared_ptr<ObjectiveFunctionT<T>> objectiveFunction);
 
   /// Retrieve a string representation of this SolverModel.
   std::string toString() const;
