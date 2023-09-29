@@ -56,4 +56,11 @@ void defineSTRLExpressions(py::module_& tetrisched_m) {
       .def(py::init<std::string, TETRISCHED_ILP_TYPE>(),
            "Initializes a ScaleExpression with the given helper name and "
            "scaling factor.");
+
+  // Define the LessThanExpression.
+  py::class_<tetrisched::LessThanExpression, tetrisched::Expression,
+             std::shared_ptr<tetrisched::LessThanExpression>>(
+      tetrisched_m, "LessThanExpression")
+      .def(py::init<std::string>(),
+           "Initializes a LessThanExpression with the given helper name.");
 }
