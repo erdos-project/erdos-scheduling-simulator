@@ -24,6 +24,43 @@ from workload import (
 )
 
 
+class PrimalDataPoint:
+    """A `PrimalDataPoint` is used to represent a single data point in the search space
+    for the solution of the primal problem described below.
+
+    This class is intended to be used to store the progress of the search at particular
+    points in time, and plot a primal integral gap figure later.
+    """
+
+    def __init__(
+        self,
+        start_time: float,
+        datapoint_time: float,
+        objective_value: float,
+        objective_bound: float,
+    ):
+        self._start_time = start_time
+        self._datapoint_time = datapoint_time
+        self._objective_value = objective_value
+        self._objective_bound = objective_bound
+
+    @property
+    def elapsed(self) -> EventTime:
+        return EventTime(
+            int((self._datapoint_time - self._start_time) * 1e6), EventTime.Unit.US
+        )
+
+    def __str__(self) -> str:
+        return (
+            "PrimalDataPoint(elapsed={}, objective_value={}, "
+            "objective_bound={})".format(
+                self.elapsed,
+                self._objective_value,
+                self._objective_bound,
+            )
+        )
+
+
 class TaskOptimizerVariables:
     """TaskOptimizerVariables is used to represent the optimizer variables for
     every particular task to be scheduled by the Scheduler.
@@ -577,9 +614,16 @@ class TetriSchedGurobiScheduler(BaseScheduler):
                 worker_to_worker_pool[worker.id] = worker_pool.id
 
         self._logger.debug(
-            f"[{sim_time.time}] The scheduler received {len(tasks_to_be_scheduled)} "
-            f"tasks for scheduling across {len(workers)} workers. These tasks were: "
-            f"{[task.unique_name for task in tasks_to_be_scheduled]}."
+            "[{}] The scheduler received {} tasks for scheduling across {} workers. "
+            "These tasks were: {}.".format(
+                sim_time.time,
+                len(tasks_to_be_scheduled),
+                len(workers),
+                [
+                    f"{task.unique_name} ({task.deadline})"
+                    for task in tasks_to_be_scheduled
+                ],
+            )
         )
         self._logger.debug(
             f"[{sim_time.time}] The scheduler is also considering the following "
@@ -609,7 +653,7 @@ class TetriSchedGurobiScheduler(BaseScheduler):
             )
 
             # Add the objectives and optimize the model.
-            self._add_objective(optimizer, tasks_to_variables)
+            self._add_objective(optimizer, tasks_to_variables, workload)
 
             if self._log_to_file or (
                 sim_time.to(EventTime.Unit.US).time in self._log_times
@@ -635,6 +679,15 @@ class TetriSchedGurobiScheduler(BaseScheduler):
             if optimizer.Status == GRB.OPTIMAL or (
                 optimizer.Status == GRB.INTERRUPTED and optimizer._solution_found
             ):
+                for primal_data_point in sorted(
+                    optimizer._primal_data_points, key=lambda dp: dp._datapoint_time
+                ):
+                    self._logger.debug(
+                        "[{}] The solver found a solution: {}.".format(
+                            sim_time.to(EventTime.Unit.US).time, str(primal_data_point)
+                        )
+                    )
+
                 self._logger.debug(
                     f"[{sim_time.to(EventTime.Unit.US).time}] The scheduler returned "
                     f"the objective value {optimizer.objVal}."
@@ -954,6 +1007,7 @@ class TetriSchedGurobiScheduler(BaseScheduler):
         self,
         optimizer: gp.Model,
         tasks_to_variables: Mapping[str, TaskOptimizerVariables],
+        workload: Workload,
     ):
         """Generates the constraints for the optimization objective as specified by
         the `goal` parameter to this instantiation of the Scheduler.
@@ -971,6 +1025,11 @@ class TetriSchedGurobiScheduler(BaseScheduler):
             # the scheduler.
             task_reward_variables = []
             for task_variable in tasks_to_variables.values():
+                task_graph = workload.get_task_graph(task_variable.task.task_graph)
+                if self.release_taskgraphs and not task_graph.is_sink_task(
+                    task_variable.task
+                ):
+                    continue
                 task_reward_variable = optimizer.addVar(
                     vtype=GRB.BINARY, name=f"{task_variable.name}_reward"
                 )
@@ -994,6 +1053,8 @@ class TetriSchedGurobiScheduler(BaseScheduler):
         optimizer._solution_found = False
         optimizer._current_gap = float("inf")
         optimizer._last_gap_update = time.time()
+        optimizer._solver_start_time = time.time()
+        optimizer._primal_data_points = []
 
     def _termination_check_callback(
         self, sim_time: EventTime, optimizer: gp.Model, where: GRB.Callback
@@ -1006,6 +1067,19 @@ class TetriSchedGurobiScheduler(BaseScheduler):
             optimizer (`gp.Model`): The model that is being optimized.
             where (`GRB.Callback`): The site where the callback was invoked.
         """
+        if where == GRB.Callback.MIPSOL:
+            # A new MIP solution has been found. Log the time at which it was found.
+            new_solution_objective = optimizer.cbGet(GRB.Callback.MIPSOL_OBJ)
+            best_solution_objective_bound = optimizer.cbGet(GRB.Callback.MIPSOL_OBJBND)
+            current_time = time.time()
+            primal_data_point = PrimalDataPoint(
+                optimizer._solver_start_time,
+                current_time,
+                new_solution_objective,
+                best_solution_objective_bound,
+            )
+            optimizer._primal_data_points.append(primal_data_point)
+
         if where == GRB.Callback.MIPNODE:
             # Retrieve the current bound and the solution from the model, and use it
             # to compute the Gap between the solution according to the formula.
@@ -1034,6 +1108,9 @@ class TetriSchedGurobiScheduler(BaseScheduler):
 
         # If the gap hasn't changed in the predefined time, terminate the model.
         solver_time = time.time()
+        if self._gap_time_limit.is_invalid():
+            # The solver was asked to run indefinitely. Do not terminate.
+            return
         gap_time_limit_s = self._gap_time_limit.to(EventTime.Unit.S).time
         if (
             solver_time - optimizer._last_gap_update > gap_time_limit_s

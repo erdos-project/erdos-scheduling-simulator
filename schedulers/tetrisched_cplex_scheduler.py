@@ -743,7 +743,7 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
         self._logger.debug(
             f"[{sim_time.time}] The scheduler received {len(tasks_to_be_scheduled)} "
             f"tasks for scheduling across {len(workers)} workers. These tasks were: "
-            f"{[task.unique_name for task in tasks_to_be_scheduled]}."
+            f"{[f'{t.unique_name} ({t.deadline})' for t in tasks_to_be_scheduled]}."
         )
         self._logger.debug(
             f"[{sim_time.time}] The scheduler is also considering the following "
@@ -831,13 +831,19 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
                     lp_out.write(optimizer.export_as_lp_string())
 
             # Solve the problem.
+            solver_start_time = time.time()
             solution: SolveSolution = optimizer.solve()
+            solver_end_time = time.time()
+            solver_runtime = EventTime(
+                int((solver_end_time - solver_start_time) * 1e6), EventTime.Unit.US
+            )
             if solution:
                 # A valid solution was found. Construct the Placement objects.
                 self._logger.debug(
-                    "[%s] The scheduler returned the objective value %s.",
+                    "[%s] The scheduler returned the objective value %s in %s.",
                     sim_time.to(EventTime.Unit.US).time,
                     solution.objective_value,
+                    solver_runtime,
                 )
 
                 # Keep a mapping of the current placements found for each `Task`, and
