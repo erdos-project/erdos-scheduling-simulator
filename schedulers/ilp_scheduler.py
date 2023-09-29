@@ -30,6 +30,43 @@ from workload import (
 )
 
 
+class PrimalDataPoint:
+    """A `PrimalDataPoint` is used to represent a single data point in the search space
+    for the solution of the primal problem described below.
+
+    This class is intended to be used to store the progress of the search at particular
+    points in time, and plot a primal integral gap figure later.
+    """
+
+    def __init__(
+        self,
+        start_time: float,
+        datapoint_time: float,
+        objective_value: float,
+        objective_bound: float,
+    ):
+        self._start_time = start_time
+        self._datapoint_time = datapoint_time
+        self._objective_value = objective_value
+        self._objective_bound = objective_bound
+
+    @property
+    def elapsed(self) -> EventTime:
+        return EventTime(
+            int((self._datapoint_time - self._start_time) * 1e6), EventTime.Unit.US
+        )
+
+    def __str__(self) -> str:
+        return (
+            "PrimalDataPoint(elapsed={}, objective_value={}, "
+            "objective_bound={})".format(
+                self.elapsed,
+                self._objective_value,
+                self._objective_bound,
+            )
+        )
+
+
 class BatchTask(object):
     """A `BatchTask` is a virtual `Task` object that is used to represent a batch of
     tasks that are to be executed together using the given strategy.
@@ -470,7 +507,7 @@ class ILPScheduler(BaseScheduler):
         release_taskgraphs: bool = False,
         goal: str = "max_goodput",
         batching: bool = False,
-        time_limit: EventTime = EventTime(20, EventTime.Unit.S),
+        time_limit: EventTime = EventTime.invalid(),
         log_to_file: bool = False,
         _flags: Optional["absl.flags"] = None,
     ):
@@ -492,7 +529,7 @@ class ILPScheduler(BaseScheduler):
         )
         self._goal = goal
         self._batching = batching
-        self._gap_time_limit = time_limit.to(EventTime.Unit.S).time
+        self._gap_time_limit = time_limit
         self._log_to_file = log_to_file
         self._log_times = set(map(int, _flags.scheduler_log_times)) if _flags else set()
         self._allowed_to_miss_deadlines = set()
@@ -587,9 +624,16 @@ class ILPScheduler(BaseScheduler):
                 worker_to_worker_pool[worker.id] = worker_pool.id
 
         self._logger.debug(
-            f"[{sim_time.time}] The scheduler received {len(tasks_to_be_scheduled)} "
-            f"tasks for scheduling across {len(workers)} workers. These tasks were: "
-            f"{[task.unique_name for task in tasks_to_be_scheduled]}."
+            "[{}] The scheduler received {} tasks for scheduling across {} workers. "
+            "These tasks were: {}.".format(
+                sim_time.time,
+                len(tasks_to_be_scheduled),
+                len(workers),
+                [
+                    f"{task.unique_name} ({task.deadline})"
+                    for task in tasks_to_be_scheduled
+                ],
+            )
         )
         self._logger.debug(
             f"[{sim_time.time}] The scheduler is also considering the following "
@@ -626,20 +670,35 @@ class ILPScheduler(BaseScheduler):
                 sim_time.to(EventTime.Unit.US).time in self._log_times
             ):
                 optimizer.write(f"./gurobi_{sim_time.to(EventTime.Unit.US).time}.lp")
+
+            solver_start_time = time.time()
             optimizer.optimize(
                 callback=lambda optimizer, where: self._termination_check_callback(
                     sim_time, optimizer, where
                 )
             )
+            solver_end_time = time.time()
+            solver_runtime = EventTime(
+                int((solver_end_time - solver_start_time) * 1e6), EventTime.Unit.US
+            )
             self._logger.debug(
                 f"[{sim_time.to(EventTime.Unit.US).time}] The scheduler returned the "
-                f"status {optimizer.status}."
+                f"status {optimizer.status} in {solver_runtime}."
             )
 
             # Collect the placement results.
             if optimizer.Status == GRB.OPTIMAL or (
                 optimizer.Status == GRB.INTERRUPTED and optimizer._solution_found
             ):
+                for primal_data_point in sorted(
+                    optimizer._primal_data_points, key=lambda dp: dp._datapoint_time
+                ):
+                    self._logger.debug(
+                        "[{}] The solver found a solution: {}.".format(
+                            sim_time.to(EventTime.Unit.US).time, str(primal_data_point)
+                        )
+                    )
+
                 self._logger.debug(
                     f"[{sim_time.to(EventTime.Unit.US).time}] The scheduler returned "
                     f"the objective value {optimizer.objVal}."
@@ -1553,6 +1612,8 @@ class ILPScheduler(BaseScheduler):
         optimizer._solution_found = False
         optimizer._current_gap = float("inf")
         optimizer._last_gap_update = time.time()
+        optimizer._solver_start_time = time.time()
+        optimizer._primal_data_points = []
 
     def _termination_check_callback(
         self, sim_time: EventTime, optimizer: gp.Model, where: GRB.Callback
@@ -1565,6 +1626,19 @@ class ILPScheduler(BaseScheduler):
             optimizer (`gp.Model`): The model that is being optimized.
             where (`GRB.Callback`): The site where the callback was invoked.
         """
+        if where == GRB.Callback.MIPSOL:
+            # A new MIP solution has been found. Log the time at which it was found.
+            new_solution_objective = optimizer.cbGet(GRB.Callback.MIPSOL_OBJ)
+            best_solution_objective_bound = optimizer.cbGet(GRB.Callback.MIPSOL_OBJBND)
+            current_time = time.time()
+            primal_data_point = PrimalDataPoint(
+                optimizer._solver_start_time,
+                current_time,
+                new_solution_objective,
+                best_solution_objective_bound,
+            )
+            optimizer._primal_data_points.append(primal_data_point)
+
         if where == GRB.Callback.MIPNODE:
             # Retrieve the current bound and the solution from the model, and use it
             # to compute the Gap between the solution according to the formula.
@@ -1593,8 +1667,15 @@ class ILPScheduler(BaseScheduler):
 
         # If the gap hasn't changed in the predefined time, terminate the model.
         solver_time = time.time()
+        if self._gap_time_limit.is_invalid():
+            # The solver was asked to run indefinitely. Do not terminate.
+            return
+
+        # There was a predefined timeout for the solver. Check if the gap has changed
+        # in the last `gap_time_limit` seconds. If not, terminate the solver.
+        gap_time_limit = self._gap_time_limit.to(EventTime.Unit.S).time
         if (
-            solver_time - optimizer._last_gap_update > self._gap_time_limit
+            solver_time - optimizer._last_gap_update > gap_time_limit
         ) and optimizer._solution_found:
             self._logger.debug(
                 "[%s] The gap between the incumbent and best bound hasn't "
@@ -1604,7 +1685,7 @@ class ILPScheduler(BaseScheduler):
                 solver_time - optimizer._last_gap_update,
             )
             optimizer.terminate()
-        elif solver_time - optimizer._last_gap_update > self._gap_time_limit:
+        elif solver_time - optimizer._last_gap_update > gap_time_limit:
             self._logger.debug(
                 "[%s] The gap between the incumbent and best bound hasn't "
                 "changed in %f seconds, and no valid solution has yet been "
