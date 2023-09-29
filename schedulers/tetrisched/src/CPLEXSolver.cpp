@@ -221,6 +221,9 @@ void CPLEXSolver::solveModel() {
         throw tetrisched::exceptions::SolverException(
             "Unsupported variable type: " + variable->variableType);
     }
+    TETRISCHED_DEBUG("Setting value of variable "
+                     << variable->getName() << " to "
+                     << variable->solutionValue.value());
   }
 }
 

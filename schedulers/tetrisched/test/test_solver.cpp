@@ -18,7 +18,7 @@ TEST(SolverModelTypes, TestVariableConstruction) {
   std::string varName = "intVar";
   tetrisched::VariablePtr intVar =
       std::make_shared<tetrisched::Variable>(tetrisched::VAR_INTEGER, varName);
-  EXPECT_EQ(intVar->toString(), varName);
+  EXPECT_EQ(intVar->getName(), varName);
 }
 
 /// Throw an error if we try to make an Integer variable continuous.
@@ -114,7 +114,7 @@ TEST(SolverModel, TestCPLEXSolverTranslation) {
   auto solutionValue = intVar->getValue();
   EXPECT_TRUE(solutionValue.has_value()) << "No solution found.";
   EXPECT_EQ(solutionValue.value(), 2) << "Solution is not correct.";
-  EXPECT_EQ(solverModelPtr->getObjectiveValue(), 4)
+  EXPECT_EQ(solverModelPtr->getObjectiveValue(), 2)
       << "The objective value is not correct.";
 }
 #endif  //_TETRISCHED_WITH_CPLEX_

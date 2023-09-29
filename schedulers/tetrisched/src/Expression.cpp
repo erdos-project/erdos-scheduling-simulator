@@ -70,7 +70,7 @@ void CapacityConstraintMap::registerUsageAtTime(const Partition& partition,
   }
 
   // Add the variable to the Constraint.
-  capacityConstraints[mapKey]->addTerm(1, variable);
+  capacityConstraints[mapKey]->addTerm(variable);
 }
 
 void CapacityConstraintMap::registerUsageAtTime(const Partition& partition,
@@ -114,6 +114,20 @@ void CapacityConstraintMap::registerUsageForDuration(const Partition& partition,
   }
 }
 
+void CapacityConstraintMap::translate(SolverModelPtr solverModel) {
+  // Add the constraints to the SolverModel.
+  for (auto& [mapKey, constraint] : capacityConstraints) {
+    solverModel->addConstraint(std::move(constraint));
+  }
+
+  // Clear the map now that the constraints have been drained.
+  capacityConstraints.clear();
+}
+
+size_t CapacityConstraintMap::size() const {
+  return capacityConstraints.size();
+}
+
 /* Method definitions for Expression */
 
 size_t Expression::getNumChildren() const { return children.size(); }
@@ -155,12 +169,6 @@ SolutionResultPtr Expression::solve(SolverModelPtr solverModel) {
         "Expression with a utility was parsed without an end time.");
   }
   solutionResult->endTime = parsedResult->endTime->resolve();
-
-  if (!parsedResult->indicator) {
-    throw tetrisched::exceptions::ExpressionSolutionException(
-        "Expression with a utility was parsed without an indicator.");
-  }
-  solutionResult->indicator = parsedResult->indicator->resolve();
 
   if (!parsedResult->utility) {
     throw tetrisched::exceptions::ExpressionSolutionException(
@@ -231,6 +239,8 @@ ParseResultPtr ChooseExpression::parse(
       std::make_shared<Variable>(VariableType::VAR_INDICATOR,
                                  associatedTask->getTaskName() + "_placed_at_" +
                                      std::to_string(startTime));
+  solverModel->addVariable(isSatisfiedVar);
+
   ConstraintPtr fulfillsDemandConstraint = std::make_unique<Constraint>(
       associatedTask->getTaskName() + "_fulfills_demand_at_" +
           std::to_string(startTime),
@@ -246,9 +256,10 @@ ParseResultPtr ChooseExpression::parse(
         0,
         std::min(static_cast<uint32_t>(partition->size()),
                  numRequiredMachines));
+    solverModel->addVariable(allocationVar);
 
     // Add the variable to the demand constraint.
-    fulfillsDemandConstraint->addTerm(1, allocationVar);
+    fulfillsDemandConstraint->addTerm(allocationVar);
 
     // Register this indicator with the capacity constraints that
     // are being bubbled up.
@@ -269,7 +280,7 @@ ParseResultPtr ChooseExpression::parse(
   parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
   parsedResult->startTime = startTime;
   parsedResult->endTime = endTime;
-  parsedResult->indicator = isSatisfiedVar;
+  // parsedResult->indicator = isSatisfiedVar;
   parsedResult->utility = std::move(utility);
   return parsedResult;
 }
@@ -283,6 +294,9 @@ void ObjectiveExpression::addChild(ExpressionPtr child) {
 ParseResultPtr ObjectiveExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMap& capacityConstraints, Time currentTime) {
+  parsedResult = std::make_shared<ParseResult>();
+  parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
+
   // Construct the overall utility of this expression.
   auto utility =
       std::make_unique<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
@@ -296,11 +310,119 @@ ParseResultPtr ObjectiveExpression::parse(
     }
   }
 
+  // All the children have been parsed. Finalize the CapacityConstraintMap.
+  capacityConstraints.translate(solverModel);
+
+  // Construct the parsed result.
+  parsedResult->utility = std::make_unique<ObjectiveFunction>(*utility);
+  parsedResult->startTime = 0;
+  parsedResult->endTime = 0;
+
   // Add the utility to the SolverModel.
   solverModel->setObjectiveFunction(std::move(utility));
 
-  return std::make_shared<ParseResult>(
-      ParseResult{.type = ParseResultType::EXPRESSION_NO_UTILITY});
+  return parsedResult;
+}
+
+/* Method definitions for LessThanExpression */
+
+LessThanExpression::LessThanExpression(std::string name) : name(name) {}
+
+void LessThanExpression::addChild(ExpressionPtr child) {
+  if (children.size() == 2) {
+    throw tetrisched::exceptions::ExpressionConstructionException(
+        "LessThanExpression cannot have more than two children.");
+  }
+  children.push_back(std::move(child));
+}
+
+ParseResultPtr LessThanExpression::parse(
+    SolverModelPtr solverModel, Partitions availablePartitions,
+    CapacityConstraintMap& capacityConstraints, Time currentTime) {
+  // Sanity check the children.
+  if (children.size() != 2) {
+    throw tetrisched::exceptions::ExpressionConstructionException(
+        "LessThanExpression must have two children.");
+  }
+
+  TETRISCHED_DEBUG("Parsing LessThanExpression with name " << name << ".")
+
+  // Parse both the children.
+  auto firstChildResult = children[0]->parse(solverModel, availablePartitions,
+                                             capacityConstraints, currentTime);
+  auto secondChildResult = children[1]->parse(solverModel, availablePartitions,
+                                              capacityConstraints, currentTime);
+
+  if (firstChildResult->type != ParseResultType::EXPRESSION_UTILITY ||
+      secondChildResult->type != ParseResultType::EXPRESSION_UTILITY) {
+    throw tetrisched::exceptions::ExpressionConstructionException(
+        "LessThanExpression must have two children that are being evaluated.");
+  }
+
+  // Generate the result of parsing the expression.
+  parsedResult = std::make_shared<ParseResult>();
+  parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
+
+  // Bubble up the start time of the first expression and the end time of
+  // the second expression as a bound on the
+  if (!firstChildResult->endTime || !secondChildResult->startTime ||
+      !firstChildResult->startTime || !secondChildResult->endTime) {
+    throw tetrisched::exceptions::ExpressionConstructionException(
+        "LessThanExpression must have children with start and end times.");
+  }
+  parsedResult->startTime.emplace(firstChildResult->startTime.value());
+  parsedResult->endTime.emplace(secondChildResult->endTime.value());
+
+  // Add a constraint that the first child must occur before the second.
+  ConstraintPtr happensBeforeConstraint = std::make_unique<Constraint>(
+      name + "_happens_before_constraint", ConstraintType::CONSTR_LE, 1);
+  if (firstChildResult->endTime->isVariable()) {
+    happensBeforeConstraint->addTerm(
+        firstChildResult->endTime->get<VariablePtr>());
+  } else {
+    happensBeforeConstraint->addTerm(firstChildResult->endTime->get<Time>());
+  }
+  if (secondChildResult->startTime->isVariable()) {
+    happensBeforeConstraint->addTerm(
+        -1, secondChildResult->startTime->get<VariablePtr>());
+  } else {
+    happensBeforeConstraint->addTerm(
+        -1 * ((int32_t)secondChildResult->startTime->get<Time>()));
+  }
+  solverModel->addConstraint(std::move(happensBeforeConstraint));
+
+  // Construct a utility function that is the minimum of the two utilities.
+  // Maximizing this utility will force the solver to place both of the
+  // subexpressions.
+  VariablePtr utilityVar =
+      std::make_shared<Variable>(VariableType::VAR_INTEGER, name + "_utility");
+  solverModel->addVariable(utilityVar);
+  if (!firstChildResult->utility || !secondChildResult->utility) {
+    throw tetrisched::exceptions::ExpressionConstructionException(
+        "LessThanExpression must have children with utilities.");
+  }
+
+  ConstraintPtr constrainUtilityLessThanFirstChild =
+      firstChildResult->utility.value()->toConstraint(
+          name + "_utility_less_than_first_child", ConstraintType::CONSTR_GE,
+          0);
+  constrainUtilityLessThanFirstChild->addTerm(-1, utilityVar);
+  solverModel->addConstraint(std::move(constrainUtilityLessThanFirstChild));
+
+  ConstraintPtr constrainUtilityLessThanSecondChild =
+      secondChildResult->utility.value()->toConstraint(
+          name + "_utility_less_than_second_child", ConstraintType::CONSTR_GE,
+          0);
+  constrainUtilityLessThanSecondChild->addTerm(-1, utilityVar);
+  solverModel->addConstraint(std::move(constrainUtilityLessThanSecondChild));
+
+  // Convert the utility variable to a utility function.
+  parsedResult->utility =
+      std::make_unique<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
+  parsedResult->utility.value()->addTerm(1, utilityVar);
+
+  // Return the result.
+  return parsedResult;
 }
 
 /* Method definitions for MinExpression */

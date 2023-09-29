@@ -122,6 +122,11 @@ void ConstraintT<T>::addTerm(T constant) {
 }
 
 template <typename T>
+void ConstraintT<T>::addTerm(std::shared_ptr<VariableT<T>> variable) {
+  this->addTerm(std::make_pair(1, variable));
+}
+
+template <typename T>
 std::string ConstraintT<T>::toString() const {
   std::string constraintString;
   for (auto &term : terms) {
@@ -274,12 +279,16 @@ std::string SolverModelT<T>::toString() const {
           constraint->getName() + ": \t" + constraint->toString() + "\n";
     }
     modelString += "\n\n";
+  } else {
+    modelString += "No Constraints Found!\n\n";
   }
   if (variables.size() > 0) {
     modelString += "Variables: \n";
     for (auto &[_, variable] : variables) {
       modelString += "\t" + variable->toString();
     }
+  } else {
+    modelString += "No Variables Found!";
   }
   return modelString;
 }
