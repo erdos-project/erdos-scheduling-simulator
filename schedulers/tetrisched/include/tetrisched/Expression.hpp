@@ -146,7 +146,7 @@ class Expression {
   /// The children of this Expression.
   std::vector<ExpressionPtr> children;
 
-public:
+ public:
   /// Default construct the base class.
   Expression() = default;
 
@@ -163,9 +163,9 @@ public:
                                Partitions availablePartitions,
                                CapacityConstraintMap& capacityConstraints,
                                Time currentTime) = 0;
-  
-  // returns the number of children in this expression
-  virtual size_t getNumChildren() = 0;
+
+  /// Returns the number of children of this Expression.
+  size_t getNumChildren() const;
 
   /// Solves the subtree rooted at this Expression and returns the solution.
   /// It assumes that the SolverModelPtr has been populated with values for
@@ -200,11 +200,10 @@ class ChooseExpression : public Expression {
   ChooseExpression(TaskPtr associatedTask, Partitions resourcePartitions,
                    uint32_t numRequiredMachines, Time startTime, Time duration);
   void addChild(ExpressionPtr child) override;
-  virtual size_t getNumChildren() override;
   ParseResultPtr parse(SolverModelPtr solverModel,
-                           Partitions availablePartitions,
-                           CapacityConstraintMap &capacityConstraints,
-                           Time currentTime) override;
+                       Partitions availablePartitions,
+                       CapacityConstraintMap& capacityConstraints,
+                       Time currentTime) override;
 };
 
 /// An `ObjectiveExpression` collates the objectives from its children and
@@ -215,27 +214,62 @@ class ObjectiveExpression : public Expression {
   std::vector<ExpressionPtr> children;
 
  public:
-  ObjectiveExpression();
+  ObjectiveExpression() = default;
   void addChild(ExpressionPtr child) override;
-  virtual size_t getNumChildren() override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
                        CapacityConstraintMap& capacityConstraints,
                        Time currentTime) override;
 };
 
-class MinExpression: public Expression {
-protected:
-    
-    std::string expressionName;
+/// A `MinExpression` inserts a utility variable that is constrained by the
+/// minimum utility of its children. Under an overall maximization objective,
+/// this ensures that the expression is only satisfied if all of its children
+/// are satisfied.
+class MinExpression : public Expression {
+ private:
+  /// The name of the expression.
+  std::string expressionName;
 
-public:
+ public:
   MinExpression(std::string name);
-  virtual ~MinExpression() {}
-  virtual void addChild(ExpressionPtr child) override;
-  virtual size_t getNumChildren() override;
-  ParseResultPtr parse(SolverModelPtr solverModel, Partitions availablePartitions,
-                       CapacityConstraintMap &capacityConstraints,
+  void addChild(ExpressionPtr child) override;
+  ParseResultPtr parse(SolverModelPtr solverModel,
+                       Partitions availablePartitions,
+                       CapacityConstraintMap& capacityConstraints,
+                       Time currentTime) override;
+};
+
+/// A `MaxExpression` enforces a choice of only one of its children to be
+/// satisfied.
+class MaxExpression : public Expression {
+ private:
+  /// The name of the expression.
+  std::string expressionName;
+
+ public:
+  MaxExpression(std::string name);
+  void addChild(ExpressionPtr child) override;
+  ParseResultPtr parse(SolverModelPtr solverModel,
+                       Partitions availablePartitions,
+                       CapacityConstraintMap& capacityConstraints,
+                       Time currentTime) override;
+};
+
+/// A `ScaleExpression` amplifies the utility of its child by a scalar factor.
+class ScaleExpression : public Expression {
+ private:
+  /// The name of the expression.
+  std::string expressionName;
+  /// The scalar factor to amplify the utility of the child by.
+  TETRISCHED_ILP_TYPE scaleFactor;
+
+ public:
+  ScaleExpression(std::string name, TETRISCHED_ILP_TYPE scaleFactor);
+  void addChild(ExpressionPtr child) override;
+  ParseResultPtr parse(SolverModelPtr solverModel,
+                       Partitions availablePartitions,
+                       CapacityConstraintMap& capacityConstraints,
                        Time currentTime) override;
 };
 
@@ -572,7 +606,6 @@ public:
 // //         {return child->eval(alloc); }
 // //     virtual string toString() {return child->toString();}
 // // };
-
 
 // // class MinExpression: public NnaryOperator {
 // // private:

@@ -66,7 +66,7 @@ using Time = uint32_t;
 
 /// General forward declarations.
 class Expression;
-using ExpressionPtr = std::unique_ptr<Expression>;
+using ExpressionPtr = std::shared_ptr<Expression>;
 
 /// Forward declarations for Solver instantiations so that we can declare
 /// them as friend classes in the model.

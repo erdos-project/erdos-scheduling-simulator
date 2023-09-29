@@ -55,6 +55,8 @@ T XOrVariableT<X>::get() const {
   return std::get<T>(value);
 }
 
+/* Method definitions for CapacityConstraintMap */
+
 void CapacityConstraintMap::registerUsageAtTime(const Partition& partition,
                                                 Time time,
                                                 VariablePtr variable) {
@@ -112,6 +114,10 @@ void CapacityConstraintMap::registerUsageForDuration(const Partition& partition,
   }
 }
 
+/* Method definitions for Expression */
+
+size_t Expression::getNumChildren() const { return children.size(); }
+
 SolutionResultPtr Expression::solve(SolverModelPtr solverModel) {
   // Check that the Expression was parsed before.
   if (!parsedResult) {
@@ -165,6 +171,8 @@ SolutionResultPtr Expression::solve(SolverModelPtr solverModel) {
   return solutionResult;
 }
 
+/* Method definitions for ChooseExpression */
+
 ChooseExpression::ChooseExpression(TaskPtr associatedTask,
                                    Partitions resourcePartitions,
                                    uint32_t numRequiredMachines, Time startTime,
@@ -179,10 +187,6 @@ ChooseExpression::ChooseExpression(TaskPtr associatedTask,
 void ChooseExpression::addChild(ExpressionPtr child) {
   throw tetrisched::exceptions::ExpressionConstructionException(
       "ChooseExpression cannot have a child.");
-}
-
-size_t ChooseExpression::getNumChildren(){
-  return 0;
 }
 
 ParseResultPtr ChooseExpression::parse(
@@ -270,20 +274,18 @@ ParseResultPtr ChooseExpression::parse(
   return parsedResult;
 }
 
-ObjectiveExpression::ObjectiveExpression() {}
+/* Method definitions for ObjectiveExpression */
 
 void ObjectiveExpression::addChild(ExpressionPtr child) {
-  children.push_back(std::move(child));
-}
-size_t ObjectiveExpression::getNumChildren(){
-  return children.size();
+  children.push_back(child);
 }
 
 ParseResultPtr ObjectiveExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMap& capacityConstraints, Time currentTime) {
   // Construct the overall utility of this expression.
-  auto utility = std::make_unique<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
+  auto utility =
+      std::make_unique<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
 
   // Parse the children and collect the utiltiies.
   for (auto& child : children) {
@@ -301,13 +303,11 @@ ParseResultPtr ObjectiveExpression::parse(
       ParseResult{.type = ParseResultType::EXPRESSION_NO_UTILITY});
 }
 
-MinExpression::MinExpression(std::string name): expressionName(name) {}
+/* Method definitions for MinExpression */
 
-size_t MinExpression::getNumChildren() { return children.size(); }
+MinExpression::MinExpression(std::string name) : expressionName(name) {}
 
-void MinExpression::addChild(ExpressionPtr child) {
-  children.push_back(std::move(child));
-}
+void MinExpression::addChild(ExpressionPtr child) { children.push_back(child); }
 
 ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
                                     Partitions availablePartitions,
@@ -317,7 +317,7 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
   parsedResult = std::make_shared<ParseResult>();
 
   auto numChildren = this->getNumChildren();
-  if (numChildren == 0){
+  if (numChildren == 0) {
     throw tetrisched::exceptions::ExpressionSolutionException(
         "Number of children should be >=1 for MIN");
   }
@@ -327,7 +327,8 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
   solverModel->addVariable(minStartTime);
 
   // end time of MIN
-  VariablePtr minEndTime = std::make_shared<Variable>(VariableType::VAR_INTEGER, expressionName + "_min_end_time");
+  VariablePtr minEndTime = std::make_shared<Variable>(
+      VariableType::VAR_INTEGER, expressionName + "_min_end_time");
   solverModel->addVariable(minEndTime);
 
   // Utility of MIN operator
@@ -342,20 +343,21 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
         solverModel, availablePartitions, capacityConstraints, currentTime);
     ConstraintPtr minStartTimeConstraint = std::make_unique<Constraint>(
         expressionName + "_min_start_time_constr_child_" + std::to_string(i),
-        ConstraintType::CONSTR_GE, 0); // minStartTime < childStartTime
+        ConstraintType::CONSTR_GE, 0);  // minStartTime < childStartTime
     if (childParsedResult->startTime.has_value()) {
       auto childStartTime = childParsedResult->startTime.value();
       if (childStartTime.isVariable()) {
         minStartTimeConstraint->addTerm(1, childStartTime.get<VariablePtr>());
-      }else {
+      } else {
         minStartTimeConstraint->addTerm(childStartTime.get<Time>());
       }
       minStartTimeConstraint->addTerm(-1, minStartTime);
       // Add the constraint to solver
       solverModel->addConstraint(std::move(minStartTimeConstraint));
-    } else{
+    } else {
       throw tetrisched::exceptions::ExpressionSolutionException(
-          "Start Time needed from child-" + std::to_string(i) + " for MIN. But not present!");
+          "Start Time needed from child-" + std::to_string(i) +
+          " for MIN. But not present!");
     }
     // constraint of end time: childEndTime <= minEndTime
     ConstraintPtr minEndTimeConstraint = std::make_unique<Constraint>(
@@ -371,21 +373,25 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
       minEndTimeConstraint->addTerm(-1, minEndTime);
       // Add the constraint to solver
       solverModel->addConstraint(std::move(minEndTimeConstraint));
-    } else{
+    } else {
       throw tetrisched::exceptions::ExpressionSolutionException(
-          "End Time needed from child-" + std::to_string(i) + " for MIN. But not present!");
+          "End Time needed from child-" + std::to_string(i) +
+          " for MIN. But not present!");
     }
 
     if (childParsedResult->utility.has_value()) {
       // child_utility - minUVar >= 0
-      auto childUtilityConstr = childParsedResult->utility.value()->toConstraint(
-          expressionName + "_min_utility_constraint_child_" + std::to_string(i),
-          ConstraintType::CONSTR_GE, 0);
+      auto childUtilityConstr =
+          childParsedResult->utility.value()->toConstraint(
+              expressionName + "_min_utility_constraint_child_" +
+                  std::to_string(i),
+              ConstraintType::CONSTR_GE, 0);
       childUtilityConstr->addTerm(-1, minUtilityVariable);
       solverModel->addConstraint(std::move(childUtilityConstr));
-    } else{
+    } else {
       throw tetrisched::exceptions::ExpressionSolutionException(
-          "Utility needed from child-" + std::to_string(i) + " for MIN. But not present!");
+          "Utility needed from child-" + std::to_string(i) +
+          " for MIN. But not present!");
     }
   }
   // MinU = Max(MinUVar)
@@ -396,6 +402,41 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
   parsedResult->endTime = minEndTime;
   parsedResult->utility = std::move(minUtility);
   return parsedResult;
+}
+
+/* Method definitions for MaxExpression */
+
+MaxExpression::MaxExpression(std::string name) : expressionName(name) {}
+
+void MaxExpression::addChild(ExpressionPtr child) { children.push_back(child); }
+
+ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
+                                    Partitions availablePartitions,
+                                    CapacityConstraintMap& capacityConstraints,
+                                    Time currentTime) {
+  throw tetrisched::exceptions::ExpressionConstructionException(
+      "MaxExpression parsing not implemented yet.");
+}
+
+/* Method definitions for ScaleExpression */
+
+ScaleExpression::ScaleExpression(std::string name,
+                                 TETRISCHED_ILP_TYPE scaleFactor)
+    : expressionName(name), scaleFactor(scaleFactor) {}
+
+void ScaleExpression::addChild(ExpressionPtr child) {
+  if (children.size() == 1) {
+    throw tetrisched::exceptions::ExpressionConstructionException(
+        "ScaleExpression can only have one child.");
+  }
+  children.push_back(child);
+}
+
+ParseResultPtr ScaleExpression::parse(
+    SolverModelPtr solverModel, Partitions availablePartitions,
+    CapacityConstraintMap& capacityConstraints, Time currentTime) {
+  throw tetrisched::exceptions::ExpressionConstructionException(
+      "ScaleExpression parsing not implemented yet.");
 }
 
 }  // namespace tetrisched

@@ -1,13 +1,70 @@
 #include <pybind11/pybind11.h>
 
 #include "Backends.cpp"
+#include "Expressions.cpp"
 #include "SolverModel.cpp"
+#include "tetrisched/Task.hpp"
+#include "tetrisched/Worker.hpp"
 
 namespace py = pybind11;
+
+void defineBasicTypes(py::module_& tetrisched_m) {
+  // Define the Task type.
+  py::class_<tetrisched::Task, tetrisched::TaskPtr>(tetrisched_m, "Task")
+      .def(py::init([](uint32_t taskId, std::string taskName) {
+             return std::make_shared<tetrisched::Task>(taskId, taskName);
+           }),
+           "Initializes the Task with the given ID and name.")
+      .def_property_readonly("id", &tetrisched::Task::getTaskId,
+                             "The ID of this Task.")
+      .def_property_readonly("name", &tetrisched::Task::getTaskName,
+                             "The name of this Task.");
+
+  // Define the Worker type.
+  py::class_<tetrisched::Worker, tetrisched::WorkerPtr>(tetrisched_m, "Worker")
+      .def(py::init([](uint32_t workerId, std::string workerName) {
+             return std::make_shared<tetrisched::Worker>(workerId, workerName);
+           }),
+           "Initializes the Worker with the given ID and name.")
+      .def_property_readonly("id", &tetrisched::Worker::getWorkerId,
+                             "The ID of this Worker.")
+      .def_property_readonly("name", &tetrisched::Worker::getWorkerName,
+                             "The name of this Worker.");
+
+  // Define the Partition type.
+  py::class_<tetrisched::Partition, tetrisched::PartitionPtr>(tetrisched_m,
+                                                              "Partition")
+      .def(py::init([]() { return std::make_shared<tetrisched::Partition>(); }),
+           "Initializes an empty Partition.")
+      .def("addWorker", &tetrisched::Partition::addWorker,
+           "Adds a Worker to this Partition.")
+      .def("__len__", &tetrisched::Partition::size,
+           "Returns the number of Workers in this Partition.")
+      .def_property_readonly("id", &tetrisched::Partition::getPartitionId,
+                             "The ID of this Partition.");
+
+  // Define the Partitions.
+  py::class_<tetrisched::Partitions>(tetrisched_m, "Partitions")
+      .def(py::init<>(), "Initializes an empty Partitions.")
+      .def("addPartition", &tetrisched::Partitions::addPartition,
+           "Adds a Partition to this Partitions.")
+      .def("getPartitions", &tetrisched::Partitions::getPartitions,
+           "Returns the Partitions in this Partitions.")
+      .def("__len__", &tetrisched::Partitions::size,
+           "Returns the number of Partitions in this Partitions.");
+}
 
 PYBIND11_MODULE(tetrisched_py, tetrisched_m) {
   // Define the top-level module for the TetriSched Python API.
   tetrisched_m.doc() = "Python API for TetriSched.";
+
+  // Define the top-level basic types.
+  defineBasicTypes(tetrisched_m);
+
+  // Implement bindings for STRL.
+  auto tetrisched_m_strl = tetrisched_m.def_submodule(
+      "strl", "STRL primitives for the TetriSched Python API.");
+  defineSTRLExpressions(tetrisched_m_strl);
 
   // Implement the modelling basics.
   auto tetrisched_m_solver_model = tetrisched_m.def_submodule(
