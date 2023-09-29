@@ -288,7 +288,6 @@ class LessThanExpression : public Expression {
                        CapacityConstraintMap& capacityConstraints,
                        Time currentTime) override;
 };
-
 }  // namespace tetrisched
 #endif  // _TETRISCHED_EXPRESSION_HPP_
 

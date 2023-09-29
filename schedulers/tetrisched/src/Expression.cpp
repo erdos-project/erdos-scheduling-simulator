@@ -324,6 +324,8 @@ ParseResultPtr ObjectiveExpression::parse(
   return parsedResult;
 }
 
+/* Method definitions for LessThanExpression */
+
 LessThanExpression::LessThanExpression(std::string name) : name(name) {}
 
 void LessThanExpression::addChild(ExpressionPtr child) {
