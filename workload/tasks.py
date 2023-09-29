@@ -1576,6 +1576,16 @@ class TaskGraph(Graph[Task]):
         return max(sink_task.completion_time for sink_task in self.get_sink_tasks())
 
     @property
+    def release_time(self) -> EventTime:
+        """Retrieves the time at which the earliest Task in this
+        TaskGraph will be released.
+
+        Returns:
+            An `EventTime` representation of the release time of the TaskGraph.
+        """
+        return min(task.release_time for task in self.get_source_tasks())
+
+    @property
     def name(self) -> str:
         """Retrieves the name of the TaskGraph.
 

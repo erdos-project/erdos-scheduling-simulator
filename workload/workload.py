@@ -335,3 +335,10 @@ class Workload(object):
     def work_profiles(self) -> Set[WorkProfile]:
         """Retrieve the `WorkProfile`s that constitute this `Workload`."""
         return self._work_profiles
+
+    def __str__(self) -> str:
+        """Returns a string representation of the Workload."""
+        task_graph_names = [
+            task_graph_name for task_graph_name in self._task_graphs.keys()
+        ]
+        return f"Workload([{', '.join(task_graph_names)}])"

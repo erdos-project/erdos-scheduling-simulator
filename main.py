@@ -76,6 +76,7 @@ flags.DEFINE_string(
     "Path of the JSON profile for the Pylot execution.",
 )
 flags.DEFINE_bool("stats", False, "Print the statistics from the tasks loaded.")
+flags.DEFINE_bool("dry_run", False, "If True, the simulator does not run.")
 
 # Simulator related flags.
 flags.DEFINE_integer(
@@ -264,7 +265,7 @@ flags.DEFINE_enum(
 )
 flags.DEFINE_integer(
     "scheduler_time_limit",
-    20,
+    -1,
     "The time limit (in seconds) to allow the scheduler to keep "
     "searching for solutions without finding a better one.",
 )
@@ -289,7 +290,7 @@ flags.DEFINE_bool(
 )
 flags.DEFINE_bool(
     "scheduler_enable_batching",
-    True,
+    False,
     "If `True`, the scheduler is allowed to batch tasks "
     "that share a WorkProfile together.",
 )
@@ -535,7 +536,7 @@ def main(args):
         )
 
     # Load the worker topology.
-    if FLAGS.execution_mode in ["replay", "synthetic", "json"]:
+    if FLAGS.execution_mode in ["replay", "synthetic", "json", "yaml"]:
         worker_loader = WorkerLoader(
             worker_profile_path=FLAGS.worker_profile_path, _flags=FLAGS
         )
@@ -558,7 +559,10 @@ def main(args):
         scheduler_frequency=EventTime(FLAGS.scheduler_frequency, EventTime.Unit.US),
         _flags=FLAGS,
     )
-    simulator.simulate()
+    if FLAGS.dry_run:
+        simulator.dry_run()
+    else:
+        simulator.simulate()
 
 
 if __name__ == "__main__":

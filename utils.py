@@ -121,6 +121,9 @@ class EventTime:
     def __copy__(self) -> "EventTime":
         return EventTime(time=self.time, unit=self.unit)
 
+    def is_invalid(self) -> bool:
+        return self.time == -1
+
     @property
     def time(self) -> int:
         return self._time

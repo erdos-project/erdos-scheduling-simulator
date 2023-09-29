@@ -239,7 +239,9 @@ class Simulator(object):
             raise ValueError(f"Unexpected type of loop_timeout: {type(loop_timeout)}")
 
         if type(scheduler_frequency) != EventTime:
-            raise ValueError(f"Unexpected type of loop_timeout: {type(loop_timeout)}")
+            raise ValueError(
+                f"Unexpected type of scheduler_frequency: {type(scheduler_frequency)}"
+            )
 
         # Set up the logger.
         # Amended from https://tinyurl.com/da5jfm58
@@ -354,6 +356,19 @@ class Simulator(object):
             self._simulator_time.time,
             sched_start_event,
         )
+
+    def dry_run(self) -> None:
+        """Displays the order in which the TaskGraphs will be released."""
+        task_graphs = sorted(
+            self._workload.task_graphs.values(),
+            key=lambda task_graph: task_graph.release_time,
+        )
+        for task_graph in task_graphs:
+            self._logger.info(
+                "[%s] The TaskGraph %s will be released.",
+                task_graph.release_time,
+                task_graph.name,
+            )
 
     def simulate(self) -> None:
         """Run the simulator loop.
