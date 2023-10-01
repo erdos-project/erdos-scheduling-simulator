@@ -1,8 +1,9 @@
 #ifndef _TETRISCHED_PARTITION_HPP_
 #define _TETRISCHED_PARTITION_HPP_
-#include "Worker.hpp"
 #include <unordered_map>
 #include <vector>
+
+#include "Worker.hpp"
 
 namespace tetrisched {
 
@@ -14,19 +15,20 @@ class Partition {
   static uint32_t partitionIdCounter;
   /// The ID attached to this partition.
   uint32_t partitionId;
-  /// A map from the ID of the  Worker to an instance of the Worker.
-  std::unordered_map<uint32_t, WorkerPtr> workers;
+  /// A map from the ID of the Worker to an instance of the Worker
+  /// and its quantity..
+  std::unordered_map<uint32_t, std::pair<WorkerPtr, size_t>> workers;
 
  public:
   /// Constructs a Partition without any Workers.
   Partition();
 
   /// Constructs a Partition with a collection of Workers.
-  Partition(std::vector<WorkerPtr>& workers);
-  Partition(std::initializer_list<WorkerPtr> workers);
+  Partition(std::vector<std::pair<WorkerPtr, size_t>>& workers);
+  Partition(std::initializer_list<std::pair<WorkerPtr, size_t>> workers);
 
   /// Add a Worker to this Partition.
-  void addWorker(WorkerPtr worker);
+  void addWorker(WorkerPtr worker, size_t quantity);
 
   /// Returns the ID of this Partition.
   uint32_t getPartitionId() const;
@@ -47,7 +49,6 @@ class Partition {
 /// multiple Expressions. This allows equivalence checks that currently
 /// rely on the ID of the Partition instead of the actual Workers inside it.
 using PartitionPtr = std::shared_ptr<Partition>;
-
 
 /// @brief  A Partitions object represents a collection of Partition.
 /// It is used by Tasks to specify a set of different Partitions that can
@@ -76,7 +77,6 @@ class Partitions {
 
   /// Returns the Partitions in this Partitions object.
   std::vector<PartitionPtr> getPartitions() const;
-
 };
 }  // namespace tetrisched
 #endif

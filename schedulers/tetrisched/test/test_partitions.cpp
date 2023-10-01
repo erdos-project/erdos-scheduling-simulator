@@ -22,13 +22,11 @@ TEST(PartitionTest, TestPartitionInitialized) {
 
 TEST(PartitionsTest, TestIntersectionEmpty) {
   // Create a set of Workers.
-  std::vector<tetrisched::WorkerPtr> workersInPartition1 = {
-      std::make_shared<tetrisched::Worker>(1, "worker1"),
-      std::make_shared<tetrisched::Worker>(2, "worker2"),
+  std::vector<std::pair<tetrisched::WorkerPtr, size_t>> workersInPartition1 = {
+      std::make_pair(std::make_shared<tetrisched::Worker>(1, "worker1"), 2),
   };
-  std::vector<tetrisched::WorkerPtr> workersInPartition2 = {
-      std::make_shared<tetrisched::Worker>(3, "worker3"),
-      std::make_shared<tetrisched::Worker>(4, "worker4"),
+  std::vector<std::pair<tetrisched::WorkerPtr, size_t>> workersInPartition2 = {
+      std::make_pair(std::make_shared<tetrisched::Worker>(2, "worker2"), 2),
   };
 
   // Create two partitions from the Workers.
@@ -48,13 +46,11 @@ TEST(PartitionsTest, TestIntersectionEmpty) {
 
 TEST(PartitionsTest, TestCorrectIntersectionSize) {
   // Create a set of Workers.
-  std::vector<tetrisched::WorkerPtr> workersInPartition1 = {
-      std::make_shared<tetrisched::Worker>(1, "worker1"),
-      std::make_shared<tetrisched::Worker>(2, "worker2"),
+  std::vector<std::pair<tetrisched::WorkerPtr, size_t>> workersInPartition1 = {
+      std::make_pair(std::make_shared<tetrisched::Worker>(1, "worker1"), 2),
   };
-  std::vector<tetrisched::WorkerPtr> workersInPartition2 = {
-      std::make_shared<tetrisched::Worker>(3, "worker3"),
-      std::make_shared<tetrisched::Worker>(4, "worker4"),
+  std::vector<std::pair<tetrisched::WorkerPtr, size_t>> workersInPartition2 = {
+      std::make_pair(std::make_shared<tetrisched::Worker>(2, "worker2"), 2),
   };
 
   // Create the Partition.

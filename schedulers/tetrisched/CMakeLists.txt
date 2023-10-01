@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.5...3.26)
 project(tetrisched LANGUAGES CXX)
 
 # Compile with atleast C++20.
+# Run export CMAKE_INSTALL_MODE=ABS_SYMBLINK to install dependencies correctly.
 # Set cmake -D CMAKE_CXX_COMPILER=/path/to/C++20/compatible/compiler.
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -109,7 +110,6 @@ target_link_libraries(tetrisched PRIVATE ${GUROBI_LINK_LIBRARIES})
 # Include and link Google-ORTools.
 target_link_libraries(tetrisched PRIVATE ${ORTOOLS_LINK_LIBRARIES})
 
-
 # add_executable(tetrisched_main ${TETRISCHED_SOURCE})
 # target_include_directories(tetrisched_main PRIVATE ${CPLEX_INCLUDE_DIRS})
 # target_link_directories(tetrisched_main PRIVATE ${CPLEX_LINK_DIRS})
@@ -121,8 +121,7 @@ target_link_libraries(tetrisched PRIVATE ${ORTOOLS_LINK_LIBRARIES})
 set(TETRISCHED_TESTS
      "test/test_expression.cpp"
      "test/test_partitions.cpp"
-     "test/test_solver.cpp"
-     "test/test_work.cpp")
+     "test/test_solver.cpp")
 
 add_executable(test_tetrisched ${TETRISCHED_TESTS})
 target_include_directories(test_tetrisched PRIVATE include)
@@ -168,6 +167,18 @@ target_link_directories(tetrisched_py PRIVATE ${CPLEX_LINK_DIRS})
 # Link all the relevant libraries.
 target_link_libraries(
   tetrisched_py
-  PRIVATE
+  PUBLIC
   tetrisched
 )
+
+# Generate an install Python target.
+find_package(Python COMPONENTS Interpreter Development)
+
+# Print the found Python path
+if (DEFINED Python_SITELIB)
+     message(STATUS "Installing Python bindings to ${Python_SITELIB}")
+     install(TARGETS tetrisched LIBRARY DESTINATION ${Python_SITELIB})
+     install(TARGETS tetrisched tetrisched_py COMPONENT python LIBRARY DESTINATION ${Python_SITELIB})
+else()
+     message("Cannot install the Python bindings. No suitable Python installation found.")
+endif()

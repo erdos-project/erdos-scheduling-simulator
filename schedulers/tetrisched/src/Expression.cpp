@@ -130,7 +130,13 @@ size_t CapacityConstraintMap::size() const {
 
 /* Method definitions for Expression */
 
+Expression::Expression(ExpressionType type) : type(type) {}
+
 size_t Expression::getNumChildren() const { return children.size(); }
+
+std::vector<ExpressionPtr> Expression::getChildren() const { return children; }
+
+ExpressionType Expression::getType() const { return type; }
 
 SolutionResultPtr Expression::solve(SolverModelPtr solverModel) {
   // Check that the Expression was parsed before.
@@ -181,11 +187,12 @@ SolutionResultPtr Expression::solve(SolverModelPtr solverModel) {
 
 /* Method definitions for ChooseExpression */
 
-ChooseExpression::ChooseExpression(TaskPtr associatedTask,
+ChooseExpression::ChooseExpression(std::string taskName,
                                    Partitions resourcePartitions,
                                    uint32_t numRequiredMachines, Time startTime,
                                    Time duration)
-    : associatedTask(associatedTask),
+    : Expression(ExpressionType::EXPR_CHOOSE),
+      taskName(taskName),
       resourcePartitions(resourcePartitions),
       numRequiredMachines(numRequiredMachines),
       startTime(startTime),
@@ -205,16 +212,14 @@ ParseResultPtr ChooseExpression::parse(
 
   if (currentTime > startTime) {
     TETRISCHED_DEBUG("Pruning Choose expression for "
-                     << associatedTask->getTaskName()
-                     << " to be placed starting at time " << startTime
-                     << " and ending at " << endTime
+                     << taskName << " to be placed starting at time "
+                     << startTime << " and ending at " << endTime
                      << " because it is in the past.");
     parsedResult->type = ParseResultType::EXPRESSION_PRUNE;
     return parsedResult;
   }
   TETRISCHED_DEBUG("Parsing Choose expression for "
-                   << associatedTask->getTaskName()
-                   << " to be placed starting at time " << startTime
+                   << taskName << " to be placed starting at time " << startTime
                    << " and ending at " << endTime << ".");
 
   // Find the partitions that this Choose expression can be placed in.
@@ -223,7 +228,7 @@ ParseResultPtr ChooseExpression::parse(
   // time of the parsing.
   Partitions schedulablePartitions = resourcePartitions | availablePartitions;
   TETRISCHED_DEBUG("The Choose Expression for "
-                   << associatedTask->getTaskName() << " will be limited to "
+                   << taskName << " will be limited to "
                    << schedulablePartitions.size() << " partitions.");
   if (schedulablePartitions.size() == 0) {
     // There are no schedulable partitions, this expression cannot be satisfied.
@@ -235,22 +240,20 @@ ParseResultPtr ChooseExpression::parse(
   // This Choose expression needs to be passed to the Solver.
   // We generate an Indicator variable for the Choose expression signifying
   // if this expression was satisfied.
-  VariablePtr isSatisfiedVar =
-      std::make_shared<Variable>(VariableType::VAR_INDICATOR,
-                                 associatedTask->getTaskName() + "_placed_at_" +
-                                     std::to_string(startTime));
+  VariablePtr isSatisfiedVar = std::make_shared<Variable>(
+      VariableType::VAR_INDICATOR,
+      taskName + "_placed_at_" + std::to_string(startTime));
   solverModel->addVariable(isSatisfiedVar);
 
   ConstraintPtr fulfillsDemandConstraint = std::make_unique<Constraint>(
-      associatedTask->getTaskName() + "_fulfills_demand_at_" +
-          std::to_string(startTime),
+      taskName + "_fulfills_demand_at_" + std::to_string(startTime),
       ConstraintType::CONSTR_EQ, 0);
   for (PartitionPtr& partition : schedulablePartitions.getPartitions()) {
     // For each partition, generate an integer that represents how many
     // resources were taken from this partition.
     VariablePtr allocationVar = std::make_shared<Variable>(
         VariableType::VAR_INTEGER,
-        associatedTask->getTaskName() + "_using_partition_" +
+        taskName + "_using_partition_" +
             std::to_string(partition->getPartitionId()) + "_at_" +
             std::to_string(startTime),
         0,
@@ -286,6 +289,9 @@ ParseResultPtr ChooseExpression::parse(
 }
 
 /* Method definitions for ObjectiveExpression */
+
+ObjectiveExpression::ObjectiveExpression()
+    : Expression(ExpressionType::EXPR_OBJECTIVE) {}
 
 void ObjectiveExpression::addChild(ExpressionPtr child) {
   children.push_back(child);
@@ -326,14 +332,15 @@ ParseResultPtr ObjectiveExpression::parse(
 
 /* Method definitions for LessThanExpression */
 
-LessThanExpression::LessThanExpression(std::string name) : name(name) {}
+LessThanExpression::LessThanExpression(std::string name)
+    : Expression(ExpressionType::EXPR_LESSTHAN), name(name) {}
 
 void LessThanExpression::addChild(ExpressionPtr child) {
   if (children.size() == 2) {
     throw tetrisched::exceptions::ExpressionConstructionException(
         "LessThanExpression cannot have more than two children.");
   }
-  children.push_back(std::move(child));
+  children.push_back(child);
 }
 
 ParseResultPtr LessThanExpression::parse(
@@ -427,7 +434,8 @@ ParseResultPtr LessThanExpression::parse(
 
 /* Method definitions for MinExpression */
 
-MinExpression::MinExpression(std::string name) : expressionName(name) {}
+MinExpression::MinExpression(std::string name)
+    : Expression(ExpressionType::EXPR_MIN), expressionName(name) {}
 
 void MinExpression::addChild(ExpressionPtr child) { children.push_back(child); }
 
@@ -528,7 +536,8 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
 
 /* Method definitions for MaxExpression */
 
-MaxExpression::MaxExpression(std::string name) : expressionName(name) {}
+MaxExpression::MaxExpression(std::string name)
+    : Expression(ExpressionType::EXPR_MAX), expressionName(name) {}
 
 void MaxExpression::addChild(ExpressionPtr child) { children.push_back(child); }
 
@@ -544,7 +553,9 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
 
 ScaleExpression::ScaleExpression(std::string name,
                                  TETRISCHED_ILP_TYPE scaleFactor)
-    : expressionName(name), scaleFactor(scaleFactor) {}
+    : Expression(ExpressionType::EXPR_SCALE),
+      expressionName(name),
+      scaleFactor(scaleFactor) {}
 
 void ScaleExpression::addChild(ExpressionPtr child) {
   if (children.size() == 1) {

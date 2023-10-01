@@ -8,7 +8,6 @@
 
 #include "tetrisched/Partition.hpp"
 #include "tetrisched/SolverModel.hpp"
-#include "tetrisched/Task.hpp"
 #include "tetrisched/Types.hpp"
 
 namespace tetrisched {
@@ -134,6 +133,33 @@ class CapacityConstraintMap {
   size_t size() const;
 };
 
+/// A `ExpressionType` enumeration represents the types of expressions that
+/// are supported by the STRL language.
+enum ExpressionType {
+  /// A Choose expression represents a choice of a required number of machines
+  /// from the set of resource partitions for the given duration starting at the
+  /// provided start_time.
+  EXPR_CHOOSE = 0,
+  /// An Objective expression collates the objectives from its children and
+  /// informs the SolverModel of the objective function.
+  EXPR_OBJECTIVE = 1,
+  /// A Min expression inserts a utility variable that is constrained by the
+  /// minimum utility of its children. Under an overall maximization objective,
+  /// this ensures that the expression is only satisfied if all of its children
+  /// are satisfied.
+  EXPR_MIN = 2,
+  /// A Max expression enforces a choice of only one of its children to be
+  /// satisfied.
+  EXPR_MAX = 3,
+  /// A Scale expression amplifies the utility of its child by a scalar factor.
+  EXPR_SCALE = 4,
+  /// A LessThan expression orders the two children of its expression in an
+  /// ordered relationship such that the second child occurs after the first
+  /// child.
+  EXPR_LESSTHAN = 5,
+};
+using ExpressionType = enum ExpressionType;
+
 /// A Base Class for all expressions in the STRL language.
 class Expression {
  protected:
@@ -142,10 +168,12 @@ class Expression {
   ParseResultPtr parsedResult;
   /// The children of this Expression.
   std::vector<ExpressionPtr> children;
+  /// The type of this Expression.
+  ExpressionType type;
 
  public:
-  /// Default construct the base class.
-  Expression() = default;
+  /// Construct the Expression class of the given type.
+  Expression(ExpressionType type);
 
   /// Adds a child to this epxression.
   /// May throw tetrisched::excpetions::ExpressionConstructionException
@@ -164,6 +192,12 @@ class Expression {
   /// Returns the number of children of this Expression.
   size_t getNumChildren() const;
 
+  /// Returns the children of this Expression.
+  std::vector<ExpressionPtr> getChildren() const;
+
+  /// Returns the type of this Expression.
+  ExpressionType getType() const;
+
   /// Solves the subtree rooted at this Expression and returns the solution.
   /// It assumes that the SolverModelPtr has been populated with values for
   /// unknown variables and throws a
@@ -178,9 +212,9 @@ class Expression {
 /// provided start_time.
 class ChooseExpression : public Expression {
  private:
-  /// The Task instance that this ChooseExpression is being inserted into
-  /// the AST in reference to.
-  TaskPtr associatedTask;
+  /// The name of the Task that this ChooseExpression is being inserted
+  /// into the AST in reference to.
+  std::string taskName;
   /// The Resource partitions that the ChooseExpression is being asked to
   /// choose resources from.
   Partitions resourcePartitions;
@@ -194,7 +228,7 @@ class ChooseExpression : public Expression {
   Time endTime;
 
  public:
-  ChooseExpression(TaskPtr associatedTask, Partitions resourcePartitions,
+  ChooseExpression(std::string taskName, Partitions resourcePartitions,
                    uint32_t numRequiredMachines, Time startTime, Time duration);
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
@@ -206,12 +240,8 @@ class ChooseExpression : public Expression {
 /// An `ObjectiveExpression` collates the objectives from its children and
 /// informs the SolverModel of the objective function.
 class ObjectiveExpression : public Expression {
- private:
-  /// The children of this Expression.
-  std::vector<ExpressionPtr> children;
-
  public:
-  ObjectiveExpression() = default;
+  ObjectiveExpression();
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
@@ -277,8 +307,6 @@ class LessThanExpression : public Expression {
  private:
   /// The name for this Expression.
   std::string name;
-  /// The children of this Expression.
-  std::vector<ExpressionPtr> children;
 
  public:
   LessThanExpression(std::string name);

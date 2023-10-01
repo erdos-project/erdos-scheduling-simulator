@@ -8,23 +8,25 @@ uint32_t Partition::partitionIdCounter = 0;
 Partition::Partition() : partitionId(partitionIdCounter++) {}
 
 /// Constructs a Partition with a collection of Workers.
-Partition::Partition(std::vector<WorkerPtr>& workers)
+Partition::Partition(std::vector<std::pair<WorkerPtr, size_t>>& workers)
     : partitionId(partitionIdCounter++) {
-  for (auto worker : workers) {
-    this->workers[worker->getWorkerId()] = worker;
+  for (const auto& workerPair : workers) {
+    this->workers[workerPair.first->getWorkerId()] = workerPair;
   }
 }
 
-Partition::Partition(std::initializer_list<WorkerPtr> workers)
+Partition::Partition(
+    std::initializer_list<std::pair<WorkerPtr, size_t>> workers)
     : partitionId(partitionIdCounter++) {
-  for (auto worker : workers) {
-    this->workers[worker->getWorkerId()] = worker;
+  for (const auto& workerPair : workers) {
+    this->workers[workerPair.first->getWorkerId()] = workerPair;
   }
 }
 
 /// Add a Worker to this Partition.
-void Partition::addWorker(WorkerPtr worker) {
-  workers[worker->getWorkerId()] = worker;
+void Partition::addWorker(WorkerPtr worker, size_t quantity) {
+  workers[worker->getWorkerId()] =
+      std::pair<WorkerPtr, size_t>(worker, quantity);
 }
 
 /// Returns the ID of this Partition.
@@ -36,7 +38,13 @@ bool Partition::operator==(const Partition& other) const {
 }
 
 /// Returns the number of Workers in this Partition.
-size_t Partition::size() const { return workers.size(); }
+size_t Partition::size() const {
+  size_t totalQuantity = 0;
+  for (const auto& [partitionId, worker] : workers) {
+    totalQuantity += worker.second;
+  }
+  return totalQuantity;
+}
 
 /// Constructs a Partitions object without any Partitions.
 Partitions::Partitions() {}
