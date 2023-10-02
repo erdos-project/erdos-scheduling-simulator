@@ -665,17 +665,17 @@ namespace tetrisched
       auto childParsedResult = children[i]->parse(solverModel, availablePartitions, capacityConstraints, currentTime);
 
       // assign an indicator variable for each child expression
-      if ((childParsedResult->startTime.has_value()) && (childParsedResult->endTime.has_value()) && (childParsedResult->utility.has_value()))
+      if ((childParsedResult->startTime.has_value()) && (childParsedResult->endTime.has_value()) && (childParsedResult->utility.has_value()) && (childParsedResult->indicator.has_value()))
       {
-        // create indicator variable for every child
-        VariablePtr isSatisfiedVar = std::make_shared<Variable>(VariableType::VAR_INDICATOR, expressionName + "_max_child_start_" + std::to_string(childParsedResult->startTime.value()) + "_end_" + std::to_string(childParsedResult->endTime.value()));
-        solverModel->addVariable(isSatisfiedVar);
+        // fetch values for fields set in the child
+        auto childStartTime = childParsedResult->startTime.value();
+        auto childEndTime = childParsedResult->endTime.value();
+        auto childIndicator = childParsedResult->indicator.value();
 
         // add per-child indicator variable to maxChildSubexprConstraint
-        maxChildSubexprConstraint->addTerm(isSatisfiedVar);
+        maxChildSubexprConstraint->addTerm(childIndicator.get<uint32_t>());
 
         // add term to maxStartTimeConstraint using isSatisfiedVar indicator
-        auto childStartTime = childParsedResult->startTime.value();
         if (childStartTime.isVariable())
         {
           throw tetrisched::exceptions::ExpressionSolutionException(
@@ -684,11 +684,10 @@ namespace tetrisched
         }
         else
         {
-          maxStartTimeConstraint->addTerm(childStartTime.get<Time>(), isSatisfiedVar);
+          maxStartTimeConstraint->addTerm(childIndicator.get<uint32_t>() * childStartTime.get<Time>());
         }
 
         // add term to maxEndTimeConstraint using isSatisfiedVar indicator
-        auto childEndTime = childParsedResult->endTime.value();
         if (childEndTime.isVariable())
         {
           throw tetrisched::exceptions::ExpressionSolutionException(
@@ -697,25 +696,31 @@ namespace tetrisched
         }
         else
         {
-          maxEndTimeConstraint->addTerm(childEndTime.get<Time>(), isSatisfiedVar);
+          maxEndTimeConstraint->addTerm(childIndicator.get<uint32_t>() * childEndTime.get<Time>());
         }
 
         // add term to maxUtilityConstraint using isSatisfiedVar indicator
-        auto childUtility = childParsedResult->utility.value()->getValue(); // TODO (DG): Check. Utility is an objective function but will have only 0 or +ve value?
-        maxUtilityConstraint->addTerm(childUtility, isSatisfiedVar);
+        // TODO (DG): To complete. Utility is an objective function. Can convert to constraint and add to solver. But how to add as "term" to maxUtilityConstraint?
+        // auto childUtility = childParsedResult->utility.value();
+        // maxUtilityConstraint->addTerm(childIndicator.get<uint32_t>(), childUtility);
       }
       else
       {
         throw tetrisched::exceptions::ExpressionSolutionException(
-            "Missing startTime or endTime or utility from child-" + std::to_string(i) +
+            "Missing startTime or endTime or utility or indicator from child-" + std::to_string(i) +
             " for MAX.");
       }
     }
 
     // Add max operator variables to the startTime, endTime, utility constraints
-    maxStartTimeConstraint->addTerm(-1, maxStartTime);
+    maxStartTimeConstraint->addTerm(-1, maxStartTime); // TODO (DG): Check if this term needs to be added just once. AK code in min adds it multiple times
+    maxEndTimeConstraint->addTerm(-1, maxEndTime);
+    // maxUtilityConstraint->addTerm(-1, maxUtility); // TODO: complete utility
 
-    // maxUtilityConstraint->addTerm(-1, maxUtility); // TODO: complete end time and utility
+    // Add constraints to solver once they are complete
+    solverModel->addConstraint(std::move(maxStartTimeConstraint));
+    solverModel->addConstraint(std::move(maxEndTimeConstraint));
+    solverModel->addConstraint(std::move(maxUtilityConstraint));
 
     // add MAX maxChildSubexprConstraint to solver
     solverModel->addConstraint(std::move(maxChildSubexprConstraint));
@@ -724,7 +729,7 @@ namespace tetrisched
     parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
     parsedResult->startTime = maxStartTime;
     parsedResult->endTime = maxEndTime;
-    parsedResult->utility = std::move(maxUtility); // TODO: Fix these
+    parsedResult->utility = std::move(maxUtility); // TODO (DG): Check. Need to pass up indicator variable?
     return parsedResult;
   }
 
