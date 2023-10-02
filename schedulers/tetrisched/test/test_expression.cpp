@@ -54,8 +54,8 @@ TEST(Expression, TestLessThanEnforcesOrdering) {
       std::make_unique<tetrisched::ChooseExpression>("task1", partitions, 1, 0,
                                                      100);
   tetrisched::ExpressionPtr chooseTask2 =
-      std::make_unique<tetrisched::ChooseExpression>("task2", partitions, 1, 200,
-                                                     100);
+      std::make_unique<tetrisched::ChooseExpression>("task2", partitions, 1,
+                                                     200, 100);
 
   // Construct the LessThan expression.
   tetrisched::ExpressionPtr lessThanExpression =
