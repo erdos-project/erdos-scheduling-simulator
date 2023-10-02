@@ -20,21 +20,27 @@ FetchContent_Declare(
 # For Windows: Prevent overriding the parent project's compiler/linker settings
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
+
+# Set the directories where the solver backends are installed.
 set(CPLEX_DIR "/opt/ibm/ILOG/CPLEX_Studio2211")
 set(GUROBI_DIR "/opt/gurobi1001/linux64")
 set(ORTOOLS_DIR "/usr/local/include/ortools")
+
+set(SOLVER_BACKEND_INCLUDE_DIRS "")
+set(SOLVER_BACKEND_LINK_DIRS "")
+set(SOLVER_BACKEND_LINK_LIBRARIES "")
 
 if (EXISTS "${CPLEX_DIR}")
      message("-- Adding CPLEX : ${CPLEX_DIR}")
      add_compile_definitions(_TETRISCHED_WITH_CPLEX_)
 
-     set(CPLEX_INCLUDE_DIRS
+     LIST(APPEND SOLVER_BACKEND_INCLUDE_DIRS
           "${CPLEX_DIR}/cplex/include/"
           "${CPLEX_DIR}/concert/include/")
-     set(CPLEX_LINK_DIRS
+     LIST(APPEND SOLVER_BACKEND_LINK_DIRS
           "${CPLEX_DIR}/cplex/lib/x86-64_linux/static_pic/"
           "${CPLEX_DIR}/concert/lib/x86-64_linux/static_pic/")
-     set(CPLEX_LINK_LIBRARIES
+     LIST(APPEND SOLVER_BACKEND_LINK_LIBRARIES
           "ilocplex"
           "concert"
           "cplex"
@@ -43,38 +49,31 @@ if (EXISTS "${CPLEX_DIR}")
           "dl")
 else()
      message("-- Not Adding CPLEX")
-     set(CPLEX_INCLUDE_DIRS "")
-     set(CPLEX_LINK_DIRS "")
-     set(CPLEX_LINK_LIBRARIES "")
 endif()
 
 if (EXISTS "${GUROBI_DIR}")
      message("-- Adding GUROBI : ${GUROBI_DIR}")
      add_compile_definitions(_TETRISCHED_WITH_GUROBI_)
 
-     set(GUROBI_INCLUDE_DIRS
+     LIST(APPEND SOLVER_BACKEND_INCLUDE_DIRS
           "${GUROBI_DIR}/include/")
-     set(GUROBI_LINK_DIRS
+     LIST(APPEND SOLVER_BACKEND_LINK_DIRS
           "${GUROBI_DIR}/lib/")
-     set(GUROBI_LINK_LIBRARIES
+     LIST(APPEND SOLVER_BACKEND_LINK_LIBRARIES
           "gurobi_c++"
           "gurobi100")
 else()
      message("-- Not Adding GUROBI")
-     set(GUROBI_INCLUDE_DIRS "")
-     set(GUROBI_LINK_DIRS "")
-     set(GUROBI_LINK_LIBRARIES "")
 endif()
 
 if (EXISTS "${ORTOOLS_DIR}")
      message("-- Adding Google OR-Tools : ${ORTOOLS_DIR}")
      add_compile_definitions(_TETRISCHED_WITH_OR_TOOLS_)
 
-     set(ORTOOLS_LINK_LIBRARIES
+     LIST(APPEND SOLVER_BACKEND_LINK_LIBRARIES
 	     "ortools")
 else()
      message("-- Not adding OR-Tools")
-     set(ORTOOLS_LINK_LIBRARIES "")
 endif()
 
 set(TETRISCHED_SOURCE
@@ -97,18 +96,10 @@ add_library(tetrisched SHARED ${TETRISCHED_SOURCE})
 target_include_directories(tetrisched PRIVATE include)
 target_compile_features(tetrisched PRIVATE cxx_std_17)
 
-# Include and link CPLEX.
-target_include_directories(tetrisched PRIVATE ${CPLEX_INCLUDE_DIRS})
-target_link_directories(tetrisched PRIVATE ${CPLEX_LINK_DIRS})
-target_link_libraries(tetrisched PRIVATE ${CPLEX_LINK_LIBRARIES})
-
-# Include and link Gurobi.
-target_include_directories(tetrisched PRIVATE ${GUROBI_INCLUDE_DIRS})
-target_link_directories(tetrisched PRIVATE ${GUROBI_LINK_DIRS})
-target_link_libraries(tetrisched PRIVATE ${GUROBI_LINK_LIBRARIES})
-
-# Include and link Google-ORTools.
-target_link_libraries(tetrisched PRIVATE ${ORTOOLS_LINK_LIBRARIES})
+# Include and link all solver backends.
+target_include_directories(tetrisched PRIVATE ${SOLVER_BACKEND_INCLUDE_DIRS})
+target_link_directories(tetrisched PRIVATE ${SOLVER_BACKEND_LINK_DIRS})
+target_link_libraries(tetrisched PRIVATE ${SOLVER_BACKEND_LINK_LIBRARIES})
 
 # add_executable(tetrisched_main ${TETRISCHED_SOURCE})
 # target_include_directories(tetrisched_main PRIVATE ${CPLEX_INCLUDE_DIRS})
@@ -126,22 +117,16 @@ set(TETRISCHED_TESTS
 add_executable(test_tetrisched ${TETRISCHED_TESTS})
 target_include_directories(test_tetrisched PRIVATE include)
 
-# Include and link CPLEX.
-target_include_directories(test_tetrisched PRIVATE ${CPLEX_INCLUDE_DIRS})
-target_link_directories(test_tetrisched PRIVATE ${CPLEX_LINK_DIRS})
-
-# Include and link Gurobi.
-target_include_directories(test_tetrisched PRIVATE ${GUROBI_INCLUDE_DIRS})
-target_link_directories(test_tetrisched PRIVATE ${GUROBI_LINK_DIRS})
+# Include and link solver backends.
+target_include_directories(test_tetrisched PRIVATE ${SOLVER_BACKEND_INCLUDE_DIRS})
+target_link_directories(test_tetrisched PRIVATE ${SOLVER_BACKEND_LINK_DIRS})
 
 target_link_libraries(
   test_tetrisched
   PRIVATE
   GTest::gtest_main
   tetrisched
-  ${CPLEX_LINK_LIBRARIES}
-  ${GUROBI_LINK_LIBRARIES}
-  ${ORTOOLS_LINK_LIBRARIES}
+  ${SOLVER_BACKEND_LINK_LIBRARIES}
 )
 
 include(GoogleTest)
@@ -160,9 +145,9 @@ pybind11_add_module(
 # Include the headers from Tetrisched.
 target_include_directories(tetrisched_py PRIVATE include)
 
-# Include and link CPLEX.
-target_include_directories(tetrisched_py PRIVATE ${CPLEX_INCLUDE_DIRS})
-target_link_directories(tetrisched_py PRIVATE ${CPLEX_LINK_DIRS})
+# Include and link solver backends.
+target_include_directories(tetrisched_py PRIVATE ${SOLVER_BACKEND_INCLUDE_DIRS})
+target_link_directories(tetrisched_py PRIVATE ${SOLVER_BACKEND_LINK_DIRS})
 
 # Link all the relevant libraries.
 target_link_libraries(
