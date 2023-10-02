@@ -574,10 +574,16 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
       VariableType::VAR_INTEGER, expressionName + "_max_utility_variable");
   solverModel->addVariable(maxUtilityVariable);
 
+  // Indicator of MAX operator
+  VariablePtr maxIndicator = std::make_shared<Variable>(
+      VariableType::VAR_INDICATOR, expressionName + "_max_indicator");
+  solverModel->addVariable(maxIndicator);
+
   // Constraint to allow only one sub-expression to have indicator = 1
+  // Sum(child_indicator - max_indicator) <= 0
   ConstraintPtr maxChildSubexprConstraint =
       std::make_unique<Constraint>(expressionName + "_max_child_subexpr_constr",
-                                   ConstraintType::CONSTR_LE, 1);
+                                   ConstraintType::CONSTR_LE, 0);
 
   // Constraint to set startTime of MAX
   // Sum(Indicator * child_start) >= maxStartTime
@@ -589,11 +595,11 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
   ConstraintPtr maxEndTimeConstraint = std::make_unique<Constraint>(
       expressionName + "_max_end_time_constr", ConstraintType::CONSTR_LE, 0);
 
-  // Constraint to set utility of MAX
-  // Utility cannot be a variable or expression. It is an int [0, inf)
-  // Sum(Indicator * child_utility) >= maxUtility
-  ConstraintPtr maxUtilityConstraint = std::make_unique<Constraint>(
-      expressionName + "_max_utility_constr", ConstraintType::CONSTR_GE, 0);
+  // // Constraint to set utility of MAX
+  // // Utility cannot be a variable or expression. It is an int [0, inf)
+  // // Sum(Indicator * child_utility) >= maxUtility
+  // ConstraintPtr maxUtilityConstraint = std::make_unique<Constraint>(
+  //     expressionName + "_max_utility_constr", ConstraintType::CONSTR_GE, 0);
 
   for (int i = 0; i < numChildren; i++) {
     // get child expression
@@ -619,8 +625,8 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
             "maxStartTimeConstraint got variable from child-" +
             std::to_string(i) + " for MAX.");
       } else {
-        maxStartTimeConstraint->addTerm(childIndicator.get<uint32_t>() *
-                                        childStartTime.get<Time>());
+        maxStartTimeConstraint->addTerm(1 * childStartTime.get<Time>(),
+                                        childIndicator);
       }
 
       // add term to maxEndTimeConstraint using isSatisfiedVar indicator
@@ -629,8 +635,8 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
             "maxEndTimeConstraint got variable from child-" +
             std::to_string(i) + " for MAX.");
       } else {
-        maxEndTimeConstraint->addTerm(childIndicator.get<uint32_t>() *
-                                      childEndTime.get<Time>());
+        maxEndTimeConstraint->addTerm(1 * childEndTime.get<Time>(),
+                                      childIndicator);
       }
 
       // add term to maxUtilityConstraint using isSatisfiedVar indicator
@@ -648,16 +654,16 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
   }
 
   // Add max operator variables to the startTime, endTime, utility constraints
-  maxStartTimeConstraint->addTerm(
-      -1, maxStartTime);  // TODO (DG): Check if this term needs to be added
-                          // just once. AK code in min adds it multiple times
+  maxStartTimeConstraint->addTerm(-1, maxStartTime);
   maxEndTimeConstraint->addTerm(-1, maxEndTime);
-  // maxUtilityConstraint->addTerm(-1, maxUtility); // TODO: complete utility
+  // maxUtilityConstraint->addTerm(-1, maxUtility);  // TODO: complete
+  // utility
+  maxChildSubexprConstraint->addTerm(-1, maxIndicator);
 
   // Add constraints to solver once they are complete
   solverModel->addConstraint(std::move(maxStartTimeConstraint));
   solverModel->addConstraint(std::move(maxEndTimeConstraint));
-  solverModel->addConstraint(std::move(maxUtilityConstraint));
+  // solverModel->addConstraint(std::move(maxUtilityConstraint));
 
   // add MAX maxChildSubexprConstraint to solver
   solverModel->addConstraint(std::move(maxChildSubexprConstraint));
@@ -666,8 +672,8 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
   parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
   parsedResult->startTime = maxStartTime;
   parsedResult->endTime = maxEndTime;
-  parsedResult->utility = std::move(
-      maxUtility);  // TODO (DG): Check. Need to pass up indicator variable?
+  parsedResult->utility = std::move(maxUtility);
+  parsedResult->indicator = maxIndicator;
   return parsedResult;
 }
 

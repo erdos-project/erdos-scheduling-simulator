@@ -78,7 +78,8 @@ struct ParseResult {
   std::optional<ObjectiveFunctionPtr> utility;
   /// The indicator associated with the parsed result.
   /// Can be either 1 or 0 based on wether the expression was satisfied or not.
-  std::optional<TimeOrVariableT> indicator;
+  using IndicatorT = XOrVariableT<uint32_t>;
+  std::optional<IndicatorT> indicator;
 };
 using ParseResultPtr = std::shared_ptr<ParseResult>;
 
