@@ -11,5 +11,9 @@ from .ilp_scheduler import ILPScheduler
 from .lsf_scheduler import LSFScheduler
 from .tetrisched_cplex_scheduler import TetriSchedCPLEXScheduler
 from .tetrisched_gurobi_scheduler import TetriSchedGurobiScheduler
-from .tetrisched_scheduler import TetriSchedScheduler
+
+try:
+    from .tetrisched_scheduler import TetriSchedScheduler
+except ImportError:
+    pass
 from .z3_scheduler import Z3Scheduler

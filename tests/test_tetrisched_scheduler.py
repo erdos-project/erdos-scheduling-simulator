@@ -4,7 +4,10 @@ import pytest
 # so we skip this module in the CI.
 tetrisched = pytest.importorskip("tetrisched_py")
 
-from schedulers import TetriSchedScheduler
+try:
+    from schedulers import TetriSchedScheduler
+except ImportError:
+    pass
 from tests.utils import create_default_task
 from utils import EventTime
 from workers import Worker, WorkerPool, WorkerPools
