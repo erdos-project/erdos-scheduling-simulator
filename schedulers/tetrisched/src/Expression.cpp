@@ -595,11 +595,9 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
   ConstraintPtr maxEndTimeConstraint = std::make_unique<Constraint>(
       expressionName + "_max_end_time_constr", ConstraintType::CONSTR_LE, 0);
 
-  // // Constraint to set utility of MAX
-  // // Utility cannot be a variable or expression. It is an int [0, inf)
-  // // Sum(Indicator * child_utility) >= maxUtility
-  // ConstraintPtr maxUtilityConstraint = std::make_unique<Constraint>(
-  //     expressionName + "_max_utility_constr", ConstraintType::CONSTR_GE, 0);
+  // Removed constraint for utility. It is assumed that indicator constraint
+  // will enable MAX to select one of the child nCk and the solver will maximize
+  // the utility from it
 
   for (int i = 0; i < numChildren; i++) {
     // get child expression
@@ -639,13 +637,6 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
                                       childIndicator);
       }
 
-      // add term to maxUtilityConstraint using isSatisfiedVar indicator
-      // TODO (DG): To complete. Utility is an objective function. Can convert
-      // to constraint and add to solver. But how to add as "term" to
-      // maxUtilityConstraint? auto childUtility =
-      // childParsedResult->utility.value();
-      // maxUtilityConstraint->addTerm(childIndicator.get<uint32_t>(),
-      // childUtility);
     } else {
       throw tetrisched::exceptions::ExpressionSolutionException(
           "Missing startTime or endTime or utility or indicator from child-" +
@@ -656,14 +647,11 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
   // Add max operator variables to the startTime, endTime, utility constraints
   maxStartTimeConstraint->addTerm(-1, maxStartTime);
   maxEndTimeConstraint->addTerm(-1, maxEndTime);
-  // maxUtilityConstraint->addTerm(-1, maxUtility);  // TODO: complete
-  // utility
   maxChildSubexprConstraint->addTerm(-1, maxIndicator);
 
   // Add constraints to solver once they are complete
   solverModel->addConstraint(std::move(maxStartTimeConstraint));
   solverModel->addConstraint(std::move(maxEndTimeConstraint));
-  // solverModel->addConstraint(std::move(maxUtilityConstraint));
 
   // add MAX maxChildSubexprConstraint to solver
   solverModel->addConstraint(std::move(maxChildSubexprConstraint));
