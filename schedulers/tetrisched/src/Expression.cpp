@@ -57,6 +57,11 @@ T XOrVariableT<X>::get() const {
 
 /* Method definitions for CapacityConstraintMap */
 
+CapacityConstraintMap::CapacityConstraintMap(Time granularity)
+    : granularity(granularity) {}
+
+CapacityConstraintMap::CapacityConstraintMap() : granularity(1) {}
+
 void CapacityConstraintMap::registerUsageAtTime(const Partition& partition,
                                                 Time time,
                                                 VariablePtr variable) {
@@ -92,24 +97,22 @@ void CapacityConstraintMap::registerUsageAtTime(const Partition& partition,
   capacityConstraints[mapKey]->addTerm(usage);
 }
 
-void CapacityConstraintMap::registerUsageForDuration(const Partition& partition,
-                                                     Time startTime,
-                                                     Time duration,
-                                                     VariablePtr variable,
-                                                     Time granularity) {
+void CapacityConstraintMap::registerUsageForDuration(
+    const Partition& partition, Time startTime, Time duration,
+    VariablePtr variable, std::optional<Time> granularity) {
+  Time _granularity = granularity.value_or(this->granularity);
   for (Time time = startTime; time < startTime + duration;
-       time += granularity) {
+       time += _granularity) {
     registerUsageAtTime(partition, time, variable);
   }
 }
 
-void CapacityConstraintMap::registerUsageForDuration(const Partition& partition,
-                                                     Time startTime,
-                                                     Time duration,
-                                                     uint32_t usage,
-                                                     Time granularity) {
+void CapacityConstraintMap::registerUsageForDuration(
+    const Partition& partition, Time startTime, Time duration, uint32_t usage,
+    std::optional<Time> granularity) {
+  Time _granularity = granularity.value_or(this->granularity);
   for (Time time = startTime; time < startTime + duration;
-       time += granularity) {
+       time += _granularity) {
     registerUsageAtTime(partition, time, usage);
   }
 }
