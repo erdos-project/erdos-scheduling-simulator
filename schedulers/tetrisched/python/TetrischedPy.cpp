@@ -3,23 +3,11 @@
 #include "Backends.cpp"
 #include "Expressions.cpp"
 #include "SolverModel.cpp"
-#include "tetrisched/Task.hpp"
 #include "tetrisched/Worker.hpp"
 
 namespace py = pybind11;
 
 void defineBasicTypes(py::module_& tetrisched_m) {
-  // Define the Task type.
-  py::class_<tetrisched::Task, tetrisched::TaskPtr>(tetrisched_m, "Task")
-      .def(py::init([](uint32_t taskId, std::string taskName) {
-             return std::make_shared<tetrisched::Task>(taskId, taskName);
-           }),
-           "Initializes the Task with the given ID and name.")
-      .def_property_readonly("id", &tetrisched::Task::getTaskId,
-                             "The ID of this Task.")
-      .def_property_readonly("name", &tetrisched::Task::getTaskName,
-                             "The name of this Task.");
-
   // Define the Worker type.
   py::class_<tetrisched::Worker, tetrisched::WorkerPtr>(tetrisched_m, "Worker")
       .def(py::init([](uint32_t workerId, std::string workerName) {

@@ -10,26 +10,24 @@
 /// Checks that no children can be added to a ChooseExpression.
 /// i.e., a ChooseExpression is a leaf node in the expression tree.
 TEST(Expression, TestChooseExpressionIsLeaf) {
-  tetrisched::TaskPtr task = std::make_shared<tetrisched::Task>(1, "task1");
   tetrisched::Partitions partitions = tetrisched::Partitions();
   tetrisched::ExpressionPtr chooseExpression =
-      std::make_unique<tetrisched::ChooseExpression>(task, partitions, 0, 0,
+      std::make_unique<tetrisched::ChooseExpression>("task1", partitions, 0, 0,
                                                      10);
   tetrisched::ExpressionPtr chooseExpression2 =
-      std::make_unique<tetrisched::ChooseExpression>(task, partitions, 0, 0,
+      std::make_unique<tetrisched::ChooseExpression>("task1", partitions, 0, 0,
                                                      10);
   EXPECT_THROW(chooseExpression->addChild(std::move(chooseExpression2)),
                tetrisched::exceptions::ExpressionConstructionException);
 }
 
 TEST(Expression, TestMinExpressionIsNOTLeaf) {
-  tetrisched::TaskPtr task = std::make_shared<tetrisched::Task>(1, "task1");
   tetrisched::Partitions partitions = tetrisched::Partitions();
   tetrisched::ExpressionPtr chooseExpression =
-      std::make_unique<tetrisched::ChooseExpression>(task, partitions, 0, 0,
+      std::make_unique<tetrisched::ChooseExpression>("task1", partitions, 0, 0,
                                                      10);
   tetrisched::ExpressionPtr chooseExpression2 =
-      std::make_unique<tetrisched::ChooseExpression>(task, partitions, 0, 0,
+      std::make_unique<tetrisched::ChooseExpression>("task1", partitions, 0, 0,
                                                      10);
 
   std::unique_ptr<tetrisched::MinExpression> minExpression =
@@ -43,25 +41,20 @@ TEST(Expression, TestMinExpressionIsNOTLeaf) {
 /// Checks that for two trivially satisfiable expressions, the less than
 /// expression is only satisfied if their times are ordered.
 TEST(Expression, TestLessThanEnforcesOrdering) {
-  // Construct the tasks.
-  tetrisched::TaskPtr task1 = std::make_shared<tetrisched::Task>(1, "task1");
-  tetrisched::TaskPtr task2 = std::make_shared<tetrisched::Task>(2, "task2");
-
   // Construct the Workers and a Partition.
   tetrisched::WorkerPtr worker1 =
       std::make_shared<tetrisched::Worker>(1, "worker1");
-  tetrisched::WorkerPtr worker2 =
-      std::make_shared<tetrisched::Worker>(2, "worker2");
-  tetrisched::PartitionPtr partition = std::make_shared<tetrisched::Partition>(
-      std::initializer_list<tetrisched::WorkerPtr>{worker1, worker2});
+  tetrisched::PartitionPtr partition =
+      std::make_shared<tetrisched::Partition>();
+  partition->addWorker(worker1, 2);
   tetrisched::Partitions partitions = tetrisched::Partitions({partition});
 
   // Construct the choice for the two tasks.
   tetrisched::ExpressionPtr chooseTask1 =
-      std::make_unique<tetrisched::ChooseExpression>(task1, partitions, 1, 0,
+      std::make_unique<tetrisched::ChooseExpression>("task1", partitions, 1, 0,
                                                      100);
   tetrisched::ExpressionPtr chooseTask2 =
-      std::make_unique<tetrisched::ChooseExpression>(task2, partitions, 1, 200,
+      std::make_unique<tetrisched::ChooseExpression>("task2", partitions, 1, 200,
                                                      100);
 
   // Construct the LessThan expression.
@@ -89,7 +82,8 @@ TEST(Expression, TestLessThanEnforcesOrdering) {
 
   // Translate and solve the model.
   cplexSolver.translateModel();
-  EXPECT_EQ(0, capacityConstraintMap.size()) << "Capacity map should be drained after translation.";
+  EXPECT_EQ(0, capacityConstraintMap.size())
+      << "Capacity map should be drained after translation.";
   cplexSolver.solveModel();
 
   auto result = objectiveExpression->solve(solverModelPtr);
