@@ -315,7 +315,7 @@ namespace tetrisched
     parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
     parsedResult->startTime = startTime;
     parsedResult->endTime = endTime;
-    // parsedResult->indicator = isSatisfiedVar;
+    parsedResult->indicator = isSatisfiedVar;
     parsedResult->utility = std::move(utility);
     return parsedResult;
   }
@@ -668,7 +668,7 @@ namespace tetrisched
       if ((childParsedResult->startTime.has_value()) && (childParsedResult->endTime.has_value()) && (childParsedResult->utility.has_value()))
       {
         // create indicator variable for every child
-        VariablePtr isSatisfiedVar = std::make_shared<Variable>(VariableType::VAR_INDICATOR, expressionName + "_max_child_start_" + std::to_string(childParsedResult->startTime.value()) + "_end_" + std::to_string(childParsedResult->endTime.value()) + "_utility_" + std::to_string(childParsedResult->utility.value()));
+        VariablePtr isSatisfiedVar = std::make_shared<Variable>(VariableType::VAR_INDICATOR, expressionName + "_max_child_start_" + std::to_string(childParsedResult->startTime.value()) + "_end_" + std::to_string(childParsedResult->endTime.value()));
         solverModel->addVariable(isSatisfiedVar);
 
         // add per-child indicator variable to maxChildSubexprConstraint
@@ -678,7 +678,9 @@ namespace tetrisched
         auto childStartTime = childParsedResult->startTime.value();
         if (childStartTime.isVariable())
         {
-          // maxStartTimeConstraint->addTerm(isSatisfiedVar.get()->getValue(), childStartTime.get<VariablePtr>()); // TODO (DG): Need to implement. Dont think this is right
+          throw tetrisched::exceptions::ExpressionSolutionException(
+              "maxStartTimeConstraint got variable from child-" + std::to_string(i) +
+              " for MAX.");
         }
         else
         {
@@ -689,7 +691,9 @@ namespace tetrisched
         auto childEndTime = childParsedResult->endTime.value();
         if (childEndTime.isVariable())
         {
-          // maxEndTimeConstraint->addTerm(isSatisfiedVar.get()->getValue(), childEndTime.get<VariablePtr>()); // TODO (DG): Need to implement. Dont think this is right
+          throw tetrisched::exceptions::ExpressionSolutionException(
+              "maxEndTimeConstraint got variable from child-" + std::to_string(i) +
+              " for MAX.");
         }
         else
         {

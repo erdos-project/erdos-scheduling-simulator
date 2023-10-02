@@ -11,285 +11,304 @@
 #include "tetrisched/Task.hpp"
 #include "tetrisched/Types.hpp"
 
-namespace tetrisched {
+namespace tetrisched
+{
 
-/// A `UtilityFn` represents the function that is used to calculate the utility
-/// of a particular expression.
-template <typename T>
-using UtilityFnT = std::function<T(Time, Time)>;
-using UtilityFn = UtilityFnT<TETRISCHED_ILP_TYPE>;
-
-/// A `ParseResultType` enumeration represents the types of results that
-/// parsing an expression can return.
-enum ParseResultType {
-  /// The expression can be pruned from the subtree.
-  /// This occurs if the time bounds for the choices
-  /// have evolved past the current time.
-  EXPRESSION_PRUNE = 0,
-  /// The expression is known to provide no utility.
-  /// Parent expressions can safely ignore this subtree.
-  EXPRESSION_NO_UTILITY = 1,
-  /// The expression has been parsed successfully.
-  /// The utility is attached with the return along with
-  /// the relevant start and finish times.
-  EXPRESSION_UTILITY = 2,
-};
-using ParseResultType = enum ParseResultType;
-using SolutionResultType = enum ParseResultType;
-
-template <typename X>
-class XOrVariableT {
- private:
-  std::variant<std::monostate, X, VariablePtr> value;
-
- public:
-  /// Constructors and operators.
-  XOrVariableT() = default;
-  XOrVariableT(const X& newValue);
-  XOrVariableT(const VariablePtr& newValue);
-  XOrVariableT(const XOrVariableT& newValue) = default;
-  XOrVariableT(XOrVariableT&& newValue) = default;
-  XOrVariableT& operator=(const X& newValue);
-  XOrVariableT& operator=(const VariablePtr& newValue);
-
-  /// Resolves the value inside this class.
-  X resolve() const;
-
-  /// Checks if the class contains a Variable.
-  bool isVariable() const;
-
-  /// Returns the (unresolved) value in the container.
+  /// A `UtilityFn` represents the function that is used to calculate the utility
+  /// of a particular expression.
   template <typename T>
-  T get() const;
-};
+  using UtilityFnT = std::function<T(Time, Time)>;
+  using UtilityFn = UtilityFnT<TETRISCHED_ILP_TYPE>;
 
-/// A `ParseResult` class represents the result of parsing an expression.
-struct ParseResult {
-  using TimeOrVariableT = XOrVariableT<Time>;
-  /// The type of the result.
-  ParseResultType type;
-  /// The start time associated with the parsed result.
-  /// Can be either a Time known at runtime or a pointer to a Solver variable.
-  std::optional<TimeOrVariableT> startTime;
-  /// The end time associated with the parsed result.
-  /// Can be either a Time known at runtime or a pointer to a Solver variable.
-  std::optional<TimeOrVariableT> endTime;
-  /// The utility associated with the parsed result.
-  /// The utility is positive if the expression was satisfied, and 0 otherwise.
-  std::optional<ObjectiveFunctionPtr> utility;
-};
-using ParseResultPtr = std::shared_ptr<ParseResult>;
+  /// A `ParseResultType` enumeration represents the types of results that
+  /// parsing an expression can return.
+  enum ParseResultType
+  {
+    /// The expression can be pruned from the subtree.
+    /// This occurs if the time bounds for the choices
+    /// have evolved past the current time.
+    EXPRESSION_PRUNE = 0,
+    /// The expression is known to provide no utility.
+    /// Parent expressions can safely ignore this subtree.
+    EXPRESSION_NO_UTILITY = 1,
+    /// The expression has been parsed successfully.
+    /// The utility is attached with the return along with
+    /// the relevant start and finish times.
+    EXPRESSION_UTILITY = 2,
+  };
+  using ParseResultType = enum ParseResultType;
+  using SolutionResultType = enum ParseResultType;
 
-/// A `SolutionResult` class represents the solution attributed to an
-/// expression.
-struct SolutionResult {
-  /// The type of the result.
-  SolutionResultType type;
-  /// The start time associated with the result.
-  std::optional<Time> startTime;
-  /// The end time associated with the result.
-  std::optional<Time> endTime;
-  /// The utility associated with the result.
-  std::optional<TETRISCHED_ILP_TYPE> utility;
-};
-using SolutionResultPtr = std::shared_ptr<SolutionResult>;
+  template <typename X>
+  class XOrVariableT
+  {
+  private:
+    std::variant<std::monostate, X, VariablePtr> value;
 
-struct PartitionTimePairHasher {
-  size_t operator()(const std::pair<uint32_t, Time>& pair) const {
-    auto partitionIdHash = std::hash<uint32_t>()(pair.first);
-    auto timeHash = std::hash<Time>()(pair.second);
-    if (partitionIdHash != timeHash) {
-      return partitionIdHash ^ timeHash;
+  public:
+    /// Constructors and operators.
+    XOrVariableT() = default;
+    XOrVariableT(const X &newValue);
+    XOrVariableT(const VariablePtr &newValue);
+    XOrVariableT(const XOrVariableT &newValue) = default;
+    XOrVariableT(XOrVariableT &&newValue) = default;
+    XOrVariableT &operator=(const X &newValue);
+    XOrVariableT &operator=(const VariablePtr &newValue);
+
+    /// Resolves the value inside this class.
+    X resolve() const;
+
+    /// Checks if the class contains a Variable.
+    bool isVariable() const;
+
+    /// Returns the (unresolved) value in the container.
+    template <typename T>
+    T get() const;
+  };
+
+  /// A `ParseResult` class represents the result of parsing an expression.
+  struct ParseResult
+  {
+    using TimeOrVariableT = XOrVariableT<Time>;
+    /// The type of the result.
+    ParseResultType type;
+    /// The start time associated with the parsed result.
+    /// Can be either a Time known at runtime or a pointer to a Solver variable.
+    std::optional<TimeOrVariableT> startTime;
+    /// The end time associated with the parsed result.
+    /// Can be either a Time known at runtime or a pointer to a Solver variable.
+    std::optional<TimeOrVariableT> endTime;
+    /// The utility associated with the parsed result.
+    /// The utility is positive if the expression was satisfied, and 0 otherwise.
+    std::optional<ObjectiveFunctionPtr> utility;
+    /// The indicator associated with the parsed result.
+    /// Can be either 1 or 0 based on wether the expression was satisfied or not.
+    std::optional<TimeOrVariableT> indicator;
+  };
+  using ParseResultPtr = std::shared_ptr<ParseResult>;
+
+  /// A `SolutionResult` class represents the solution attributed to an
+  /// expression.
+  struct SolutionResult
+  {
+    /// The type of the result.
+    SolutionResultType type;
+    /// The start time associated with the result.
+    std::optional<Time> startTime;
+    /// The end time associated with the result.
+    std::optional<Time> endTime;
+    /// The utility associated with the result.
+    std::optional<TETRISCHED_ILP_TYPE> utility;
+  };
+  using SolutionResultPtr = std::shared_ptr<SolutionResult>;
+
+  struct PartitionTimePairHasher
+  {
+    size_t operator()(const std::pair<uint32_t, Time> &pair) const
+    {
+      auto partitionIdHash = std::hash<uint32_t>()(pair.first);
+      auto timeHash = std::hash<Time>()(pair.second);
+      if (partitionIdHash != timeHash)
+      {
+        return partitionIdHash ^ timeHash;
+      }
+      return partitionIdHash;
     }
-    return partitionIdHash;
-  }
-};
+  };
 
-/// A `CapacityConstraintMap` aggregates the terms that may potentially
-/// affect the capacity of a Partition at a particular time, and provides
-/// the ability for Expressions to register a variable that represents their
-/// potential intent to use the Partition at a particular time.
-class CapacityConstraintMap {
- private:
-  std::unordered_map<std::pair<uint32_t, Time>, ConstraintPtr,
-                     PartitionTimePairHasher>
-      capacityConstraints;
+  /// A `CapacityConstraintMap` aggregates the terms that may potentially
+  /// affect the capacity of a Partition at a particular time, and provides
+  /// the ability for Expressions to register a variable that represents their
+  /// potential intent to use the Partition at a particular time.
+  class CapacityConstraintMap
+  {
+  private:
+    std::unordered_map<std::pair<uint32_t, Time>, ConstraintPtr,
+                       PartitionTimePairHasher>
+        capacityConstraints;
 
-  /// The ObjectiveExpression is allowed to translate this map.
-  void translate(SolverModelPtr solverModel);
-  friend class ObjectiveExpression;
+    /// The ObjectiveExpression is allowed to translate this map.
+    void translate(SolverModelPtr solverModel);
+    friend class ObjectiveExpression;
 
- public:
-  CapacityConstraintMap() {}
-  void registerUsageAtTime(const Partition& partition, Time time,
-                           VariablePtr variable);
-  void registerUsageAtTime(const Partition& partition, Time time,
-                           uint32_t usage);
-  void registerUsageForDuration(const Partition& partition, Time startTime,
-                                Time duration, VariablePtr variable,
-                                Time granularity = 1);
-  void registerUsageForDuration(const Partition& partition, Time startTime,
-                                Time duration, uint32_t usage,
-                                Time granularity = 1);
-  size_t size() const;
-};
+  public:
+    CapacityConstraintMap() {}
+    void registerUsageAtTime(const Partition &partition, Time time,
+                             VariablePtr variable);
+    void registerUsageAtTime(const Partition &partition, Time time,
+                             uint32_t usage);
+    void registerUsageForDuration(const Partition &partition, Time startTime,
+                                  Time duration, VariablePtr variable,
+                                  Time granularity = 1);
+    void registerUsageForDuration(const Partition &partition, Time startTime,
+                                  Time duration, uint32_t usage,
+                                  Time granularity = 1);
+    size_t size() const;
+  };
 
-/// A Base Class for all expressions in the STRL language.
-class Expression {
- protected:
-  /// The parsed result from the Expression.
-  /// Used for retrieving the solution from the solver.
-  ParseResultPtr parsedResult;
-  /// The children of this Expression.
-  std::vector<ExpressionPtr> children;
+  /// A Base Class for all expressions in the STRL language.
+  class Expression
+  {
+  protected:
+    /// The parsed result from the Expression.
+    /// Used for retrieving the solution from the solver.
+    ParseResultPtr parsedResult;
+    /// The children of this Expression.
+    std::vector<ExpressionPtr> children;
 
- public:
-  /// Default construct the base class.
-  Expression() = default;
+  public:
+    /// Default construct the base class.
+    Expression() = default;
 
-  /// Adds a child to this epxression.
-  /// May throw tetrisched::excpetions::ExpressionConstructionException
-  /// if an incorrect number of children are registered.
-  virtual void addChild(ExpressionPtr child) = 0;
+    /// Adds a child to this epxression.
+    /// May throw tetrisched::excpetions::ExpressionConstructionException
+    /// if an incorrect number of children are registered.
+    virtual void addChild(ExpressionPtr child) = 0;
 
-  /// Parses the expression into a set of variables and constraints for the
-  /// Solver. Returns a ParseResult that contains the utility of the expression,
-  /// an indicator specifying if the expression was satisfied and variables that
-  /// provide a start and end time bound on this Expression.
-  virtual ParseResultPtr parse(SolverModelPtr solverModel,
-                               Partitions availablePartitions,
-                               CapacityConstraintMap& capacityConstraints,
-                               Time currentTime) = 0;
+    /// Parses the expression into a set of variables and constraints for the
+    /// Solver. Returns a ParseResult that contains the utility of the expression,
+    /// an indicator specifying if the expression was satisfied and variables that
+    /// provide a start and end time bound on this Expression.
+    virtual ParseResultPtr parse(SolverModelPtr solverModel,
+                                 Partitions availablePartitions,
+                                 CapacityConstraintMap &capacityConstraints,
+                                 Time currentTime) = 0;
 
-  /// Returns the number of children of this Expression.
-  size_t getNumChildren() const;
+    /// Returns the number of children of this Expression.
+    size_t getNumChildren() const;
 
-  /// Solves the subtree rooted at this Expression and returns the solution.
-  /// It assumes that the SolverModelPtr has been populated with values for
-  /// unknown variables and throws a
-  /// tetrisched::exceptions::ExpressionSolutionException if the SolverModelPtr
-  /// is not populated. This method returns the actual values for the variables
-  /// specified in the ParseResult.
-  SolutionResultPtr solve(SolverModelPtr solverModel);
-};
+    /// Solves the subtree rooted at this Expression and returns the solution.
+    /// It assumes that the SolverModelPtr has been populated with values for
+    /// unknown variables and throws a
+    /// tetrisched::exceptions::ExpressionSolutionException if the SolverModelPtr
+    /// is not populated. This method returns the actual values for the variables
+    /// specified in the ParseResult.
+    SolutionResultPtr solve(SolverModelPtr solverModel);
+  };
 
-/// A `ChooseExpression` represents a choice of a required number of machines
-/// from the set of resource partitions for the given duration starting at the
-/// provided start_time.
-class ChooseExpression : public Expression {
- private:
-  /// The Task instance that this ChooseExpression is being inserted into
-  /// the AST in reference to.
-  TaskPtr associatedTask;
-  /// The Resource partitions that the ChooseExpression is being asked to
-  /// choose resources from.
-  Partitions resourcePartitions;
-  /// The number of partitions that this ChooseExpression needs to choose.
-  uint32_t numRequiredMachines;
-  /// The start time of the choice represented by this Expression.
-  Time startTime;
-  /// The duration of the choice represented by this Expression.
-  Time duration;
-  /// The end time of the choice represented by this Expression.
-  Time endTime;
+  /// A `ChooseExpression` represents a choice of a required number of machines
+  /// from the set of resource partitions for the given duration starting at the
+  /// provided start_time.
+  class ChooseExpression : public Expression
+  {
+  private:
+    /// The Task instance that this ChooseExpression is being inserted into
+    /// the AST in reference to.
+    TaskPtr associatedTask;
+    /// The Resource partitions that the ChooseExpression is being asked to
+    /// choose resources from.
+    Partitions resourcePartitions;
+    /// The number of partitions that this ChooseExpression needs to choose.
+    uint32_t numRequiredMachines;
+    /// The start time of the choice represented by this Expression.
+    Time startTime;
+    /// The duration of the choice represented by this Expression.
+    Time duration;
+    /// The end time of the choice represented by this Expression.
+    Time endTime;
 
- public:
-  ChooseExpression(TaskPtr associatedTask, Partitions resourcePartitions,
-                   uint32_t numRequiredMachines, Time startTime, Time duration);
-  void addChild(ExpressionPtr child) override;
-  ParseResultPtr parse(SolverModelPtr solverModel,
-                       Partitions availablePartitions,
-                       CapacityConstraintMap& capacityConstraints,
-                       Time currentTime) override;
-};
+  public:
+    ChooseExpression(TaskPtr associatedTask, Partitions resourcePartitions,
+                     uint32_t numRequiredMachines, Time startTime, Time duration);
+    void addChild(ExpressionPtr child) override;
+    ParseResultPtr parse(SolverModelPtr solverModel,
+                         Partitions availablePartitions,
+                         CapacityConstraintMap &capacityConstraints,
+                         Time currentTime) override;
+  };
 
-/// An `ObjectiveExpression` collates the objectives from its children and
-/// informs the SolverModel of the objective function.
-class ObjectiveExpression : public Expression {
- private:
-  /// The children of this Expression.
-  std::vector<ExpressionPtr> children;
+  /// An `ObjectiveExpression` collates the objectives from its children and
+  /// informs the SolverModel of the objective function.
+  class ObjectiveExpression : public Expression
+  {
+  private:
+    /// The children of this Expression.
+    std::vector<ExpressionPtr> children;
 
- public:
-  ObjectiveExpression() = default;
-  void addChild(ExpressionPtr child) override;
-  ParseResultPtr parse(SolverModelPtr solverModel,
-                       Partitions availablePartitions,
-                       CapacityConstraintMap& capacityConstraints,
-                       Time currentTime) override;
-};
+  public:
+    ObjectiveExpression() = default;
+    void addChild(ExpressionPtr child) override;
+    ParseResultPtr parse(SolverModelPtr solverModel,
+                         Partitions availablePartitions,
+                         CapacityConstraintMap &capacityConstraints,
+                         Time currentTime) override;
+  };
 
-/// A `MinExpression` inserts a utility variable that is constrained by the
-/// minimum utility of its children. Under an overall maximization objective,
-/// this ensures that the expression is only satisfied if all of its children
-/// are satisfied.
-class MinExpression : public Expression {
- private:
-  /// The name of the expression.
-  std::string expressionName;
+  /// A `MinExpression` inserts a utility variable that is constrained by the
+  /// minimum utility of its children. Under an overall maximization objective,
+  /// this ensures that the expression is only satisfied if all of its children
+  /// are satisfied.
+  class MinExpression : public Expression
+  {
+  private:
+    /// The name of the expression.
+    std::string expressionName;
 
- public:
-  MinExpression(std::string name);
-  void addChild(ExpressionPtr child) override;
-  ParseResultPtr parse(SolverModelPtr solverModel,
-                       Partitions availablePartitions,
-                       CapacityConstraintMap& capacityConstraints,
-                       Time currentTime) override;
-};
+  public:
+    MinExpression(std::string name);
+    void addChild(ExpressionPtr child) override;
+    ParseResultPtr parse(SolverModelPtr solverModel,
+                         Partitions availablePartitions,
+                         CapacityConstraintMap &capacityConstraints,
+                         Time currentTime) override;
+  };
 
-/// A `MaxExpression` enforces a choice of only one of its children to be
-/// satisfied.
-class MaxExpression : public Expression {
- private:
-  /// The name of the expression.
-  std::string expressionName;
+  /// A `MaxExpression` enforces a choice of only one of its children to be
+  /// satisfied.
+  class MaxExpression : public Expression
+  {
+  private:
+    /// The name of the expression.
+    std::string expressionName;
 
- public:
-  MaxExpression(std::string name);
-  void addChild(ExpressionPtr child) override;
-  ParseResultPtr parse(SolverModelPtr solverModel,
-                       Partitions availablePartitions,
-                       CapacityConstraintMap& capacityConstraints,
-                       Time currentTime) override;
-};
+  public:
+    MaxExpression(std::string name);
+    void addChild(ExpressionPtr child) override;
+    ParseResultPtr parse(SolverModelPtr solverModel,
+                         Partitions availablePartitions,
+                         CapacityConstraintMap &capacityConstraints,
+                         Time currentTime) override;
+  };
 
-/// A `ScaleExpression` amplifies the utility of its child by a scalar factor.
-class ScaleExpression : public Expression {
- private:
-  /// The name of the expression.
-  std::string expressionName;
-  /// The scalar factor to amplify the utility of the child by.
-  TETRISCHED_ILP_TYPE scaleFactor;
+  /// A `ScaleExpression` amplifies the utility of its child by a scalar factor.
+  class ScaleExpression : public Expression
+  {
+  private:
+    /// The name of the expression.
+    std::string expressionName;
+    /// The scalar factor to amplify the utility of the child by.
+    TETRISCHED_ILP_TYPE scaleFactor;
 
- public:
-  ScaleExpression(std::string name, TETRISCHED_ILP_TYPE scaleFactor);
-  void addChild(ExpressionPtr child) override;
-  ParseResultPtr parse(SolverModelPtr solverModel,
-                       Partitions availablePartitions,
-                       CapacityConstraintMap& capacityConstraints,
-                       Time currentTime) override;
-};
+  public:
+    ScaleExpression(std::string name, TETRISCHED_ILP_TYPE scaleFactor);
+    void addChild(ExpressionPtr child) override;
+    ParseResultPtr parse(SolverModelPtr solverModel,
+                         Partitions availablePartitions,
+                         CapacityConstraintMap &capacityConstraints,
+                         Time currentTime) override;
+  };
 
-/// A `LessThanExpression` orders the two children of its expression in an
-/// ordered relationship such that the second child occurs after the first
-/// child.
-class LessThanExpression : public Expression {
- private:
-  /// The name for this Expression.
-  std::string name;
-  /// The children of this Expression.
-  std::vector<ExpressionPtr> children;
+  /// A `LessThanExpression` orders the two children of its expression in an
+  /// ordered relationship such that the second child occurs after the first
+  /// child.
+  class LessThanExpression : public Expression
+  {
+  private:
+    /// The name for this Expression.
+    std::string name;
+    /// The children of this Expression.
+    std::vector<ExpressionPtr> children;
 
- public:
-  LessThanExpression(std::string name);
-  void addChild(ExpressionPtr child) override;
-  ParseResultPtr parse(SolverModelPtr solverModel,
-                       Partitions availablePartitions,
-                       CapacityConstraintMap& capacityConstraints,
-                       Time currentTime) override;
-};
-}  // namespace tetrisched
-#endif  // _TETRISCHED_EXPRESSION_HPP_
+  public:
+    LessThanExpression(std::string name);
+    void addChild(ExpressionPtr child) override;
+    ParseResultPtr parse(SolverModelPtr solverModel,
+                         Partitions availablePartitions,
+                         CapacityConstraintMap &capacityConstraints,
+                         Time currentTime) override;
+  };
+} // namespace tetrisched
+#endif // _TETRISCHED_EXPRESSION_HPP_
 
 // #ifndef _EXPRESSION_HPP_
 // #define _EXPRESSION_HPP_
