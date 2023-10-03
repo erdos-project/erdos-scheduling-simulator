@@ -127,6 +127,24 @@ void ConstraintT<T>::addTerm(std::shared_ptr<VariableT<T>> variable) {
 }
 
 template <typename T>
+void ConstraintT<T>::addTerm(const XOrVariableT<T> &term) {
+  if (term.isVariable()) {
+    this->addTerm(term.template get<VariablePtr>());
+  } else {
+    this->addTerm(term.template get<T>());
+  }
+}
+
+template <typename T>
+void ConstraintT<T>::addTerm(T coefficient, const XOrVariableT<T> &term) {
+  if (term.isVariable()) {
+    this->addTerm(coefficient, term.template get<VariablePtr>());
+  } else {
+    this->addTerm(coefficient * term.template get<T>());
+  }
+}
+
+template <typename T>
 std::string ConstraintT<T>::toString() const {
   std::string constraintString;
   for (auto &term : terms) {
@@ -222,6 +240,15 @@ void ObjectiveFunctionT<T>::merge(const ObjectiveFunctionT<T> &other) {
   for (auto &term : other.terms) {
     terms.push_back(term);
   }
+}
+
+template <typename T>
+ObjectiveFunctionT<T> &ObjectiveFunctionT<T>::operator+=(
+    const ObjectiveFunctionT<T> &other) {
+  for (auto &term : other.terms) {
+    terms.push_back(term);
+  }
+  return *this;
 }
 
 template <typename T>

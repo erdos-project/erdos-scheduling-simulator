@@ -121,6 +121,14 @@ class XOrVariableT {
     value = newValue;
     return *this;
   }
+  template <typename Y>
+  operator XOrVariableT<Y>() const {
+    if (this->isVariable()) {
+      return XOrVariableT<Y>(this->get<VariablePtr>());
+    } else {
+      return XOrVariableT<Y>(static_cast<Y>(this->get<X>()));
+    }
+  }
 
   /// Resolves the value inside this class.
   X resolve() const {
@@ -201,6 +209,14 @@ class ConstraintT {
   /// with the coefficient of 1.
   void addTerm(std::shared_ptr<VariableT<T>> variable);
 
+  /// Adds a term to the left-hand side of this constraint that can be
+  /// resolved to either a constant or a variable.
+  void addTerm(const XOrVariableT<T>& term);
+
+  /// Adds a term to the left-hand side of this constraint with a given
+  /// coefficient and a term that can either be a constant or a variable.
+  void addTerm(T coefficient, const XOrVariableT<T>& term);
+
   /// Retrieve a string representation of this Constraint.
   std::string toString() const;
 
@@ -268,6 +284,10 @@ class ObjectiveFunctionT {
 
   /// Merges this utility with another utility.
   void merge(const ObjectiveFunctionT<T>& other);
+
+  /// Merges the current utility with the utility of the other objective,
+  /// and returns a reference to the current utility.
+  ObjectiveFunctionT<T>& operator+=(const ObjectiveFunctionT<T>& other);
 
   /// Retrieves the value of the utility of this ObjectiveFunction.
   T getValue() const;

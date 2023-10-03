@@ -261,7 +261,7 @@ ParseResultPtr ObjectiveExpression::parse(
     auto result = child->parse(solverModel, availablePartitions,
                                capacityConstraints, currentTime);
     if (result->type == ParseResultType::EXPRESSION_UTILITY) {
-      utility->merge(*(result->utility.value()));
+      (*utility) += *(result->utility.value());
     }
   }
 
@@ -504,22 +504,18 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
         "Number of children should be >=1 for MAX");
   }
 
-  // start time of MAX operator
+  // Define the start time, end time and the utility bubbled up
+  // by the MaxExpression.
   VariablePtr maxStartTime = std::make_shared<Variable>(
       VariableType::VAR_INTEGER, expressionName + "_max_start_time");
   solverModel->addVariable(maxStartTime);
 
-  // end time of MAX operator
   VariablePtr maxEndTime = std::make_shared<Variable>(
       VariableType::VAR_INTEGER, expressionName + "_max_end_time");
   solverModel->addVariable(maxEndTime);
 
-  // Utility of MAX operator
-  auto maxUtility =
+  ObjectiveFunctionPtr maxObjectiveFunction =
       std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
-  VariablePtr maxUtilityVariable = std::make_shared<Variable>(
-      VariableType::VAR_INTEGER, expressionName + "_max_utility_variable");
-  solverModel->addVariable(maxUtilityVariable);
 
   // Indicator of MAX operator
   VariablePtr maxIndicator = std::make_shared<Variable>(
@@ -542,73 +538,77 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
   ConstraintPtr maxEndTimeConstraint = std::make_shared<Constraint>(
       expressionName + "_max_end_time_constr", ConstraintType::CONSTR_LE, 0);
 
-  // Removed constraint for utility. It is assumed that indicator constraint
-  // will enable MAX to select one of the child nCk and the solver will maximize
-  // the utility from it
-
+  // Parse each of the children and constrain the MaxExpression's start time,
+  // end time and utility as a function of the children's start time, end time
+  // and utility.
   for (int i = 0; i < numChildren; i++) {
-    // get child expression
     auto childParsedResult = children[i]->parse(
         solverModel, availablePartitions, capacityConstraints, currentTime);
 
-    // assign an indicator variable for each child expression
-    if ((childParsedResult->startTime.has_value()) &&
-        (childParsedResult->endTime.has_value()) &&
-        (childParsedResult->utility.has_value()) &&
-        (childParsedResult->indicator.has_value())) {
-      // fetch values for fields set in the child
-      auto childStartTime = childParsedResult->startTime.value();
-      auto childEndTime = childParsedResult->endTime.value();
-      auto childIndicator = childParsedResult->indicator.value();
-
-      // add per-child indicator variable to maxChildSubexprConstraint
-      maxChildSubexprConstraint->addTerm(childIndicator.get<uint32_t>());
-
-      // add term to maxStartTimeConstraint using isSatisfiedVar indicator
-      if (childStartTime.isVariable()) {
-        throw tetrisched::exceptions::ExpressionSolutionException(
-            "maxStartTimeConstraint got variable from child-" +
-            std::to_string(i) + " for MAX.");
-      } else {
-        maxStartTimeConstraint->addTerm(childStartTime.get<Time>(),
-                                        childIndicator.get<VariablePtr>());
-      }
-
-      // add term to maxEndTimeConstraint using isSatisfiedVar indicator
-      if (childEndTime.isVariable()) {
-        throw tetrisched::exceptions::ExpressionSolutionException(
-            "maxEndTimeConstraint got variable from child-" +
-            std::to_string(i) + " for MAX.");
-      } else {
-        maxEndTimeConstraint->addTerm(childEndTime.get<Time>(),
-                                      childIndicator.get<VariablePtr>());
-      }
-
-    } else {
-      throw tetrisched::exceptions::ExpressionSolutionException(
-          "Missing startTime or endTime or utility or indicator from child-" +
-          std::to_string(i) + " for MAX.");
+    // Check that the MaxExpression's childrens were specified correctly.
+    if (!childParsedResult->startTime ||
+        childParsedResult->startTime.value().isVariable()) {
+      throw tetrisched::exceptions::ExpressionConstructionException(
+          "MaxExpression child-" + std::to_string(i) +
+          " must have a non-variable start time.");
     }
+    if (!childParsedResult->endTime ||
+        childParsedResult->endTime.value().isVariable()) {
+      throw tetrisched::exceptions::ExpressionConstructionException(
+          "MaxExpression child-" + std::to_string(i) +
+          " must have a non-variable end time.");
+    }
+    if (!childParsedResult->indicator) {
+      throw tetrisched::exceptions::ExpressionConstructionException(
+          "MaxExpression child-" + std::to_string(i) +
+          " must have an indicator.");
+    }
+    if (!childParsedResult->utility) {
+      throw tetrisched::exceptions::ExpressionConstructionException(
+          "MaxExpression child-" + std::to_string(i) + " must have a utility.");
+    }
+
+    auto childStartTime = childParsedResult->startTime.value().get<Time>();
+    auto childEndTime = childParsedResult->endTime.value().get<Time>();
+    auto childIndicator = childParsedResult->indicator.value();
+    auto childUtility = childParsedResult->utility.value();
+
+    // Enforce that only one of the children is satisfied.
+    maxChildSubexprConstraint->addTerm(childIndicator);
+
+    // Add the start time of the child to the MaxExpression's start time.
+    maxStartTimeConstraint->addTerm(childStartTime, childIndicator);
+
+    // Add the end time of the child to the MaxExpression's end time.
+    maxEndTimeConstraint->addTerm(childEndTime, childIndicator);
+
+    // Add the utility of the child to the MaxExpression's utility.
+    (*maxObjectiveFunction) += (*childUtility);
   }
 
-  // Add max operator variables to the startTime, endTime, utility constraints
+  // Constrain the MaxExpression's start time to be less than or equal to the
+  // start time of the chosen child.
   maxStartTimeConstraint->addTerm(-1, maxStartTime);
+
+  // Constrain the MaxExpression's end time to be greater than or equal to the
+  // end time of the chosen child.
   maxEndTimeConstraint->addTerm(-1, maxEndTime);
+
+  // Set the indicator for the MaxExpression to be equal to the sum of the
+  // indicators for the children.
   maxChildSubexprConstraint->addTerm(-1, maxIndicator);
 
-  // Add constraints to solver once they are complete
+  // Add the constraints for the start time, end time and the indicator.
   solverModel->addConstraint(std::move(maxStartTimeConstraint));
   solverModel->addConstraint(std::move(maxEndTimeConstraint));
-
-  // add MAX maxChildSubexprConstraint to solver
   solverModel->addConstraint(std::move(maxChildSubexprConstraint));
 
-  // assigning values to result
+  // Construct the ParsedResult for the MaxExpression.
   parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
-  parsedResult->startTime = maxStartTime;
-  parsedResult->endTime = maxEndTime;
-  parsedResult->utility = std::move(maxUtility);
-  parsedResult->indicator = maxIndicator;
+  parsedResult->startTime = std::move(maxStartTime);
+  parsedResult->endTime = std::move(maxEndTime);
+  parsedResult->utility = std::move(maxObjectiveFunction);
+  parsedResult->indicator = std::move(maxIndicator);
   return parsedResult;
 }
 
