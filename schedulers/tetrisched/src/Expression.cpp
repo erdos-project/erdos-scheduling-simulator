@@ -557,6 +557,25 @@ void ScaleExpression::addChild(ExpressionPtr child) {
 ParseResultPtr ScaleExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMap& capacityConstraints, Time currentTime) {
+    
+    auto childParsedResult = children[0]->parse(
+            solverModel, availablePartitions, capacityConstraints, currentTime);
+    if (childParsedResult->utility.has_value()) {
+        auto childUtility = childParsedResult->utility.value();
+        childUtility_scaled = childUtility* scaleFactor;
+        parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
+        parsedResult->utility = childUtility_scaled
+        return parsedResult;
+    }
+
+    else{
+        throw tetrisched::exceptions::ExpressionSolutionException(
+          "Utility needed from child" );
+    }
+
+    }
+  
+  
   throw tetrisched::exceptions::ExpressionConstructionException(
       "ScaleExpression parsing not implemented yet.");
 }
