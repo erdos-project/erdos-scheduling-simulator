@@ -4,57 +4,6 @@
 
 namespace tetrisched {
 
-/* Method definitions for XOrVariableT. */
-template <typename X>
-XOrVariableT<X>::XOrVariableT(const X& value) : value(value) {}
-
-template <typename X>
-XOrVariableT<X>::XOrVariableT(const VariablePtr& variable) : value(variable) {}
-
-template <typename X>
-XOrVariableT<X>& XOrVariableT<X>::operator=(const X& newValue) {
-  value = newValue;
-  return *this;
-}
-
-template <typename X>
-XOrVariableT<X>& XOrVariableT<X>::operator=(const VariablePtr& newValue) {
-  value = newValue;
-  return *this;
-}
-
-template <typename X>
-X XOrVariableT<X>::resolve() const {
-  // If the value is the provided type, then return it.
-  if (std::holds_alternative<X>(value)) {
-    return std::get<X>(value);
-  } else if (std::holds_alternative<VariablePtr>(value)) {
-    // If the value is a VariablePtr, then return the value of the variable.
-    auto variable = std::get<VariablePtr>(value);
-    auto variableValue = variable->getValue();
-    if (!variableValue) {
-      throw tetrisched::exceptions::ExpressionSolutionException(
-          "No solution was found for the variable name: " +
-          variable->getName());
-    }
-    return variableValue.value();
-  } else {
-    throw tetrisched::exceptions::ExpressionSolutionException(
-        "XOrVariableT was resolved with an invalid type.");
-  }
-}
-
-template <typename X>
-bool XOrVariableT<X>::isVariable() const {
-  return std::holds_alternative<VariablePtr>(value);
-}
-
-template <typename X>
-template <typename T>
-T XOrVariableT<X>::get() const {
-  return std::get<T>(value);
-}
-
 /* Method definitions for CapacityConstraintMap */
 
 void CapacityConstraintMap::registerUsageAtTime(const Partition& partition,

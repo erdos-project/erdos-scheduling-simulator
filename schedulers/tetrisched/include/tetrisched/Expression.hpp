@@ -4,7 +4,6 @@
 #include <functional>
 #include <optional>
 #include <unordered_map>
-#include <variant>
 
 #include "tetrisched/Partition.hpp"
 #include "tetrisched/SolverModel.hpp"
@@ -35,32 +34,6 @@ enum ParseResultType {
 };
 using ParseResultType = enum ParseResultType;
 using SolutionResultType = enum ParseResultType;
-
-template <typename X>
-class XOrVariableT {
- private:
-  std::variant<std::monostate, X, VariablePtr> value;
-
- public:
-  /// Constructors and operators.
-  XOrVariableT() = default;
-  XOrVariableT(const X& newValue);
-  XOrVariableT(const VariablePtr& newValue);
-  XOrVariableT(const XOrVariableT& newValue) = default;
-  XOrVariableT(XOrVariableT&& newValue) = default;
-  XOrVariableT& operator=(const X& newValue);
-  XOrVariableT& operator=(const VariablePtr& newValue);
-
-  /// Resolves the value inside this class.
-  X resolve() const;
-
-  /// Checks if the class contains a Variable.
-  bool isVariable() const;
-
-  /// Returns the (unresolved) value in the container.
-  template <typename T>
-  T get() const;
-};
 
 /// A `ParseResult` class represents the result of parsing an expression.
 struct ParseResult {
