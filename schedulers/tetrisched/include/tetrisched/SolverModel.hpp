@@ -282,9 +282,6 @@ class ObjectiveFunctionT {
   /// Retrieve the number of terms in this ObjectiveFunction.
   size_t size() const;
 
-  /// Merges this utility with another utility.
-  void merge(const ObjectiveFunctionT<T>& other);
-
   /// Merges the current utility with the utility of the other objective,
   /// and returns a reference to the current utility.
   ObjectiveFunctionT<T>& operator+=(const ObjectiveFunctionT<T>& other);

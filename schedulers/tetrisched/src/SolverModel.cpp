@@ -236,13 +236,6 @@ size_t ObjectiveFunctionT<T>::size() const {
 }
 
 template <typename T>
-void ObjectiveFunctionT<T>::merge(const ObjectiveFunctionT<T> &other) {
-  for (auto &term : other.terms) {
-    terms.push_back(term);
-  }
-}
-
-template <typename T>
 ObjectiveFunctionT<T> &ObjectiveFunctionT<T>::operator+=(
     const ObjectiveFunctionT<T> &other) {
   for (auto &term : other.terms) {
