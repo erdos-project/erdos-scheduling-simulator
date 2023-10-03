@@ -65,6 +65,7 @@ class XOrVariableT {
 /// A `ParseResult` class represents the result of parsing an expression.
 struct ParseResult {
   using TimeOrVariableT = XOrVariableT<Time>;
+  using IndicatorT = XOrVariableT<uint32_t>;
   /// The type of the result.
   ParseResultType type;
   /// The start time associated with the parsed result.
@@ -78,7 +79,6 @@ struct ParseResult {
   std::optional<ObjectiveFunctionPtr> utility;
   /// The indicator associated with the parsed result.
   /// Can be either 1 or 0 based on wether the expression was satisfied or not.
-  using IndicatorT = XOrVariableT<uint32_t>;
   std::optional<IndicatorT> indicator;
 };
 using ParseResultPtr = std::shared_ptr<ParseResult>;

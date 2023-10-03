@@ -623,8 +623,8 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
             "maxStartTimeConstraint got variable from child-" +
             std::to_string(i) + " for MAX.");
       } else {
-        maxStartTimeConstraint->addTerm(1 * childStartTime.get<Time>(),
-                                        childIndicator);
+        maxStartTimeConstraint->addTerm(childStartTime.get<Time>(),
+                                        childIndicator.get<VariablePtr>());
       }
 
       // add term to maxEndTimeConstraint using isSatisfiedVar indicator
@@ -633,8 +633,8 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
             "maxEndTimeConstraint got variable from child-" +
             std::to_string(i) + " for MAX.");
       } else {
-        maxEndTimeConstraint->addTerm(1 * childEndTime.get<Time>(),
-                                      childIndicator);
+        maxEndTimeConstraint->addTerm(childEndTime.get<Time>(),
+                                      childIndicator.get<VariablePtr>());
       }
 
     } else {
