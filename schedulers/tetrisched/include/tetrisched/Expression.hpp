@@ -44,12 +44,12 @@ class XOrVariableT {
  public:
   /// Constructors and operators.
   XOrVariableT() = default;
-  XOrVariableT(const X &newValue);
-  XOrVariableT(const VariablePtr &newValue);
-  XOrVariableT(const XOrVariableT &newValue) = default;
-  XOrVariableT(XOrVariableT &&newValue) = default;
-  XOrVariableT &operator=(const X &newValue);
-  XOrVariableT &operator=(const VariablePtr &newValue);
+  XOrVariableT(const X& newValue);
+  XOrVariableT(const VariablePtr& newValue);
+  XOrVariableT(const XOrVariableT& newValue) = default;
+  XOrVariableT(XOrVariableT&& newValue) = default;
+  XOrVariableT& operator=(const X& newValue);
+  XOrVariableT& operator=(const VariablePtr& newValue);
 
   /// Resolves the value inside this class.
   X resolve() const;
@@ -98,7 +98,7 @@ struct SolutionResult {
 using SolutionResultPtr = std::shared_ptr<SolutionResult>;
 
 struct PartitionTimePairHasher {
-  size_t operator()(const std::pair<uint32_t, Time> &pair) const {
+  size_t operator()(const std::pair<uint32_t, Time>& pair) const {
     auto partitionIdHash = std::hash<uint32_t>()(pair.first);
     auto timeHash = std::hash<Time>()(pair.second);
     if (partitionIdHash != timeHash) {
@@ -124,14 +124,14 @@ class CapacityConstraintMap {
 
  public:
   CapacityConstraintMap() {}
-  void registerUsageAtTime(const Partition &partition, Time time,
+  void registerUsageAtTime(const Partition& partition, Time time,
                            VariablePtr variable);
-  void registerUsageAtTime(const Partition &partition, Time time,
+  void registerUsageAtTime(const Partition& partition, Time time,
                            uint32_t usage);
-  void registerUsageForDuration(const Partition &partition, Time startTime,
+  void registerUsageForDuration(const Partition& partition, Time startTime,
                                 Time duration, VariablePtr variable,
                                 Time granularity = 1);
-  void registerUsageForDuration(const Partition &partition, Time startTime,
+  void registerUsageForDuration(const Partition& partition, Time startTime,
                                 Time duration, uint32_t usage,
                                 Time granularity = 1);
   size_t size() const;
@@ -190,7 +190,7 @@ class Expression {
   /// provide a start and end time bound on this Expression.
   virtual ParseResultPtr parse(SolverModelPtr solverModel,
                                Partitions availablePartitions,
-                               CapacityConstraintMap &capacityConstraints,
+                               CapacityConstraintMap& capacityConstraints,
                                Time currentTime) = 0;
 
   /// Returns the number of children of this Expression.
@@ -237,7 +237,7 @@ class ChooseExpression : public Expression {
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
-                       CapacityConstraintMap &capacityConstraints,
+                       CapacityConstraintMap& capacityConstraints,
                        Time currentTime) override;
 };
 
@@ -249,7 +249,7 @@ class ObjectiveExpression : public Expression {
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
-                       CapacityConstraintMap &capacityConstraints,
+                       CapacityConstraintMap& capacityConstraints,
                        Time currentTime) override;
 };
 
@@ -267,7 +267,7 @@ class MinExpression : public Expression {
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
-                       CapacityConstraintMap &capacityConstraints,
+                       CapacityConstraintMap& capacityConstraints,
                        Time currentTime) override;
 };
 
@@ -283,7 +283,7 @@ class MaxExpression : public Expression {
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
-                       CapacityConstraintMap &capacityConstraints,
+                       CapacityConstraintMap& capacityConstraints,
                        Time currentTime) override;
 };
 
@@ -300,7 +300,7 @@ class ScaleExpression : public Expression {
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
-                       CapacityConstraintMap &capacityConstraints,
+                       CapacityConstraintMap& capacityConstraints,
                        Time currentTime) override;
 };
 
@@ -317,7 +317,7 @@ class LessThanExpression : public Expression {
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
-                       CapacityConstraintMap &capacityConstraints,
+                       CapacityConstraintMap& capacityConstraints,
                        Time currentTime) override;
 };
 }  // namespace tetrisched

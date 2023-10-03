@@ -6,19 +6,19 @@ namespace tetrisched {
 
 /* Method definitions for XOrVariableT. */
 template <typename X>
-XOrVariableT<X>::XOrVariableT(const X &value) : value(value) {}
+XOrVariableT<X>::XOrVariableT(const X& value) : value(value) {}
 
 template <typename X>
-XOrVariableT<X>::XOrVariableT(const VariablePtr &variable) : value(variable) {}
+XOrVariableT<X>::XOrVariableT(const VariablePtr& variable) : value(variable) {}
 
 template <typename X>
-XOrVariableT<X> &XOrVariableT<X>::operator=(const X &newValue) {
+XOrVariableT<X>& XOrVariableT<X>::operator=(const X& newValue) {
   value = newValue;
   return *this;
 }
 
 template <typename X>
-XOrVariableT<X> &XOrVariableT<X>::operator=(const VariablePtr &newValue) {
+XOrVariableT<X>& XOrVariableT<X>::operator=(const VariablePtr& newValue) {
   value = newValue;
   return *this;
 }
@@ -57,7 +57,7 @@ T XOrVariableT<X>::get() const {
 
 /* Method definitions for CapacityConstraintMap */
 
-void CapacityConstraintMap::registerUsageAtTime(const Partition &partition,
+void CapacityConstraintMap::registerUsageAtTime(const Partition& partition,
                                                 Time time,
                                                 VariablePtr variable) {
   // Get or insert the Constraint corresponding to this partition and time.
@@ -73,7 +73,7 @@ void CapacityConstraintMap::registerUsageAtTime(const Partition &partition,
   capacityConstraints[mapKey]->addTerm(variable);
 }
 
-void CapacityConstraintMap::registerUsageAtTime(const Partition &partition,
+void CapacityConstraintMap::registerUsageAtTime(const Partition& partition,
                                                 Time time, uint32_t usage) {
   if (usage == 0) {
     // No usage was registered. We don't need to add anything.
@@ -92,7 +92,7 @@ void CapacityConstraintMap::registerUsageAtTime(const Partition &partition,
   capacityConstraints[mapKey]->addTerm(usage);
 }
 
-void CapacityConstraintMap::registerUsageForDuration(const Partition &partition,
+void CapacityConstraintMap::registerUsageForDuration(const Partition& partition,
                                                      Time startTime,
                                                      Time duration,
                                                      VariablePtr variable,
@@ -103,7 +103,7 @@ void CapacityConstraintMap::registerUsageForDuration(const Partition &partition,
   }
 }
 
-void CapacityConstraintMap::registerUsageForDuration(const Partition &partition,
+void CapacityConstraintMap::registerUsageForDuration(const Partition& partition,
                                                      Time startTime,
                                                      Time duration,
                                                      uint32_t usage,
@@ -116,7 +116,7 @@ void CapacityConstraintMap::registerUsageForDuration(const Partition &partition,
 
 void CapacityConstraintMap::translate(SolverModelPtr solverModel) {
   // Add the constraints to the SolverModel.
-  for (auto &[mapKey, constraint] : capacityConstraints) {
+  for (auto& [mapKey, constraint] : capacityConstraints) {
     solverModel->addConstraint(std::move(constraint));
   }
 
@@ -206,7 +206,7 @@ void ChooseExpression::addChild(ExpressionPtr child) {
 
 ParseResultPtr ChooseExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
-    CapacityConstraintMap &capacityConstraints, Time currentTime) {
+    CapacityConstraintMap& capacityConstraints, Time currentTime) {
   // Create and save the ParseResult.
   parsedResult = std::make_shared<ParseResult>();
 
@@ -248,7 +248,7 @@ ParseResultPtr ChooseExpression::parse(
   ConstraintPtr fulfillsDemandConstraint = std::make_unique<Constraint>(
       taskName + "_fulfills_demand_at_" + std::to_string(startTime),
       ConstraintType::CONSTR_EQ, 0);
-  for (PartitionPtr &partition : schedulablePartitions.getPartitions()) {
+  for (PartitionPtr& partition : schedulablePartitions.getPartitions()) {
     // For each partition, generate an integer that represents how many
     // resources were taken from this partition.
     VariablePtr allocationVar = std::make_shared<Variable>(
@@ -299,7 +299,7 @@ void ObjectiveExpression::addChild(ExpressionPtr child) {
 
 ParseResultPtr ObjectiveExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
-    CapacityConstraintMap &capacityConstraints, Time currentTime) {
+    CapacityConstraintMap& capacityConstraints, Time currentTime) {
   parsedResult = std::make_shared<ParseResult>();
   parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
 
@@ -308,7 +308,7 @@ ParseResultPtr ObjectiveExpression::parse(
       std::make_unique<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
 
   // Parse the children and collect the utiltiies.
-  for (auto &child : children) {
+  for (auto& child : children) {
     auto result = child->parse(solverModel, availablePartitions,
                                capacityConstraints, currentTime);
     if (result->type == ParseResultType::EXPRESSION_UTILITY) {
@@ -345,7 +345,7 @@ void LessThanExpression::addChild(ExpressionPtr child) {
 
 ParseResultPtr LessThanExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
-    CapacityConstraintMap &capacityConstraints, Time currentTime) {
+    CapacityConstraintMap& capacityConstraints, Time currentTime) {
   // Sanity check the children.
   if (children.size() != 2) {
     throw tetrisched::exceptions::ExpressionConstructionException(
@@ -441,7 +441,7 @@ void MinExpression::addChild(ExpressionPtr child) { children.push_back(child); }
 
 ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
                                     Partitions availablePartitions,
-                                    CapacityConstraintMap &capacityConstraints,
+                                    CapacityConstraintMap& capacityConstraints,
                                     Time currentTime) {
   /// Create and save the ParseResult.
   parsedResult = std::make_shared<ParseResult>();
@@ -481,9 +481,7 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
       } else {
         minStartTimeConstraint->addTerm(childStartTime.get<Time>());
       }
-      minStartTimeConstraint->addTerm(
-          -1, minStartTime);  // TODO (DG): Check why is this term added N
-                              // times? Should be just once?
+      minStartTimeConstraint->addTerm(-1, minStartTime);
 
       // Add the constraint to solver
       solverModel->addConstraint(std::move(minStartTimeConstraint));
@@ -546,7 +544,7 @@ void MaxExpression::addChild(ExpressionPtr child) { children.push_back(child); }
 
 ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
                                     Partitions availablePartitions,
-                                    CapacityConstraintMap &capacityConstraints,
+                                    CapacityConstraintMap& capacityConstraints,
                                     Time currentTime) {
   // Create and save the ParseResult.
   parsedResult = std::make_shared<ParseResult>();
@@ -580,7 +578,7 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
   solverModel->addVariable(maxIndicator);
 
   // Constraint to allow only one sub-expression to have indicator = 1
-  // Sum(child_indicator - max_indicator) <= 0
+  // Sum(child_indicator) - max_indicator <= 0
   ConstraintPtr maxChildSubexprConstraint =
       std::make_unique<Constraint>(expressionName + "_max_child_subexpr_constr",
                                    ConstraintType::CONSTR_LE, 0);
@@ -683,7 +681,7 @@ void ScaleExpression::addChild(ExpressionPtr child) {
 
 ParseResultPtr ScaleExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
-    CapacityConstraintMap &capacityConstraints, Time currentTime) {
+    CapacityConstraintMap& capacityConstraints, Time currentTime) {
   throw tetrisched::exceptions::ExpressionConstructionException(
       "ScaleExpression parsing not implemented yet.");
 }
