@@ -567,7 +567,7 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
 
   // Utility of MAX operator
   auto maxUtility =
-      std::make_unique<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
+      std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
   VariablePtr maxUtilityVariable = std::make_shared<Variable>(
       VariableType::VAR_INTEGER, expressionName + "_max_utility_variable");
   solverModel->addVariable(maxUtilityVariable);
@@ -580,17 +580,17 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
   // Constraint to allow only one sub-expression to have indicator = 1
   // Sum(child_indicator) - max_indicator <= 0
   ConstraintPtr maxChildSubexprConstraint =
-      std::make_unique<Constraint>(expressionName + "_max_child_subexpr_constr",
+      std::make_shared<Constraint>(expressionName + "_max_child_subexpr_constr",
                                    ConstraintType::CONSTR_LE, 0);
 
   // Constraint to set startTime of MAX
   // Sum(Indicator * child_start) >= maxStartTime
-  ConstraintPtr maxStartTimeConstraint = std::make_unique<Constraint>(
+  ConstraintPtr maxStartTimeConstraint = std::make_shared<Constraint>(
       expressionName + "_max_start_time_constr", ConstraintType::CONSTR_GE, 0);
 
   // Constraint to set endTime of MAX
   // Sum(Indicator * child_end) <= maxEndTime
-  ConstraintPtr maxEndTimeConstraint = std::make_unique<Constraint>(
+  ConstraintPtr maxEndTimeConstraint = std::make_shared<Constraint>(
       expressionName + "_max_end_time_constr", ConstraintType::CONSTR_LE, 0);
 
   // Removed constraint for utility. It is assumed that indicator constraint
