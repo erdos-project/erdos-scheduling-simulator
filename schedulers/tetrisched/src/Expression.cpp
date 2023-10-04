@@ -88,7 +88,28 @@ size_t Expression::getNumChildren() const { return children.size(); }
 
 std::vector<ExpressionPtr> Expression::getChildren() const { return children; }
 
+void Expression::addChild(ExpressionPtr child)
+{
+  child->addParent(shared_from_this());
+  children.push_back(child);
+}
+
 ExpressionType Expression::getType() const { return type; }
+
+void Expression::addParent(ExpressionPtr parent)
+{
+  parents.push_back(parent);
+}
+
+size_t Expression::getNumParents() const { return parents.size(); }
+
+std::vector<ExpressionPtr> Expression::getParents() const {
+  std::vector<ExpressionPtr> return_parents;
+  for(int i=0; i< parents.size(); i++){
+    return_parents.push_back(parents[i].lock());
+  }
+  return return_parents;
+}
 
 SolutionResultPtr Expression::populateResults(SolverModelPtr solverModel) {
   // Check that the Expression was parsed before.
@@ -182,6 +203,14 @@ void ChooseExpression::addChild(ExpressionPtr child) {
 ParseResultPtr ChooseExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMap& capacityConstraints, Time currentTime) {
+
+  // Check that the Expression was parsed before
+  if (parsedResult != nullptr) {
+    // return the already parsed sub-tree from another parent
+    // this assumes a sub-tree can have > 1 parent and enables
+    // STRL DAG structures
+    return parsedResult;
+  }
   // Create and save the ParseResult.
   parsedResult = std::make_shared<ParseResult>();
 
@@ -270,13 +299,17 @@ ParseResultPtr ChooseExpression::parse(
 ObjectiveExpression::ObjectiveExpression()
     : Expression(ExpressionType::EXPR_OBJECTIVE) {}
 
-void ObjectiveExpression::addChild(ExpressionPtr child) {
-  children.push_back(child);
-}
-
 ParseResultPtr ObjectiveExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMap& capacityConstraints, Time currentTime) {
+
+  // Check that the Expression was parsed before
+  if (parsedResult != nullptr) {
+    // return the already parsed sub-tree from another parent
+    // this assumes a sub-tree can have > 1 parent and enables
+    // STRL DAG structures
+    return parsedResult;
+  }
   parsedResult = std::make_shared<ParseResult>();
   parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
 
@@ -317,7 +350,7 @@ void LessThanExpression::addChild(ExpressionPtr child) {
     throw tetrisched::exceptions::ExpressionConstructionException(
         "LessThanExpression cannot have more than two children.");
   }
-  children.push_back(child);
+  Expression::addChild(child);
 }
 
 ParseResultPtr LessThanExpression::parse(
@@ -327,6 +360,13 @@ ParseResultPtr LessThanExpression::parse(
   if (children.size() != 2) {
     throw tetrisched::exceptions::ExpressionConstructionException(
         "LessThanExpression must have two children.");
+  }
+  // Check that the Expression was parsed before
+  if (parsedResult != nullptr) {
+    // return the already parsed sub-tree from another parent
+    // this assumes a sub-tree can have > 1 parent and enables
+    // STRL DAG structures
+    return parsedResult;
   }
 
   TETRISCHED_DEBUG("Parsing LessThanExpression with name " << name << ".")
@@ -413,12 +453,17 @@ ParseResultPtr LessThanExpression::parse(
 MinExpression::MinExpression(std::string name)
     : Expression(ExpressionType::EXPR_MIN), expressionName(name) {}
 
-void MinExpression::addChild(ExpressionPtr child) { children.push_back(child); }
-
 ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
                                     Partitions availablePartitions,
                                     CapacityConstraintMap& capacityConstraints,
                                     Time currentTime) {
+  // Check that the Expression was parsed before
+  if (parsedResult != nullptr) {
+    // return the already parsed sub-tree from another parent
+    // this assumes a sub-tree can have > 1 parent and enables
+    // STRL DAG structures
+    return parsedResult;
+  }
   /// Create and save the ParseResult.
   parsedResult = std::make_shared<ParseResult>();
 
@@ -515,13 +560,18 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
 
 MaxExpression::MaxExpression(std::string name)
     : Expression(ExpressionType::EXPR_MAX), expressionName(name) {}
-
-void MaxExpression::addChild(ExpressionPtr child) { children.push_back(child); }
-
+    
 ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
                                     Partitions availablePartitions,
                                     CapacityConstraintMap& capacityConstraints,
                                     Time currentTime) {
+  // Check that the Expression was parsed before
+  if (parsedResult != nullptr) {
+    // return the already parsed sub-tree from another parent
+    // this assumes a sub-tree can have > 1 parent and enables
+    // STRL DAG structures
+    return parsedResult;
+  }
   // Create and save the ParseResult.
   parsedResult = std::make_shared<ParseResult>();
 
@@ -652,7 +702,7 @@ void ScaleExpression::addChild(ExpressionPtr child) {
     throw tetrisched::exceptions::ExpressionConstructionException(
         "ScaleExpression can only have one child.");
   }
-  children.push_back(child);
+  Expression::addChild(child);
 }
 
 ParseResultPtr ScaleExpression::parse(

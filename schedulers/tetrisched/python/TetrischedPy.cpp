@@ -65,5 +65,7 @@ PYBIND11_MODULE(tetrisched_py, tetrisched_m) {
   // Implement the Solver backends.
   auto tetrisched_m_solver_backend = tetrisched_m.def_submodule(
       "backends", "Solver backends for the TetriSched Python API.");
+#ifdef _TETRISCHED_WITH_CPLEX_
   defineCPLEXBackend(tetrisched_m_solver_backend);
+#endif //_TETRISCHED_WITH_CPLEX_
 }

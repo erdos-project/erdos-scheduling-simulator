@@ -42,6 +42,8 @@ void defineSTRLExpressions(py::module_& tetrisched_m) {
                                                                 "Expression")
       .def("getNumChildren", &tetrisched::Expression::getNumChildren,
            "Returns the number of children of this Expression.")
+      .def("getNumParents", &tetrisched::Expression::getNumParents,
+           "Returns the number of parents of this Expression.")
       .def("getChildren", &tetrisched::Expression::getChildren,
            "Returns the children of this Expression.")
       .def("getType", &tetrisched::Expression::getType,
