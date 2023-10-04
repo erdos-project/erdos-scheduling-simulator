@@ -21,7 +21,7 @@
 // experiment with. Note that both CPLEX and Gurobi do not like 32-bit floating
 // points (due to documented numerical difficulties) so the only permissible
 // values for this macro is supposed to be int32_t or double.
-#define TETRISCHED_ILP_TYPE int32_t
+#define TETRISCHED_ILP_TYPE int64_t
 
 namespace tetrisched {
 /// Defines the exceptions that the methods can throw.

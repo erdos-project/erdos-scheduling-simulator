@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <variant>
 #include <vector>
 
 #include "tetrisched/Types.hpp"
@@ -97,6 +98,69 @@ template class VariableT<TETRISCHED_ILP_TYPE>;
 using Variable = VariableT<TETRISCHED_ILP_TYPE>;
 using VariablePtr = std::shared_ptr<Variable>;
 
+/// A `XOrVariableT` type encapsulates either a value known at runtime
+/// prior to the solver being invoked, or a VariableT that is created
+/// for the solver to assign a value to.
+template <typename X>
+class XOrVariableT {
+ private:
+  std::variant<std::monostate, X, VariablePtr> value;
+
+ public:
+  /// Constructors and operators.
+  XOrVariableT() : value(std::monostate()) {}
+  XOrVariableT(const X newValue) : value(newValue) {}
+  XOrVariableT(const VariablePtr newValue) : value(newValue) {}
+  XOrVariableT(const XOrVariableT& newValue) = default;
+  XOrVariableT(XOrVariableT&& newValue) = default;
+  XOrVariableT& operator=(const X newValue) {
+    value = newValue;
+    return *this;
+  }
+  XOrVariableT& operator=(const VariablePtr newValue) {
+    value = newValue;
+    return *this;
+  }
+  template <typename Y>
+  operator XOrVariableT<Y>() const {
+    if (this->isVariable()) {
+      return XOrVariableT<Y>(this->get<VariablePtr>());
+    } else {
+      return XOrVariableT<Y>(static_cast<Y>(this->get<X>()));
+    }
+  }
+
+  /// Resolves the value inside this class.
+  X resolve() const {
+    // If the value is the provided type, then return it.
+    if (std::holds_alternative<X>(value)) {
+      return std::get<X>(value);
+    } else if (std::holds_alternative<VariablePtr>(value)) {
+      // If the value is a VariablePtr, then return the value of the variable.
+      auto variable = std::get<VariablePtr>(value);
+      auto variableValue = variable->getValue();
+      if (!variableValue) {
+        throw tetrisched::exceptions::ExpressionSolutionException(
+            "No solution was found for the variable name: " +
+            variable->getName());
+      }
+      return variableValue.value();
+    } else {
+      throw tetrisched::exceptions::ExpressionSolutionException(
+          "XOrVariableT was resolved with an invalid type.");
+    }
+  }
+
+  /// Checks if the class contains a Variable.
+  bool isVariable() const { return std::holds_alternative<VariablePtr>(value); }
+
+  /// Returns the (unresolved) value in the container.
+  template <typename T>
+  T get() const {
+    return std::get<T>(value);
+  }
+};
+
 /// A `ConstraintType` enumeration represents the types of constraints that we
 /// allow the user to construct. These map to the types of constraints that the
 /// underlying solver supports.
@@ -144,6 +208,14 @@ class ConstraintT {
   /// Adds a variable term to the left-hand side of the constraint
   /// with the coefficient of 1.
   void addTerm(std::shared_ptr<VariableT<T>> variable);
+
+  /// Adds a term to the left-hand side of this constraint that can be
+  /// resolved to either a constant or a variable.
+  void addTerm(const XOrVariableT<T>& term);
+
+  /// Adds a term to the left-hand side of this constraint with a given
+  /// coefficient and a term that can either be a constant or a variable.
+  void addTerm(T coefficient, const XOrVariableT<T>& term);
 
   /// Retrieve a string representation of this Constraint.
   std::string toString() const;
@@ -210,8 +282,9 @@ class ObjectiveFunctionT {
   /// Retrieve the number of terms in this ObjectiveFunction.
   size_t size() const;
 
-  /// Merges this utility with another utility.
-  void merge(const ObjectiveFunctionT<T>& other);
+  /// Merges the current utility with the utility of the other objective,
+  /// and returns a reference to the current utility.
+  ObjectiveFunctionT<T>& operator+=(const ObjectiveFunctionT<T>& other);
 
   /// Retrieves the value of the utility of this ObjectiveFunction.
   T getValue() const;

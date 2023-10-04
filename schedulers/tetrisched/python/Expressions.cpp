@@ -31,8 +31,7 @@ void defineSTRLExpressions(py::module_& tetrisched_m) {
   py::class_<tetrisched::ChooseExpression, tetrisched::Expression,
              std::shared_ptr<tetrisched::ChooseExpression>>(tetrisched_m,
                                                             "ChooseExpression")
-      .def(py::init([](std::string taskName,
-                       tetrisched::Partitions partitions,
+      .def(py::init([](std::string taskName, tetrisched::Partitions partitions,
                        uint32_t numRequiredMachines, tetrisched::Time startTime,
                        tetrisched::Time duration) {
              return std::make_shared<tetrisched::ChooseExpression>(

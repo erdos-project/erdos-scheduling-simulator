@@ -4,7 +4,6 @@
 #include <functional>
 #include <optional>
 #include <unordered_map>
-#include <variant>
 
 #include "tetrisched/Partition.hpp"
 #include "tetrisched/SolverModel.hpp"
@@ -36,35 +35,10 @@ enum ParseResultType {
 using ParseResultType = enum ParseResultType;
 using SolutionResultType = enum ParseResultType;
 
-template <typename X>
-class XOrVariableT {
- private:
-  std::variant<std::monostate, X, VariablePtr> value;
-
- public:
-  /// Constructors and operators.
-  XOrVariableT() = default;
-  XOrVariableT(const X& newValue);
-  XOrVariableT(const VariablePtr& newValue);
-  XOrVariableT(const XOrVariableT& newValue) = default;
-  XOrVariableT(XOrVariableT&& newValue) = default;
-  XOrVariableT& operator=(const X& newValue);
-  XOrVariableT& operator=(const VariablePtr& newValue);
-
-  /// Resolves the value inside this class.
-  X resolve() const;
-
-  /// Checks if the class contains a Variable.
-  bool isVariable() const;
-
-  /// Returns the (unresolved) value in the container.
-  template <typename T>
-  T get() const;
-};
-
 /// A `ParseResult` class represents the result of parsing an expression.
 struct ParseResult {
   using TimeOrVariableT = XOrVariableT<Time>;
+  using IndicatorT = XOrVariableT<uint32_t>;
   /// The type of the result.
   ParseResultType type;
   /// The start time associated with the parsed result.
@@ -76,6 +50,9 @@ struct ParseResult {
   /// The utility associated with the parsed result.
   /// The utility is positive if the expression was satisfied, and 0 otherwise.
   std::optional<ObjectiveFunctionPtr> utility;
+  /// The indicator associated with the parsed result.
+  /// Can be either 1 or 0 based on wether the expression was satisfied or not.
+  std::optional<IndicatorT> indicator;
 };
 using ParseResultPtr = std::shared_ptr<ParseResult>;
 
