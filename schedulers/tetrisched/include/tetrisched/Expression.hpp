@@ -167,13 +167,16 @@ enum ExpressionType {
 using ExpressionType = enum ExpressionType;
 
 /// A Base Class for all expressions in the STRL language.
-class Expression {
- protected:
+class Expression : public std::enable_shared_from_this<Expression>
+{
+protected:
   /// The parsed result from the Expression.
   /// Used for retrieving the solution from the solver.
   ParseResultPtr parsedResult;
   /// The children of this Expression.
   std::vector<ExpressionPtr> children;
+  /// The parents of this Expression.
+  std::vector<std::weak_ptr<Expression>> parents;
   /// The type of this Expression.
   ExpressionType type;
 
@@ -195,11 +198,20 @@ class Expression {
                                CapacityConstraintMap& capacityConstraints,
                                Time currentTime) = 0;
 
+  /// Adds a parent to this epxression.
+  void addParent(std::weak_ptr<Expression> parent);
+
   /// Returns the number of children of this Expression.
   size_t getNumChildren() const;
 
+  /// Returns the number of parents of this Expression.
+  size_t getNumParents() const;
+
   /// Returns the children of this Expression.
   std::vector<ExpressionPtr> getChildren() const;
+
+  /// Returns the children of this Expression.
+  std::vector<std::weak_ptr<Expression>> getParents() const;
 
   /// Returns the type of this Expression.
   ExpressionType getType() const;
