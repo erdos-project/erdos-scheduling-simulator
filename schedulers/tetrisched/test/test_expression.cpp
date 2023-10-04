@@ -89,7 +89,7 @@ TEST(Expression, TestLessThanEnforcesOrdering) {
       << "Capacity map should be drained after translation.";
   cplexSolver.solveModel();
 
-  auto result = objectiveExpression->solve(solverModelPtr);
+  auto result = objectiveExpression->populateResults(solverModelPtr);
   EXPECT_TRUE(result->utility);
   EXPECT_EQ(1, result->utility.value());
 }
@@ -138,7 +138,7 @@ TEST(Expression, TestMaxExpressionEnforcesSingleChoice) {
   cplexSolver.translateModel();
   cplexSolver.solveModel();
 
-  auto result = objectiveExpression->solve(solverModelPtr);
+  auto result = objectiveExpression->populateResults(solverModelPtr);
   EXPECT_TRUE(result->utility);
   EXPECT_EQ(1, result->utility.value()) << "Only one choice should be made.";
 }

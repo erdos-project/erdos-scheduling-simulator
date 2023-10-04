@@ -179,6 +179,8 @@ protected:
   std::vector<std::weak_ptr<Expression>> parents;
   /// The type of this Expression.
   ExpressionType type;
+  /// The Solution result from this Expression.
+  SolutionResultPtr solution;
 
   /// Adds a parent to this epxression.
   void addParent(ExpressionPtr parent);
@@ -216,13 +218,17 @@ public:
   /// Returns the type of this Expression.
   ExpressionType getType() const;
 
-  /// Solves the subtree rooted at this Expression and returns the solution.
-  /// It assumes that the SolverModelPtr has been populated with values for
-  /// unknown variables and throws a
-  /// tetrisched::exceptions::ExpressionSolutionException if the SolverModelPtr
-  /// is not populated. This method returns the actual values for the variables
-  /// specified in the ParseResult.
-  SolutionResultPtr solve(SolverModelPtr solverModel);
+  /// Populates the solution of the subtree rooted at this Expression and
+  /// returns the Solution for this Expression. It assumes that the
+  /// SolverModelPtr has been populated with values for unknown variables and
+  /// throws a tetrisched::exceptions::ExpressionSolutionException if the
+  /// SolverModelPtr is not populated.
+  SolutionResultPtr populateResults(SolverModelPtr solverModel);
+
+  /// Retrieve the solution for this Expression.
+  /// The Solution is only available if `populateResults` has been called on
+  /// this Expression.
+  std::optional<SolutionResultPtr> getSolution() const;
 };
 
 /// A `ChooseExpression` represents a choice of a required number of machines
