@@ -23,6 +23,7 @@ XOrVariableT<X>& XOrVariableT<X>::operator=(const VariablePtr& newValue) {
   return *this;
 }
 
+
 template <typename X>
 X XOrVariableT<X>::resolve() const {
   // If the value is the provided type, then return it.
@@ -561,12 +562,26 @@ ParseResultPtr ScaleExpression::parse(
     auto childParsedResult = children[0]->parse(
             solverModel, availablePartitions, capacityConstraints, currentTime);
     if (childParsedResult->utility.has_value()) {
-        auto childUtility = childParsedResult->utility.value();
-        childUtility_scaled = childUtility* scaleFactor;
-        parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
-        parsedResult->utility = childUtility_scaled
-        return parsedResult;
+        auto childUtility = childParsedResult->utility.value(); 
+        //Use the * operator to scale the utility
+        auto result = childUtility * scaleFactor;
+
+        /*auto result = std::make_unique<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
+        // Iterate over the terms in the rhs ObjectiveFunction
+        for (const auto& term : childUtility->terms) {
+          int coefficient = term.first;
+          std::shared_ptr<VariableT<int>> variable = term.second;
+          result->addTerm(coefficient * scaleFactor, variable);
     }
+
+        parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
+        parsedResult->utility = childUtility;
+        return parsedResult;
+    }*/
+
+    parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
+        parsedResult->utility = childUtility;
+        return parsedResult;}
 
     else{
         throw tetrisched::exceptions::ExpressionSolutionException(
@@ -574,13 +589,45 @@ ParseResultPtr ScaleExpression::parse(
     }
 
     }
+
+}
+
+/*ObjectiveFunctionT operator*(const ObjectiveFunctionT& lhs, TETRISCHED_ILP_TYPE scaleFactor ) {
+  // Create a new ObjectiveFunction object to hold the result
+  auto result = std::make_unique<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
+
+  // Iterate over the terms in the lhs ObjectiveFunction
+  for (const auto& term : lhs->terms) {
+    int coefficient = term.first;
+    std::shared_ptr<VariableT<int>> variable = term.second;
+    result->addTerm(coefficient * scaleFactor, variable);
+  }
+
+  return result;
+}
+*/
   
-  
-  throw tetrisched::exceptions::ExpressionConstructionException(
+ /* throw tetrisched::exceptions::ExpressionConstructionException(
       "ScaleExpression parsing not implemented yet.");
 }
 
-}  // namespace tetrisched
+ObjectiveFunctionPtr operator*(const ObjectiveFunctionPtr& lhs, TETRISCHED_ILP_TYPE scaleFactor ) {
+    // Create a new ObjectiveFunction object to hold the result
+    auto result = std::make_unique<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
+
+    // Iterate over the terms in the rhs ObjectiveFunction
+    for (const auto& term : lhs->terms) {
+    int coefficient = term.first;
+    std::shared_ptr<VariableT<int>> variable = term.second;
+    result->addTerm(coefficient * scaleFactor, variable);
+    }
+    }*/
+
+
+
+    // Set the value of the result to be the product of the integer and the value of the ObjectiveFunction
+
+  // namespace tetrisched
 
 // // standard C/C++ libraries
 // #include <algorithm>

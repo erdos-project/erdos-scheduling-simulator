@@ -186,11 +186,15 @@ template <typename T>
 class ObjectiveFunctionT {
  private:
   /// The terms in this objective function.
-  std::vector<std::pair<T, std::shared_ptr<VariableT<T>>>> terms;
   /// The type of the objective function.
   ObjectiveType objectiveType;
+  std::vector<std::pair<T, std::shared_ptr<VariableT<T>>>> terms;
 
  public:
+ std::vector<std::pair<T, std::shared_ptr<VariableT<T>>>> getterms()
+ {
+    return terms;
+ }
   ObjectiveFunctionT(const ObjectiveFunctionT& other) = default;
 
   /// Generate a new objective function with the given type.

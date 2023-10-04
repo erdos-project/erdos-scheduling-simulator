@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC  -std=c++2a -g -shared  -o tetrisched_py.cpython-310-x86_64-linux-gnu.so CMakeFiles/tetrisched_py.dir/python/TetrischedPy.cpp.o  -Wl,-rpath,/mnt/c/Users/drago/erdos-scheduling-simulator/schedulers/tetrisched/extern/build libtetrisched.so 

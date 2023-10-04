@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC  -std=c++2a -g -shared -Wl,-soname,libtetrisched.so -o libtetrisched.so CMakeFiles/tetrisched.dir/src/Expression.cpp.o CMakeFiles/tetrisched.dir/src/Worker.cpp.o CMakeFiles/tetrisched.dir/src/Partition.cpp.o CMakeFiles/tetrisched.dir/src/SolverModel.cpp.o 
