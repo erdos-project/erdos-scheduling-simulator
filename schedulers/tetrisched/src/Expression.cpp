@@ -277,6 +277,14 @@ void ObjectiveExpression::addChild(ExpressionPtr child) {
 ParseResultPtr ObjectiveExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMap& capacityConstraints, Time currentTime) {
+
+  // Check that the Expression was parsed before
+  if (parsedResult != nullptr) {
+    // return the already parsed sub-tree from another parent
+    // this assumes a sub-tree can have > 1 parent and enables
+    // STRL DAG structures
+    return parsedResult;
+  }
   parsedResult = std::make_shared<ParseResult>();
   parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
 
@@ -328,6 +336,13 @@ ParseResultPtr LessThanExpression::parse(
   if (children.size() != 2) {
     throw tetrisched::exceptions::ExpressionConstructionException(
         "LessThanExpression must have two children.");
+  }
+  // Check that the Expression was parsed before
+  if (parsedResult != nullptr) {
+    // return the already parsed sub-tree from another parent
+    // this assumes a sub-tree can have > 1 parent and enables
+    // STRL DAG structures
+    return parsedResult;
   }
 
   TETRISCHED_DEBUG("Parsing LessThanExpression with name " << name << ".")
@@ -423,6 +438,13 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
                                     Partitions availablePartitions,
                                     CapacityConstraintMap& capacityConstraints,
                                     Time currentTime) {
+  // Check that the Expression was parsed before
+  if (parsedResult != nullptr) {
+    // return the already parsed sub-tree from another parent
+    // this assumes a sub-tree can have > 1 parent and enables
+    // STRL DAG structures
+    return parsedResult;
+  }
   /// Create and save the ParseResult.
   parsedResult = std::make_shared<ParseResult>();
 
@@ -529,6 +551,13 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
                                     Partitions availablePartitions,
                                     CapacityConstraintMap& capacityConstraints,
                                     Time currentTime) {
+  // Check that the Expression was parsed before
+  if (parsedResult != nullptr) {
+    // return the already parsed sub-tree from another parent
+    // this assumes a sub-tree can have > 1 parent and enables
+    // STRL DAG structures
+    return parsedResult;
+  }
   // Create and save the ParseResult.
   parsedResult = std::make_shared<ParseResult>();
 
