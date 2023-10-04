@@ -139,4 +139,103 @@ TEST(Expression, TestMaxExpressionEnforcesSingleChoice) {
   EXPECT_TRUE(result->utility);
   EXPECT_EQ(1, result->utility.value()) << "Only one choice should be made.";
 }
+
+// Check that the STRL parsing for the MinExpression enforces all
+// children to be true.
+TEST(Expression, TestMinExpressionEnforcesAllChildrenSatisfied) {
+  // Construct the Workers and a Partition.
+  tetrisched::WorkerPtr worker1 =
+      std::make_shared<tetrisched::Worker>(1, "worker1");
+  tetrisched::PartitionPtr partition =
+      std::make_shared<tetrisched::Partition>();
+  partition->addWorker(worker1, 1);
+  tetrisched::Partitions partitions = tetrisched::Partitions({partition});
+
+  // Construct two choices for a task.
+  tetrisched::ExpressionPtr chooseTask1_1 =
+      std::make_shared<tetrisched::ChooseExpression>("task1_1", partitions, 1,
+                                                     0, 100);
+  tetrisched::ExpressionPtr chooseTask1_2 =
+      std::make_shared<tetrisched::ChooseExpression>("task1_2", partitions, 1,
+                                                     100, 100);
+
+  // Constrain both choices to actually happen.
+  tetrisched::ExpressionPtr minChooseExpr =
+      std::make_shared<tetrisched::MinExpression>("minChooseTaskBoth");
+  minChooseExpr->addChild(std::move(chooseTask1_1));
+  minChooseExpr->addChild(std::move(chooseTask1_2));
+
+  // Construct an ObjectiveExpression.
+  tetrisched::ExpressionPtr objectiveExpression =
+      std::make_shared<tetrisched::ObjectiveExpression>();
+  objectiveExpression->addChild(std::move(minChooseExpr));
+
+  // Construct a Solver.
+  tetrisched::CPLEXSolver cplexSolver = tetrisched::CPLEXSolver();
+  auto solverModelPtr = cplexSolver.getModel();
+
+  // Construct a CapacityConstraintMap and parse the expression tree.
+  tetrisched::CapacityConstraintMap capacityConstraintMap;
+  auto _ = objectiveExpression->parse(solverModelPtr, partitions,
+                                      capacityConstraintMap, 0);
+  solverModelPtr->exportModel(
+      "testMinExpressionEnforcesAllChildrenSatisfied.lp");
+
+  // Translate and solve the model.
+  cplexSolver.translateModel();
+  cplexSolver.solveModel();
+
+  auto result = objectiveExpression->solve(solverModelPtr);
+  EXPECT_TRUE(result->utility);
+  EXPECT_EQ(2, result->utility.value()) << "Both choices should be satisfied.";
+}
+
+// Check that the STRL parsing for the MinExpression enforces no expression to
+// be true if all children can't be satisfied.
+TEST(Expression, TestMinExpressionEnforcesNoneSatisfied) {
+  // Construct the Workers and a Partition.
+  tetrisched::WorkerPtr worker1 =
+      std::make_shared<tetrisched::Worker>(1, "worker1");
+  tetrisched::PartitionPtr partition =
+      std::make_shared<tetrisched::Partition>();
+  partition->addWorker(worker1, 1);
+  tetrisched::Partitions partitions = tetrisched::Partitions({partition});
+
+  // Construct two choices for a task.
+  tetrisched::ExpressionPtr chooseTask1_1 =
+      std::make_shared<tetrisched::ChooseExpression>("task1_1", partitions, 1,
+                                                     0, 100);
+  tetrisched::ExpressionPtr chooseTask1_2 =
+      std::make_shared<tetrisched::ChooseExpression>("task1_2", partitions, 1,
+                                                     50, 100);
+
+  // Constrain both choices to actually happen.
+  tetrisched::ExpressionPtr minChooseExpr =
+      std::make_shared<tetrisched::MinExpression>("minChooseTaskNone");
+  minChooseExpr->addChild(std::move(chooseTask1_1));
+  minChooseExpr->addChild(std::move(chooseTask1_2));
+
+  // Construct an ObjectiveExpression.
+  tetrisched::ExpressionPtr objectiveExpression =
+      std::make_shared<tetrisched::ObjectiveExpression>();
+  objectiveExpression->addChild(std::move(minChooseExpr));
+
+  // Construct a Solver.
+  tetrisched::CPLEXSolver cplexSolver = tetrisched::CPLEXSolver();
+  auto solverModelPtr = cplexSolver.getModel();
+
+  // Construct a CapacityConstraintMap and parse the expression tree.
+  tetrisched::CapacityConstraintMap capacityConstraintMap;
+  auto _ = objectiveExpression->parse(solverModelPtr, partitions,
+                                      capacityConstraintMap, 0);
+  solverModelPtr->exportModel("testMinExpressionEnforcesNoneSatisfied.lp");
+
+  // Translate and solve the model.
+  cplexSolver.translateModel();
+  cplexSolver.solveModel();
+
+  auto result = objectiveExpression->solve(solverModelPtr);
+  EXPECT_FALSE(result->utility);
+  EXPECT_EQ(0, result->utility.value()) << "No choices should be satisfied.";
+}
 #endif
