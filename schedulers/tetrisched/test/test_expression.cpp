@@ -11,10 +11,10 @@
 /// i.e., a ChooseExpression is a leaf node in the expression tree.
 TEST(Expression, TestChooseExpressionIsLeaf) {
   tetrisched::Partitions partitions = tetrisched::Partitions();
-  tetrisched::ExpressionPtr chooseExpression =
+  auto chooseExpression =
       std::make_unique<tetrisched::ChooseExpression>("task1", partitions, 0, 0,
                                                      10);
-  tetrisched::ExpressionPtr chooseExpression2 =
+  auto chooseExpression2 =
       std::make_unique<tetrisched::ChooseExpression>("task1", partitions, 0, 0,
                                                      10);
   EXPECT_THROW(chooseExpression->addChild(std::move(chooseExpression2)),
@@ -24,17 +24,20 @@ TEST(Expression, TestChooseExpressionIsLeaf) {
 TEST(Expression, TestMinExpressionIsNOTLeaf) {
   tetrisched::Partitions partitions = tetrisched::Partitions();
   tetrisched::ExpressionPtr chooseExpression =
-      std::make_unique<tetrisched::ChooseExpression>("task1", partitions, 0, 0,
+      std::make_shared<tetrisched::ChooseExpression>("task1", partitions, 0, 0,
                                                      10);
   tetrisched::ExpressionPtr chooseExpression2 =
-      std::make_unique<tetrisched::ChooseExpression>("task1", partitions, 0, 0,
+      std::make_shared<tetrisched::ChooseExpression>("task1", partitions, 0, 0,
                                                      10);
 
-  std::unique_ptr<tetrisched::MinExpression> minExpression =
-      std::make_unique<tetrisched::MinExpression>("TEST_MIN");
-  minExpression->addChild(std::move(chooseExpression2));
-  minExpression->addChild(std::move(chooseExpression));
+  tetrisched::ExpressionPtr minExpression =
+      std::make_shared<tetrisched::MinExpression>("TEST_MIN");
+  minExpression->addChild(chooseExpression2);
+  minExpression->addChild(chooseExpression);
   EXPECT_TRUE(minExpression->getNumChildren() == 2);
+  EXPECT_TRUE(minExpression->getNumParents() == 0);
+  EXPECT_TRUE(chooseExpression2->getNumParents() == 1);
+  EXPECT_TRUE(chooseExpression->getNumParents() == 1);
 }
 
 #ifdef _TETRISCHED_WITH_CPLEX_
@@ -86,7 +89,7 @@ TEST(Expression, TestLessThanEnforcesOrdering) {
       << "Capacity map should be drained after translation.";
   cplexSolver.solveModel();
 
-  auto result = objectiveExpression->solve(solverModelPtr);
+  auto result = objectiveExpression->populateResults(solverModelPtr);
   EXPECT_TRUE(result->utility);
   EXPECT_EQ(1, result->utility.value());
 }
@@ -135,7 +138,7 @@ TEST(Expression, TestMaxExpressionEnforcesSingleChoice) {
   cplexSolver.translateModel();
   cplexSolver.solveModel();
 
-  auto result = objectiveExpression->solve(solverModelPtr);
+  auto result = objectiveExpression->populateResults(solverModelPtr);
   EXPECT_TRUE(result->utility);
   EXPECT_EQ(1, result->utility.value()) << "Only one choice should be made.";
 }

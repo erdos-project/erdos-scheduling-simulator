@@ -1,10 +1,11 @@
 #include <pybind11/pybind11.h>
 
-#include "tetrisched/CPLEXSolver.hpp"
 
 namespace py = pybind11;
 
 #ifdef _TETRISCHED_WITH_CPLEX_
+#include "tetrisched/CPLEXSolver.hpp"
+
 void defineCPLEXBackend(py::module_& tetrisched_m) {
   py::class_<tetrisched::CPLEXSolver>(tetrisched_m, "CPLEXSolver")
       .def(py::init<>())

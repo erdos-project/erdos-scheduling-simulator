@@ -15,17 +15,43 @@ void defineSTRLExpressions(py::module_& tetrisched_m) {
       .value("EXPR_LESSTHAN", tetrisched::ExpressionType::EXPR_LESSTHAN)
       .export_values();
 
+  // Define the SolutionResult.
+  py::class_<tetrisched::SolutionResult, tetrisched::SolutionResultPtr>(
+      tetrisched_m, "SolutionResult")
+      .def_property_readonly(
+          "startTime",
+          [](const tetrisched::SolutionResult& result) {
+            return result.startTime;
+          },
+          "The start time of the expression.")
+      .def_property_readonly(
+          "endTime",
+          [](const tetrisched::SolutionResult& result) {
+            return result.endTime;
+          },
+          "The end time of the expression.")
+      .def_property_readonly(
+          "utility",
+          [](const tetrisched::SolutionResult& result) {
+            return result.utility;
+          },
+          "The utility of the expression.");
+
   // Define the base Expression.
   py::class_<tetrisched::Expression, tetrisched::ExpressionPtr>(tetrisched_m,
                                                                 "Expression")
       .def("getNumChildren", &tetrisched::Expression::getNumChildren,
            "Returns the number of children of this Expression.")
+      .def("getNumParents", &tetrisched::Expression::getNumParents,
+           "Returns the number of parents of this Expression.")
       .def("getChildren", &tetrisched::Expression::getChildren,
            "Returns the children of this Expression.")
       .def("getType", &tetrisched::Expression::getType,
            "Returns the type of this Expression.")
       .def("addChild", &tetrisched::Expression::addChild,
-           "Adds a child to this Expression.");
+           "Adds a child to this Expression.")
+      .def("getSolution", &tetrisched::Expression::getSolution,
+           "Returns the solution for this Expression.");
 
   // Define the ChooseExpression.
   py::class_<tetrisched::ChooseExpression, tetrisched::Expression,

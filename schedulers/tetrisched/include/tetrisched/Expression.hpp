@@ -167,24 +167,30 @@ enum ExpressionType {
 using ExpressionType = enum ExpressionType;
 
 /// A Base Class for all expressions in the STRL language.
-class Expression {
- protected:
+class Expression : public std::enable_shared_from_this<Expression>
+{
+protected:
   /// The parsed result from the Expression.
   /// Used for retrieving the solution from the solver.
   ParseResultPtr parsedResult;
   /// The children of this Expression.
   std::vector<ExpressionPtr> children;
+  /// The parents of this Expression.
+  std::vector<std::weak_ptr<Expression>> parents;
   /// The type of this Expression.
   ExpressionType type;
+  /// The Solution result from this Expression.
+  SolutionResultPtr solution;
 
- public:
+  /// Adds a parent to this epxression.
+  void addParent(ExpressionPtr parent);
+
+  /// Returns the parents of this Expression.
+  std::vector<ExpressionPtr> getParents() const;
+
+public:
   /// Construct the Expression class of the given type.
   Expression(ExpressionType type);
-
-  /// Adds a child to this epxression.
-  /// May throw tetrisched::excpetions::ExpressionConstructionException
-  /// if an incorrect number of children are registered.
-  virtual void addChild(ExpressionPtr child) = 0;
 
   /// Parses the expression into a set of variables and constraints for the
   /// Solver. Returns a ParseResult that contains the utility of the expression,
@@ -195,8 +201,16 @@ class Expression {
                                CapacityConstraintMap& capacityConstraints,
                                Time currentTime) = 0;
 
+  /// Adds a child to this epxression.
+  /// May throw tetrisched::excpetions::ExpressionConstructionException
+  /// if an incorrect number of children are registered.
+  void addChild(ExpressionPtr child);
+
   /// Returns the number of children of this Expression.
   size_t getNumChildren() const;
+
+  /// Returns the number of parents of this Expression.
+  size_t getNumParents() const;
 
   /// Returns the children of this Expression.
   std::vector<ExpressionPtr> getChildren() const;
@@ -204,13 +218,17 @@ class Expression {
   /// Returns the type of this Expression.
   ExpressionType getType() const;
 
-  /// Solves the subtree rooted at this Expression and returns the solution.
-  /// It assumes that the SolverModelPtr has been populated with values for
-  /// unknown variables and throws a
-  /// tetrisched::exceptions::ExpressionSolutionException if the SolverModelPtr
-  /// is not populated. This method returns the actual values for the variables
-  /// specified in the ParseResult.
-  SolutionResultPtr solve(SolverModelPtr solverModel);
+  /// Populates the solution of the subtree rooted at this Expression and
+  /// returns the Solution for this Expression. It assumes that the
+  /// SolverModelPtr has been populated with values for unknown variables and
+  /// throws a tetrisched::exceptions::ExpressionSolutionException if the
+  /// SolverModelPtr is not populated.
+  SolutionResultPtr populateResults(SolverModelPtr solverModel);
+
+  /// Retrieve the solution for this Expression.
+  /// The Solution is only available if `populateResults` has been called on
+  /// this Expression.
+  std::optional<SolutionResultPtr> getSolution() const;
 };
 
 /// A `ChooseExpression` represents a choice of a required number of machines
@@ -236,7 +254,7 @@ class ChooseExpression : public Expression {
  public:
   ChooseExpression(std::string taskName, Partitions resourcePartitions,
                    uint32_t numRequiredMachines, Time startTime, Time duration);
-  void addChild(ExpressionPtr child) override;
+  void addChild(ExpressionPtr child);
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
                        CapacityConstraintMap& capacityConstraints,
@@ -248,7 +266,6 @@ class ChooseExpression : public Expression {
 class ObjectiveExpression : public Expression {
  public:
   ObjectiveExpression();
-  void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
                        CapacityConstraintMap& capacityConstraints,
@@ -266,7 +283,6 @@ class MinExpression : public Expression {
 
  public:
   MinExpression(std::string name);
-  void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
                        CapacityConstraintMap& capacityConstraints,
@@ -282,7 +298,6 @@ class MaxExpression : public Expression {
 
  public:
   MaxExpression(std::string name);
-  void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
                        CapacityConstraintMap& capacityConstraints,
@@ -299,7 +314,7 @@ class ScaleExpression : public Expression {
 
  public:
   ScaleExpression(std::string name, TETRISCHED_ILP_TYPE scaleFactor);
-  void addChild(ExpressionPtr child) override;
+  void addChild(ExpressionPtr child);
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
                        CapacityConstraintMap& capacityConstraints,
@@ -316,7 +331,7 @@ class LessThanExpression : public Expression {
 
  public:
   LessThanExpression(std::string name);
-  void addChild(ExpressionPtr child) override;
+  void addChild(ExpressionPtr child);
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
                        CapacityConstraintMap& capacityConstraints,
