@@ -108,16 +108,16 @@ class XOrVariableT {
 
  public:
   /// Constructors and operators.
-  XOrVariableT() = default;
-  XOrVariableT(const X& newValue) : value(value) {}
-  XOrVariableT(const VariablePtr& newValue) : value(newValue) {}
+  XOrVariableT() : value(std::monostate()) {}
+  XOrVariableT(const X newValue) : value(newValue) {}
+  XOrVariableT(const VariablePtr newValue) : value(newValue) {}
   XOrVariableT(const XOrVariableT& newValue) = default;
   XOrVariableT(XOrVariableT&& newValue) = default;
-  XOrVariableT& operator=(const X& newValue) {
+  XOrVariableT& operator=(const X newValue) {
     value = newValue;
     return *this;
   }
-  XOrVariableT& operator=(const VariablePtr& newValue) {
+  XOrVariableT& operator=(const VariablePtr newValue) {
     value = newValue;
     return *this;
   }

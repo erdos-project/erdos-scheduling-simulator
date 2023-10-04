@@ -51,22 +51,22 @@ TEST(Expression, TestLessThanEnforcesOrdering) {
 
   // Construct the choice for the two tasks.
   tetrisched::ExpressionPtr chooseTask1 =
-      std::make_unique<tetrisched::ChooseExpression>("task1", partitions, 1, 0,
+      std::make_shared<tetrisched::ChooseExpression>("task1", partitions, 1, 0,
                                                      100);
   tetrisched::ExpressionPtr chooseTask2 =
-      std::make_unique<tetrisched::ChooseExpression>("task2", partitions, 1,
+      std::make_shared<tetrisched::ChooseExpression>("task2", partitions, 1,
                                                      200, 100);
 
   // Construct the LessThan expression.
   tetrisched::ExpressionPtr lessThanExpression =
-      std::make_unique<tetrisched::LessThanExpression>(
+      std::make_shared<tetrisched::LessThanExpression>(
           "task1_less_than_task_2");
   lessThanExpression->addChild(std::move(chooseTask1));
   lessThanExpression->addChild(std::move(chooseTask2));
 
   // Construct an ObjectiveExpression.
   tetrisched::ExpressionPtr objectiveExpression =
-      std::make_unique<tetrisched::ObjectiveExpression>();
+      std::make_shared<tetrisched::ObjectiveExpression>();
   objectiveExpression->addChild(std::move(lessThanExpression));
 
   // Construct a Solver.
@@ -87,6 +87,56 @@ TEST(Expression, TestLessThanEnforcesOrdering) {
   cplexSolver.solveModel();
 
   auto result = objectiveExpression->solve(solverModelPtr);
+  EXPECT_TRUE(result->utility);
   EXPECT_EQ(1, result->utility.value());
+}
+
+// Check that the STRL parsing for the MaxExpression enforces only
+// one of the children to be true.
+TEST(Expression, TestMaxExpressionEnforcesSingleChoice) {
+  // Construct the Workers and a Partition.
+  tetrisched::WorkerPtr worker1 =
+      std::make_shared<tetrisched::Worker>(1, "worker1");
+  tetrisched::PartitionPtr partition =
+      std::make_shared<tetrisched::Partition>();
+  partition->addWorker(worker1, 2);
+  tetrisched::Partitions partitions = tetrisched::Partitions({partition});
+
+  // Construct two choices for a task.
+  tetrisched::ExpressionPtr chooseTask1_1 =
+      std::make_shared<tetrisched::ChooseExpression>("task1", partitions, 1, 0,
+                                                     100);
+  tetrisched::ExpressionPtr chooseTask1_2 =
+      std::make_shared<tetrisched::ChooseExpression>("task1", partitions, 1,
+                                                     100, 100);
+
+  // Constrain only one choice to actually happen.
+  tetrisched::ExpressionPtr maxChooseExpr =
+      std::make_shared<tetrisched::MaxExpression>("maxChooseTask1");
+  maxChooseExpr->addChild(std::move(chooseTask1_1));
+  maxChooseExpr->addChild(std::move(chooseTask1_2));
+
+  // Construct an ObjectiveExpression.
+  tetrisched::ExpressionPtr objectiveExpression =
+      std::make_shared<tetrisched::ObjectiveExpression>();
+  objectiveExpression->addChild(std::move(maxChooseExpr));
+
+  // Construct a Solver.
+  tetrisched::CPLEXSolver cplexSolver = tetrisched::CPLEXSolver();
+  auto solverModelPtr = cplexSolver.getModel();
+
+  // Construct a CapacityConstraintMap and parse the expression tree.
+  tetrisched::CapacityConstraintMap capacityConstraintMap;
+  auto _ = objectiveExpression->parse(solverModelPtr, partitions,
+                                      capacityConstraintMap, 0);
+  solverModelPtr->exportModel("testMaxExpressionEnforcesSingleChoice.lp");
+
+  // Translate and solve the model.
+  cplexSolver.translateModel();
+  cplexSolver.solveModel();
+
+  auto result = objectiveExpression->solve(solverModelPtr);
+  EXPECT_TRUE(result->utility);
+  EXPECT_EQ(1, result->utility.value()) << "Only one choice should be made.";
 }
 #endif

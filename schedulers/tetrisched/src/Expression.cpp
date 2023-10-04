@@ -12,7 +12,7 @@ void CapacityConstraintMap::registerUsageAtTime(const Partition& partition,
   // Get or insert the Constraint corresponding to this partition and time.
   auto mapKey = std::make_pair(partition.getPartitionId(), time);
   if (capacityConstraints.find(mapKey) == capacityConstraints.end()) {
-    capacityConstraints[mapKey] = std::make_unique<Constraint>(
+    capacityConstraints[mapKey] = std::make_shared<Constraint>(
         "CapacityConstraint_" + std::to_string(partition.getPartitionId()) +
             "_at_" + std::to_string(time),
         ConstraintType::CONSTR_LE, partition.size());
@@ -31,7 +31,7 @@ void CapacityConstraintMap::registerUsageAtTime(const Partition& partition,
   // Get or insert the Constraint corresponding to this partition and time.
   auto mapKey = std::make_pair(partition.getPartitionId(), time);
   if (capacityConstraints.find(mapKey) == capacityConstraints.end()) {
-    capacityConstraints[mapKey] = std::make_unique<Constraint>(
+    capacityConstraints[mapKey] = std::make_shared<Constraint>(
         "CapacityConstraint_" + std::to_string(partition.getPartitionId()) +
             "_at_" + std::to_string(time),
         ConstraintType::CONSTR_LE, partition.size());
@@ -118,18 +118,24 @@ SolutionResultPtr Expression::solve(SolverModelPtr solverModel) {
         "Expression with a utility was parsed without a start time.");
   }
   solutionResult->startTime = parsedResult->startTime->resolve();
+  TETRISCHED_DEBUG("Set start time to " << solutionResult->startTime.value()
+                                        << " for expression.");
 
   if (!parsedResult->endTime) {
     throw tetrisched::exceptions::ExpressionSolutionException(
         "Expression with a utility was parsed without an end time.");
   }
   solutionResult->endTime = parsedResult->endTime->resolve();
+  TETRISCHED_DEBUG("Set end time to " << solutionResult->endTime.value()
+                                      << " for expression.");
 
   if (!parsedResult->utility) {
     throw tetrisched::exceptions::ExpressionSolutionException(
         "Expression with a utility was parsed without a utility.");
   }
   solutionResult->utility = parsedResult->utility.value()->getValue();
+  TETRISCHED_DEBUG("Set utility to " << solutionResult->utility.value()
+                                     << " for expression.");
 
   return solutionResult;
 }
@@ -194,7 +200,7 @@ ParseResultPtr ChooseExpression::parse(
       taskName + "_placed_at_" + std::to_string(startTime));
   solverModel->addVariable(isSatisfiedVar);
 
-  ConstraintPtr fulfillsDemandConstraint = std::make_unique<Constraint>(
+  ConstraintPtr fulfillsDemandConstraint = std::make_shared<Constraint>(
       taskName + "_fulfills_demand_at_" + std::to_string(startTime),
       ConstraintType::CONSTR_EQ, 0);
   for (PartitionPtr& partition : schedulablePartitions.getPartitions()) {
@@ -220,12 +226,14 @@ ParseResultPtr ChooseExpression::parse(
   }
   // Ensure that if the Choose expression is satisfied, it fulfills the
   // demand for this expression. Pass the constraint to the model.
-  fulfillsDemandConstraint->addTerm(-1 * numRequiredMachines, isSatisfiedVar);
+  fulfillsDemandConstraint->addTerm(
+      -1 * static_cast<TETRISCHED_ILP_TYPE>(numRequiredMachines),
+      isSatisfiedVar);
   solverModel->addConstraint(std::move(fulfillsDemandConstraint));
 
   // Construct the Utility function for this Choose expression.
   auto utility =
-      std::make_unique<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
+      std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
   utility->addTerm(1, isSatisfiedVar);
 
   // Construct the return value.
@@ -254,7 +262,7 @@ ParseResultPtr ObjectiveExpression::parse(
 
   // Construct the overall utility of this expression.
   auto utility =
-      std::make_unique<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
+      std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
 
   // Parse the children and collect the utiltiies.
   for (auto& child : children) {
@@ -269,7 +277,7 @@ ParseResultPtr ObjectiveExpression::parse(
   capacityConstraints.translate(solverModel);
 
   // Construct the parsed result.
-  parsedResult->utility = std::make_unique<ObjectiveFunction>(*utility);
+  parsedResult->utility = std::make_shared<ObjectiveFunction>(*utility);
   parsedResult->startTime = 0;
   parsedResult->endTime = 0;
 
@@ -308,6 +316,9 @@ ParseResultPtr LessThanExpression::parse(
                                              capacityConstraints, currentTime);
   auto secondChildResult = children[1]->parse(solverModel, availablePartitions,
                                               capacityConstraints, currentTime);
+  TETRISCHED_DEBUG(
+      "Finished parsing the children for LessThanExpression with name " << name
+                                                                        << ".")
 
   if (firstChildResult->type != ParseResultType::EXPRESSION_UTILITY ||
       secondChildResult->type != ParseResultType::EXPRESSION_UTILITY) {
@@ -330,22 +341,16 @@ ParseResultPtr LessThanExpression::parse(
   parsedResult->endTime.emplace(secondChildResult->endTime.value());
 
   // Add a constraint that the first child must occur before the second.
-  ConstraintPtr happensBeforeConstraint = std::make_unique<Constraint>(
-      name + "_happens_before_constraint", ConstraintType::CONSTR_LE, 1);
-  if (firstChildResult->endTime->isVariable()) {
-    happensBeforeConstraint->addTerm(
-        firstChildResult->endTime->get<VariablePtr>());
-  } else {
-    happensBeforeConstraint->addTerm(firstChildResult->endTime->get<Time>());
-  }
-  if (secondChildResult->startTime->isVariable()) {
-    happensBeforeConstraint->addTerm(
-        -1, secondChildResult->startTime->get<VariablePtr>());
-  } else {
-    happensBeforeConstraint->addTerm(
-        -1 * ((int32_t)secondChildResult->startTime->get<Time>()));
-  }
+  auto happensBeforeConstraintName = name + "_happens_before_constraint";
+  ConstraintPtr happensBeforeConstraint = std::make_shared<Constraint>(
+      happensBeforeConstraintName, ConstraintType::CONSTR_LE, 1);
+  happensBeforeConstraint->addTerm(firstChildResult->indicator.value());
+  happensBeforeConstraint->addTerm(-1, secondChildResult->indicator.value());
   solverModel->addConstraint(std::move(happensBeforeConstraint));
+  TETRISCHED_DEBUG("Finished adding constraint "
+                   << happensBeforeConstraintName
+                   << " to enforce ordering in LessThanExpression with name "
+                   << name << ".")
 
   // Construct a utility function that is the minimum of the two utilities.
   // Maximizing this utility will force the solver to place both of the
@@ -374,8 +379,10 @@ ParseResultPtr LessThanExpression::parse(
 
   // Convert the utility variable to a utility function.
   parsedResult->utility =
-      std::make_unique<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
+      std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
   parsedResult->utility.value()->addTerm(1, utilityVar);
+  TETRISCHED_DEBUG("LessThanExpression with name "
+                   << name << " has utility " << utilityVar->getName() << ".");
 
   // Return the result.
   return parsedResult;
@@ -412,7 +419,7 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
 
   // Utility of MIN operator
   auto minUtility =
-      std::make_unique<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
+      std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
   VariablePtr minUtilityVariable = std::make_shared<Variable>(
       VariableType::VAR_INTEGER, expressionName + "_min_utility_variable");
   solverModel->addVariable(minUtilityVariable);
@@ -420,7 +427,7 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
   for (int i = 0; i < numChildren; i++) {
     auto childParsedResult = children[i]->parse(
         solverModel, availablePartitions, capacityConstraints, currentTime);
-    ConstraintPtr minStartTimeConstraint = std::make_unique<Constraint>(
+    ConstraintPtr minStartTimeConstraint = std::make_shared<Constraint>(
         expressionName + "_min_start_time_constr_child_" + std::to_string(i),
         ConstraintType::CONSTR_GE, 0);  // minStartTime < childStartTime
     if (childParsedResult->startTime.has_value()) {
@@ -440,7 +447,7 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
           " for MIN. But not present!");
     }
     // constraint of end time: childEndTime <= minEndTime
-    ConstraintPtr minEndTimeConstraint = std::make_unique<Constraint>(
+    ConstraintPtr minEndTimeConstraint = std::make_shared<Constraint>(
         expressionName + "_min_end_time_constr_child_" + std::to_string(i),
         ConstraintType::CONSTR_LE, 0);
     if (childParsedResult->endTime.has_value()) {

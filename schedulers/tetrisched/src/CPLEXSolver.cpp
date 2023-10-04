@@ -197,6 +197,7 @@ void CPLEXSolver::exportModel(const std::string& fname) {
 
 void CPLEXSolver::solveModel() {
   cplexInstance.solve();
+  TETRISCHED_DEBUG("Finished solving the model using the CPLEX solver!")
 
   // Retrieve all the variables from the CPLEX model into the SolverModel.
   for (const auto& [variableId, variable] : solverModel->variables) {
@@ -225,6 +226,9 @@ void CPLEXSolver::solveModel() {
                      << variable->getName() << " to "
                      << variable->solutionValue.value());
   }
+  TETRISCHED_DEBUG("Successfully populated the solution values for all "
+                   << solverModel->variables.size()
+                   << " variables from CPLEX to SolverModel.");
 }
 
 CPLEXSolver::~CPLEXSolver() { cplexEnv.end(); }
