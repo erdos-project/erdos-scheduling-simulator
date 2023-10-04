@@ -11,10 +11,10 @@
 /// i.e., a ChooseExpression is a leaf node in the expression tree.
 TEST(Expression, TestChooseExpressionIsLeaf) {
   tetrisched::Partitions partitions = tetrisched::Partitions();
-  tetrisched::ExpressionPtr chooseExpression =
+  auto chooseExpression =
       std::make_unique<tetrisched::ChooseExpression>("task1", partitions, 0, 0,
                                                      10);
-  tetrisched::ExpressionPtr chooseExpression2 =
+  auto chooseExpression2 =
       std::make_unique<tetrisched::ChooseExpression>("task1", partitions, 0, 0,
                                                      10);
   EXPECT_THROW(chooseExpression->addChild(std::move(chooseExpression2)),

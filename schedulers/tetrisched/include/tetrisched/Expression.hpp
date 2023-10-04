@@ -180,14 +180,15 @@ protected:
   /// The type of this Expression.
   ExpressionType type;
 
- public:
+  /// Adds a parent to this epxression.
+  void addParent(ExpressionPtr parent);
+
+  /// Returns the parents of this Expression.
+  std::vector<ExpressionPtr> getParents() const;
+
+public:
   /// Construct the Expression class of the given type.
   Expression(ExpressionType type);
-
-  /// Adds a child to this epxression.
-  /// May throw tetrisched::excpetions::ExpressionConstructionException
-  /// if an incorrect number of children are registered.
-  virtual void addChild(ExpressionPtr child) = 0;
 
   /// Parses the expression into a set of variables and constraints for the
   /// Solver. Returns a ParseResult that contains the utility of the expression,
@@ -198,8 +199,10 @@ protected:
                                CapacityConstraintMap& capacityConstraints,
                                Time currentTime) = 0;
 
-  /// Adds a parent to this epxression.
-  void addParent(std::weak_ptr<Expression> parent);
+  /// Adds a child to this epxression.
+  /// May throw tetrisched::excpetions::ExpressionConstructionException
+  /// if an incorrect number of children are registered.
+  void addChild(ExpressionPtr child);
 
   /// Returns the number of children of this Expression.
   size_t getNumChildren() const;
@@ -209,9 +212,6 @@ protected:
 
   /// Returns the children of this Expression.
   std::vector<ExpressionPtr> getChildren() const;
-
-  /// Returns the children of this Expression.
-  std::vector<std::weak_ptr<Expression>> getParents() const;
 
   /// Returns the type of this Expression.
   ExpressionType getType() const;
@@ -248,7 +248,7 @@ class ChooseExpression : public Expression {
  public:
   ChooseExpression(std::string taskName, Partitions resourcePartitions,
                    uint32_t numRequiredMachines, Time startTime, Time duration);
-  void addChild(ExpressionPtr child) override;
+  void addChild(ExpressionPtr child);
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
                        CapacityConstraintMap& capacityConstraints,
@@ -260,7 +260,6 @@ class ChooseExpression : public Expression {
 class ObjectiveExpression : public Expression {
  public:
   ObjectiveExpression();
-  void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
                        CapacityConstraintMap& capacityConstraints,
@@ -278,7 +277,6 @@ class MinExpression : public Expression {
 
  public:
   MinExpression(std::string name);
-  void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
                        CapacityConstraintMap& capacityConstraints,
@@ -294,7 +292,6 @@ class MaxExpression : public Expression {
 
  public:
   MaxExpression(std::string name);
-  void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
                        CapacityConstraintMap& capacityConstraints,
@@ -311,7 +308,7 @@ class ScaleExpression : public Expression {
 
  public:
   ScaleExpression(std::string name, TETRISCHED_ILP_TYPE scaleFactor);
-  void addChild(ExpressionPtr child) override;
+  void addChild(ExpressionPtr child);
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
                        CapacityConstraintMap& capacityConstraints,
@@ -328,7 +325,7 @@ class LessThanExpression : public Expression {
 
  public:
   LessThanExpression(std::string name);
-  void addChild(ExpressionPtr child) override;
+  void addChild(ExpressionPtr child);
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
                        CapacityConstraintMap& capacityConstraints,
