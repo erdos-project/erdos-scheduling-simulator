@@ -90,24 +90,34 @@ std::vector<ExpressionPtr> Expression::getChildren() const { return children; }
 
 ExpressionType Expression::getType() const { return type; }
 
-SolutionResultPtr Expression::solve(SolverModelPtr solverModel) {
+SolutionResultPtr Expression::populateResults(SolverModelPtr solverModel) {
   // Check that the Expression was parsed before.
   if (!parsedResult) {
     throw tetrisched::exceptions::ExpressionSolutionException(
         "Expression was not parsed before solve.");
   }
 
+  if (solution) {
+    // Solution was already available, just return the same instance.
+    return solution;
+  }
+
+  // Populate results for all children first.
+  for (auto& childExpression : children) {
+    auto _ = childExpression->populateResults(solverModel);
+  }
+
   // Construct the SolutionResult.
-  SolutionResultPtr solutionResult = std::make_shared<SolutionResult>();
+  solution = std::make_shared<SolutionResult>();
   switch (parsedResult->type) {
     case ParseResultType::EXPRESSION_PRUNE:
-      solutionResult->type = SolutionResultType::EXPRESSION_PRUNE;
-      return solutionResult;
+      solution->type = SolutionResultType::EXPRESSION_PRUNE;
+      return solution;
     case ParseResultType::EXPRESSION_NO_UTILITY:
-      solutionResult->type = SolutionResultType::EXPRESSION_NO_UTILITY;
-      return solutionResult;
+      solution->type = SolutionResultType::EXPRESSION_NO_UTILITY;
+      return solution;
     case ParseResultType::EXPRESSION_UTILITY:
-      solutionResult->type = SolutionResultType::EXPRESSION_UTILITY;
+      solution->type = SolutionResultType::EXPRESSION_UTILITY;
       break;
     default:
       throw tetrisched::exceptions::ExpressionSolutionException(
@@ -120,27 +130,34 @@ SolutionResultPtr Expression::solve(SolverModelPtr solverModel) {
     throw tetrisched::exceptions::ExpressionSolutionException(
         "Expression with a utility was parsed without a start time.");
   }
-  solutionResult->startTime = parsedResult->startTime->resolve();
-  TETRISCHED_DEBUG("Set start time to " << solutionResult->startTime.value()
+  solution->startTime = parsedResult->startTime->resolve();
+  TETRISCHED_DEBUG("Set start time to " << solution->startTime.value()
                                         << " for expression.");
 
   if (!parsedResult->endTime) {
     throw tetrisched::exceptions::ExpressionSolutionException(
         "Expression with a utility was parsed without an end time.");
   }
-  solutionResult->endTime = parsedResult->endTime->resolve();
-  TETRISCHED_DEBUG("Set end time to " << solutionResult->endTime.value()
+  solution->endTime = parsedResult->endTime->resolve();
+  TETRISCHED_DEBUG("Set end time to " << solution->endTime.value()
                                       << " for expression.");
 
   if (!parsedResult->utility) {
     throw tetrisched::exceptions::ExpressionSolutionException(
         "Expression with a utility was parsed without a utility.");
   }
-  solutionResult->utility = parsedResult->utility.value()->getValue();
-  TETRISCHED_DEBUG("Set utility to " << solutionResult->utility.value()
+  solution->utility = parsedResult->utility.value()->getValue();
+  TETRISCHED_DEBUG("Set utility to " << solution->utility.value()
                                      << " for expression.");
 
-  return solutionResult;
+  return solution;
+}
+
+std::optional<SolutionResultPtr> Expression::getSolution() const {
+  if (!solution) {
+    return std::nullopt;
+  }
+  return solution;
 }
 
 /* Method definitions for ChooseExpression */
