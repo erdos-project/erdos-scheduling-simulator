@@ -163,8 +163,8 @@ TEST(Expression, TestMinExpressionEnforcesAllChildrenSatisfied) {
   // Constrain both choices to actually happen.
   tetrisched::ExpressionPtr minChooseExpr =
       std::make_shared<tetrisched::MinExpression>("minChooseTaskBoth");
-  minChooseExpr->addChild(std::move(chooseTask1_1));
-  minChooseExpr->addChild(std::move(chooseTask1_2));
+  minChooseExpr->addChild(chooseTask1_1);
+  minChooseExpr->addChild(chooseTask1_2);
 
   // Construct an ObjectiveExpression.
   tetrisched::ExpressionPtr objectiveExpression =
@@ -189,6 +189,10 @@ TEST(Expression, TestMinExpressionEnforcesAllChildrenSatisfied) {
   auto result = objectiveExpression->populateResults(solverModelPtr);
   EXPECT_TRUE(result->utility);
   EXPECT_EQ(1, result->utility.value()) << "Both choices should be satisfied.";
+  EXPECT_EQ(chooseTask1_1->getSolution().value()->utility.value(), 1)
+      << "First Choose expression must be satisfied.";
+  EXPECT_EQ(chooseTask1_2->getSolution().value()->utility.value(), 1)
+      << "Second Choose expression must be satisfied.";
 }
 
 // Check that the STRL parsing for the MinExpression enforces no expression to
@@ -213,8 +217,8 @@ TEST(Expression, TestMinExpressionEnforcesNoneSatisfied) {
   // Constrain both choices to actually happen.
   tetrisched::ExpressionPtr minChooseExpr =
       std::make_shared<tetrisched::MinExpression>("minChooseTaskNone");
-  minChooseExpr->addChild(std::move(chooseTask1_1));
-  minChooseExpr->addChild(std::move(chooseTask1_2));
+  minChooseExpr->addChild(chooseTask1_1);
+  minChooseExpr->addChild(chooseTask1_2);
 
   // Construct an ObjectiveExpression.
   tetrisched::ExpressionPtr objectiveExpression =
@@ -238,5 +242,9 @@ TEST(Expression, TestMinExpressionEnforcesNoneSatisfied) {
   auto result = objectiveExpression->populateResults(solverModelPtr);
   EXPECT_TRUE(result->utility);
   EXPECT_EQ(0, result->utility.value()) << "No choices should be satisfied.";
+  EXPECT_EQ(chooseTask1_1->getSolution().value()->utility.value(), 0)
+      << "First Choose expression must not be satisfied.";
+  EXPECT_EQ(chooseTask1_2->getSolution().value()->utility.value(), 0)
+      << "Second Choose expression must not be satisfied.";
 }
 #endif
