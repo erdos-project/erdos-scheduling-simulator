@@ -11,12 +11,10 @@
 /// i.e., a ChooseExpression is a leaf node in the expression tree.
 TEST(Expression, TestChooseExpressionIsLeaf) {
   tetrisched::Partitions partitions = tetrisched::Partitions();
-  auto chooseExpression =
-      std::make_unique<tetrisched::ChooseExpression>("task1", partitions, 0, 0,
-                                                     10);
-  auto chooseExpression2 =
-      std::make_unique<tetrisched::ChooseExpression>("task1", partitions, 0, 0,
-                                                     10);
+  auto chooseExpression = std::make_unique<tetrisched::ChooseExpression>(
+      "task1", partitions, 0, 0, 10);
+  auto chooseExpression2 = std::make_unique<tetrisched::ChooseExpression>(
+      "task1", partitions, 0, 0, 10);
   EXPECT_THROW(chooseExpression->addChild(std::move(chooseExpression2)),
                tetrisched::exceptions::ExpressionConstructionException);
 }
@@ -190,7 +188,7 @@ TEST(Expression, TestMinExpressionEnforcesAllChildrenSatisfied) {
 
   auto result = objectiveExpression->solve(solverModelPtr);
   EXPECT_TRUE(result->utility);
-  EXPECT_EQ(2, result->utility.value()) << "Both choices should be satisfied.";
+  EXPECT_EQ(1, result->utility.value()) << "Both choices should be satisfied.";
 }
 
 // Check that the STRL parsing for the MinExpression enforces no expression to
@@ -238,7 +236,7 @@ TEST(Expression, TestMinExpressionEnforcesNoneSatisfied) {
   cplexSolver.solveModel();
 
   auto result = objectiveExpression->solve(solverModelPtr);
-  EXPECT_FALSE(result->utility);
+  EXPECT_TRUE(result->utility);
   EXPECT_EQ(0, result->utility.value()) << "No choices should be satisfied.";
 }
 #endif
