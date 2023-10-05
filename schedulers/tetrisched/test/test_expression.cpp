@@ -186,7 +186,7 @@ TEST(Expression, TestMinExpressionEnforcesAllChildrenSatisfied) {
   cplexSolver.translateModel();
   cplexSolver.solveModel();
 
-  auto result = objectiveExpression->solve(solverModelPtr);
+  auto result = objectiveExpression->populateResults(solverModelPtr);
   EXPECT_TRUE(result->utility);
   EXPECT_EQ(1, result->utility.value()) << "Both choices should be satisfied.";
 }
@@ -235,7 +235,7 @@ TEST(Expression, TestMinExpressionEnforcesNoneSatisfied) {
   cplexSolver.translateModel();
   cplexSolver.solveModel();
 
-  auto result = objectiveExpression->solve(solverModelPtr);
+  auto result = objectiveExpression->populateResults(solverModelPtr);
   EXPECT_TRUE(result->utility);
   EXPECT_EQ(0, result->utility.value()) << "No choices should be satisfied.";
 }
