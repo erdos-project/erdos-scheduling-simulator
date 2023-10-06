@@ -3,6 +3,7 @@
 #include "Backends.cpp"
 #include "Expressions.cpp"
 #include "SolverModel.cpp"
+#include "tetrisched/Scheduler.hpp"
 #include "tetrisched/Worker.hpp"
 
 namespace py = pybind11;
@@ -42,12 +43,23 @@ void defineBasicTypes(py::module_& tetrisched_m) {
            "Returns the number of Partitions in this Partitions.");
 }
 
+/// Define the Scheduler interface.
+void defineScheduler(py::module_& tetrisched_m) {
+  py::class_<tetrisched::Scheduler>(tetrisched_m, "Scheduler")
+      .def(py::init<tetrisched::Time>(), "Initializes the Scheduler.")
+      .def("registerSTRL", &tetrisched::Scheduler::registerSTRL,
+           "Registers the STRL expression for the scheduler to schedule from.")
+      .def("schedule", &tetrisched::Scheduler::schedule,
+           "Invokes the solver to schedule the registered STRL expression.");
+}
+
 PYBIND11_MODULE(tetrisched_py, tetrisched_m) {
   // Define the top-level module for the TetriSched Python API.
   tetrisched_m.doc() = "Python API for TetriSched.";
 
-  // Define the top-level basic types.
+  // Define the top-level basic types and the Scheduler itself.
   defineBasicTypes(tetrisched_m);
+  defineScheduler(tetrisched_m);
 
   // Implement bindings for STRL.
   auto tetrisched_m_strl = tetrisched_m.def_submodule(

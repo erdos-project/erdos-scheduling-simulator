@@ -1,6 +1,7 @@
 #include "tetrisched/Scheduler.hpp"
 
 #include "tetrisched/CPLEXSolver.hpp"
+#include "tetrisched/Expression.hpp"
 
 namespace tetrisched {
 Scheduler::Scheduler(Time discretization) : discretization(discretization) {
@@ -8,7 +9,7 @@ Scheduler::Scheduler(Time discretization) : discretization(discretization) {
   solverModel = solver->getModel();
 }
 
-void Scheduler::scheduleSTRL(ExpressionPtr expression,
+void Scheduler::registerSTRL(ExpressionPtr expression,
                              Partitions availablePartitions, Time currentTime) {
   // Check if the expression is an objective function.
   if (expression->getType() != ExpressionType::EXPR_OBJECTIVE) {
@@ -17,15 +18,30 @@ void Scheduler::scheduleSTRL(ExpressionPtr expression,
         "but is of type: " +
         std::to_string(expression->getType()) + ".");
   }
+  // Save the expression.
+  this->expression = expression;
 
   // Create the CapacityConstraintMap for the STRL tree to add constraints to.
   CapacityConstraintMap capacityConstraintMap(discretization);
 
   // Parse the ExpressionTree to populate the solver model.
-  expression->parse(solverModel, availablePartitions, capacityConstraintMap,
-                    currentTime);
+  auto _ = expression->parse(solverModel, availablePartitions,
+                             capacityConstraintMap, currentTime);
+}
 
-  // Invoke the solver, and populate the results into the expression tree.
-  solver->solveModel();
+void Scheduler::schedule() {
+  if (!this->expression.has_value()) {
+    throw exceptions::ExpressionSolutionException(
+        "No expression has been registered with the scheduler. "
+        "Please invoke registerSTRL() first.");
+  }
+  // Translate the model to the solver backend.
+  this->solver->translateModel();
+
+  // Solve the model.
+  this->solver->solveModel();
+
+  // Populate the results from the solver into the expression tree.
+  this->expression.value()->populateResults(solverModel);
 }
 }  // namespace tetrisched

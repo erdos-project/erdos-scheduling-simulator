@@ -80,7 +80,8 @@ set(TETRISCHED_SOURCE
      "src/Expression.cpp"
      "src/Worker.cpp"
      "src/Partition.cpp"
-     "src/SolverModel.cpp")
+     "src/SolverModel.cpp"
+     "src/Scheduler.cpp")
 
 if (EXISTS "${CPLEX_DIR}")
      LIST(APPEND TETRISCHED_SOURCE "src/CPLEXSolver.cpp")

@@ -157,12 +157,17 @@ def test_tetrisched_task_graph_strl_generation_simple():
     partitions = scheduler.construct_partitions(worker_pools=worker_pools)
 
     # Construct the STRL expression for the TaskGraph.
-    task_graph_strl = scheduler.construct_task_graph_strl(
+    task_strls = {}
+    task_graph_strl = scheduler._construct_task_graph_strl(
         current_time=EventTime.zero(),
         task=task_one,
         task_graph=task_graph,
         partitions=partitions,
+        task_strls=task_strls,
     )
+
+    # Ensure that STRL expressions were constructed for all tasks.
+    assert len(task_strls) == 2, "Incorrect number of STRL expressions."
 
     # Ensure that the generated STRL expression is correct.
     assert (
@@ -180,3 +185,42 @@ def test_tetrisched_task_graph_strl_generation_simple():
         task_two_strl.getType() == tetrisched.strl.EXPR_MAX
     ), f"Incorrect type: {task_two_strl.getType()}"
     assert task_two_strl.getNumChildren() == 3, "Incorrect number of children in STRL."
+
+
+def test_two_tasks_correctly_scheduled():
+    """Tests that two tasks without dependencies are correctly
+    scheduled on a single Worker."""
+    # Create two tasks.
+    task_1 = create_default_task(
+        name="task_1",
+        runtime=20,
+        deadline=30,
+        resource_requirements=Resources(resource_vector={Resource(name="Slot"): 1}),
+    )
+    task_2 = create_default_task(
+        name="task_2",
+        runtime=20,
+        deadline=30,
+        resource_requirements=Resources(resource_vector={Resource(name="Slot"): 1}),
+    )
+    task_graph = TaskGraph(name=task_1.task_graph, tasks={task_1: [], task_2: []})
+    workload = Workload.from_task_graphs(task_graphs={task_graph.name: task_graph})
+
+    # Release the tasks.
+    task_1.release(EventTime.zero())
+    task_2.release(EventTime.zero())
+
+    # Construct the WorkerPools.
+    worker_1 = Worker(
+        name="worker_1", resources=Resources(resource_vector={Resource(name="Slot"): 1})
+    )
+    worker_pool = WorkerPool(name="worker_pool", workers=[worker_1])
+    worker_pools = WorkerPools(worker_pools=[worker_pool])
+
+    # Construct the scheduler and invoke it at the current time.
+    scheduler = TetriSchedScheduler(
+        time_discretization=EventTime(10, EventTime.Unit.US)
+    )
+    scheduler.schedule(
+        sim_time=EventTime.zero(), workload=workload, worker_pools=worker_pools
+    )
