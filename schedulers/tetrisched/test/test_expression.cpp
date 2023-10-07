@@ -38,6 +38,26 @@ TEST(Expression, TestMinExpressionIsNOTLeaf) {
   EXPECT_TRUE(chooseExpression->getNumParents() == 1);
 }
 
+/// Checks that the MaxExpression can only have ChooseExpression as children.
+TEST(Expression, TestMaxExpressionOnlyAllowsChooseExpressionChildren) {
+  tetrisched::Partitions partitions = tetrisched::Partitions();
+  // Ensure ChooseExpression can be added to MaxExpression.
+  tetrisched::ExpressionPtr chooseExpression =
+      std::make_shared<tetrisched::ChooseExpression>("task1", partitions, 0, 0,
+                                                     10);
+  tetrisched::ExpressionPtr maxExpression =
+      std::make_shared<tetrisched::MaxExpression>("TestMax");
+  EXPECT_NO_THROW(maxExpression->addChild(chooseExpression))
+      << "MaxExpression should allow ChooseExpression children.";
+
+  // Ensure MinExpression cannot be added to MaxExpression.
+  tetrisched::ExpressionPtr minExpression =
+      std::make_shared<tetrisched::MinExpression>("TestMin");
+  EXPECT_THROW(maxExpression->addChild(minExpression),
+               tetrisched::exceptions::ExpressionConstructionException)
+      << "MaxExpression should not allow MinExpression children.";
+}
+
 #ifdef _TETRISCHED_WITH_CPLEX_
 /// Checks that for two trivially satisfiable expressions, the less than
 /// expression is only satisfied if their times are ordered.

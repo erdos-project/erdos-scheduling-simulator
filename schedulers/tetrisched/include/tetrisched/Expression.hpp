@@ -56,6 +56,17 @@ struct ParseResult {
 };
 using ParseResultPtr = std::shared_ptr<ParseResult>;
 
+/// A `Placement` class represents the placement of a Task.
+struct Placement {
+  /// The name or identifer for the Task being represented by this Placement.
+  std::string taskName;
+  /// The start time of the Placement.
+  std::optional<Time> startTime;
+  /// The ID of the Partition that the Task is placed on.
+  std::optional<uint32_t> partitionId;
+};
+using PlacementPtr = std::shared_ptr<Placement>;
+
 /// A `SolutionResult` class represents the solution attributed to an
 /// expression.
 struct SolutionResult {
@@ -67,6 +78,8 @@ struct SolutionResult {
   std::optional<Time> endTime;
   /// The utility associated with the result.
   std::optional<TETRISCHED_ILP_TYPE> utility;
+  /// The placement objects being bubbled up in the solution.
+  std::unordered_map<std::string, PlacementPtr> placements;
 };
 using SolutionResultPtr = std::shared_ptr<SolutionResult>;
 
@@ -167,9 +180,8 @@ enum ExpressionType {
 using ExpressionType = enum ExpressionType;
 
 /// A Base Class for all expressions in the STRL language.
-class Expression : public std::enable_shared_from_this<Expression>
-{
-protected:
+class Expression : public std::enable_shared_from_this<Expression> {
+ protected:
   /// The parsed result from the Expression.
   /// Used for retrieving the solution from the solver.
   ParseResultPtr parsedResult;
@@ -188,7 +200,7 @@ protected:
   /// Returns the parents of this Expression.
   std::vector<ExpressionPtr> getParents() const;
 
-public:
+ public:
   /// Construct the Expression class of the given type.
   Expression(ExpressionType type);
 
@@ -204,7 +216,7 @@ public:
   /// Adds a child to this epxression.
   /// May throw tetrisched::excpetions::ExpressionConstructionException
   /// if an incorrect number of children are registered.
-  void addChild(ExpressionPtr child);
+  virtual void addChild(ExpressionPtr child);
 
   /// Returns the number of children of this Expression.
   size_t getNumChildren() const;
@@ -254,7 +266,7 @@ class ChooseExpression : public Expression {
  public:
   ChooseExpression(std::string taskName, Partitions resourcePartitions,
                    uint32_t numRequiredMachines, Time startTime, Time duration);
-  void addChild(ExpressionPtr child);
+  void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
                        CapacityConstraintMap& capacityConstraints,
@@ -298,6 +310,7 @@ class MaxExpression : public Expression {
 
  public:
   MaxExpression(std::string name);
+  void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
                        CapacityConstraintMap& capacityConstraints,
@@ -314,7 +327,7 @@ class ScaleExpression : public Expression {
 
  public:
   ScaleExpression(std::string name, TETRISCHED_ILP_TYPE scaleFactor);
-  void addChild(ExpressionPtr child);
+  void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
                        CapacityConstraintMap& capacityConstraints,
@@ -331,7 +344,7 @@ class LessThanExpression : public Expression {
 
  public:
   LessThanExpression(std::string name);
-  void addChild(ExpressionPtr child);
+  void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
                        CapacityConstraintMap& capacityConstraints,

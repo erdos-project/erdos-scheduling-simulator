@@ -560,7 +560,15 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
 
 MaxExpression::MaxExpression(std::string name)
     : Expression(ExpressionType::EXPR_MAX), expressionName(name) {}
-    
+
+void MaxExpression::addChild(ExpressionPtr child) {
+  if (child->getType() != ExpressionType::EXPR_CHOOSE) {
+    throw tetrisched::exceptions::ExpressionConstructionException(
+        "MaxExpression can only have ChooseExpression children.");
+  }
+  Expression::addChild(child);
+}
+
 ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
                                     Partitions availablePartitions,
                                     CapacityConstraintMap& capacityConstraints,
