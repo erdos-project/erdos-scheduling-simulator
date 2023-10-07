@@ -16,7 +16,6 @@ from schedulers import (
     BranchPredictionScheduler,
     ClockworkScheduler,
     EDFScheduler,
-    ERDOSScheduler,
     FIFOScheduler,
     ILPScheduler,
     LSFScheduler,
@@ -24,6 +23,11 @@ from schedulers import (
     TetriSchedGurobiScheduler,
     Z3Scheduler,
 )
+
+try:
+    from schedulers import TetriSchedScheduler
+except ImportError:
+    pass
 from simulator import Simulator
 from utils import EventTime, setup_logging
 from workload import BranchPredictionPolicy, Workload
@@ -175,7 +179,7 @@ flags.DEFINE_enum(
         "TetriSched_CPLEX",
         "TetriSched_Gurobi",
         "Clockwork",
-        "ERDOS",
+        "TetriSched",
     ],
     "The scheduler to use for this execution.",
 )
@@ -525,10 +529,18 @@ def main(args):
             goal=FLAGS.clockwork_goal,
             _flags=FLAGS,
         )
-    elif FLAGS.scheduler == "ERDOS":
-        scheduler = ERDOSScheduler(
+    elif FLAGS.scheduler == "TetriSched":
+        scheduler = TetriSchedScheduler(
             preemptive=FLAGS.preemption,
             runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
+            lookahead=EventTime(FLAGS.scheduler_lookahead, EventTime.Unit.US),
+            enforce_deadlines=FLAGS.enforce_deadlines,
+            retract_schedules=FLAGS.retract_schedules,
+            release_taskgraphs=FLAGS.release_taskgraphs,
+            time_discretization=EventTime(
+                FLAGS.scheduler_time_discretization, EventTime.Unit.US
+            ),
+            _flags=FLAGS,
         )
     else:
         raise ValueError(
