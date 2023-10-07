@@ -57,13 +57,47 @@ struct ParseResult {
 using ParseResultPtr = std::shared_ptr<ParseResult>;
 
 /// A `Placement` class represents the placement of a Task.
-struct Placement {
+class Placement {
+ private:
   /// The name or identifer for the Task being represented by this Placement.
   std::string taskName;
+  /// A boolean indicating if the Task was actually placed.
+  bool placed;
   /// The start time of the Placement.
   std::optional<Time> startTime;
   /// The ID of the Partition that the Task is placed on.
-  std::optional<uint32_t> partitionId;
+  std::unordered_map<uint32_t, TETRISCHED_ILP_TYPE> partitionToResources;
+
+ public:
+  /// Initialize a Placement with the given Task name, start time and Partition
+  /// ID.
+  Placement(std::string taskName, Time startTime);
+
+  /// Initialize a Placement with the given Task name signifying that the Task
+  /// was not actually placed.
+  Placement(std::string taskName);
+
+  /// Check if the Task was actually placed.
+  bool isPlaced() const;
+
+  /// Add a Partition along with the resources it is contributing to this
+  /// Placement.
+  void addPartition(uint32_t partitionId, TETRISCHED_ILP_TYPE resources);
+
+  /// Retrieve the name of the Task.
+  std::string getName() const;
+
+  /// Retrieve the start time of the Placement, if available.
+  std::optional<Time> getStartTime() const;
+
+  /// Retrieve an assignment from the Partition ID to the resources it is
+  /// contributing to this Placement.
+  std::vector<std::pair<uint32_t, TETRISCHED_ILP_TYPE>>
+  getPartitionAssignments() const;
+
+  /// Retrieve the total resources contributed by all Partitions to this
+  /// Placement.
+  TETRISCHED_ILP_TYPE getTotalResources() const;
 };
 using PlacementPtr = std::shared_ptr<Placement>;
 
@@ -182,6 +216,8 @@ using ExpressionType = enum ExpressionType;
 /// A Base Class for all expressions in the STRL language.
 class Expression : public std::enable_shared_from_this<Expression> {
  protected:
+  /// The name of the Expression.
+  std::string name;
   /// The parsed result from the Expression.
   /// Used for retrieving the solution from the solver.
   ParseResultPtr parsedResult;
@@ -202,7 +238,7 @@ class Expression : public std::enable_shared_from_this<Expression> {
 
  public:
   /// Construct the Expression class of the given type.
-  Expression(ExpressionType type);
+  Expression(std::string name, ExpressionType type);
 
   /// Parses the expression into a set of variables and constraints for the
   /// Solver. Returns a ParseResult that contains the utility of the expression,
@@ -217,6 +253,9 @@ class Expression : public std::enable_shared_from_this<Expression> {
   /// May throw tetrisched::excpetions::ExpressionConstructionException
   /// if an incorrect number of children are registered.
   virtual void addChild(ExpressionPtr child);
+
+  /// Returns the name of this Expression.
+  std::string getName() const;
 
   /// Returns the number of children of this Expression.
   size_t getNumChildren() const;
@@ -235,7 +274,7 @@ class Expression : public std::enable_shared_from_this<Expression> {
   /// SolverModelPtr has been populated with values for unknown variables and
   /// throws a tetrisched::exceptions::ExpressionSolutionException if the
   /// SolverModelPtr is not populated.
-  SolutionResultPtr populateResults(SolverModelPtr solverModel);
+  virtual SolutionResultPtr populateResults(SolverModelPtr solverModel);
 
   /// Retrieve the solution for this Expression.
   /// The Solution is only available if `populateResults` has been called on
@@ -248,9 +287,6 @@ class Expression : public std::enable_shared_from_this<Expression> {
 /// provided start_time.
 class ChooseExpression : public Expression {
  private:
-  /// The name of the Task that this ChooseExpression is being inserted
-  /// into the AST in reference to.
-  std::string taskName;
   /// The Resource partitions that the ChooseExpression is being asked to
   /// choose resources from.
   Partitions resourcePartitions;
@@ -262,6 +298,9 @@ class ChooseExpression : public Expression {
   Time duration;
   /// The end time of the choice represented by this Expression.
   Time endTime;
+  /// The variables that represent the choice of each Partition for this
+  /// Expression.
+  std::unordered_map<uint32_t, VariablePtr> partitionVariables;
 
  public:
   ChooseExpression(std::string taskName, Partitions resourcePartitions,
@@ -271,6 +310,7 @@ class ChooseExpression : public Expression {
                        Partitions availablePartitions,
                        CapacityConstraintMap& capacityConstraints,
                        Time currentTime) override;
+  SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
 };
 
 /// An `ObjectiveExpression` collates the objectives from its children and
@@ -282,6 +322,7 @@ class ObjectiveExpression : public Expression {
                        Partitions availablePartitions,
                        CapacityConstraintMap& capacityConstraints,
                        Time currentTime) override;
+  SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
 };
 
 /// A `MinExpression` inserts a utility variable that is constrained by the
@@ -289,10 +330,6 @@ class ObjectiveExpression : public Expression {
 /// this ensures that the expression is only satisfied if all of its children
 /// are satisfied.
 class MinExpression : public Expression {
- private:
-  /// The name of the expression.
-  std::string expressionName;
-
  public:
   MinExpression(std::string name);
   ParseResultPtr parse(SolverModelPtr solverModel,
@@ -304,10 +341,6 @@ class MinExpression : public Expression {
 /// A `MaxExpression` enforces a choice of only one of its children to be
 /// satisfied.
 class MaxExpression : public Expression {
- private:
-  /// The name of the expression.
-  std::string expressionName;
-
  public:
   MaxExpression(std::string name);
   void addChild(ExpressionPtr child) override;
@@ -320,8 +353,6 @@ class MaxExpression : public Expression {
 /// A `ScaleExpression` amplifies the utility of its child by a scalar factor.
 class ScaleExpression : public Expression {
  private:
-  /// The name of the expression.
-  std::string expressionName;
   /// The scalar factor to amplify the utility of the child by.
   TETRISCHED_ILP_TYPE scaleFactor;
 
@@ -338,10 +369,6 @@ class ScaleExpression : public Expression {
 /// ordered relationship such that the second child occurs after the first
 /// child.
 class LessThanExpression : public Expression {
- private:
-  /// The name for this Expression.
-  std::string name;
-
  public:
   LessThanExpression(std::string name);
   void addChild(ExpressionPtr child) override;

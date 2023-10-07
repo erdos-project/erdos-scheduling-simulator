@@ -108,8 +108,34 @@ TEST(Expression, TestLessThanEnforcesOrdering) {
   cplexSolver.solveModel();
 
   auto result = objectiveExpression->populateResults(solverModelPtr);
-  EXPECT_TRUE(result->utility);
-  EXPECT_EQ(1, result->utility.value());
+
+  // Ensure that the LessThanExpression's variables are correct.
+  EXPECT_TRUE(result->utility.has_value()) << "Utility should be set.";
+  EXPECT_EQ(1, result->utility.value()) << "Utility should be 1.";
+
+  EXPECT_TRUE(result->startTime.has_value()) << "Start time should be set.";
+  EXPECT_EQ(0, result->startTime.value()) << "Start time should be 0.";
+
+  EXPECT_TRUE(result->endTime.has_value()) << "End time should be set.";
+  EXPECT_EQ(300, result->endTime.value()) << "End time should be 100.";
+
+  // Ensure that the Placements are correct.
+  EXPECT_EQ(result->placements.size(), 2) << "There should be 2 placements.";
+  EXPECT_TRUE(result->placements["task1"]->isPlaced())
+      << "task1 should be placed";
+  EXPECT_EQ(result->placements["task1"]->getPartitionAssignments()[0].first,
+            partition->getPartitionId())
+      << "task1 should be placed on partition.";
+  EXPECT_EQ(result->placements["task1"]->getStartTime().value(), 0)
+      << "task1 should start at 0.";
+
+  EXPECT_TRUE(result->placements["task2"]->isPlaced())
+      << "task2 should be placed";
+  EXPECT_EQ(result->placements["task2"]->getPartitionAssignments()[0].first,
+            partition->getPartitionId())
+      << "task2 should be placed on partition.";
+  EXPECT_EQ(result->placements["task2"]->getStartTime().value(), 200)
+      << "task2 should start at 200.";
 }
 
 // Check that the STRL parsing for the MaxExpression enforces only
