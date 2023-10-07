@@ -534,8 +534,8 @@ ParseResultPtr LessThanExpression::parse(
   auto happensBeforeConstraintName = name + "_happens_before_constraint";
   ConstraintPtr happensBeforeConstraint = std::make_shared<Constraint>(
       happensBeforeConstraintName, ConstraintType::CONSTR_LE, 1);
-  happensBeforeConstraint->addTerm(firstChildResult->indicator.value());
-  happensBeforeConstraint->addTerm(-1, secondChildResult->indicator.value());
+  happensBeforeConstraint->addTerm(firstChildResult->endTime.value());
+  happensBeforeConstraint->addTerm(-1, secondChildResult->startTime.value());
   solverModel->addConstraint(std::move(happensBeforeConstraint));
   TETRISCHED_DEBUG("Finished adding constraint "
                    << happensBeforeConstraintName

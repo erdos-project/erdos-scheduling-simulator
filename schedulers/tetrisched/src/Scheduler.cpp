@@ -35,6 +35,7 @@ void Scheduler::schedule() {
         "No expression has been registered with the scheduler. "
         "Please invoke registerSTRL() first.");
   }
+
   // Translate the model to the solver backend.
   this->solver->translateModel();
 

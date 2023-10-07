@@ -54,7 +54,7 @@ def test_tetrisched_partition_creation_success():
     # Create the TetriSchedScheduler and check that it returns a single Partitions
     # object with four partitions that each have 2 slots.
     scheduler = TetriSchedScheduler()
-    partitions = scheduler.construct_partitions(worker_pools=worker_pools)
+    _, _, partitions = scheduler.construct_partitions(worker_pools=worker_pools)
 
     assert len(partitions) == 4, "The number of Partition objects is not 2."
     for partition in partitions.getPartitions():
@@ -80,7 +80,7 @@ def test_tetrisched_task_strl_no_slot_fail():
 
     # Construct the scheduler and the partitions.
     scheduler = TetriSchedScheduler()
-    partitions = scheduler.construct_partitions(worker_pools=worker_pools)
+    _, _, partitions = scheduler.construct_partitions(worker_pools=worker_pools)
     with pytest.raises(ValueError):
         scheduler.construct_task_strl(
             current_time=EventTime.zero(), task=task, partitions=partitions
@@ -108,7 +108,7 @@ def test_tetrisched_task_choice_strl_generation():
     scheduler = TetriSchedScheduler(
         time_discretization=EventTime(10, EventTime.Unit.US)
     )
-    partitions = scheduler.construct_partitions(worker_pools=worker_pools)
+    _, _, partitions = scheduler.construct_partitions(worker_pools=worker_pools)
     task_strl = scheduler.construct_task_strl(
         current_time=EventTime.zero(), task=task, partitions=partitions
     )
@@ -154,7 +154,7 @@ def test_tetrisched_task_graph_strl_generation_simple():
     scheduler = TetriSchedScheduler(
         time_discretization=EventTime(10, EventTime.Unit.US)
     )
-    partitions = scheduler.construct_partitions(worker_pools=worker_pools)
+    _, _, partitions = scheduler.construct_partitions(worker_pools=worker_pools)
 
     # Construct the STRL expression for the TaskGraph.
     task_strls = {}
@@ -193,15 +193,19 @@ def test_two_tasks_correctly_scheduled():
     # Create two tasks.
     task_1 = create_default_task(
         name="task_1",
-        runtime=20,
+        runtime=10,
         deadline=30,
-        resource_requirements=Resources(resource_vector={Resource(name="Slot"): 1}),
+        resource_requirements=Resources(
+            resource_vector={Resource(name="Slot", _id="any"): 1}
+        ),
     )
     task_2 = create_default_task(
         name="task_2",
         runtime=20,
         deadline=30,
-        resource_requirements=Resources(resource_vector={Resource(name="Slot"): 1}),
+        resource_requirements=Resources(
+            resource_vector={Resource(name="Slot", _id="any"): 1}
+        ),
     )
     task_graph = TaskGraph(name=task_1.task_graph, tasks={task_1: [], task_2: []})
     workload = Workload.from_task_graphs(task_graphs={task_graph.name: task_graph})
@@ -221,6 +225,79 @@ def test_two_tasks_correctly_scheduled():
     scheduler = TetriSchedScheduler(
         time_discretization=EventTime(10, EventTime.Unit.US)
     )
-    scheduler.schedule(
+    placements = scheduler.schedule(
         sim_time=EventTime.zero(), workload=workload, worker_pools=worker_pools
     )
+    task_1_placement = placements.get_placements(task_1)[0]
+    task_2_placement = placements.get_placements(task_2)[0]
+    assert task_1_placement.is_placed(), "Task 1 was not placed."
+    assert task_2_placement.is_placed(), "Task 2 was not placed."
+    assert (
+        task_1_placement.worker_id == worker_1.id
+    ), "Task 1 was not scheduled on the correct worker."
+    assert (
+        task_1_placement.placement_time.time == 0
+    ), "Task 1 was not scheduled at the correct time."
+    assert (
+        task_2_placement.worker_id == worker_1.id
+    ), "Task 2 was not scheduled on the correct worker."
+    assert (
+        task_2_placement.placement_time.time == 10
+    ), "Task 2 was not scheduled at the correct time."
+
+
+def test_two_tasks_dependency_correctly_scheduled():
+    """Tests that two tasks with a dependency are correctly scheduled."""
+    # Create two tasks.
+    task_1 = create_default_task(
+        name="task_1",
+        runtime=10,
+        deadline=30,
+        resource_requirements=Resources(
+            resource_vector={Resource(name="Slot", _id="any"): 1}
+        ),
+    )
+    task_2 = create_default_task(
+        name="task_2",
+        runtime=20,
+        deadline=30,
+        resource_requirements=Resources(
+            resource_vector={Resource(name="Slot", _id="any"): 1}
+        ),
+    )
+    task_graph = TaskGraph(name=task_1.task_graph, tasks={task_1: [], task_2: [task_1]})
+    workload = Workload.from_task_graphs(task_graphs={task_graph.name: task_graph})
+
+    # Release the tasks.
+    task_2.release(EventTime.zero())
+
+    # Construct the WorkerPools.
+    worker_1 = Worker(
+        name="worker_1", resources=Resources(resource_vector={Resource(name="Slot"): 1})
+    )
+    worker_pool = WorkerPool(name="worker_pool", workers=[worker_1])
+    worker_pools = WorkerPools(worker_pools=[worker_pool])
+
+    # Construct the scheduler and invoke it at the current time.
+    scheduler = TetriSchedScheduler(
+        time_discretization=EventTime(10, EventTime.Unit.US), release_taskgraphs=True
+    )
+    placements = scheduler.schedule(
+        sim_time=EventTime.zero(), workload=workload, worker_pools=worker_pools
+    )
+    task_1_placement = placements.get_placements(task_1)[0]
+    task_2_placement = placements.get_placements(task_2)[0]
+    assert task_1_placement.is_placed(), "Task 1 was not placed."
+    assert task_2_placement.is_placed(), "Task 2 was not placed."
+    assert (
+        task_1_placement.worker_id == worker_1.id
+    ), "Task 1 was not scheduled on the correct worker."
+    assert (
+        task_1_placement.placement_time.time == 20
+    ), "Task 1 was not scheduled at the correct time."
+    assert (
+        task_2_placement.worker_id == worker_1.id
+    ), "Task 2 was not scheduled on the correct worker."
+    assert (
+        task_2_placement.placement_time.time == 0
+    ), "Task 2 was not scheduled at the correct time."

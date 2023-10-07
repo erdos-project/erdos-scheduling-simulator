@@ -15,6 +15,18 @@ void defineSTRLExpressions(py::module_& tetrisched_m) {
       .value("EXPR_LESSTHAN", tetrisched::ExpressionType::EXPR_LESSTHAN)
       .export_values();
 
+  // Define the Placement object.
+  py::class_<tetrisched::Placement, tetrisched::PlacementPtr>(tetrisched_m,
+                                                              "Placement")
+      .def_property_readonly("name", &tetrisched::Placement::getName,
+                             "The name of the Placement.")
+      .def_property_readonly("startTime", &tetrisched::Placement::getStartTime)
+      .def("isPlaced", &tetrisched::Placement::isPlaced,
+           "Returns true if the Placement was placed, false otherwise.")
+      .def("getPartitionAssignments",
+           &tetrisched::Placement::getPartitionAssignments,
+           "Returns the Partition assignments for this Placement.");
+
   // Define the SolutionResult.
   py::class_<tetrisched::SolutionResult, tetrisched::SolutionResultPtr>(
       tetrisched_m, "SolutionResult")
@@ -35,7 +47,13 @@ void defineSTRLExpressions(py::module_& tetrisched_m) {
           [](const tetrisched::SolutionResult& result) {
             return result.utility;
           },
-          "The utility of the expression.");
+          "The utility of the expression.")
+      .def(
+          "getPlacement",
+          [](const tetrisched::SolutionResult& result, std::string taskName) {
+            return result.placements.at(taskName);
+          },
+          "Returns the Placement for the given task.");
 
   // Define the base Expression.
   py::class_<tetrisched::Expression, tetrisched::ExpressionPtr>(tetrisched_m,
