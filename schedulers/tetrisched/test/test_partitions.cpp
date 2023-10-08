@@ -1,39 +1,22 @@
 #include <gtest/gtest.h>
 
 #include "tetrisched/Partition.hpp"
-#include "tetrisched/Worker.hpp"
-
-TEST(WorkerTest, TestWorkerInitialization) {
-  // Create a Worker.
-  tetrisched::Worker worker = tetrisched::Worker(1, "worker1");
-  EXPECT_EQ(worker.getWorkerId(), 1)
-      << "The ID of the Worker was expected to be 1.";
-  EXPECT_EQ(worker.getWorkerName(), "worker1")
-      << "The name of the Worker was expected to be worker1.";
-}
 
 TEST(PartitionTest, TestPartitionInitialized) {
   // Create an empty Partition.
-  tetrisched::Partition partition = tetrisched::Partition();
-  EXPECT_EQ(partition.size(), 0) << "The partition was expected to be empty.";
-  EXPECT_GT(partition.getPartitionId(), 0)
-      << "The partition ID was expected to be greater than 0.";
+  tetrisched::Partition partition = tetrisched::Partition(0, "partition1");
+  EXPECT_EQ(partition.getQuantity(), 0)
+      << "The partition was expected to be empty.";
+  EXPECT_EQ(partition.getPartitionId(), 0)
+      << "The partition ID was expected to be 0.";
 }
 
 TEST(PartitionsTest, TestIntersectionEmpty) {
-  // Create a set of Workers.
-  std::vector<std::pair<tetrisched::WorkerPtr, size_t>> workersInPartition1 = {
-      std::make_pair(std::make_shared<tetrisched::Worker>(1, "worker1"), 2),
-  };
-  std::vector<std::pair<tetrisched::WorkerPtr, size_t>> workersInPartition2 = {
-      std::make_pair(std::make_shared<tetrisched::Worker>(2, "worker2"), 2),
-  };
-
-  // Create two partitions from the Workers.
+  // Create two Partition objects.
   std::vector<tetrisched::PartitionPtr> p1 = {
-      std::make_shared<tetrisched::Partition>(workersInPartition1)};
+      std::make_shared<tetrisched::Partition>(1, "partition1", 1)};
   std::vector<tetrisched::PartitionPtr> p2 = {
-      std::make_shared<tetrisched::Partition>(workersInPartition2)};
+      std::make_shared<tetrisched::Partition>(2, "partition2", 1)};
 
   // Wrap the individual PartitionPtr into Partitions.
   tetrisched::Partitions firstPartition = tetrisched::Partitions(p1);
@@ -45,19 +28,11 @@ TEST(PartitionsTest, TestIntersectionEmpty) {
 }
 
 TEST(PartitionsTest, TestCorrectIntersectionSize) {
-  // Create a set of Workers.
-  std::vector<std::pair<tetrisched::WorkerPtr, size_t>> workersInPartition1 = {
-      std::make_pair(std::make_shared<tetrisched::Worker>(1, "worker1"), 2),
-  };
-  std::vector<std::pair<tetrisched::WorkerPtr, size_t>> workersInPartition2 = {
-      std::make_pair(std::make_shared<tetrisched::Worker>(2, "worker2"), 2),
-  };
-
   // Create the Partition.
   tetrisched::PartitionPtr partition1 =
-      std::make_shared<tetrisched::Partition>(workersInPartition1);
+      std::make_shared<tetrisched::Partition>(1, "partition1", 1);
   tetrisched::PartitionPtr partition2 =
-      std::make_shared<tetrisched::Partition>(workersInPartition2);
+      std::make_shared<tetrisched::Partition>(2, "partition2", 1);
 
   // Create the Partitions.
   tetrisched::Partitions firstPartition = tetrisched::Partitions();

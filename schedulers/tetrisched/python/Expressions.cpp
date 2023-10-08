@@ -53,7 +53,22 @@ void defineSTRLExpressions(py::module_& tetrisched_m) {
           [](const tetrisched::SolutionResult& result, std::string taskName) {
             return result.placements.at(taskName);
           },
-          "Returns the Placement for the given task.");
+          "Returns the Placement for the given task.")
+      .def("__str__", [](const tetrisched::SolutionResult& result) {
+        return "Placement<start=" +
+               (result.startTime.has_value()
+                    ? std::to_string(result.startTime.value())
+                    : "None") +
+               ", end=" +
+               (result.endTime.has_value()
+                    ? std::to_string(result.endTime.value())
+                    : "None") +
+               ", utility=" +
+               (result.utility.has_value()
+                    ? std::to_string(result.utility.value())
+                    : "None") +
+               ">";
+      });
 
   // Define the base Expression.
   py::class_<tetrisched::Expression, tetrisched::ExpressionPtr>(tetrisched_m,

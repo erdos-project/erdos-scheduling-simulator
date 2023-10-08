@@ -78,7 +78,6 @@ endif()
 
 set(TETRISCHED_SOURCE
      "src/Expression.cpp"
-     "src/Worker.cpp"
      "src/Partition.cpp"
      "src/SolverModel.cpp"
      "src/Scheduler.cpp")

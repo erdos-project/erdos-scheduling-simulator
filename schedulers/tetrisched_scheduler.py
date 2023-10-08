@@ -75,9 +75,7 @@ class TetriSchedScheduler(BaseScheduler):
         placements = []
         if len(tasks_to_be_scheduled) > 0:
             # Construct the partitions from the Workers in the WorkerPool.
-            workers, worker_to_worker_pools, partitions = self.construct_partitions(
-                worker_pools=worker_pools
-            )
+            partitions = self.construct_partitions(worker_pools=worker_pools)
 
             # Construct the STRL expressions for each TaskGraph.
             task_graph_names: Set[TaskGraph] = {
@@ -115,18 +113,19 @@ class TetriSchedScheduler(BaseScheduler):
                 task_strl = task_strls[task.id]
                 task_strl_solution = task_strl.getSolution()
                 if task_strl_solution.utility > 0:
+                    # Retrieve the Partition where the task was placed.
                     # The task was placed, retrieve the Partition where the task
                     # was placed.
                     task_placement = task_strl_solution.getPlacement(task.unique_name)
-                    worker_index = task_placement.getPartitionAssignments()[0][0]
-                    worker_id = workers[worker_index].id
+                    partitionId = task_placement.getPartitionAssignments()[0][0]
+                    partition = partitions.partitionMap[partitionId]
                     task_placement = Placement.create_task_placement(
                         task=task,
                         placement_time=EventTime(
-                            task_strl_solution.startTime, EventTime.Unit.US
+                            task_placement.startTime, EventTime.Unit.US
                         ),
-                        worker_id=worker_id,
-                        worker_pool_id=worker_to_worker_pools[worker_id],
+                        worker_id=partition.associatedWorker.id,
+                        worker_pool_id=partition.associatedWorkerPool.id,
                         execution_strategy=task.available_execution_strategies[0],
                     )
                     placements.append(task_placement)
@@ -149,9 +148,7 @@ class TetriSchedScheduler(BaseScheduler):
             runtime=runtime, true_runtime=scheduler_runtime, placements=placements
         )
 
-    def construct_partitions(
-        self, worker_pools: WorkerPools
-    ) -> Tuple[Mapping[int, Worker], Mapping[str, WorkerPool], tetrisched.Partitions]:
+    def construct_partitions(self, worker_pools: WorkerPools) -> tetrisched.Partitions:
         """Partitions the Workers in the WorkerPools into a granular partition set.
 
         The Partitions are used to reduce the number of variables in the compiled ILP
@@ -165,12 +162,15 @@ class TetriSchedScheduler(BaseScheduler):
             A `Partitions` object that contains the partitions.
         """
         partitions = tetrisched.Partitions()
+        # BUG (Sukrit): The partitionMap is being used to keep the Partition objects
+        # alive on the Python side so we can query the associatedWorker and the
+        # associatedWorkerPool. Otherwise, pybind11 loses track of the objects and
+        # the attributes are not accessible.
+        partitions.partitionMap = {}
         # TODO (Sukrit): This method constructs a separate partition for all the slots
         # in a Worker. This might not be the best strategy for dealing with heterogenous
         # resources. Fix.
         worker_index = 1
-        workers: Mapping[int, Worker] = {}
-        worker_to_worker_pool: Mapping[str, WorkerPool] = {}
         for worker_pool in worker_pools.worker_pools:
             for worker in worker_pool.workers:
                 # Check that the Worker only has Slot resources.
@@ -180,20 +180,21 @@ class TetriSchedScheduler(BaseScheduler):
                             "TetrischedScheduler currently supports Slot resources."
                         )
 
-                # Create a tetrisched Worker.
-                tetrisched_worker = tetrisched.Worker(worker_index, worker.name)
+                # Create a tetrisched Partition.
                 slot_quantity = worker.resources.get_total_quantity(
                     resource=Resource(name="Slot", _id="any")
                 )
-                partition = tetrisched.Partition()
-                partition.addWorker(tetrisched_worker, slot_quantity)
+                partition = tetrisched.Partition(
+                    worker_index, worker.name, slot_quantity
+                )
                 partitions.addPartition(partition)
 
-                # Add the Partition to the Map.
-                workers[partition.id] = worker
-                worker_to_worker_pool[worker.id] = worker_pool
+                # Maintain the relevant mappings to transform it to a Placement.
+                partition.associatedWorker = worker
+                partition.associatedWorkerPool = worker_pool
+                partitions.partitionMap[worker_index] = partition
                 worker_index += 1
-        return workers, worker_to_worker_pool, partitions
+        return partitions
 
     def construct_task_strl(
         self,
