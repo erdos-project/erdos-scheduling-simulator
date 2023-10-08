@@ -84,7 +84,7 @@ TEST(Expression, TestLessThanEnforcesOrdering) {
 
   // Construct an ObjectiveExpression.
   tetrisched::ExpressionPtr objectiveExpression =
-      std::make_shared<tetrisched::ObjectiveExpression>();
+      std::make_shared<tetrisched::ObjectiveExpression>("TestObjective");
   objectiveExpression->addChild(std::move(lessThanExpression));
 
   // Construct a Solver.
@@ -159,7 +159,7 @@ TEST(Expression, TestMaxExpressionEnforcesSingleChoice) {
 
   // Construct an ObjectiveExpression.
   tetrisched::ExpressionPtr objectiveExpression =
-      std::make_shared<tetrisched::ObjectiveExpression>();
+      std::make_shared<tetrisched::ObjectiveExpression>("TestObjective");
   objectiveExpression->addChild(std::move(maxChooseExpr));
 
   // Construct a Solver.
@@ -205,7 +205,7 @@ TEST(Expression, TestMinExpressionEnforcesAllChildrenSatisfied) {
 
   // Construct an ObjectiveExpression.
   tetrisched::ExpressionPtr objectiveExpression =
-      std::make_shared<tetrisched::ObjectiveExpression>();
+      std::make_shared<tetrisched::ObjectiveExpression>("TestObjective");
   objectiveExpression->addChild(std::move(minChooseExpr));
 
   // Construct a Solver.
@@ -256,7 +256,7 @@ TEST(Expression, TestMinExpressionEnforcesNoneSatisfied) {
 
   // Construct an ObjectiveExpression.
   tetrisched::ExpressionPtr objectiveExpression =
-      std::make_shared<tetrisched::ObjectiveExpression>();
+      std::make_shared<tetrisched::ObjectiveExpression>("TestObjective");
   objectiveExpression->addChild(std::move(minChooseExpr));
 
   // Construct a Solver.

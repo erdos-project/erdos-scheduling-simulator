@@ -132,6 +132,25 @@ void Expression::addChild(ExpressionPtr child) {
 
 ExpressionType Expression::getType() const { return type; }
 
+std::string Expression::getTypeString() const {
+  switch (type) {
+    case ExpressionType::EXPR_CHOOSE:
+      return "ChooseExpression";
+    case ExpressionType::EXPR_OBJECTIVE:
+      return "ObjectiveExpression";
+    case ExpressionType::EXPR_MIN:
+      return "MinExpression";
+    case ExpressionType::EXPR_MAX:
+      return "MaxExpression";
+    case ExpressionType::EXPR_SCALE:
+      return "ScaleExpression";
+    case ExpressionType::EXPR_LESSTHAN:
+      return "LessThanExpression";
+    default:
+      return "UnknownExpression";
+  }
+}
+
 void Expression::addParent(ExpressionPtr parent) { parents.push_back(parent); }
 
 size_t Expression::getNumParents() const { return parents.size(); }
@@ -392,8 +411,8 @@ SolutionResultPtr ChooseExpression::populateResults(
 
 /* Method definitions for ObjectiveExpression */
 
-ObjectiveExpression::ObjectiveExpression()
-    : Expression("ObjectiveExpression", ExpressionType::EXPR_OBJECTIVE) {}
+ObjectiveExpression::ObjectiveExpression(std::string name)
+    : Expression(name, ExpressionType::EXPR_OBJECTIVE) {}
 
 ParseResultPtr ObjectiveExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,

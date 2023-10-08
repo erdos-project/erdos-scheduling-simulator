@@ -77,12 +77,14 @@ class TetriSchedScheduler(BaseScheduler):
             # Construct the partitions from the Workers in the WorkerPool.
             partitions = self.construct_partitions(worker_pools=worker_pools)
 
-            # Construct the STRL expressions for each TaskGraph.
+            # Construct the STRL expressions for each TaskGraph and add them together
+            # in a single objective expression.
             task_graph_names: Set[TaskGraph] = {
                 task.task_graph for task in tasks_to_be_scheduled
             }
-            task_strls: Mapping[str, tetrisched.strl.Expression] = {}
-            task_graph_strls: List[tetrisched.strl.Expression] = []
+            objective_strl = tetrisched.strl.ObjectiveExpression(
+                f"TetriSched_{sim_time.to(EventTime.Unit.US).time}"
+            )
             for task_graph_name in task_graph_names:
                 # Retrieve the TaskGraph and construct its STRL.
                 task_graph = workload.get_task_graph(task_graph_name)
@@ -90,52 +92,44 @@ class TetriSchedScheduler(BaseScheduler):
                     current_time=sim_time,
                     task_graph=task_graph,
                     partitions=partitions,
-                    task_strls=task_strls,
                 )
                 if task_graph_strl is not None:
-                    task_graph_strls.append(task_graph_strl)
-
-            objective_strl = tetrisched.strl.ObjectiveExpression()
-            for task_graph_strl in task_graph_strls:
-                objective_strl.addChild(task_graph_strl)
+                    objective_strl.addChild(task_graph_strl)
 
             # Register the STRL expression with the scheduler and solve it.
             self._scheduler.registerSTRL(objective_strl, partitions, sim_time.time)
             self._scheduler.schedule()
 
+            # Retrieve the solution and check if we were able to schedule anything.
+            solverSolution = objective_strl.getSolution()
+            if solverSolution.utility == 0:
+                raise RuntimeError("TetrischedScheduler was unable to schedule tasks.")
+
             # Retrieve the Placements for each task.
             for task in tasks_to_be_scheduled:
-                if task.id not in task_strls:
+                task_placement = solverSolution.getPlacement(task.unique_name)
+                if task_placement is None or not task_placement.isPlaced():
                     self._logger.error(
-                        f"[{sim_time.time}] No STRL was generated for "
+                        f"[{sim_time.time}] No Placement was found for "
                         f"Task {task.unique_name}."
                     )
-                task_strl = task_strls[task.id]
-                task_strl_solution = task_strl.getSolution()
-                if task_strl_solution.utility > 0:
-                    # Retrieve the Partition where the task was placed.
-                    # The task was placed, retrieve the Partition where the task
-                    # was placed.
-                    task_placement = task_strl_solution.getPlacement(task.unique_name)
-                    partitionId = task_placement.getPartitionAssignments()[0][0]
-                    partition = partitions.partitionMap[partitionId]
-                    task_placement = Placement.create_task_placement(
-                        task=task,
-                        placement_time=EventTime(
-                            task_placement.startTime, EventTime.Unit.US
-                        ),
-                        worker_id=partition.associatedWorker.id,
-                        worker_pool_id=partition.associatedWorkerPool.id,
-                        execution_strategy=task.available_execution_strategies[0],
-                    )
-                    placements.append(task_placement)
-                else:
-                    # The task was not placed, log the error.
-                    self._logger.debug(
-                        f"[{sim_time.time}] Task {task.unique_name} was not placed "
-                        f"by the Tetrisched scheduler."
-                    )
                     placements.append(Placement.create_task_placement(task=task))
+
+                # Retrieve the Partition where the task was placed.
+                # The task was placed, retrieve the Partition where the task
+                # was placed.
+                partitionId = task_placement.getPartitionAssignments()[0][0]
+                partition = partitions.partitionMap[partitionId]
+                task_placement = Placement.create_task_placement(
+                    task=task,
+                    placement_time=EventTime(
+                        task_placement.startTime, EventTime.Unit.US
+                    ),
+                    worker_id=partition.associatedWorker.id,
+                    worker_pool_id=partition.associatedWorkerPool.id,
+                    execution_strategy=task.available_execution_strategies[0],
+                )
+                placements.append(task_placement)
 
         scheduler_end_time = time.time()
         scheduler_runtime = EventTime(
@@ -364,7 +358,7 @@ class TetriSchedScheduler(BaseScheduler):
         current_time: EventTime,
         task_graph: TaskGraph,
         partitions: tetrisched.Partitions,
-        task_strls: Mapping[str, tetrisched.strl.Expression],
+        task_strls: Mapping[str, tetrisched.strl.Expression] = {},
     ) -> tetrisched.strl.Expression:
         """Constructs the STRL expression subtree for a given TaskGraph.
 

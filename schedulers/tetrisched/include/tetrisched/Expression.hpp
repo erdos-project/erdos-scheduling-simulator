@@ -269,6 +269,9 @@ class Expression : public std::enable_shared_from_this<Expression> {
   /// Returns the type of this Expression.
   ExpressionType getType() const;
 
+  /// Returns the type of this Expression as a string.
+  std::string getTypeString() const;
+
   /// Populates the solution of the subtree rooted at this Expression and
   /// returns the Solution for this Expression. It assumes that the
   /// SolverModelPtr has been populated with values for unknown variables and
@@ -317,7 +320,7 @@ class ChooseExpression : public Expression {
 /// informs the SolverModel of the objective function.
 class ObjectiveExpression : public Expression {
  public:
-  ObjectiveExpression();
+  ObjectiveExpression(std::string name);
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
                        CapacityConstraintMap& capacityConstraints,

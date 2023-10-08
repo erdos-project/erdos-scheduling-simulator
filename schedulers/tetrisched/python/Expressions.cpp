@@ -50,7 +50,11 @@ void defineSTRLExpressions(py::module_& tetrisched_m) {
           "The utility of the expression.")
       .def(
           "getPlacement",
-          [](const tetrisched::SolutionResult& result, std::string taskName) {
+          [](const tetrisched::SolutionResult& result,
+             std::string taskName) -> std::optional<tetrisched::PlacementPtr> {
+            if (result.placements.find(taskName) == result.placements.end()) {
+              return std::nullopt;
+            }
             return result.placements.at(taskName);
           },
           "Returns the Placement for the given task.")
@@ -84,7 +88,13 @@ void defineSTRLExpressions(py::module_& tetrisched_m) {
       .def("addChild", &tetrisched::Expression::addChild,
            "Adds a child to this Expression.")
       .def("getSolution", &tetrisched::Expression::getSolution,
-           "Returns the solution for this Expression.");
+           "Returns the solution for this Expression.")
+      .def("__str__",
+           [](const tetrisched::Expression& expr) {
+             return "Expression<name=" + expr.getName() +
+                    ", type=" + expr.getTypeString() + ">";
+           })
+      .def_property_readonly("name", &tetrisched::Expression::getName);
 
   // Define the ChooseExpression.
   py::class_<tetrisched::ChooseExpression, tetrisched::Expression,
@@ -105,7 +115,8 @@ void defineSTRLExpressions(py::module_& tetrisched_m) {
   py::class_<tetrisched::ObjectiveExpression, tetrisched::Expression,
              std::shared_ptr<tetrisched::ObjectiveExpression>>(
       tetrisched_m, "ObjectiveExpression")
-      .def(py::init<>(), "Initializes an empty ObjectiveExpression.");
+      .def(py::init<std::string>(),
+           "Initializes an empty ObjectiveExpression.");
 
   // Define the MinExpression.
   py::class_<tetrisched::MinExpression, tetrisched::Expression,
