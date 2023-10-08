@@ -1,8 +1,9 @@
 #ifndef _TETRISCHED_PARTITION_HPP_
 #define _TETRISCHED_PARTITION_HPP_
-#include <memory>
 #include <unordered_map>
 #include <vector>
+
+#include "tetrisched/Types.hpp"
 
 namespace tetrisched {
 

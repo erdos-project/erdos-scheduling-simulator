@@ -47,3 +47,17 @@ TEST(PartitionsTest, TestCorrectIntersectionSize) {
   EXPECT_EQ(intersectionPartition.size(), 1)
       << "The intersection of the Partitions was expected to be of size 1.";
 }
+
+TEST(PartitionsTest, TestMultiplePartitionsWithSameIDFails) {
+  // Create two Partition objects with the same ID.
+  tetrisched::PartitionPtr partition1 =
+      std::make_shared<tetrisched::Partition>(1, "partition1", 1);
+  tetrisched::PartitionPtr partition2 =
+      std::make_shared<tetrisched::Partition>(1, "partition2", 1);
+
+  // Create the Partitions.
+  EXPECT_THROW(tetrisched::Partitions({partition1, partition2}),
+               tetrisched::exceptions::RuntimeException)
+      << "The Partitions object should not be allowed to be constructed with "
+         "multiple Partitions with the same ID.";
+}

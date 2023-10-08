@@ -32,18 +32,23 @@ Partitions::Partitions() {}
 /// Constructs a Partitions object with a collection of Partitions.
 Partitions::Partitions(std::vector<PartitionPtr>& partitions) {
   for (auto partition : partitions) {
-    this->partitions[partition->getPartitionId()] = partition;
+    this->addPartition(partition);
   }
 }
 
 Partitions::Partitions(std::initializer_list<PartitionPtr> partitions) {
   for (auto partition : partitions) {
-    this->partitions[partition->getPartitionId()] = partition;
+    this->addPartition(partition);
   }
 }
 
 /// Add a Partition to this Partitions object.
 void Partitions::addPartition(PartitionPtr partition) {
+  if (partitions.find(partition->getPartitionId()) != partitions.end()) {
+    throw tetrisched::exceptions::RuntimeException(
+        "Partition with ID " + std::to_string(partition->getPartitionId()) +
+        " already exists.");
+  }
   partitions[partition->getPartitionId()] = partition;
 }
 

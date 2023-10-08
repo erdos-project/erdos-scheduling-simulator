@@ -56,6 +56,16 @@ class SolverException : public std::exception {
   SolverException(std::string message) : message(message) {}
   const char* what() const noexcept override { return message.c_str(); }
 };
+
+/// A general Runtime exception.
+class RuntimeException : public std::exception {
+ private:
+  std::string message;
+
+ public:
+  RuntimeException(std::string message) : message(message) {}
+  const char* what() const noexcept override { return message.c_str(); }
+};
 }  // namespace exceptions
 
 /// A Representation of time in the system.
