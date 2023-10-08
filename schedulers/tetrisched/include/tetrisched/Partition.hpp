@@ -3,7 +3,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "Worker.hpp"
+#include "tetrisched/Types.hpp"
 
 namespace tetrisched {
 
@@ -12,37 +12,37 @@ namespace tetrisched {
 /// of the Workers in a Partition to it.
 class Partition {
  private:
-  static uint32_t partitionIdCounter;
   /// The ID attached to this partition.
   uint32_t partitionId;
-  /// A map from the ID of the Worker to an instance of the Worker
-  /// and its quantity..
-  std::unordered_map<uint32_t, std::pair<WorkerPtr, size_t>> workers;
+  /// The name of this Partition.
+  std::string partitionName;
+  /// The quantity of this Partition.
+  /// A quantity signifies how many units of the Resource being abstracted
+  /// by this Partition are available.
+  size_t quantity;
 
  public:
-  /// Constructs a Partition without any Workers.
-  Partition();
+  /// Constructs a Partition with 0 quantity.
+  Partition(uint32_t partitionId, std::string partitionName);
 
-  /// Constructs a Partition with a collection of Workers.
-  Partition(std::vector<std::pair<WorkerPtr, size_t>>& workers);
-  Partition(std::initializer_list<std::pair<WorkerPtr, size_t>> workers);
-
-  /// Add a Worker to this Partition.
-  void addWorker(WorkerPtr worker, size_t quantity);
+  /// Constructs a Partition with the given quantity.
+  Partition(uint32_t partitionId, std::string partitionName, size_t quantity);
 
   /// Returns the ID of this Partition.
   uint32_t getPartitionId() const;
 
+  /// Returns the name of this Partition.
+  std::string getPartitionName() const;
+
+  /// Returns the quantity of the resources in this Partition.
+  size_t getQuantity() const;
+
+  /// Adds the given quantity to this Partition.
+  Partition& operator+=(size_t quantity);
+
   /// Checks if the two Partitions are equivalent.
   /// Two Partitions are considered equivalent only if they have the same ID.
-  // TODO (Sukrit): The assumption is that only one instance of a Partition
-  // will be created and will be used by everyone using a shared_pointer.
-  // If this assumption does not pan out, this check should be updated to
-  // check equivalence of Workers in this Partition.
   bool operator==(const Partition& other) const;
-
-  /// Returns the number of Workers in this Partition.
-  size_t size() const;
 };
 
 /// Partitions are being allowed to be constructed once and shared by
@@ -77,6 +77,9 @@ class Partitions {
 
   /// Returns the Partitions in this Partitions object.
   std::vector<PartitionPtr> getPartitions() const;
+
+  /// Returns the Partition with the given ID (if exists).
+  std::optional<PartitionPtr> getPartition(uint32_t partitionId) const;
 };
 }  // namespace tetrisched
 #endif

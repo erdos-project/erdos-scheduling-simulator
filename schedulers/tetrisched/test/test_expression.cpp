@@ -62,12 +62,9 @@ TEST(Expression, TestMaxExpressionOnlyAllowsChooseExpressionChildren) {
 /// Checks that for two trivially satisfiable expressions, the less than
 /// expression is only satisfied if their times are ordered.
 TEST(Expression, TestLessThanEnforcesOrdering) {
-  // Construct the Workers and a Partition.
-  tetrisched::WorkerPtr worker1 =
-      std::make_shared<tetrisched::Worker>(1, "worker1");
+  // Construct the Partition.
   tetrisched::PartitionPtr partition =
-      std::make_shared<tetrisched::Partition>();
-  partition->addWorker(worker1, 2);
+      std::make_shared<tetrisched::Partition>(1, "partition1", 1);
   tetrisched::Partitions partitions = tetrisched::Partitions({partition});
 
   // Construct the choice for the two tasks.
@@ -87,7 +84,7 @@ TEST(Expression, TestLessThanEnforcesOrdering) {
 
   // Construct an ObjectiveExpression.
   tetrisched::ExpressionPtr objectiveExpression =
-      std::make_shared<tetrisched::ObjectiveExpression>();
+      std::make_shared<tetrisched::ObjectiveExpression>("TestObjective");
   objectiveExpression->addChild(std::move(lessThanExpression));
 
   // Construct a Solver.
@@ -141,12 +138,9 @@ TEST(Expression, TestLessThanEnforcesOrdering) {
 // Check that the STRL parsing for the MaxExpression enforces only
 // one of the children to be true.
 TEST(Expression, TestMaxExpressionEnforcesSingleChoice) {
-  // Construct the Workers and a Partition.
-  tetrisched::WorkerPtr worker1 =
-      std::make_shared<tetrisched::Worker>(1, "worker1");
+  // Construct the Partition.
   tetrisched::PartitionPtr partition =
-      std::make_shared<tetrisched::Partition>();
-  partition->addWorker(worker1, 2);
+      std::make_shared<tetrisched::Partition>(1, "partition1", 2);
   tetrisched::Partitions partitions = tetrisched::Partitions({partition});
 
   // Construct two choices for a task.
@@ -165,7 +159,7 @@ TEST(Expression, TestMaxExpressionEnforcesSingleChoice) {
 
   // Construct an ObjectiveExpression.
   tetrisched::ExpressionPtr objectiveExpression =
-      std::make_shared<tetrisched::ObjectiveExpression>();
+      std::make_shared<tetrisched::ObjectiveExpression>("TestObjective");
   objectiveExpression->addChild(std::move(maxChooseExpr));
 
   // Construct a Solver.
@@ -190,12 +184,9 @@ TEST(Expression, TestMaxExpressionEnforcesSingleChoice) {
 // Check that the STRL parsing for the MinExpression enforces all
 // children to be true.
 TEST(Expression, TestMinExpressionEnforcesAllChildrenSatisfied) {
-  // Construct the Workers and a Partition.
-  tetrisched::WorkerPtr worker1 =
-      std::make_shared<tetrisched::Worker>(1, "worker1");
+  // Construct the Partition.
   tetrisched::PartitionPtr partition =
-      std::make_shared<tetrisched::Partition>();
-  partition->addWorker(worker1, 1);
+      std::make_shared<tetrisched::Partition>(1, "partition1", 1);
   tetrisched::Partitions partitions = tetrisched::Partitions({partition});
 
   // Construct two choices for a task.
@@ -214,7 +205,7 @@ TEST(Expression, TestMinExpressionEnforcesAllChildrenSatisfied) {
 
   // Construct an ObjectiveExpression.
   tetrisched::ExpressionPtr objectiveExpression =
-      std::make_shared<tetrisched::ObjectiveExpression>();
+      std::make_shared<tetrisched::ObjectiveExpression>("TestObjective");
   objectiveExpression->addChild(std::move(minChooseExpr));
 
   // Construct a Solver.
@@ -244,12 +235,9 @@ TEST(Expression, TestMinExpressionEnforcesAllChildrenSatisfied) {
 // Check that the STRL parsing for the MinExpression enforces no expression to
 // be true if all children can't be satisfied.
 TEST(Expression, TestMinExpressionEnforcesNoneSatisfied) {
-  // Construct the Workers and a Partition.
-  tetrisched::WorkerPtr worker1 =
-      std::make_shared<tetrisched::Worker>(1, "worker1");
+  // Construct the Partition.
   tetrisched::PartitionPtr partition =
-      std::make_shared<tetrisched::Partition>();
-  partition->addWorker(worker1, 1);
+      std::make_shared<tetrisched::Partition>(1, "partition1", 1);
   tetrisched::Partitions partitions = tetrisched::Partitions({partition});
 
   // Construct two choices for a task.
@@ -268,7 +256,7 @@ TEST(Expression, TestMinExpressionEnforcesNoneSatisfied) {
 
   // Construct an ObjectiveExpression.
   tetrisched::ExpressionPtr objectiveExpression =
-      std::make_shared<tetrisched::ObjectiveExpression>();
+      std::make_shared<tetrisched::ObjectiveExpression>("TestObjective");
   objectiveExpression->addChild(std::move(minChooseExpr));
 
   // Construct a Solver.

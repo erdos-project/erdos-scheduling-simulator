@@ -4,41 +4,35 @@
 #include "Expressions.cpp"
 #include "SolverModel.cpp"
 #include "tetrisched/Scheduler.hpp"
-#include "tetrisched/Worker.hpp"
 
 namespace py = pybind11;
 
 void defineBasicTypes(py::module_& tetrisched_m) {
-  // Define the Worker type.
-  py::class_<tetrisched::Worker, tetrisched::WorkerPtr>(tetrisched_m, "Worker")
-      .def(py::init([](uint32_t workerId, std::string workerName) {
-             return std::make_shared<tetrisched::Worker>(workerId, workerName);
-           }),
-           "Initializes the Worker with the given ID and name.")
-      .def_property_readonly("id", &tetrisched::Worker::getWorkerId,
-                             "The ID of this Worker.")
-      .def_property_readonly("name", &tetrisched::Worker::getWorkerName,
-                             "The name of this Worker.");
-
   // Define the Partition type.
-  py::class_<tetrisched::Partition, tetrisched::PartitionPtr>(tetrisched_m,
-                                                              "Partition")
-      .def(py::init([]() { return std::make_shared<tetrisched::Partition>(); }),
-           "Initializes an empty Partition.")
-      .def("addWorker", &tetrisched::Partition::addWorker,
-           "Adds a Worker to this Partition.")
-      .def("__len__", &tetrisched::Partition::size,
+  py::class_<tetrisched::Partition, tetrisched::PartitionPtr>(
+      tetrisched_m, "Partition", py::dynamic_attr())
+      .def(py::init<uint32_t, std::string>(), "Initializes an empty Partition.")
+      .def(py::init<uint32_t, std::string, size_t>(),
+           "Initializes a Partition with the given quantity.")
+      .def("__add__", &tetrisched::Partition::operator+=,
+           "Adds the given quantity to this Partition.")
+      .def("__len__", &tetrisched::Partition::getQuantity,
            "Returns the number of Workers in this Partition.")
       .def_property_readonly("id", &tetrisched::Partition::getPartitionId,
-                             "The ID of this Partition.");
+                             "The ID of this Partition.")
+      .def_property_readonly("name", &tetrisched::Partition::getPartitionName,
+                             "The name of this Partition.");
 
   // Define the Partitions.
-  py::class_<tetrisched::Partitions>(tetrisched_m, "Partitions")
+  py::class_<tetrisched::Partitions>(tetrisched_m, "Partitions",
+                                     py::dynamic_attr())
       .def(py::init<>(), "Initializes an empty Partitions.")
       .def("addPartition", &tetrisched::Partitions::addPartition,
            "Adds a Partition to this Partitions.")
       .def("getPartitions", &tetrisched::Partitions::getPartitions,
            "Returns the Partitions in this Partitions.")
+      .def("__getitem__", &tetrisched::Partitions::getPartition,
+           "Returns the Partition with the given ID (if exists).")
       .def("__len__", &tetrisched::Partitions::size,
            "Returns the number of Partitions in this Partitions.");
 }
@@ -79,5 +73,5 @@ PYBIND11_MODULE(tetrisched_py, tetrisched_m) {
       "backends", "Solver backends for the TetriSched Python API.");
 #ifdef _TETRISCHED_WITH_CPLEX_
   defineCPLEXBackend(tetrisched_m_solver_backend);
-#endif //_TETRISCHED_WITH_CPLEX_
+#endif  //_TETRISCHED_WITH_CPLEX_
 }

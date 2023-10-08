@@ -1,49 +1,29 @@
 #include "tetrisched/Partition.hpp"
 
 namespace tetrisched {
-// Initialize the static counter for Partition IDs.
-// This is required by the compiler.
-uint32_t Partition::partitionIdCounter = 0;
+Partition::Partition(uint32_t partitionId, std::string partitionName)
+    : partitionId(partitionId), partitionName(partitionName), quantity(0) {}
 
-Partition::Partition() : partitionId(partitionIdCounter++) {}
+Partition::Partition(uint32_t partitionId, std::string partitionName,
+                     size_t quantity)
+    : partitionId(partitionId),
+      partitionName(partitionName),
+      quantity(quantity) {}
 
-/// Constructs a Partition with a collection of Workers.
-Partition::Partition(std::vector<std::pair<WorkerPtr, size_t>>& workers)
-    : partitionId(partitionIdCounter++) {
-  for (const auto& workerPair : workers) {
-    this->workers[workerPair.first->getWorkerId()] = workerPair;
-  }
-}
-
-Partition::Partition(
-    std::initializer_list<std::pair<WorkerPtr, size_t>> workers)
-    : partitionId(partitionIdCounter++) {
-  for (const auto& workerPair : workers) {
-    this->workers[workerPair.first->getWorkerId()] = workerPair;
-  }
-}
-
-/// Add a Worker to this Partition.
-void Partition::addWorker(WorkerPtr worker, size_t quantity) {
-  workers[worker->getWorkerId()] =
-      std::pair<WorkerPtr, size_t>(worker, quantity);
-}
-
-/// Returns the ID of this Partition.
 uint32_t Partition::getPartitionId() const { return partitionId; }
+
+std::string Partition::getPartitionName() const { return partitionName; }
+
+size_t Partition::getQuantity() const { return quantity; }
+
+Partition& Partition::operator+=(size_t quantity) {
+  this->quantity += quantity;
+  return *this;
+}
 
 /// The equivalence checks currently rely on the unique ID.
 bool Partition::operator==(const Partition& other) const {
   return partitionId == other.partitionId;
-}
-
-/// Returns the number of Workers in this Partition.
-size_t Partition::size() const {
-  size_t totalQuantity = 0;
-  for (const auto& [partitionId, worker] : workers) {
-    totalQuantity += worker.second;
-  }
-  return totalQuantity;
 }
 
 /// Constructs a Partitions object without any Partitions.
@@ -52,18 +32,23 @@ Partitions::Partitions() {}
 /// Constructs a Partitions object with a collection of Partitions.
 Partitions::Partitions(std::vector<PartitionPtr>& partitions) {
   for (auto partition : partitions) {
-    this->partitions[partition->getPartitionId()] = partition;
+    this->addPartition(partition);
   }
 }
 
 Partitions::Partitions(std::initializer_list<PartitionPtr> partitions) {
   for (auto partition : partitions) {
-    this->partitions[partition->getPartitionId()] = partition;
+    this->addPartition(partition);
   }
 }
 
 /// Add a Partition to this Partitions object.
 void Partitions::addPartition(PartitionPtr partition) {
+  if (partitions.find(partition->getPartitionId()) != partitions.end()) {
+    throw tetrisched::exceptions::RuntimeException(
+        "Partition with ID " + std::to_string(partition->getPartitionId()) +
+        " already exists.");
+  }
   partitions[partition->getPartitionId()] = partition;
 }
 
@@ -89,5 +74,15 @@ std::vector<PartitionPtr> Partitions::getPartitions() const {
     partitionsVec.push_back(partition.second);
   }
   return partitionsVec;
+}
+
+/// Returns the Partition with the given ID (if exists).
+std::optional<PartitionPtr> Partitions::getPartition(
+    uint32_t partitionId) const {
+  if (partitions.find(partitionId) != partitions.end()) {
+    return partitions.at(partitionId);
+  } else {
+    return std::nullopt;
+  }
 }
 }  // namespace tetrisched

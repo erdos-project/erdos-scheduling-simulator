@@ -52,9 +52,9 @@ void CapacityConstraintMap::registerUsageAtTime(const Partition& partition,
   auto mapKey = std::make_pair(partition.getPartitionId(), time);
   if (capacityConstraints.find(mapKey) == capacityConstraints.end()) {
     capacityConstraints[mapKey] = std::make_shared<Constraint>(
-        "CapacityConstraint_" + std::to_string(partition.getPartitionId()) +
-            "_at_" + std::to_string(time),
-        ConstraintType::CONSTR_LE, partition.size());
+        "CapacityConstraint_" + partition.getPartitionName() + "_at_" +
+            std::to_string(time),
+        ConstraintType::CONSTR_LE, partition.getQuantity());
   }
 
   // Add the variable to the Constraint.
@@ -71,9 +71,9 @@ void CapacityConstraintMap::registerUsageAtTime(const Partition& partition,
   auto mapKey = std::make_pair(partition.getPartitionId(), time);
   if (capacityConstraints.find(mapKey) == capacityConstraints.end()) {
     capacityConstraints[mapKey] = std::make_shared<Constraint>(
-        "CapacityConstraint_" + std::to_string(partition.getPartitionId()) +
-            "_at_" + std::to_string(time),
-        ConstraintType::CONSTR_LE, partition.size());
+        "CapacityConstraint_" + partition.getPartitionName() + "_at_" +
+            std::to_string(time),
+        ConstraintType::CONSTR_LE, partition.getQuantity());
   }
 
   // Add the variable to the Constraint.
@@ -132,6 +132,25 @@ void Expression::addChild(ExpressionPtr child) {
 
 ExpressionType Expression::getType() const { return type; }
 
+std::string Expression::getTypeString() const {
+  switch (type) {
+    case ExpressionType::EXPR_CHOOSE:
+      return "ChooseExpression";
+    case ExpressionType::EXPR_OBJECTIVE:
+      return "ObjectiveExpression";
+    case ExpressionType::EXPR_MIN:
+      return "MinExpression";
+    case ExpressionType::EXPR_MAX:
+      return "MaxExpression";
+    case ExpressionType::EXPR_SCALE:
+      return "ScaleExpression";
+    case ExpressionType::EXPR_LESSTHAN:
+      return "LessThanExpression";
+    default:
+      return "UnknownExpression";
+  }
+}
+
 void Expression::addParent(ExpressionPtr parent) { parents.push_back(parent); }
 
 size_t Expression::getNumParents() const { return parents.size(); }
@@ -187,8 +206,10 @@ SolutionResultPtr Expression::populateResults(SolverModelPtr solverModel) {
         " with a utility was parsed without a start time.");
   }
   solution->startTime = parsedResult->startTime->resolve();
-  TETRISCHED_DEBUG("Set start time to " << solution->startTime.value()
-                                        << " for expression " << name << ".");
+  TETRISCHED_DEBUG("Set start time to "
+                   << solution->startTime.value() << " for expression " << name
+                   << " of type " << std::to_string(static_cast<int>(type))
+                   << ".");
 
   if (!parsedResult->endTime) {
     throw tetrisched::exceptions::ExpressionSolutionException(
@@ -196,16 +217,20 @@ SolutionResultPtr Expression::populateResults(SolverModelPtr solverModel) {
         " with a utility was parsed without an end time.");
   }
   solution->endTime = parsedResult->endTime->resolve();
-  TETRISCHED_DEBUG("Set end time to " << solution->endTime.value()
-                                      << " for expression " << name << ".");
+  TETRISCHED_DEBUG("Set end time to "
+                   << solution->endTime.value() << " for expression " << name
+                   << " of type " << std::to_string(static_cast<int>(type))
+                   << ".");
 
   if (!parsedResult->utility) {
     throw tetrisched::exceptions::ExpressionSolutionException(
         "Expression " + name + " with a utility was parsed without a utility.");
   }
   solution->utility = parsedResult->utility.value()->getValue();
-  TETRISCHED_DEBUG("Set utility to " << solution->utility.value()
-                                     << " for expression " << name << ".");
+  TETRISCHED_DEBUG("Set utility to "
+                   << solution->utility.value() << " for expression " << name
+                   << " of type " << std::to_string(static_cast<int>(type))
+                   << ".");
 
   // Our default way of populating the placements is to retrieve the
   // children's placements and coalesce them into a single Placements map.
@@ -310,7 +335,7 @@ ParseResultPtr ChooseExpression::parse(
             std::to_string(partition->getPartitionId()) + "_at_" +
             std::to_string(startTime),
         0,
-        std::min(static_cast<uint32_t>(partition->size()),
+        std::min(static_cast<uint32_t>(partition->getQuantity()),
                  numRequiredMachines));
     solverModel->addVariable(allocationVar);
 
@@ -386,8 +411,8 @@ SolutionResultPtr ChooseExpression::populateResults(
 
 /* Method definitions for ObjectiveExpression */
 
-ObjectiveExpression::ObjectiveExpression()
-    : Expression("ObjectiveExpression", ExpressionType::EXPR_OBJECTIVE) {}
+ObjectiveExpression::ObjectiveExpression(std::string name)
+    : Expression(name, ExpressionType::EXPR_OBJECTIVE) {}
 
 ParseResultPtr ObjectiveExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,

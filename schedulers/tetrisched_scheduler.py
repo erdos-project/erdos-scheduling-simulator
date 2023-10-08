@@ -75,16 +75,16 @@ class TetriSchedScheduler(BaseScheduler):
         placements = []
         if len(tasks_to_be_scheduled) > 0:
             # Construct the partitions from the Workers in the WorkerPool.
-            workers, worker_to_worker_pools, partitions = self.construct_partitions(
-                worker_pools=worker_pools
-            )
+            partitions = self.construct_partitions(worker_pools=worker_pools)
 
-            # Construct the STRL expressions for each TaskGraph.
+            # Construct the STRL expressions for each TaskGraph and add them together
+            # in a single objective expression.
             task_graph_names: Set[TaskGraph] = {
                 task.task_graph for task in tasks_to_be_scheduled
             }
-            task_strls: Mapping[str, tetrisched.strl.Expression] = {}
-            task_graph_strls: List[tetrisched.strl.Expression] = []
+            objective_strl = tetrisched.strl.ObjectiveExpression(
+                f"TetriSched_{sim_time.to(EventTime.Unit.US).time}"
+            )
             for task_graph_name in task_graph_names:
                 # Retrieve the TaskGraph and construct its STRL.
                 task_graph = workload.get_task_graph(task_graph_name)
@@ -92,51 +92,44 @@ class TetriSchedScheduler(BaseScheduler):
                     current_time=sim_time,
                     task_graph=task_graph,
                     partitions=partitions,
-                    task_strls=task_strls,
                 )
                 if task_graph_strl is not None:
-                    task_graph_strls.append(task_graph_strl)
-
-            objective_strl = tetrisched.strl.ObjectiveExpression()
-            for task_graph_strl in task_graph_strls:
-                objective_strl.addChild(task_graph_strl)
+                    objective_strl.addChild(task_graph_strl)
 
             # Register the STRL expression with the scheduler and solve it.
             self._scheduler.registerSTRL(objective_strl, partitions, sim_time.time)
             self._scheduler.schedule()
 
+            # Retrieve the solution and check if we were able to schedule anything.
+            solverSolution = objective_strl.getSolution()
+            if solverSolution.utility == 0:
+                raise RuntimeError("TetrischedScheduler was unable to schedule tasks.")
+
             # Retrieve the Placements for each task.
             for task in tasks_to_be_scheduled:
-                if task.id not in task_strls:
+                task_placement = solverSolution.getPlacement(task.unique_name)
+                if task_placement is None or not task_placement.isPlaced():
                     self._logger.error(
-                        f"[{sim_time.time}] No STRL was generated for "
+                        f"[{sim_time.time}] No Placement was found for "
                         f"Task {task.unique_name}."
                     )
-                task_strl = task_strls[task.id]
-                task_strl_solution = task_strl.getSolution()
-                if task_strl_solution.utility > 0:
-                    # The task was placed, retrieve the Partition where the task
-                    # was placed.
-                    task_placement = task_strl_solution.getPlacement(task.unique_name)
-                    worker_index = task_placement.getPartitionAssignments()[0][0]
-                    worker_id = workers[worker_index].id
-                    task_placement = Placement.create_task_placement(
-                        task=task,
-                        placement_time=EventTime(
-                            task_strl_solution.startTime, EventTime.Unit.US
-                        ),
-                        worker_id=worker_id,
-                        worker_pool_id=worker_to_worker_pools[worker_id],
-                        execution_strategy=task.available_execution_strategies[0],
-                    )
-                    placements.append(task_placement)
-                else:
-                    # The task was not placed, log the error.
-                    self._logger.debug(
-                        f"[{sim_time.time}] Task {task.unique_name} was not placed "
-                        f"by the Tetrisched scheduler."
-                    )
                     placements.append(Placement.create_task_placement(task=task))
+
+                # Retrieve the Partition where the task was placed.
+                # The task was placed, retrieve the Partition where the task
+                # was placed.
+                partitionId = task_placement.getPartitionAssignments()[0][0]
+                partition = partitions.partitionMap[partitionId]
+                task_placement = Placement.create_task_placement(
+                    task=task,
+                    placement_time=EventTime(
+                        task_placement.startTime, EventTime.Unit.US
+                    ),
+                    worker_id=partition.associatedWorker.id,
+                    worker_pool_id=partition.associatedWorkerPool.id,
+                    execution_strategy=task.available_execution_strategies[0],
+                )
+                placements.append(task_placement)
 
         scheduler_end_time = time.time()
         scheduler_runtime = EventTime(
@@ -149,9 +142,7 @@ class TetriSchedScheduler(BaseScheduler):
             runtime=runtime, true_runtime=scheduler_runtime, placements=placements
         )
 
-    def construct_partitions(
-        self, worker_pools: WorkerPools
-    ) -> Tuple[Mapping[int, Worker], Mapping[str, WorkerPool], tetrisched.Partitions]:
+    def construct_partitions(self, worker_pools: WorkerPools) -> tetrisched.Partitions:
         """Partitions the Workers in the WorkerPools into a granular partition set.
 
         The Partitions are used to reduce the number of variables in the compiled ILP
@@ -165,12 +156,15 @@ class TetriSchedScheduler(BaseScheduler):
             A `Partitions` object that contains the partitions.
         """
         partitions = tetrisched.Partitions()
+        # BUG (Sukrit): The partitionMap is being used to keep the Partition objects
+        # alive on the Python side so we can query the associatedWorker and the
+        # associatedWorkerPool. Otherwise, pybind11 loses track of the objects and
+        # the attributes are not accessible.
+        partitions.partitionMap = {}
         # TODO (Sukrit): This method constructs a separate partition for all the slots
         # in a Worker. This might not be the best strategy for dealing with heterogenous
         # resources. Fix.
         worker_index = 1
-        workers: Mapping[int, Worker] = {}
-        worker_to_worker_pool: Mapping[str, WorkerPool] = {}
         for worker_pool in worker_pools.worker_pools:
             for worker in worker_pool.workers:
                 # Check that the Worker only has Slot resources.
@@ -180,20 +174,21 @@ class TetriSchedScheduler(BaseScheduler):
                             "TetrischedScheduler currently supports Slot resources."
                         )
 
-                # Create a tetrisched Worker.
-                tetrisched_worker = tetrisched.Worker(worker_index, worker.name)
+                # Create a tetrisched Partition.
                 slot_quantity = worker.resources.get_total_quantity(
                     resource=Resource(name="Slot", _id="any")
                 )
-                partition = tetrisched.Partition()
-                partition.addWorker(tetrisched_worker, slot_quantity)
+                partition = tetrisched.Partition(
+                    worker_index, worker.name, slot_quantity
+                )
                 partitions.addPartition(partition)
 
-                # Add the Partition to the Map.
-                workers[partition.id] = worker
-                worker_to_worker_pool[worker.id] = worker_pool
+                # Maintain the relevant mappings to transform it to a Placement.
+                partition.associatedWorker = worker
+                partition.associatedWorkerPool = worker_pool
+                partitions.partitionMap[worker_index] = partition
                 worker_index += 1
-        return workers, worker_to_worker_pool, partitions
+        return partitions
 
     def construct_task_strl(
         self,
@@ -363,7 +358,7 @@ class TetriSchedScheduler(BaseScheduler):
         current_time: EventTime,
         task_graph: TaskGraph,
         partitions: tetrisched.Partitions,
-        task_strls: Mapping[str, tetrisched.strl.Expression],
+        task_strls: Mapping[str, tetrisched.strl.Expression] = {},
     ) -> tetrisched.strl.Expression:
         """Constructs the STRL expression subtree for a given TaskGraph.
 

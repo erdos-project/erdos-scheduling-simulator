@@ -54,7 +54,7 @@ def test_tetrisched_partition_creation_success():
     # Create the TetriSchedScheduler and check that it returns a single Partitions
     # object with four partitions that each have 2 slots.
     scheduler = TetriSchedScheduler()
-    _, _, partitions = scheduler.construct_partitions(worker_pools=worker_pools)
+    partitions = scheduler.construct_partitions(worker_pools=worker_pools)
 
     assert len(partitions) == 4, "The number of Partition objects is not 2."
     for partition in partitions.getPartitions():
@@ -80,7 +80,7 @@ def test_tetrisched_task_strl_no_slot_fail():
 
     # Construct the scheduler and the partitions.
     scheduler = TetriSchedScheduler()
-    _, _, partitions = scheduler.construct_partitions(worker_pools=worker_pools)
+    partitions = scheduler.construct_partitions(worker_pools=worker_pools)
     with pytest.raises(ValueError):
         scheduler.construct_task_strl(
             current_time=EventTime.zero(), task=task, partitions=partitions
@@ -108,7 +108,7 @@ def test_tetrisched_task_choice_strl_generation():
     scheduler = TetriSchedScheduler(
         time_discretization=EventTime(10, EventTime.Unit.US)
     )
-    _, _, partitions = scheduler.construct_partitions(worker_pools=worker_pools)
+    partitions = scheduler.construct_partitions(worker_pools=worker_pools)
     task_strl = scheduler.construct_task_strl(
         current_time=EventTime.zero(), task=task, partitions=partitions
     )
@@ -154,7 +154,7 @@ def test_tetrisched_task_graph_strl_generation_simple():
     scheduler = TetriSchedScheduler(
         time_discretization=EventTime(10, EventTime.Unit.US)
     )
-    _, _, partitions = scheduler.construct_partitions(worker_pools=worker_pools)
+    partitions = scheduler.construct_partitions(worker_pools=worker_pools)
 
     # Construct the STRL expression for the TaskGraph.
     task_strls = {}
@@ -232,18 +232,25 @@ def test_two_tasks_correctly_scheduled():
     task_2_placement = placements.get_placements(task_2)[0]
     assert task_1_placement.is_placed(), "Task 1 was not placed."
     assert task_2_placement.is_placed(), "Task 2 was not placed."
+
+    # Test that the Worker placements are correct.
     assert (
         task_1_placement.worker_id == worker_1.id
     ), "Task 1 was not scheduled on the correct worker."
     assert (
-        task_1_placement.placement_time.time == 0
-    ), "Task 1 was not scheduled at the correct time."
-    assert (
         task_2_placement.worker_id == worker_1.id
     ), "Task 2 was not scheduled on the correct worker."
+
+    # Test that the Placement times are linearly-ordered due to one Slot.
     assert (
-        task_2_placement.placement_time.time == 10
-    ), "Task 2 was not scheduled at the correct time."
+        # Either Task 1 runs first.
+        task_1_placement.placement_time.time + 10
+        == task_2_placement.placement_time.time
+    ) or (
+        # or Task 2 runs first.
+        task_2_placement.placement_time.time + 20
+        == task_1_placement.placement_time.time
+    ), "Task 1 and Task 2 were not scheduled linearly."
 
 
 def test_two_tasks_dependency_correctly_scheduled():
