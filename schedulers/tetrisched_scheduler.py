@@ -92,16 +92,27 @@ class TetriSchedScheduler(BaseScheduler):
                     current_time=sim_time,
                     task_graph=task_graph,
                     partitions=partitions,
+                    task_strls={},
+                    tasks_to_be_scheduled=tasks_to_be_scheduled,
                 )
                 if task_graph_strl is not None:
                     objective_strl.addChild(task_graph_strl)
 
             # Register the STRL expression with the scheduler and solve it.
             self._scheduler.registerSTRL(objective_strl, partitions, sim_time.time)
+            solver_start_time = time.time()
             self._scheduler.schedule()
+            solver_end_time = time.time()
+            solver_time = EventTime(
+                int((solver_end_time - solver_start_time) * 1e6), EventTime.Unit.US
+            )
 
             # Retrieve the solution and check if we were able to schedule anything.
             solverSolution = objective_strl.getSolution()
+            self._logger.info(
+                f"[{sim_time.time}] Solver returned utility of {solverSolution.utility}"
+                f" and took {solver_time} to solve."
+            )
             if solverSolution.utility == 0:
                 raise RuntimeError("TetrischedScheduler was unable to schedule tasks.")
 
@@ -130,6 +141,17 @@ class TetriSchedScheduler(BaseScheduler):
                     execution_strategy=task.available_execution_strategies[0],
                 )
                 placements.append(task_placement)
+                self._logger.debug(
+                    "[%s] Placed %s (with deadline %s and remaining time %s) on "
+                    "WorkerPool (%s) to be started at %s and executed with %s.",
+                    sim_time.to(EventTime.Unit.US).time,
+                    task_placement.task.unique_name,
+                    task_placement.task.deadline,
+                    task_placement.execution_strategy.runtime,
+                    task_placement.worker_pool_id,
+                    task_placement.placement_time,
+                    task_placement.execution_strategy,
+                )
 
         scheduler_end_time = time.time()
         scheduler_runtime = EventTime(
@@ -240,6 +262,7 @@ class TetriSchedScheduler(BaseScheduler):
             resource=Resource(name="Slot", _id="any")
         )
 
+        num_choose_expressions_generated = 0
         for placement_time in range(
             current_time.to(EventTime.Unit.US).time,
             task.deadline.to(EventTime.Unit.US).time
@@ -247,11 +270,7 @@ class TetriSchedScheduler(BaseScheduler):
             + 1,
             self._time_discretization.time,
         ):
-            self._logger.debug(
-                f"[{current_time.time}] Generating a Choose Expression "
-                f"for {task.unique_name} at time {placement_time} for "
-                f"{num_slots_required} slots for {execution_strategy.runtime}."
-            )
+            num_choose_expressions_generated += 1
             # Construct a ChooseExpression for placement at this time.
             # TODO (Sukrit): We just assume for now that all Slots are the same and
             # thus the task can be placed on any Slot. This is not true in general.
@@ -265,6 +284,13 @@ class TetriSchedScheduler(BaseScheduler):
 
             # Register this expression with the MAX expression.
             chooseOneFromSet.addChild(chooseAtTime)
+
+        self._logger.debug(
+            f"[{current_time.time}] Generated {num_choose_expressions_generated} "
+            f"ChooseExpressions for {task.unique_name} from {current_time} to "
+            f"{task.deadline-execution_strategy.runtime} for "
+            f"{num_slots_required} slots for {execution_strategy.runtime}."
+        )
         return chooseOneFromSet
 
     def _construct_task_graph_strl(
@@ -274,6 +300,7 @@ class TetriSchedScheduler(BaseScheduler):
         task_graph: TaskGraph,
         partitions: tetrisched.Partitions,
         task_strls: Mapping[str, tetrisched.strl.Expression],
+        tasks_to_be_scheduled: Optional[List[Task]] = None,
     ) -> tetrisched.strl.Expression:
         """Constructs the STRL expression subtree for a given TaskGraph starting at
         the specified Task.
@@ -293,29 +320,41 @@ class TetriSchedScheduler(BaseScheduler):
         # Check if we have already constructed the STRL for this Task, and return
         # the expression if we have.
         if task.id in task_strls:
+            self._logger.debug(
+                "[%s] Reusing STRL for Task %s.", current_time.time, task.unique_name
+            )
             return task_strls[task.id]
 
         # Construct the STRL expression for this Task.
-        self._logger.debug(
-            f"[{current_time.time}] Constructing the TaskGraph STRL for the "
-            f"graph {task_graph.name} rooted at {task.unique_name}."
-        )
-        task_expression = self.construct_task_strl(current_time, task, partitions)
-        task_strls[task.id] = task_expression
+        if tasks_to_be_scheduled is not None and task in tasks_to_be_scheduled:
+            self._logger.debug(
+                f"[{current_time.time}] Constructing the TaskGraph STRL for the "
+                f"graph {task_graph.name} rooted at {task.unique_name}."
+            )
+            task_expression = self.construct_task_strl(current_time, task, partitions)
+            task_strls[task.id] = task_expression
+        else:
+            # If this Task is not in the set of Tasks that we are required to schedule,
+            # then we just return a None expression.
+            self._logger.debug(
+                f"[{current_time.time}] Task {task.unique_name} is not in the set of "
+                f"tasks to be scheduled."
+            )
+            task_expression = None
 
         # Retrieve the STRL expressions for all the children of this Task.
         child_expressions = []
         for child in task_graph.get_children(task):
-            self._logger.debug(
-                f"[{current_time.time}] Constructing the STRL for {child.unique_name} "
-                f"while creating the STRL for TaskGraph {task_graph.name} rooted at "
-                f"{task.unique_name}."
+            child_expression = self._construct_task_graph_strl(
+                current_time,
+                child,
+                task_graph,
+                partitions,
+                task_strls,
+                tasks_to_be_scheduled,
             )
-            child_expressions.append(
-                self._construct_task_graph_strl(
-                    current_time, child, task_graph, partitions, task_strls
-                )
-            )
+            if child_expression:
+                child_expressions.append(child_expression)
 
         # If there are no children, return the expression for this Task.
         if len(child_expressions) == 0:
@@ -340,16 +379,23 @@ class TetriSchedScheduler(BaseScheduler):
             child_expression = child_expressions[0]
 
         # Construct a LessThanExpression to order the two trees.
-        self._logger.debug(
-            f"[{current_time.time}] Ordering the STRL for {task.unique_name} and its "
-            f"children under a LessThanExpression {task.unique_name}_less_than for "
-            f"STRL of the TaskGraph {task_graph.name} rooted at {task.unique_name}."
-        )
-        task_graph_expression = tetrisched.strl.LessThanExpression(
-            f"{task.unique_name}_less_than"
-        )
-        task_graph_expression.addChild(task_expression)
-        task_graph_expression.addChild(child_expression)
+        # If the current Task has to be scheduled, then we need to ensure that it
+        # is scheduled before its children.
+        if task_expression:
+            self._logger.debug(
+                f"[{current_time.time}] Ordering the STRL for {task.unique_name} and "
+                f"its children "
+                f"{[child.unique_name for child in task_graph.get_children(task)]}"
+                f" under a LessThanExpression {task.unique_name}_less_than for "
+                f"STRL of the TaskGraph {task_graph.name} rooted at {task.unique_name}."
+            )
+            task_graph_expression = tetrisched.strl.LessThanExpression(
+                f"{task.unique_name}_less_than"
+            )
+            task_graph_expression.addChild(task_expression)
+            task_graph_expression.addChild(child_expression)
+        else:
+            task_graph_expression = child_expression
 
         return task_graph_expression
 
@@ -358,7 +404,8 @@ class TetriSchedScheduler(BaseScheduler):
         current_time: EventTime,
         task_graph: TaskGraph,
         partitions: tetrisched.Partitions,
-        task_strls: Mapping[str, tetrisched.strl.Expression] = {},
+        task_strls: Optional[Mapping[str, tetrisched.strl.Expression]] = None,
+        tasks_to_be_scheduled: Optional[List[Task]] = None,
     ) -> tetrisched.strl.Expression:
         """Constructs the STRL expression subtree for a given TaskGraph.
 
@@ -369,7 +416,12 @@ class TetriSchedScheduler(BaseScheduler):
             partitions (`Partitions`): The partitions that are available for scheduling.
             task_strls (`Mapping[str, tetrisched.strl.Expression]`): A mapping from Task
                 IDs to their STRL expressions. Used for caching.
+            tasks_to_be_scheduled (`Optional[List[Task]]`): The list of Tasks that are
+                to be scheduled. If `None`, then all the Tasks in the TaskGraph are
+                considered. Defaults to `None`.
         """
+        self._logger.debug(f"The generated STRLs were: {task_strls.keys()}")
+
         # Construct the STRL expression for all the roots of the TaskGraph.
         root_task_strls = []
         for root in task_graph.get_source_tasks():
@@ -378,11 +430,16 @@ class TetriSchedScheduler(BaseScheduler):
                 f"{root.unique_name} while creating the STRL for "
                 f"TaskGraph {task_graph.name}."
             )
-            root_task_strls.append(
-                self._construct_task_graph_strl(
-                    current_time, root, task_graph, partitions, task_strls
-                )
+            root_task_strl = self._construct_task_graph_strl(
+                current_time,
+                root,
+                task_graph,
+                partitions,
+                task_strls if task_strls else {},
+                tasks_to_be_scheduled,
             )
+            if root_task_strl:
+                root_task_strls.append(root_task_strl)
 
         if len(root_task_strls) == 0:
             # No roots, possibly empty TaskGraph, return None.
