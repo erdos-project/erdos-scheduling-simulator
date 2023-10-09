@@ -1563,7 +1563,7 @@ class Simulator(object):
                     )
                 )
             else:
-                raise ValueError(
+                self._logger.debug(
                     f"The task {task.unique_name} was in an "
                     f"unexpected state: {task.state}."
                 )
