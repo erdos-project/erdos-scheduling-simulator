@@ -8,6 +8,7 @@ from uuid import UUID
 
 import absl  # noqa: F401
 import gurobipy as gp
+import numpy as np
 from gurobipy import GRB, and_
 
 from schedulers import BaseScheduler
@@ -116,6 +117,12 @@ class TaskOptimizerVariables:
             for t in time_range
             for strategy in self._task.available_execution_strategies
         }
+        self._placement_rewards = dict(
+            zip(
+                time_range,
+                np.interp(time_range, (min(time_range), max(time_range)), (2, 1)),
+            )
+        )
 
         # Timing characteristics.
         if task.state == TaskState.RUNNING:
@@ -1031,11 +1038,20 @@ class TetriSchedGurobiScheduler(BaseScheduler):
                 ):
                     continue
                 task_reward_variable = optimizer.addVar(
-                    vtype=GRB.BINARY, name=f"{task_variable.name}_reward"
+                    vtype=GRB.CONTINUOUS, name=f"{task_variable.name}_reward"
                 )
                 optimizer.addConstr(
                     task_reward_variable
-                    == gp.quicksum(task_variable.space_time_matrix.values()),
+                    == gp.quicksum(
+                        [
+                            task_variable._placement_rewards[t] * value
+                            for (
+                                _,
+                                t,
+                                _,
+                            ), value in task_variable.space_time_matrix.items()
+                        ]
+                    ),
                     name=f"{task_variable.name}_reward_constraint",
                 )
                 task_reward_variables.append(task_reward_variable)
