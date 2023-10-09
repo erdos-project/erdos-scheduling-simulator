@@ -1,5 +1,7 @@
 #include "tetrisched/CPLEXSolver.hpp"
 
+#include <chrono>
+
 #include "tetrisched/Types.hpp"
 namespace tetrisched {
 
@@ -195,8 +197,39 @@ void CPLEXSolver::exportModel(const std::string& fname) {
   cplexInstance.exportModel(fname.c_str());
 }
 
-void CPLEXSolver::solveModel() {
+SolverSolutionPtr CPLEXSolver::solveModel() {
+  // Create the result object.
+  SolverSolutionPtr solverSolution = std::make_shared<SolverSolution>();
+
+  // Solve the model.
+  auto solverStartTime = std::chrono::high_resolution_clock::now();
   cplexInstance.solve();
+  auto solverEndTime = std::chrono::high_resolution_clock::now();
+  solverSolution->solverTimeMicroseconds =
+      std::chrono::duration_cast<std::chrono::microseconds>(solverEndTime -
+                                                            solverStartTime)
+          .count();
+
+  // Retrieve the solution type.
+  switch (cplexInstance.getStatus()) {
+    case IloAlgorithm::Optimal:
+      solverSolution->solutionType = SolutionType::OPTIMAL;
+      solverSolution->objectiveValue = cplexInstance.getObjValue();
+      break;
+    case IloAlgorithm::Feasible:
+      solverSolution->solutionType = SolutionType::FEASIBLE;
+      solverSolution->objectiveValue = cplexInstance.getObjValue();
+      break;
+    case IloAlgorithm::Infeasible:
+      solverSolution->solutionType = SolutionType::INFEASIBLE;
+      break;
+    case IloAlgorithm::Unbounded:
+      solverSolution->solutionType = SolutionType::UNBOUNDED;
+      break;
+    default:
+      solverSolution->solutionType = SolutionType::UNKNOWN;
+      break;
+  }
   TETRISCHED_DEBUG("Finished solving the model using the CPLEX solver!")
 
   // Retrieve all the variables from the CPLEX model into the SolverModel.
@@ -229,6 +262,8 @@ void CPLEXSolver::solveModel() {
   TETRISCHED_DEBUG("Successfully populated the solution values for all "
                    << solverModel->variables.size()
                    << " variables from CPLEX to SolverModel.");
+
+  return solverSolution;
 }
 
 CPLEXSolver::~CPLEXSolver() { cplexEnv.end(); }

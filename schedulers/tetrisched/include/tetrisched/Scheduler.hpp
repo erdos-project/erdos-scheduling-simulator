@@ -11,6 +11,8 @@ class Scheduler {
   std::shared_ptr<Solver> solver;
   /// The solver model to be passed to the expressions during parsing.
   SolverModelPtr solverModel;
+  /// The solution to the last solver invocation (if available).
+  std::optional<SolverSolutionPtr> solverSolution;
   /// The time discretization to use for the solver.
   Time discretization;
   /// The registered STRL expression (if available).
@@ -29,6 +31,9 @@ class Scheduler {
   /// on the given partitions at the given time.
   /// Use expression->getSolution() to retrieve the solution.
   void schedule();
+
+  /// Retrieve the solution from the last invocation of the solver.
+  SolverSolutionPtr getLastSolverSolution() const;
 };
 }  // namespace tetrisched
 

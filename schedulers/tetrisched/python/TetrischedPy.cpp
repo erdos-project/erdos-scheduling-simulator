@@ -44,7 +44,23 @@ void defineScheduler(py::module_& tetrisched_m) {
       .def("registerSTRL", &tetrisched::Scheduler::registerSTRL,
            "Registers the STRL expression for the scheduler to schedule from.")
       .def("schedule", &tetrisched::Scheduler::schedule,
-           "Invokes the solver to schedule the registered STRL expression.");
+           "Invokes the solver to schedule the registered STRL expression.")
+      .def("getLastSolverSolution",
+           &tetrisched::Scheduler::getLastSolverSolution,
+           "Retrieve the solution from the last invocation of the solver.");
+}
+
+/// Define the Solver backends.
+void defineSolverBackends(py::module_& tetrisched_m) {
+  auto tetrisched_m_solver_backend = tetrisched_m.def_submodule(
+      "backends", "Solver backends for the TetriSched Python API.");
+  defineSolverSolution(tetrisched_m_solver_backend);
+#ifdef _TETRISCHED_WITH_CPLEX_
+  defineCPLEXBackend(tetrisched_m_solver_backend);
+#endif  //_TETRISCHED_WITH_CPLEX_
+#ifdef _TETRISCHED_WITH_GUROBI_
+  defineGurobiBackend(tetrisched_m_solver_backend);
+#endif  //_TETRISCHED_WITH_GUROBI_
 }
 
 PYBIND11_MODULE(tetrisched_py, tetrisched_m) {
@@ -69,9 +85,5 @@ PYBIND11_MODULE(tetrisched_py, tetrisched_m) {
   defineSolverModel(tetrisched_m_solver_model);
 
   // Implement the Solver backends.
-  auto tetrisched_m_solver_backend = tetrisched_m.def_submodule(
-      "backends", "Solver backends for the TetriSched Python API.");
-#ifdef _TETRISCHED_WITH_CPLEX_
-  defineCPLEXBackend(tetrisched_m_solver_backend);
-#endif  //_TETRISCHED_WITH_CPLEX_
+  defineSolverBackends(tetrisched_m);
 }
