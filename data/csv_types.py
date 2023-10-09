@@ -1,6 +1,6 @@
 from collections import namedtuple
 from functools import total_ordering
-from typing import Mapping, Optional, Sequence, Tuple, Union
+from typing import Mapping, Optional, Sequence
 
 Resource = namedtuple("Resource", ["name", "id", "quantity"])
 WorkerPoolStats = namedtuple(
@@ -43,7 +43,6 @@ class Task(object):
         task_id: str,
         intended_release_time: int,
         release_time: int,
-        runtime: int,
         deadline: int,
     ):
         self.name = name
@@ -53,7 +52,7 @@ class Task(object):
         # All times are in microseconds.
         self.intended_release_time = intended_release_time
         self.release_time = release_time
-        self.runtime = runtime
+        self.runtime = None
         self.deadline = deadline
 
         # Values updated from the TASK_PLACEMENT events.
@@ -126,7 +125,7 @@ class Task(object):
             placement_time=placement_time,
             worker_pool=worker_pools[csv_reading[6]],
             resources_used=[
-                Resource(*csv_reading[i : i + 3]) for i in range(7, len(csv_reading), 3)
+                Resource(*csv_reading[i : i + 3]) for i in range(8, len(csv_reading), 3)
             ],
         )
         self.placements.append(placement)
@@ -134,6 +133,7 @@ class Task(object):
             self.start_time = placement_time
         if not self.placement_time or self.placement_time > placement_time:
             self.placement_time = placement_time
+        self.runtime = int(csv_reading[7])
 
     def update_skip(self, csv_reading: str):
         """Updates the values of the Task based on the TASK_SKIP event from CSV.
