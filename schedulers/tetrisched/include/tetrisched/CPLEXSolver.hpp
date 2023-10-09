@@ -48,7 +48,7 @@ class CPLEXSolver : public Solver {
   void exportModel(const std::string& fileName) override;
 
   /// Solve the constructed model.
-  void solveModel() override;
+  SolverSolutionPtr solveModel() override;
 
   /// Destroy the CPLEXSolver.
   ~CPLEXSolver();

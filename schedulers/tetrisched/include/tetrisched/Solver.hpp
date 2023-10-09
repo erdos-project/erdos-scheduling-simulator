@@ -4,6 +4,53 @@
 #include "tetrisched/SolverModel.hpp"
 
 namespace tetrisched {
+/// The `SolutionType` enum represents the different types of solutions
+/// that we can retrieve from the solver.
+enum SolutionType {
+  /// The Solver returned a feasible (but not optimal) solution.
+  FEASIBLE = 0,
+  /// The Solver returned an optimal solution.
+  OPTIMAL = 1,
+  /// The Solver returned an infeasible solution.
+  INFEASIBLE = 2,
+  /// The Solver returned an unbounded solution.
+  UNBOUNDED = 3,
+  /// The Solver returned an unknown solution.
+  UNKNOWN = 4
+};
+
+/// The SolverSolution structure represents the information that we
+/// retrieve from either the callbacks or the Solver that we can use
+/// to evaluate our approach.
+struct SolverSolution {
+  /// The type of the solution.
+  SolutionType solutionType;
+  /// The objective value of the solution.
+  std::optional<double> objectiveValue;
+  /// The time taken by the solver to find the solution (in microseconds).
+  uint64_t solverTimeMicroseconds;
+
+  /// Get a string representation of the Solver's type.
+  std::string getSolutionTypeStr() const {
+    switch (solutionType) {
+      case SolutionType::FEASIBLE:
+        return "FEASIBLE";
+      case SolutionType::OPTIMAL:
+        return "OPTIMAL";
+      case SolutionType::INFEASIBLE:
+        return "INFEASIBLE";
+      case SolutionType::UNBOUNDED:
+        return "UNBOUNDED";
+      case SolutionType::UNKNOWN:
+        return "UNKNOWN";
+      default:
+        return "NOTIMPLEMENTED";
+    }
+  }
+};
+using SolverSolution = struct SolverSolution;
+using SolverSolutionPtr = std::shared_ptr<SolverSolution>;
+
 /// The Solver class is the abstract base class for all solver
 /// backends and provides a common interface for the STRL
 /// expressions to communicate with the backend.
@@ -20,76 +67,7 @@ class Solver {
   virtual void exportModel(const std::string& fileName) = 0;
 
   /// Solve the constructed model.
-  virtual void solveModel() = 0;
+  virtual SolverSolutionPtr solveModel() = 0;
 };
 }  // namespace tetrisched
 #endif  // _TETRISCHED_SOLVER_HPP_
-// #ifndef _SOLVER_HPP
-// #define _SOLVER_HPP
-// #include <ilcplex/ilocplex.h>
-// #include <string>
-// #include "Expression.hpp"
-// #include "SolverModel.hpp"
-
-// namespace alsched {
-// // Solver class is the interface for all MILP-type solvers to implement
-// class Solver
-// {
-// public:
-//     virtual SolverModelPtr initModel(double) = 0;
-//     virtual bool translateModel() = 0;
-//     virtual void exportModel(const char *fname) = 0;
-//     virtual void solve(double timeLimit) = 0;
-//     // TODO(atumanov): add required result methods to this class
-//     virtual double getResult(int vi) const = 0;
-// /*    virtual double getFloatResult(int vi) const = 0;
-//     virtual double getIntResult(int vi) const = 0;
-//     virtual double getBoolResult(int vi) const = 0;*/
-// };
-
-// // CPLEXSolver : understands how to talk to CPLEX and how to interface with
-// // our internal model representation.
-// // It essentially serves as the bridge between internal and external model
-// class CPLEXSolver : public Solver
-// {
-// private:
-//     SolverModelPtr mptr; //internal model
-//     double modelstarttime; // current model start time
-//     IloEnv env;
-//     IloModel extmodel;  //external model
-//     IloCplex cplex;
-//     IloNumVarArray vars;
-
-//     //helper functions
-//     IloExpr translateExpression(const vector<pair<double,int> > &terms, const
-//     IloNumVarArray &); IloRange translateConstraint(const Constraint &mycon,
-//     const IloNumVarArray &);
-//     //IloExpr translateObjFunction(const SolverModelPtr &model);
-
-// public:
-//     CPLEXSolver() {}
-//     ~CPLEXSolver() {}
-//     // creates, initializes and returns a reference to the new model
-//     SolverModelPtr initModel(double);
-//     // genModel: populate the stored internal model pointed to by mptr
-//     // NOTE: an alternative is to generate it externally and pass it for
-//     translation void genModel(ExpressionPtr t, vector<map<double,vector<int>
-//     > > partcaps); bool translateModel();
-//     // translate given internal model into external
-//     void translateModel(SolverModelPtr m);
-//     // solve the stored external model
-//     void solve(double timeLimit);
-//     // export the stored external model
-//     void exportModel(const char *fname);
-//     // Export the solution to the given file.
-//     void exportSolution(const char *fileName);
-//     vector<double> getRawResults();
-//     map<JobPtr, Allocation> getResults();
-//     map<JobPtr, Allocation> getResultsForTime(double start_time);
-//     // get a solution for a single variable, given internal variable index
-//     vidx virtual double getResult(int vidx) const;
-// };
-
-// } //namespace alsched
-
-// #endif

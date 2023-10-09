@@ -40,9 +40,17 @@ void Scheduler::schedule() {
   this->solver->translateModel();
 
   // Solve the model.
-  this->solver->solveModel();
+  solverSolution = this->solver->solveModel();
 
   // Populate the results from the solver into the expression tree.
   this->expression.value()->populateResults(solverModel);
+}
+
+SolverSolutionPtr Scheduler::getLastSolverSolution() const {
+  if (!solverSolution.has_value()) {
+    throw exceptions::ExpressionSolutionException(
+        "No solution has been computed yet. Please invoke schedule() first.");
+  }
+  return solverSolution.value();
 }
 }  // namespace tetrisched

@@ -134,7 +134,7 @@ void GurobiSolver::exportModel(const std::string& fileName) {
   gurobiModel->write(fileName);
 }
 
-void GurobiSolver::solveModel() {
+SolverSolutionPtr GurobiSolver::solveModel() {
   throw exceptions::SolverException("Not implemented yet!");
 }
 }  // namespace tetrisched

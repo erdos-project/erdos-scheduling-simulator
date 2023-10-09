@@ -47,7 +47,7 @@ class GoogleCPSolver : public Solver {
   void exportModel(const std::string& fileName) override;
 
   /// Solve the constructed model.
-  void solveModel() override;
+  SolverSolutionPtr solveModel() override;
 };
 }  // namespace tetrisched
 #endif  // _TETRISCHED_GOOGLE_CP_SOLVER_HPP_

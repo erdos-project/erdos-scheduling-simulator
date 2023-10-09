@@ -111,7 +111,8 @@ class TetriSchedScheduler(BaseScheduler):
             solverSolution = objective_strl.getSolution()
             self._logger.info(
                 f"[{sim_time.time}] Solver returned utility of {solverSolution.utility}"
-                f" and took {solver_time} to solve."
+                f" and took {solver_time} to solve. The solution result "
+                f"was {self._scheduler.getLastSolverSolution()}."
             )
             if solverSolution.utility == 0:
                 raise RuntimeError("TetrischedScheduler was unable to schedule tasks.")

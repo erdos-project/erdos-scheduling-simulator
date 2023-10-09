@@ -45,7 +45,7 @@ class GurobiSolver : public Solver {
   void exportModel(const std::string& fileName) override;
 
   /// Solve the constructed model.
-  void solveModel() override;
+  SolverSolutionPtr solveModel() override;
 };
 }  // namespace tetrisched
 #endif  // _TETRISCHED_GUROBI_SOLVER_HPP_
