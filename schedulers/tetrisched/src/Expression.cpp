@@ -580,7 +580,7 @@ ParseResultPtr ScaleExpression::parse(
     }*/
 
     parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
-        parsedResult->utility = childUtility;
+        parsedResult->utility = result;
         return parsedResult;}
 
     else{
