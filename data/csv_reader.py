@@ -52,78 +52,83 @@ class CSVReader(object):
             worker_pools = {}
             schedulers = []
             for reading in csv_readings:
-                if reading[1] == "SIMULATOR_START":
-                    simulator = Simulator(
-                        csv_path=csv_path,
-                        start_time=int(reading[0]),
-                        total_tasks=reading[2],
-                    )
-                elif reading[1] == "SIMULATOR_END":
-                    assert (
-                        simulator is not None
-                    ), "No SIMULATOR_START found for a corresponding SIMULATOR_END."
-                    simulator.update_finish(reading)
-                elif reading[1] == "TASK_RELEASE":
-                    tasks[reading[8]] = Task(
-                        name=reading[2],
-                        task_graph=reading[9],
-                        timestamp=int(reading[3]),
-                        task_id=reading[8],
-                        intended_release_time=int(reading[4]),
-                        release_time=int(reading[5]),
-                        runtime=int(reading[6]),
-                        deadline=int(reading[7]),
-                    )
-                elif reading[1] == "TASK_FINISHED":
-                    # Update the task with the completion event data.
-                    tasks[reading[7]].update_finish(reading)
-                elif reading[1] == "MISSED_DEADLINE":
-                    # Update the task with the completion event data.
-                    tasks[reading[5]].update_missed_deadline(reading)
-                elif reading[1] == "SCHEDULER_START":
-                    schedulers.append(
-                        Scheduler(
+                try:
+                    if reading[1] == "SIMULATOR_START":
+                        simulator = Simulator(
+                            csv_path=csv_path,
                             start_time=int(reading[0]),
-                            released_tasks=int(reading[2]),
-                            previously_placed_tasks=int(reading[3]),
-                            instance_id=len(schedulers) + 1,
+                            total_tasks=reading[2],
                         )
-                    )
-                elif reading[1] == "SCHEDULER_FINISHED":
-                    # Update the Scheduler with the completion event data.
-                    schedulers[-1].update_finish(reading)
-                elif reading[1] == "WORKER_POOL_UTILIZATION":
-                    worker_pools[reading[2]].utilizations.append(
-                        WorkerPoolUtilization(
-                            simulator_time=int(reading[0]),
-                            resource_name=reading[3],
-                            allocated_quantity=float(reading[4]),
-                            available_quantity=float(reading[5]),
+                    elif reading[1] == "SIMULATOR_END":
+                        assert (
+                            simulator is not None
+                        ), "No SIMULATOR_START found for a corresponding SIMULATOR_END."
+                        simulator.update_finish(reading)
+                    elif reading[1] == "TASK_RELEASE":
+                        tasks[reading[7]] = Task(
+                            name=reading[2],
+                            task_graph=reading[8],
+                            timestamp=int(reading[3]),
+                            task_id=reading[7],
+                            intended_release_time=int(reading[4]),
+                            release_time=int(reading[5]),
+                            deadline=int(reading[6]),
                         )
-                    )
-                elif reading[1] == "WORKER_POOL":
-                    resources = [
-                        Resource(*reading[i : i + 3]) for i in range(4, len(reading), 3)
-                    ]
-                    worker_pools[reading[3]] = WorkerPool(
-                        name=reading[2],
-                        id=reading[3],
-                        resources=resources,
-                    )
-                elif reading[1] == "TASK_PLACEMENT":
-                    # Update the task with the placement event data.
-                    tasks[reading[5]].update_placement(reading, worker_pools)
-                elif reading[1] == "TASK_SKIP" and reading[4] in tasks:
-                    # Update the task with the skip data.
-                    tasks[reading[4]].update_skip(reading)
-                elif reading[1] == "TASK_PREEMPT":
-                    # Update the placement with the preemption time.
-                    tasks[reading[4]].update_preempt(reading)
-                elif reading[1] == "TASK_MIGRATED":
-                    # Update the placement with the migration time.
-                    tasks[reading[4]].update_migration(reading, worker_pools)
-                else:
-                    continue
+                    elif reading[1] == "TASK_FINISHED":
+                        # Update the task with the completion event data.
+                        tasks[reading[7]].update_finish(reading)
+                    elif reading[1] == "MISSED_DEADLINE":
+                        # Update the task with the completion event data.
+                        tasks[reading[5]].update_missed_deadline(reading)
+                    elif reading[1] == "SCHEDULER_START":
+                        schedulers.append(
+                            Scheduler(
+                                start_time=int(reading[0]),
+                                released_tasks=int(reading[2]),
+                                previously_placed_tasks=int(reading[3]),
+                                instance_id=len(schedulers) + 1,
+                            )
+                        )
+                    elif reading[1] == "SCHEDULER_FINISHED":
+                        # Update the Scheduler with the completion event data.
+                        schedulers[-1].update_finish(reading)
+                    elif reading[1] == "WORKER_POOL_UTILIZATION":
+                        worker_pools[reading[2]].utilizations.append(
+                            WorkerPoolUtilization(
+                                simulator_time=int(reading[0]),
+                                resource_name=reading[3],
+                                allocated_quantity=float(reading[4]),
+                                available_quantity=float(reading[5]),
+                            )
+                        )
+                    elif reading[1] == "WORKER_POOL":
+                        resources = [
+                            Resource(*reading[i : i + 3])
+                            for i in range(4, len(reading), 3)
+                        ]
+                        worker_pools[reading[3]] = WorkerPool(
+                            name=reading[2],
+                            id=reading[3],
+                            resources=resources,
+                        )
+                    elif reading[1] == "TASK_PLACEMENT":
+                        # Update the task with the placement event data.
+                        tasks[reading[5]].update_placement(reading, worker_pools)
+                    elif reading[1] == "TASK_SKIP" and reading[4] in tasks:
+                        # Update the task with the skip data.
+                        tasks[reading[4]].update_skip(reading)
+                    elif reading[1] == "TASK_PREEMPT":
+                        # Update the placement with the preemption time.
+                        tasks[reading[4]].update_preempt(reading)
+                    elif reading[1] == "TASK_MIGRATED":
+                        # Update the placement with the migration time.
+                        tasks[reading[4]].update_migration(reading, worker_pools)
+                    else:
+                        continue
+                except Exception as e:
+                    raise ValueError(
+                        f"Error while parsing the following line: {reading}"
+                    ) from e
             simulator.worker_pools = worker_pools.values()
             simulator.tasks = list(
                 sorted(tasks.values(), key=attrgetter("release_time"))
