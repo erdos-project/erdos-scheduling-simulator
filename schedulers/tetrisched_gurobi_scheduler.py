@@ -10,7 +10,6 @@ import absl  # noqa: F401
 import gurobipy as gp
 import numpy as np
 from gurobipy import GRB, and_
-import math
 from schedulers import BaseScheduler
 from utils import EventTime
 from workers import Worker, WorkerPools
@@ -24,9 +23,6 @@ from workload import (
     Workload,
 )
 
-def nearest_integer(time, value):
-    # return math.ceil(time/value)*value
-    return time
 
 class PrimalDataPoint:
     """A `PrimalDataPoint` is used to represent a single data point in the search space
@@ -109,10 +105,10 @@ class TaskOptimizerVariables:
         # Placement characteristics
         # Indicator variables which signify the task's start time.
         time_range = range(
-            nearest_integer(current_time.to(EventTime.Unit.US).time, time_discretization.to(EventTime.Unit.US).time),
-            nearest_integer(current_time.to(EventTime.Unit.US).time
+            current_time.to(EventTime.Unit.US).time,
+            current_time.to(EventTime.Unit.US).time
             + plan_ahead.to(EventTime.Unit.US).time
-            + 1, time_discretization.to(EventTime.Unit.US).time),
+            + 1,
             time_discretization.to(EventTime.Unit.US).time,
         )
         self._space_time_strategy_matrix = {
@@ -138,11 +134,10 @@ class TaskOptimizerVariables:
             self._previously_placed = True
             placed_key = (
                 self.__get_worker_index_from_previous_placement(task, workers),
-                nearest_integer(current_time.to(EventTime.Unit.US).time, time_discretization.to(EventTime.Unit.US).time),
+                current_time.to(EventTime.Unit.US).time,
                 task.current_placement.execution_strategy,
             )
             self._space_time_strategy_matrix[placed_key] = 1
-            # self._start_time =  nearest_integer(current_time.to(EventTime.Unit.US).time, time_discretization.to(EventTime.Unit.US).time)
             self._start_time =  current_time.to(EventTime.Unit.US).time
             
             self._is_placed_variable = 1
@@ -1091,29 +1086,6 @@ class TetriSchedGurobiScheduler(BaseScheduler):
             # the scheduler.
             task_reward_variables = []
             for task_variable in tasks_to_variables.values():
-                # task_graph = workload.get_task_graph(task_variable.task.task_graph)
-                # if self.release_taskgraphs and not task_graph.is_sink_task(
-                #     task_variable.task
-                # ):
-                #     continue
-                # task_reward_variable = optimizer.addVar(
-                #     vtype=GRB.CONTINUOUS, name=f"{task_variable.name}_reward"
-                # )
-                # optimizer.addConstr(
-                #     task_reward_variable
-                #     == gp.quicksum(
-                #         [
-                #             task_variable._placement_rewards[t] * value
-                #             for (
-                #                 _,
-                #                 t,
-                #                 _,
-                #             ), value in task_variable.space_time_matrix.items()
-                #         ]
-                #     ),
-                #     name=f"{task_variable.name}_reward_constraint",
-                # )
-                # task_reward_variables.append(task_reward_variable)
                 task_reward_variables.extend(
                     [
                         task_variable._placement_rewards[t] * value
