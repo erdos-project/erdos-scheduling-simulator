@@ -40,6 +40,10 @@ class GoogleCPSolver : public Solver {
   /// Retrieve a pointer to the SolverModel.
   SolverModelPtr getModel() override;
 
+  /// Replace the SolverModel in this instance with the given model.
+  /// This may be used to switch backends when a model is already constructed.
+  void setModel(SolverModelPtr model) override;
+
   /// Translates the SolverModel into a CP-SAT model.
   void translateModel() override;
 
@@ -48,6 +52,9 @@ class GoogleCPSolver : public Solver {
 
   /// Solve the constructed model.
   SolverSolutionPtr solveModel() override;
+
+  /// Get the name of the Solver.
+  std::string getName() const override { return "GoogleCPSolver"; }
 };
 }  // namespace tetrisched
 #endif  // _TETRISCHED_GOOGLE_CP_SOLVER_HPP_

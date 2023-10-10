@@ -41,6 +41,10 @@ class CPLEXSolver : public Solver {
   /// The SolverModel is the interface to define STRL expressions over.
   SolverModelPtr getModel() override;
 
+  /// Replace the SolverModel in this instance with the given model.
+  /// This may be used to switch backends when a model is already constructed.
+  void setModel(SolverModelPtr model) override;
+
   /// Translates the SolverModel into a CPLEX model.
   void translateModel() override;
 
@@ -52,6 +56,9 @@ class CPLEXSolver : public Solver {
 
   /// Destroy the CPLEXSolver.
   ~CPLEXSolver();
+
+  /// Get the name of the Solver.
+  std::string getName() const override { return "CPLEXSolver"; };
 };
 }  // namespace tetrisched
 #endif  // _TETRISCHED_CPLEX_SOLVER_HPP_

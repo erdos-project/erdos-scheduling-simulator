@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <iostream>
+
 #ifdef _TETRISCHED_WITH_CPLEX_
 #include "tetrisched/CPLEXSolver.hpp"
 #endif  //_TETRISCHED_WITH_CPLEX_
@@ -123,7 +124,7 @@ TEST(SolverModel, TestCPLEXSolverTranslation) {
 TEST(SolverModel, TestGurobiSolverTranslation) {
   tetrisched::GurobiSolver gurobiSolver;
   auto solverModelPtr = gurobiSolver.getModel();
-  constructModel(solverModelPtr);
+  auto intVar = constructModel(solverModelPtr);
   solverModelPtr->exportModel("test_solvermodel.lp");
   EXPECT_TRUE(std::filesystem::exists("test_solvermodel.lp"))
       << "The file test_solvermodel.lp was not created.";
@@ -133,6 +134,16 @@ TEST(SolverModel, TestGurobiSolverTranslation) {
   EXPECT_TRUE(std::filesystem::exists("test_gurobimodel.lp"))
       << "The file test_gurobimodel.lp was not created.";
   std::filesystem::remove("test_gurobimodel.lp");
+
+  // Solve the model.
+  gurobiSolver.solveModel();
+
+  // Check if solution is correct.
+  auto solutionValue = intVar->getValue();
+  EXPECT_TRUE(solutionValue.has_value()) << "No solution found.";
+  EXPECT_EQ(solutionValue.value(), 2) << "Solution is not correct.";
+  EXPECT_EQ(solverModelPtr->getObjectiveValue(), 2)
+      << "The objective value is not correct.";
 }
 #endif  //_TETRISCHED_WITH_GUROBI_
 
@@ -152,3 +163,29 @@ TEST(SolverModel, TestOrToolsSolverTranslation) {
   std::filesystem::remove("test_ortoolsmodel.lp");
 }
 #endif  //_TETRISCHED_WITH_ORTOOLS_
+
+TEST(SolverBackends, TestSolverBackends) {
+  std::vector<tetrisched::SolverPtr> solvers;
+#ifdef _TETRISCHED_WITH_CPLEX_
+  solvers.push_back(std::make_shared<tetrisched::CPLEXSolver>());
+#endif  //_TETRISCHED_WITH_CPLEX_
+#ifdef _TETRISCHED_WITH_GUROBI_
+  solvers.push_back(std::make_shared<tetrisched::GurobiSolver>());
+#endif  //_TETRISCHED_WITH_GUROBI_
+  ASSERT_GT(solvers.size(), 0) << "No solvers were enabled.";
+
+  // Construct a simple model.
+  auto solverModel = solvers[0]->getModel();
+  constructModel(solverModel);
+
+  // Pass it to all the solvers and check if they can solve it.
+  for (const auto& solver : solvers) {
+    solver->setModel(solverModel);
+    solver->translateModel();
+    auto solverSolution = solver->solveModel();
+    EXPECT_EQ(solverSolution->solutionType, tetrisched::SolutionType::OPTIMAL)
+        << "Solver " << solver->getName() << " could not solve the model.";
+    EXPECT_EQ(solverSolution->objectiveValue, 2)
+        << "Solver " << solver->getName() << " did not find the correct value.";
+  }
+}

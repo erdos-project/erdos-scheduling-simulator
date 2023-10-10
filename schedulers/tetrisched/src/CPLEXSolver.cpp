@@ -17,6 +17,10 @@ SolverModelPtr CPLEXSolver::getModel() {
   return solverModel;
 }
 
+void CPLEXSolver::setModel(SolverModelPtr solverModelPtr) {
+  solverModel = solverModelPtr;
+}
+
 CPLEXSolver::CPLEXVarType CPLEXSolver::translateVariable(
     const VariablePtr& variable) const {
   if (variable->variableType == tetrisched::VariableType::VAR_INTEGER) {

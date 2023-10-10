@@ -10,6 +10,10 @@ SolverModelPtr GoogleCPSolver::getModel() {
   return solverModel;
 }
 
+void GoogleCPSolver::setModel(SolverModelPtr solverModelPtr) {
+  solverModel = solverModelPtr;
+}
+
 GoogleCPSolver::GoogleCPVarType GoogleCPSolver::translateVariable(
     const VariablePtr& variable) const {
   // Check that a continuous variable is not passed in.

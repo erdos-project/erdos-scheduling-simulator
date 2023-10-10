@@ -60,7 +60,11 @@ class Solver {
   /// The SolverModel is the interface to define STRL expressions over.
   virtual SolverModelPtr getModel() = 0;
 
-  /// Translate teh SolverModel into a backend-specific model.
+  /// Replace the SolverModel in this instance with the given model.
+  /// This may be used to switch backends when a model is already constructed.
+  virtual void setModel(SolverModelPtr model) = 0;
+
+  /// Translate the SolverModel into a backend-specific model.
   virtual void translateModel() = 0;
 
   /// Export the constructed model to the given file.
@@ -68,6 +72,10 @@ class Solver {
 
   /// Solve the constructed model.
   virtual SolverSolutionPtr solveModel() = 0;
+
+  /// Get the name of the Solver.
+  virtual std::string getName() const = 0;
 };
+using SolverPtr = std::shared_ptr<tetrisched::Solver>;
 }  // namespace tetrisched
 #endif  // _TETRISCHED_SOLVER_HPP_

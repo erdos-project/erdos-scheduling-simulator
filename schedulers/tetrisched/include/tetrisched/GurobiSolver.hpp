@@ -38,6 +38,10 @@ class GurobiSolver : public Solver {
   /// The SolverModel is the interface to define STRL expressions over.
   SolverModelPtr getModel() override;
 
+  /// Replace the SolverModel in this instance with the given model.
+  /// This may be used to switch backends when a model is already constructed.
+  void setModel(SolverModelPtr model) override;
+
   /// Translates the SolverModel into a Gurobi model.
   void translateModel() override;
 
@@ -46,6 +50,9 @@ class GurobiSolver : public Solver {
 
   /// Solve the constructed model.
   SolverSolutionPtr solveModel() override;
+
+  /// Get the name of the Solver.
+  std::string getName() const override { return "GurobiSolver"; }
 };
 }  // namespace tetrisched
 #endif  // _TETRISCHED_GUROBI_SOLVER_HPP_

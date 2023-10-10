@@ -1,5 +1,7 @@
 #include "tetrisched/GurobiSolver.hpp"
 
+#include <chrono>
+
 namespace tetrisched {
 GurobiSolver::GurobiSolver()
     : gurobiEnv(new GRBEnv()), gurobiModel(new GRBModel(*gurobiEnv)) {}
@@ -9,6 +11,10 @@ SolverModelPtr GurobiSolver::getModel() {
     solverModel = std::shared_ptr<SolverModel>(new SolverModel());
   }
   return solverModel;
+}
+
+void GurobiSolver::setModel(SolverModelPtr solverModelPtr) {
+  solverModel = solverModelPtr;
 }
 
 GRBVar GurobiSolver::translateVariable(GRBModel& gurobiModel,
@@ -135,6 +141,64 @@ void GurobiSolver::exportModel(const std::string& fileName) {
 }
 
 SolverSolutionPtr GurobiSolver::solveModel() {
-  throw exceptions::SolverException("Not implemented yet!");
+  // Create the result object.
+  SolverSolutionPtr solverSolution = std::make_shared<SolverSolution>();
+
+  // Solve the model.
+  auto solverStartTime = std::chrono::high_resolution_clock::now();
+  gurobiModel->optimize();
+  auto solverEndTime = std::chrono::high_resolution_clock::now();
+  solverSolution->solverTimeMicroseconds =
+      std::chrono::duration_cast<std::chrono::microseconds>(solverEndTime -
+                                                            solverStartTime)
+          .count();
+
+  // Retrieve the solution type.
+  switch (gurobiModel->get(GRB_IntAttr_Status)) {
+    case GRB_OPTIMAL:
+      solverSolution->solutionType = SolutionType::OPTIMAL;
+      solverSolution->objectiveValue = gurobiModel->get(GRB_DoubleAttr_ObjVal);
+      break;
+    case GRB_SUBOPTIMAL:
+      solverSolution->solutionType = SolutionType::FEASIBLE;
+      solverSolution->objectiveValue = gurobiModel->get(GRB_DoubleAttr_ObjVal);
+      break;
+    case GRB_INFEASIBLE:
+      solverSolution->solutionType = SolutionType::INFEASIBLE;
+      break;
+    case GRB_INF_OR_UNBD:
+    case GRB_UNBOUNDED:
+      solverSolution->solutionType = SolutionType::UNBOUNDED;
+      break;
+    default:
+      solverSolution->solutionType = SolutionType::UNKNOWN;
+      TETRISCHED_DEBUG("The Gurobi solver returned the value: "
+                       << gurobiModel->get(GRB_IntAttr_Status));
+      break;
+  }
+  TETRISCHED_DEBUG("The Gurobi solver took "
+                   << solverSolution->solverTimeMicroseconds << " microseconds "
+                   << "to solve the model.");
+
+  // Retrieve all the variables from the Gurobi model into the SolverModel.
+  for (const auto& [variableId, variable] : solverModel->variables) {
+    if (gurobiVariables.find(variableId) == gurobiVariables.end()) {
+      throw tetrisched::exceptions::SolverException(
+          "Variable " + variable->getName() +
+          " was not found in the Gurobi model.");
+    }
+    switch (variable->variableType) {
+      case tetrisched::VariableType::VAR_INTEGER:
+      case tetrisched::VariableType::VAR_CONTINUOUS:
+      case tetrisched::VariableType::VAR_INDICATOR:
+        variable->solutionValue =
+            gurobiVariables.at(variableId).get(GRB_DoubleAttr_X);
+        break;
+      default:
+        throw tetrisched::exceptions::SolverException(
+            "Unsupported variable type: " + variable->variableType);
+    }
+  }
+  return solverSolution;
 }
 }  // namespace tetrisched
