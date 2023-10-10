@@ -14,8 +14,15 @@ from gurobipy import GRB, and_
 from schedulers import BaseScheduler
 from utils import EventTime
 from workers import Worker, WorkerPools
-from workload import (ExecutionStrategies, ExecutionStrategy, Placement,
-                      Placements, Task, TaskState, Workload)
+from workload import (
+    ExecutionStrategies,
+    ExecutionStrategy,
+    Placement,
+    Placements,
+    Task,
+    TaskState,
+    Workload,
+)
 
 
 class PrimalDataPoint:
