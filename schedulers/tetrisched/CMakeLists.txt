@@ -22,24 +22,31 @@ set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
 # Set the directories where the solver backends are installed.
-set(CPLEX_DIR "/opt/ibm/ILOG/CPLEX_Studio2211")
-set(GUROBI_DIR "/opt/gurobi1001/linux64")
-set(ORTOOLS_DIR "/usr/local/include/ortools")
+message("ENV CPLEX: $ENV{CPLEX_DIR}")
+if (NOT DEFINED $ENV{CPLEX_DIR})
+     set($ENV{CPLEX_DIR} "/opt/ibm/ILOG/CPLEX_Studio2211")
+endif()
+if (NOT DEFINED $ENV{GUROBI_DIR})
+     set($ENV{GUROBI_DIR} "/opt/gurobi1001/linux64")
+endif()
+if (NOT DEFINED $ENV{ORTOOLS_DIR})
+     set($ENV{ORTOOLS_DIR} "/usr/local/include/ortools")
+endif()
 
 set(SOLVER_BACKEND_INCLUDE_DIRS "")
 set(SOLVER_BACKEND_LINK_DIRS "")
 set(SOLVER_BACKEND_LINK_LIBRARIES "")
 
-if (EXISTS "${CPLEX_DIR}")
-     message("-- Adding CPLEX : ${CPLEX_DIR}")
+if (EXISTS "$ENV{CPLEX_DIR}")
+     message("-- Adding CPLEX : $ENV{CPLEX_DIR}")
      add_compile_definitions(_TETRISCHED_WITH_CPLEX_)
 
      LIST(APPEND SOLVER_BACKEND_INCLUDE_DIRS
-          "${CPLEX_DIR}/cplex/include/"
-          "${CPLEX_DIR}/concert/include/")
+          "$ENV{CPLEX_DIR}/cplex/include/"
+          "$ENV{CPLEX_DIR}/concert/include/")
      LIST(APPEND SOLVER_BACKEND_LINK_DIRS
-          "${CPLEX_DIR}/cplex/lib/x86-64_linux/static_pic/"
-          "${CPLEX_DIR}/concert/lib/x86-64_linux/static_pic/")
+          "$ENV{CPLEX_DIR}/cplex/lib/x86-64_linux/static_pic/"
+          "$ENV{CPLEX_DIR}/concert/lib/x86-64_linux/static_pic/")
      LIST(APPEND SOLVER_BACKEND_LINK_LIBRARIES
           "ilocplex"
           "concert"
@@ -51,14 +58,14 @@ else()
      message("-- Not Adding CPLEX")
 endif()
 
-if (EXISTS "${GUROBI_DIR}")
-     message("-- Adding GUROBI : ${GUROBI_DIR}")
+if (EXISTS "$ENV{GUROBI_DIR}")
+     message("-- Adding GUROBI : $ENV{GUROBI_DIR}")
      add_compile_definitions(_TETRISCHED_WITH_GUROBI_)
 
      LIST(APPEND SOLVER_BACKEND_INCLUDE_DIRS
-          "${GUROBI_DIR}/include/")
+          "$ENV{GUROBI_DIR}/include/")
      LIST(APPEND SOLVER_BACKEND_LINK_DIRS
-          "${GUROBI_DIR}/lib/")
+          "$ENV{GUROBI_DIR}/lib/")
      LIST(APPEND SOLVER_BACKEND_LINK_LIBRARIES
           "gurobi_c++"
           "gurobi100")
@@ -66,8 +73,8 @@ else()
      message("-- Not Adding GUROBI")
 endif()
 
-if (EXISTS "${ORTOOLS_DIR}")
-     message("-- Adding Google OR-Tools : ${ORTOOLS_DIR}")
+if (EXISTS "$ENV{ORTOOLS_DIR}")
+     message("-- Adding Google OR-Tools : $ENV{ORTOOLS_DIR}")
      add_compile_definitions(_TETRISCHED_WITH_OR_TOOLS_)
 
      LIST(APPEND SOLVER_BACKEND_LINK_LIBRARIES
@@ -82,13 +89,13 @@ set(TETRISCHED_SOURCE
      "src/SolverModel.cpp"
      "src/Scheduler.cpp")
 
-if (EXISTS "${CPLEX_DIR}")
+if (EXISTS "$ENV{CPLEX_DIR}")
      LIST(APPEND TETRISCHED_SOURCE "src/CPLEXSolver.cpp")
 endif()
-if (EXISTS "${GUROBI_DIR}")
+if (EXISTS "$ENV{GUROBI_DIR}")
      LIST(APPEND TETRISCHED_SOURCE "src/GurobiSolver.cpp")
 endif()
-if (EXISTS "${ORTOOLS_DIR}")
+if (EXISTS "$ENV{ORTOOLS_DIR}")
      LIST(APPEND TETRISCHED_SOURCE "src/GoogleCPSolver.cpp")
 endif()
 

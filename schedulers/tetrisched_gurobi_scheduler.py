@@ -48,7 +48,8 @@ class PrimalDataPoint:
     @property
     def elapsed(self) -> EventTime:
         return EventTime(
-            int((self._datapoint_time - self._start_time) * 1e6), EventTime.Unit.US
+            int((self._datapoint_time - self._start_time) * 1e6),
+            EventTime.Unit.US,
         )
 
     def __str__(self) -> str:
@@ -137,6 +138,7 @@ class TaskOptimizerVariables:
             )
             self._space_time_strategy_matrix[placed_key] = 1
             self._start_time = current_time.to(EventTime.Unit.US).time
+
             self._is_placed_variable = 1
         else:
             # Initialize all the possible placement opportunities for this task into the
@@ -463,7 +465,8 @@ class TaskOptimizerVariables:
         self,
     ) -> Mapping[Tuple[int, int, ExecutionStrategy], Union[int, gp.Var]]:
         """Returns a mapping from the (Worker Index, Time, ExecutionStrategy) to the
-        binary variable specifying if the task was placed at that time or not."""
+        binary variable specifying if the task was placed at that time or not.
+        """
         return self._space_time_strategy_matrix
 
     @property
@@ -577,7 +580,10 @@ class TetriSchedGurobiScheduler(BaseScheduler):
         return optimizer
 
     def schedule(
-        self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools
+        self,
+        sim_time: EventTime,
+        workload: Workload,
+        worker_pools: WorkerPools,
     ) -> Placements:
         # Retrieve the schedulable tasks from the Workload.
         tasks_to_be_scheduled = workload.get_schedulable_tasks(
@@ -641,7 +647,9 @@ class TetriSchedGurobiScheduler(BaseScheduler):
         # Construct the model and the variables for each of the tasks.
         scheduler_start_time = time.time()
         placements = []
-        if len(tasks_to_be_scheduled) != 0:
+        if len(tasks_to_be_scheduled) != 0 and not all(
+            [t.state == TaskState.SCHEDULED for t in tasks_to_be_scheduled]
+        ):
             optimizer = self._initialize_optimizer(sim_time)
             tasks_to_variables = self._add_variables(
                 sim_time=sim_time,
@@ -687,11 +695,13 @@ class TetriSchedGurobiScheduler(BaseScheduler):
                 optimizer.Status == GRB.INTERRUPTED and optimizer._solution_found
             ):
                 for primal_data_point in sorted(
-                    optimizer._primal_data_points, key=lambda dp: dp._datapoint_time
+                    optimizer._primal_data_points,
+                    key=lambda dp: dp._datapoint_time,
                 ):
                     self._logger.debug(
                         "[{}] The solver found a solution: {}.".format(
-                            sim_time.to(EventTime.Unit.US).time, str(primal_data_point)
+                            sim_time.to(EventTime.Unit.US).time,
+                            str(primal_data_point),
                         )
                     )
 
@@ -754,7 +764,8 @@ class TetriSchedGurobiScheduler(BaseScheduler):
                 self._logger.warning(f"[{sim_time.time}] Failed to place any task.")
         scheduler_end_time = time.time()
         scheduler_runtime = EventTime(
-            int((scheduler_end_time - scheduler_start_time) * 1e6), EventTime.Unit.US
+            int((scheduler_end_time - scheduler_start_time) * 1e6),
+            EventTime.Unit.US,
         )
         self._logger.debug(
             f"[{sim_time.time}] The runtime of the scheduler was: {scheduler_runtime}."
@@ -765,7 +776,9 @@ class TetriSchedGurobiScheduler(BaseScheduler):
             else self.runtime
         )
         return Placements(
-            runtime=runtime, true_runtime=scheduler_runtime, placements=placements
+            runtime=runtime,
+            true_runtime=scheduler_runtime,
+            placements=placements,
         )
 
     def _add_variables(
@@ -1032,29 +1045,16 @@ class TetriSchedGurobiScheduler(BaseScheduler):
             # the scheduler.
             task_reward_variables = []
             for task_variable in tasks_to_variables.values():
-                task_graph = workload.get_task_graph(task_variable.task.task_graph)
-                if self.release_taskgraphs and not task_graph.is_sink_task(
-                    task_variable.task
-                ):
-                    continue
-                task_reward_variable = optimizer.addVar(
-                    vtype=GRB.CONTINUOUS, name=f"{task_variable.name}_reward"
+                task_reward_variables.extend(
+                    [
+                        task_variable._placement_rewards[t] * value
+                        for (
+                            _,
+                            t,
+                            _,
+                        ), value in task_variable.space_time_matrix.items()
+                    ]
                 )
-                optimizer.addConstr(
-                    task_reward_variable
-                    == gp.quicksum(
-                        [
-                            task_variable._placement_rewards[t] * value
-                            for (
-                                _,
-                                t,
-                                _,
-                            ), value in task_variable.space_time_matrix.items()
-                        ]
-                    ),
-                    name=f"{task_variable.name}_reward_constraint",
-                )
-                task_reward_variables.append(task_reward_variable)
             optimizer.setObjective(
                 gp.quicksum(task_reward_variables),
                 sense=GRB.MAXIMIZE,
