@@ -10,18 +10,12 @@ import absl  # noqa: F401
 import gurobipy as gp
 import numpy as np
 from gurobipy import GRB, and_
+
 from schedulers import BaseScheduler
 from utils import EventTime
 from workers import Worker, WorkerPools
-from workload import (
-    ExecutionStrategies,
-    ExecutionStrategy,
-    Placement,
-    Placements,
-    Task,
-    TaskState,
-    Workload,
-)
+from workload import (ExecutionStrategies, ExecutionStrategy, Placement,
+                      Placements, Task, TaskState, Workload)
 
 
 class PrimalDataPoint:
@@ -120,9 +114,7 @@ class TaskOptimizerVariables:
         self._placement_rewards = dict(
             zip(
                 time_range,
-                np.interp(
-                    time_range, (min(time_range), max(time_range)), (2, 1)
-                ),
+                np.interp(time_range, (min(time_range), max(time_range)), (2, 1)),
             )
         )
 
@@ -138,27 +130,21 @@ class TaskOptimizerVariables:
                 task.current_placement.execution_strategy,
             )
             self._space_time_strategy_matrix[placed_key] = 1
-            self._start_time =  current_time.to(EventTime.Unit.US).time
-            
+            self._start_time = current_time.to(EventTime.Unit.US).time
+
             self._is_placed_variable = 1
         else:
             # Initialize all the possible placement opportunities for this task into the
             # space-time matrix. The worker has to be able to accomodate the task, and
             # the timing constraints as requested by the Simulator have to be met.
-            schedulable_workers_to_strategies: Mapping[
-                int, ExecutionStrategies
-            ] = {}
+            schedulable_workers_to_strategies: Mapping[int, ExecutionStrategies] = {}
             for worker_id, worker in workers.items():
                 cleared_worker = deepcopy(worker)
-                compatible_strategies = (
-                    cleared_worker.get_compatible_strategies(
-                        self.task.available_execution_strategies
-                    )
+                compatible_strategies = cleared_worker.get_compatible_strategies(
+                    self.task.available_execution_strategies
                 )
                 if len(compatible_strategies) > 0:
-                    schedulable_workers_to_strategies[
-                        worker_id
-                    ] = compatible_strategies
+                    schedulable_workers_to_strategies[worker_id] = compatible_strategies
 
             for (
                 worker_id,
@@ -167,8 +153,7 @@ class TaskOptimizerVariables:
             ) in self._space_time_strategy_matrix.keys():
                 if (
                     worker_id not in schedulable_workers_to_strategies
-                    or strategy
-                    not in schedulable_workers_to_strategies[worker_id]
+                    or strategy not in schedulable_workers_to_strategies[worker_id]
                 ):
                     # The Worker cannot accomodate this task or this strategy, and so
                     # the task should not be placed on this Worker.
@@ -185,8 +170,7 @@ class TaskOptimizerVariables:
                     ] = 0
                 elif (
                     enforce_deadlines
-                    and start_time
-                    + strategy.runtime.to(EventTime.Unit.US).time
+                    and start_time + strategy.runtime.to(EventTime.Unit.US).time
                     > task.deadline.to(EventTime.Unit.US).time
                 ):
                     # The scheduler is asked to only place a task if the deadline can
@@ -235,8 +219,7 @@ class TaskOptimizerVariables:
                     name=f"{task.unique_name}_not_placed_at_time_{time_index}",
                 )
                 optimizer.addConstr(
-                    task_not_placed_at_time_index
-                    == 1 - task_placed_at_time_index,
+                    task_not_placed_at_time_index == 1 - task_placed_at_time_index,
                     name=f"{task.unique_name}_not_placed_at"
                     f"_time_{time_index}_constraint",
                 )
@@ -261,8 +244,7 @@ class TaskOptimizerVariables:
                     name=f"{task.unique_name}_phase_shift_at_time_{time_index_b}",
                 )
                 optimizer.addConstr(
-                    phase_shift_at_index_b
-                    == and_(not_placed_at_a, placed_at_b),
+                    phase_shift_at_index_b == and_(not_placed_at_a, placed_at_b),
                     name=f"{task.unique_name}_phase_shift_at_"
                     f"time_{time_index_b}_constraint",
                 )
@@ -287,9 +269,7 @@ class TaskOptimizerVariables:
             if task.state == TaskState.SCHEDULED:
                 # Seed the previously computed placement to the optimizer.
                 placed_key = (
-                    self.__get_worker_index_from_previous_placement(
-                        task, workers
-                    ),
+                    self.__get_worker_index_from_previous_placement(task, workers),
                     task.expected_start_time.to(EventTime.Unit.US).time,
                     task.current_placement.execution_strategy,
                 )
@@ -311,8 +291,7 @@ class TaskOptimizerVariables:
                 # If the task was previously scheduled, and we do not allow retractions,
                 # we allow the start time to be fungible, but the task must be placed.
                 optimizer.addConstr(
-                    gp.quicksum(self._space_time_strategy_matrix.values())
-                    == 1,
+                    gp.quicksum(self._space_time_strategy_matrix.values()) == 1,
                     name=f"{task.unique_name}_previously_scheduled_"
                     f"required_worker_placement",
                 )
@@ -321,8 +300,7 @@ class TaskOptimizerVariables:
                 # If either the task was not previously placed, or we are allowing
                 # retractions, then the task can be placed or left unplaced.
                 optimizer.addConstr(
-                    gp.quicksum(self._space_time_strategy_matrix.values())
-                    <= 1,
+                    gp.quicksum(self._space_time_strategy_matrix.values()) <= 1,
                     name=f"{task.unique_name}_consistent_worker_placement",
                 )
                 self._is_placed_variable = optimizer.addVar(
@@ -351,10 +329,7 @@ class TaskOptimizerVariables:
             The index of the Worker in this instance of the Scheduler, if found.
             Otherwise, a ValueError is raised with the appropriate information.
         """
-        if (
-            task.current_placement is None
-            or task.current_placement.worker_id is None
-        ):
+        if task.current_placement is None or task.current_placement.worker_id is None:
             raise ValueError(
                 f"Task {task.unique_name} in state {task.state} does not have a "
                 f"cached prior Placement or the Worker ID is empty."
@@ -403,15 +378,11 @@ class TaskOptimizerVariables:
         ), variable in self._space_time_strategy_matrix.items():
             if type(variable) != int and variable.X == 1:
                 placement_worker = worker_index_to_worker[worker_id]
-                placement_worker_pool_id = worker_id_to_worker_pool[
-                    placement_worker.id
-                ]
+                placement_worker_pool_id = worker_id_to_worker_pool[placement_worker.id]
                 return [
                     Placement.create_task_placement(
                         task=self.task,
-                        placement_time=EventTime(
-                            start_time, unit=EventTime.Unit.US
-                        ),
+                        placement_time=EventTime(start_time, unit=EventTime.Unit.US),
                         worker_pool_id=placement_worker_pool_id,
                         worker_id=placement_worker.id,
                         execution_strategy=strategy,
@@ -454,8 +425,7 @@ class TaskOptimizerVariables:
             if (
                 worker_id == worker_index
                 and start_time <= time
-                and start_time + strategy.runtime.to(EventTime.Unit.US).time
-                > time
+                and start_time + strategy.runtime.to(EventTime.Unit.US).time > time
                 and (type(variable) == gp.Var or variable == 1)
             ):
                 partition_variables[strategy].append(variable)
@@ -534,9 +504,7 @@ class TetriSchedGurobiScheduler(BaseScheduler):
         goal: str = "max_goodput",
         batching: bool = False,
         time_limit: EventTime = EventTime(time=20, unit=EventTime.Unit.S),
-        time_discretization: EventTime = EventTime(
-            time=1, unit=EventTime.Unit.US
-        ),
+        time_discretization: EventTime = EventTime(time=1, unit=EventTime.Unit.US),
         plan_ahead: EventTime = EventTime.invalid(),
         log_to_file: bool = False,
         _flags: Optional["absl.flags"] = None,
@@ -561,9 +529,7 @@ class TetriSchedGurobiScheduler(BaseScheduler):
         self._time_discretization = time_discretization
         self._plan_ahead = plan_ahead
         self._log_to_file = log_to_file
-        self._log_times = (
-            set(map(int, _flags.scheduler_log_times)) if _flags else set()
-        )
+        self._log_times = set(map(int, _flags.scheduler_log_times)) if _flags else set()
 
     def _initialize_optimizer(self, current_time: EventTime) -> gp.Model:
         """Initializes the Optimizer and sets the required parameters.
@@ -584,7 +550,9 @@ class TetriSchedGurobiScheduler(BaseScheduler):
             self._log_to_file
             or current_time.to(EventTime.Unit.US).time in self._log_times
         ):
-            optimizer.Params.LogFile = f"./tetrisched_gurobi_{current_time.to(EventTime.Unit.US).time}.log"
+            optimizer.Params.LogFile = (
+                f"./tetrisched_gurobi_{current_time.to(EventTime.Unit.US).time}.log"
+            )
 
         # If the goal is goodput, set the MIPGap to 0.1.
         if self._goal == "max_goodput":
@@ -627,9 +595,7 @@ class TetriSchedGurobiScheduler(BaseScheduler):
         if self.retract_schedules:
             # If we are retracting schedules, the scheduler will re-place
             # the scheduled tasks, so we should only consider RUNNING tasks.
-            filter_fn = (
-                lambda task: task.state == TaskState.RUNNING
-            )  # noqa: E731
+            filter_fn = lambda task: task.state == TaskState.RUNNING  # noqa: E731
         else:
             # If we are not retracting schedules, we should consider both
             # RUNNING and SCHEDULED task placements as permanent.
@@ -674,13 +640,14 @@ class TetriSchedGurobiScheduler(BaseScheduler):
         # Construct the model and the variables for each of the tasks.
         scheduler_start_time = time.time()
         placements = []
-        if len(tasks_to_be_scheduled) != 0 and not all([t.state == TaskState.SCHEDULED for t in tasks_to_be_scheduled]):
+        if len(tasks_to_be_scheduled) != 0 and not all(
+            [t.state == TaskState.SCHEDULED for t in tasks_to_be_scheduled]
+        ):
             optimizer = self._initialize_optimizer(sim_time)
             tasks_to_variables = self._add_variables(
                 sim_time=sim_time,
                 optimizer=optimizer,
-                tasks_to_be_scheduled=tasks_to_be_scheduled
-                + previously_placed_tasks,
+                tasks_to_be_scheduled=tasks_to_be_scheduled + previously_placed_tasks,
                 workers=workers,
             )
 
@@ -718,8 +685,7 @@ class TetriSchedGurobiScheduler(BaseScheduler):
 
             # Collect the placement results.
             if optimizer.Status == GRB.OPTIMAL or (
-                optimizer.Status == GRB.INTERRUPTED
-                and optimizer._solution_found
+                optimizer.Status == GRB.INTERRUPTED and optimizer._solution_found
             ):
                 for primal_data_point in sorted(
                     optimizer._primal_data_points,
@@ -788,9 +754,7 @@ class TetriSchedGurobiScheduler(BaseScheduler):
                             execution_strategy=None,
                         )
                     )
-                self._logger.warning(
-                    f"[{sim_time.time}] Failed to place any task."
-                )
+                self._logger.warning(f"[{sim_time.time}] Failed to place any task.")
         scheduler_end_time = time.time()
         scheduler_runtime = EventTime(
             int((scheduler_end_time - scheduler_start_time) * 1e6),
@@ -917,8 +881,7 @@ class TetriSchedGurobiScheduler(BaseScheduler):
                         )
                         optimizer.addConstr(
                             task_variable.start_time
-                            >= parent_variable.start_time
-                            + parent_remaining_time,
+                            >= parent_variable.start_time + parent_remaining_time,
                             name=f"{task_name}_start_after_running_task_"
                             f"{parent_variable.name}_remaining_time_"
                             f"{parent_remaining_time}",
@@ -927,15 +890,11 @@ class TetriSchedGurobiScheduler(BaseScheduler):
                         parent_strategies = (
                             parent_variable.task.available_execution_strategies
                         )
-                        parent_strategy = (
-                            parent_strategies.get_slowest_strategy()
-                        )
+                        parent_strategy = parent_strategies.get_slowest_strategy()
                         optimizer.addConstr(
                             task_variable.start_time
                             >= parent_variable.start_time
-                            + parent_strategy.runtime.to(
-                                EventTime.Unit.US
-                            ).time
+                            + parent_strategy.runtime.to(EventTime.Unit.US).time
                             + 1,
                             name=f"{task_name}_start_after_{parent_variable.name}",
                         )
@@ -1012,9 +971,7 @@ class TetriSchedGurobiScheduler(BaseScheduler):
             for worker_index, worker in workers.items():
                 # Get all the placement variables that affect the resource utilization
                 # on this worker at this particular time.
-                overlap_variables: Mapping[
-                    ExecutionStrategy, Any
-                ] = defaultdict(list)
+                overlap_variables: Mapping[ExecutionStrategy, Any] = defaultdict(list)
                 for task_variable in tasks_to_variables.values():
                     partition_variables = task_variable.get_partition_variable(
                         time=t,
@@ -1043,17 +1000,12 @@ class TetriSchedGurobiScheduler(BaseScheduler):
                             # adding any of the terms into this resource constraint
                             # expression.
                             continue
-                        for (
-                            strategy_overlap_variable
-                        ) in strategy_overlap_variables:
+                        for strategy_overlap_variable in strategy_overlap_variables:
                             resource_constraint_expression.add(
                                 strategy_request_for_resource
                                 * strategy_overlap_variable
                             )
-                    if (
-                        quantity == 0
-                        or resource_constraint_expression.size() == 0
-                    ):
+                    if quantity == 0 or resource_constraint_expression.size() == 0:
                         # If either the Worker doesn't have enough space to accomodate
                         # this task, or no task wants to occupy this resource at the
                         # particular time, we skip the addition of this constraint.
@@ -1127,9 +1079,7 @@ class TetriSchedGurobiScheduler(BaseScheduler):
         if where == GRB.Callback.MIPSOL:
             # A new MIP solution has been found. Log the time at which it was found.
             new_solution_objective = optimizer.cbGet(GRB.Callback.MIPSOL_OBJ)
-            best_solution_objective_bound = optimizer.cbGet(
-                GRB.Callback.MIPSOL_OBJBND
-            )
+            best_solution_objective_bound = optimizer.cbGet(GRB.Callback.MIPSOL_OBJBND)
             current_time = time.time()
             primal_data_point = PrimalDataPoint(
                 optimizer._solver_start_time,
@@ -1148,10 +1098,7 @@ class TetriSchedGurobiScheduler(BaseScheduler):
                 # If we have no solution, assume the gap is infinity.
                 gap = float("inf")
             else:
-                gap = (
-                    best_objective_bound
-                    - incumbent_objective / incumbent_objective
-                )
+                gap = best_objective_bound - incumbent_objective / incumbent_objective
 
             # If the gap changed, update the time at which it changed.
             if abs(gap - optimizer._current_gap) > sys.float_info.epsilon:
