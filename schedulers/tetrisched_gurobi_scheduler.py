@@ -115,7 +115,6 @@ class TaskOptimizerVariables:
             + 1, time_discretization.to(EventTime.Unit.US).time),
             time_discretization.to(EventTime.Unit.US).time,
         )
-        # print(f"TIME RANGE: {time_range}")
         self._space_time_strategy_matrix = {
             (worker_id, t, strategy): 0
             for worker_id in workers.keys()
@@ -130,8 +129,6 @@ class TaskOptimizerVariables:
                 ),
             )
         )
-        # print(f"PLACEMENT REWARDS: {self._placement_rewards}")
-        # print(f"SPACE_TIME STRATEGY MATRIX : {self._space_time_strategy_matrix}")
 
         # Timing characteristics.
         if task.state == TaskState.RUNNING:
@@ -1117,13 +1114,6 @@ class TetriSchedGurobiScheduler(BaseScheduler):
                 #     name=f"{task_variable.name}_reward_constraint",
                 # )
                 # task_reward_variables.append(task_reward_variable)
-                for (
-                            _,
-                            t,
-                            _,
-                        ), value in task_variable.space_time_matrix.items():
-                    print(f"{task_variable.task.unique_name} : t: {t}") 
-                    print(f"task: {task_variable.task.unique_name} placement_rewards: { task_variable._placement_rewards[t]}")
                 task_reward_variables.extend(
                     [
                         task_variable._placement_rewards[t] * value
