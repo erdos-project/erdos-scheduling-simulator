@@ -270,20 +270,8 @@ class ScaleExpression : public Expression {
                        Time currentTime) override;
 };
 
-ObjectiveFunctionPtr operator*(const ObjectiveFunctionPtr& lhs, TETRISCHED_ILP_TYPE scaleFactor ) {
-  // Create a new ObjectiveFunction object to hold the result
-  auto result = std::make_unique<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
-  auto terms = lhs->getterms();
 
-  // Iterate over the terms in the lhs ObjectiveFunction
-  for (const auto& term : terms) {
-    int coefficient = term.first;
-    std::shared_ptr<VariableT<int>> variable = term.second;
-    result->addTerm(coefficient * scaleFactor, variable);
-  }
 
-  return result;
-}
 
 /// A `LessThanExpression` orders the two children of its expression in an
 /// ordered relationship such that the second child occurs after the first

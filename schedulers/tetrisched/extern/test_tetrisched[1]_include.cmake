@@ -1,5 +1,0 @@
-if(EXISTS "/mnt/c/Users/drago/erdos-scheduling-simulator/schedulers/tetrisched/extern/test_tetrisched[1]_tests.cmake")
-  include("/mnt/c/Users/drago/erdos-scheduling-simulator/schedulers/tetrisched/extern/test_tetrisched[1]_tests.cmake")
-else()
-  add_test(test_tetrisched_NOT_BUILT test_tetrisched_NOT_BUILT)
-endif()
