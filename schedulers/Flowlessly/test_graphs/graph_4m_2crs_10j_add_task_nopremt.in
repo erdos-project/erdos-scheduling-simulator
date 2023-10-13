@@ -1,0 +1,13 @@
+c === Adds task vertex to the graph. The graph has a low cost of not being scheduled.
+d 0 0 6
+c === Arc from source
+a 1 0 0 1 0
+c === Arc to unscheduled
+a 0 12 0 1 30
+c === Arc to cluster agg
+a 0 15 0 1 25
+c === Arc to turtle agg
+a 0 14 0 1 25
+c === Preference arcs to cores
+a 0 21 0 1 28
+a 0 23 0 1 27

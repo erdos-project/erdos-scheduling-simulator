@@ -9,6 +9,15 @@ and run
 python3 setup.py develop
 ```
 
+### To use FlowScheduler
+Start at the root of the repository:
+1. `git submodule update --init``
+2. `cd schedulers/Flowlessly`
+3. `make`
+4. `cd build`
+5. `make`
+6. `cp flowlessly_py.cpython-310-aarch64-linux-gnu.so ../../flowlessly_py.cpython-310-aarch64-linux-gnu.so`
+
 ## Executing Experiments
 
 Run the following command in order to run experiments:

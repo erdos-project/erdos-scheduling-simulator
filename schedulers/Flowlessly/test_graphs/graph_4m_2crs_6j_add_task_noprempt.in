@@ -1,0 +1,16 @@
+c === Adds task vertex to graph_4m_2crs_6j. The graph has less tasks than cores, hence
+c === the flow changes should not propagate a lot through the graph. Moreover, the min
+c === cost max flow does not have to move the other tasks because the placement before
+c === the graph change is still the best.
+d 0 0 6
+c === Arc from source
+a 1 0 0 1 0
+c === Arc to unscheduled
+a 0 8 0 1 184
+c === Arc to cluster agg
+a 0 11 0 1 74
+c === Arc to devil agg
+a 0 9 0 1 30
+c === Preference arcs to cores
+a 0 21 0 1 57
+a 0 22 0 1 62

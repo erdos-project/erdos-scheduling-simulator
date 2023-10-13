@@ -1,0 +1,6 @@
+#!/bin/bash
+
+BASE_PKGS="make cmake pkg-config"
+COMPILER_PKGS="g++"
+GOOGLE_PKGS="libgflags-dev libgoogle-glog-dev"
+BOOST_PKGS="libboost-system-dev libboost-thread-dev libboost-timer-dev"
