@@ -41,11 +41,27 @@ PYBIND11_MODULE(flowlessly_py, flowlessly_m) {
         .def_readwrite("distance", &flowlessly::Node::distance)
         .def_readwrite("type", &flowlessly::Node::type)
         .def_readwrite("status", &flowlessly::Node::status);
+    
+    py::class_<flowlessly::Arc>(flowlessly_m, "Arc")
+        .def(py::init<>())  // Default constructor
+        .def(py::init<uint32_t, uint32_t, bool, bool, int32_t, int32_t, int64_t, flowlessly::Arc*>())  // Parameterized constructor
+        .def(py::init<const flowlessly::Arc&>())  // Copy constructor
+        .def(py::init<flowlessly::Arc*>())  // Constructor from a pointer
+        .def("CopyArc", &flowlessly::Arc::CopyArc)
+        .def_readwrite("src_node_id", &flowlessly::Arc::src_node_id)
+        .def_readwrite("dst_node_id", &flowlessly::Arc::dst_node_id)
+        .def_readwrite("is_alive", &flowlessly::Arc::is_alive)
+        .def_readwrite("is_fwd", &flowlessly::Arc::is_fwd)
+        .def_readwrite("is_running", &flowlessly::Arc::is_running)
+        .def_readwrite("residual_cap", &flowlessly::Arc::residual_cap)
+        .def_readwrite("min_flow", &flowlessly::Arc::min_flow)
+        .def_readwrite("cost", &flowlessly::Arc::cost)
+        .def_readwrite("reverse_arc", &flowlessly::Arc::reverse_arc);
 
     py::class_<flowlessly::AdjacencyMapGraph>(flowlessly_m, "AdjacencyMapGraph")
         .def(py::init<flowlessly::Statistics*>())
         .def("ReadGraph", static_cast<void (flowlessly::AdjacencyMapGraph::*)(const std::string&, bool, bool&)> (&flowlessly::AdjacencyMapGraph::ReadGraph))
-        .def("AddArc", &flowlessly::AdjacencyMapGraph::AddArc)
+        .def("AddArc", &flowlessly::AdjacencyMapGraph::AddArc, pybind11::return_value_policy::reference_internal)
         .def("AddNode", static_cast<void (flowlessly::AdjacencyMapGraph::*)(uint32_t, int32_t, int64_t, flowlessly::NodeType, bool)> (&flowlessly::AdjacencyMapGraph::AddNode)) // Overloaded function
         .def("AddNode", static_cast<uint32_t (flowlessly::AdjacencyMapGraph::*)(int32_t, int64_t, flowlessly::NodeType, bool)> (&flowlessly::AdjacencyMapGraph::AddNode)) // Overloaded function
         .def("ChangeArc", static_cast<void (flowlessly::AdjacencyMapGraph::*)(flowlessly::Arc*, uint32_t, int32_t, int64_t, int32_t)> (&flowlessly::AdjacencyMapGraph::ChangeArc)) // Overloaded function
@@ -60,10 +76,19 @@ PYBIND11_MODULE(flowlessly_py, flowlessly_m) {
         .def("IsInTopologicalOrder", &flowlessly::AdjacencyMapGraph::IsInTopologicalOrder)
         .def("RemoveArc", &flowlessly::AdjacencyMapGraph::RemoveArc)
         .def("RemoveNode", &flowlessly::AdjacencyMapGraph::RemoveNode)
-        .def("get_nodes", &flowlessly::AdjacencyMapGraph::get_nodes);
+        .def("WriteAssignments", &flowlessly::AdjacencyMapGraph::WriteAssignments)
+        .def("WriteFlowGraph", &flowlessly::AdjacencyMapGraph::WriteFlowGraph)
+        .def("WriteGraph", &flowlessly::AdjacencyMapGraph::WriteGraph)
+        .def("get_arcs", &flowlessly::AdjacencyMapGraph::get_arcs, pybind11::return_value_policy::reference_internal)
+        .def("get_nodes", &flowlessly::AdjacencyMapGraph::get_nodes, pybind11::return_value_policy::reference_internal)
+        .def("get_max_node_id", &flowlessly::AdjacencyMapGraph::get_max_node_id)
+        .def("get_sink_node", &flowlessly::AdjacencyMapGraph::get_sink_node)
+        .def("get_source_nodes", &flowlessly::AdjacencyMapGraph::get_source_nodes, py::return_value_policy::reference_internal)
+        .def("get_potentials", &flowlessly::AdjacencyMapGraph::get_potentials, py::return_value_policy::reference_internal);
 
     py::class_<flowlessly::SuccessiveShortest>(flowlessly_m, "SuccessiveShortest")
         .def(py::init<flowlessly::AdjacencyMapGraph*, flowlessly::Statistics*>())
-        .def("PrepareState", &flowlessly::SuccessiveShortest::PrepareState)
+        .def("LogStatistics", &flowlessly::SuccessiveShortest::LogStatistics)
+        .def("ResetStatistics", &flowlessly::SuccessiveShortest::ResetStatistics)
         .def("Run", &flowlessly::SuccessiveShortest::Run);
 }
