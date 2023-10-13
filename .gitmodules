@@ -2,3 +2,6 @@
 	path = schedulers/tetrisched/extern/pybind11
 	url = https://github.com/pybind/pybind11
 	branch = stable
+[submodule "schedulers/Flowlessly/extern/pybind11"]
+	path = schedulers/Flowlessly/extern/pybind11
+	url = https://github.com/pybind/pybind11
