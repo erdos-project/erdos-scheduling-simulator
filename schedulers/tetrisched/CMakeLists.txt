@@ -22,31 +22,44 @@ set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
 # Set the directories where the solver backends are installed.
-message("ENV CPLEX: $ENV{CPLEX_DIR}")
-if (NOT DEFINED $ENV{CPLEX_DIR})
-     set($ENV{CPLEX_DIR} "/opt/ibm/ILOG/CPLEX_Studio2211")
+if (DEFINED ENV{CPLEX_DIR})
+    set(CPLEX_DIR ENV{CPLEX_DIR})
+    message("-- Using CPLEX installation at: ${CPLEX_DIR}")
+else()
+    set(CPLEX_DIR "/opt/ibm/ILOG/CPLEX_Studio2211")
+    message("-- Using default CPLEX installation at: ${CPLEX_DIR}")
 endif()
-if (NOT DEFINED $ENV{GUROBI_DIR})
-     set($ENV{GUROBI_DIR} "/opt/gurobi1001/linux64")
+
+if (DEFINED ENV{GUROBI_DIR})
+   set(GUROBI_DIR ENV{GUROBI_DIR})
+   message("-- Using Gurobi installation at: ${GUROBI_DIR}")
+else()
+   set(GUROBI_DIR "/opt/gurobi1001/linux64")
+   message("-- Using default Gurobi installation at: ${GUROBI_DIR}")
 endif()
-if (NOT DEFINED $ENV{ORTOOLS_DIR})
-     set($ENV{ORTOOLS_DIR} "/usr/local/include/ortools")
+
+if (DEFINED ENV{ORTOOLS_DIR})
+   set(ORTOOLS_DIR ENV{ORTOOLS_DIR})
+   message("-- Using Google OR-Tools installation at: ${ORTOOLS_DIR}")
+else()
+   set(ORTOOLS_DIR "/usr/local/include/ortools")
+   message("-- Using default Google OR-Tools installation at: ${ORTOOLS_DIR}")
 endif()
 
 set(SOLVER_BACKEND_INCLUDE_DIRS "")
 set(SOLVER_BACKEND_LINK_DIRS "")
 set(SOLVER_BACKEND_LINK_LIBRARIES "")
 
-if (EXISTS "$ENV{CPLEX_DIR}")
-     message("-- Adding CPLEX : $ENV{CPLEX_DIR}")
+if (EXISTS "${CPLEX_DIR}")
+     message("-- Adding CPLEX : ${CPLEX_DIR}")
      add_compile_definitions(_TETRISCHED_WITH_CPLEX_)
 
      LIST(APPEND SOLVER_BACKEND_INCLUDE_DIRS
-          "$ENV{CPLEX_DIR}/cplex/include/"
-          "$ENV{CPLEX_DIR}/concert/include/")
+          "${CPLEX_DIR}/cplex/include/"
+          "${CPLEX_DIR}/concert/include/")
      LIST(APPEND SOLVER_BACKEND_LINK_DIRS
-          "$ENV{CPLEX_DIR}/cplex/lib/x86-64_linux/static_pic/"
-          "$ENV{CPLEX_DIR}/concert/lib/x86-64_linux/static_pic/")
+          "${CPLEX_DIR}/cplex/lib/x86-64_linux/static_pic/"
+          "${CPLEX_DIR}/concert/lib/x86-64_linux/static_pic/")
      LIST(APPEND SOLVER_BACKEND_LINK_LIBRARIES
           "ilocplex"
           "concert"
@@ -58,14 +71,14 @@ else()
      message("-- Not Adding CPLEX")
 endif()
 
-if (EXISTS "$ENV{GUROBI_DIR}")
-     message("-- Adding GUROBI : $ENV{GUROBI_DIR}")
+if (EXISTS "${GUROBI_DIR}")
+     message("-- Adding GUROBI : ${GUROBI_DIR}")
      add_compile_definitions(_TETRISCHED_WITH_GUROBI_)
 
      LIST(APPEND SOLVER_BACKEND_INCLUDE_DIRS
-          "$ENV{GUROBI_DIR}/include/")
+          "${GUROBI_DIR}/include/")
      LIST(APPEND SOLVER_BACKEND_LINK_DIRS
-          "$ENV{GUROBI_DIR}/lib/")
+          "${GUROBI_DIR}/lib/")
      LIST(APPEND SOLVER_BACKEND_LINK_LIBRARIES
           "gurobi_c++"
           "gurobi100")
@@ -73,8 +86,8 @@ else()
      message("-- Not Adding GUROBI")
 endif()
 
-if (EXISTS "$ENV{ORTOOLS_DIR}")
-     message("-- Adding Google OR-Tools : $ENV{ORTOOLS_DIR}")
+if (EXISTS "${ORTOOLS_DIR}")
+     message("-- Adding Google OR-Tools : ${ORTOOLS_DIR}")
      add_compile_definitions(_TETRISCHED_WITH_OR_TOOLS_)
 
      LIST(APPEND SOLVER_BACKEND_LINK_LIBRARIES
@@ -89,13 +102,13 @@ set(TETRISCHED_SOURCE
      "src/SolverModel.cpp"
      "src/Scheduler.cpp")
 
-if (EXISTS "$ENV{CPLEX_DIR}")
+if (EXISTS "${CPLEX_DIR}")
      LIST(APPEND TETRISCHED_SOURCE "src/CPLEXSolver.cpp")
 endif()
-if (EXISTS "$ENV{GUROBI_DIR}")
+if (EXISTS "${GUROBI_DIR}")
      LIST(APPEND TETRISCHED_SOURCE "src/GurobiSolver.cpp")
 endif()
-if (EXISTS "$ENV{ORTOOLS_DIR}")
+if (EXISTS "${ORTOOLS_DIR}")
      LIST(APPEND TETRISCHED_SOURCE "src/GoogleCPSolver.cpp")
 endif()
 
@@ -108,14 +121,7 @@ target_include_directories(tetrisched PRIVATE ${SOLVER_BACKEND_INCLUDE_DIRS})
 target_link_directories(tetrisched PRIVATE ${SOLVER_BACKEND_LINK_DIRS})
 target_link_libraries(tetrisched PRIVATE ${SOLVER_BACKEND_LINK_LIBRARIES})
 
-# add_executable(tetrisched_main ${TETRISCHED_SOURCE})
-# target_include_directories(tetrisched_main PRIVATE ${CPLEX_INCLUDE_DIRS})
-# target_link_directories(tetrisched_main PRIVATE ${CPLEX_LINK_DIRS})
-# target_link_libraries(tetrisched_main PRIVATE ${CPLEX_LINK_LIBRARIES})
-#
-# enable_testing()
-#
-
+# Define the target for tests.
 set(TETRISCHED_TESTS
      "test/test_expression.cpp"
      "test/test_partitions.cpp"
