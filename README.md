@@ -9,9 +9,9 @@ and run
 python3 setup.py develop
 ```
 
-### To use FlowScheduler
+### To set up FlowScheduler dependencies
 Start at the root of the repository:
-1. `git submodule update --init``
+1. `git submodule init`
 2. `cd schedulers/Flowlessly`
 3. `make`
 4. `cd build`
