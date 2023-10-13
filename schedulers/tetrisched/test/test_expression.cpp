@@ -281,4 +281,45 @@ TEST(Expression, TestMinExpressionEnforcesNoneSatisfied) {
   EXPECT_EQ(chooseTask1_2->getSolution().value()->utility.value(), 0)
       << "Second Choose expression must not be satisfied.";
 }
+
+TEST(Expression, TestScaleExpressionDoublesUtility) {
+  // Construct the Partition.
+  tetrisched::PartitionPtr partition =
+      std::make_shared<tetrisched::Partition>(1, "partition1", 1);
+  tetrisched::Partitions partitions = tetrisched::Partitions({partition});
+
+  // Construct the choice for a task.
+  tetrisched::ExpressionPtr chooseExpression =
+      std::make_shared<tetrisched::ChooseExpression>("task1", partitions, 1, 0,
+                                                     10);
+  // Scale the utility by 2.
+  tetrisched::ExpressionPtr scaleExpression =
+      std::make_shared<tetrisched::ScaleExpression>("TEST_SCALE", 4);
+  scaleExpression->addChild(chooseExpression);
+
+  // Construct an ObjectiveExpression.
+  tetrisched::ExpressionPtr objectiveExpression =
+      std::make_shared<tetrisched::ObjectiveExpression>("TestObjective");
+  objectiveExpression->addChild(std::move(scaleExpression));
+
+  // Construct a Solver.
+  tetrisched::CPLEXSolver cplexSolver = tetrisched::CPLEXSolver();
+  auto solverModelPtr = cplexSolver.getModel();
+
+  // Construct a CapacityConstraintMap and parse the expression tree.
+  tetrisched::CapacityConstraintMap capacityConstraintMap;
+  auto _ = objectiveExpression->parse(solverModelPtr, partitions,
+                                      capacityConstraintMap, 0);
+
+  // Translate and solve the model.
+  cplexSolver.translateModel();
+  cplexSolver.solveModel();
+
+  auto result = objectiveExpression->populateResults(solverModelPtr);
+  EXPECT_TRUE(result->utility) << "Result should have some utility.";
+  EXPECT_EQ(4, result->utility.value())
+      << "The utility after Scale should be 4.";
+  EXPECT_EQ(1, chooseExpression->getSolution().value()->utility.value())
+      << "The utility for the individual Choose should be 1.";
+}
 #endif

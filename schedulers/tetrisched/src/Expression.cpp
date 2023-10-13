@@ -208,8 +208,7 @@ SolutionResultPtr Expression::populateResults(SolverModelPtr solverModel) {
   solution->startTime = parsedResult->startTime->resolve();
   TETRISCHED_DEBUG("Set start time to "
                    << solution->startTime.value() << " for expression " << name
-                   << " of type " << std::to_string(static_cast<int>(type))
-                   << ".");
+                   << " of type " << getTypeString() << ".");
 
   if (!parsedResult->endTime) {
     throw tetrisched::exceptions::ExpressionSolutionException(
@@ -217,20 +216,18 @@ SolutionResultPtr Expression::populateResults(SolverModelPtr solverModel) {
         " with a utility was parsed without an end time.");
   }
   solution->endTime = parsedResult->endTime->resolve();
-  TETRISCHED_DEBUG("Set end time to "
-                   << solution->endTime.value() << " for expression " << name
-                   << " of type " << std::to_string(static_cast<int>(type))
-                   << ".");
+  TETRISCHED_DEBUG("Set end time to " << solution->endTime.value()
+                                      << " for expression " << name
+                                      << " of type " << getTypeString() << ".");
 
   if (!parsedResult->utility) {
     throw tetrisched::exceptions::ExpressionSolutionException(
         "Expression " + name + " with a utility was parsed without a utility.");
   }
   solution->utility = parsedResult->utility.value()->getValue();
-  TETRISCHED_DEBUG("Set utility to "
-                   << solution->utility.value() << " for expression " << name
-                   << " of type " << std::to_string(static_cast<int>(type))
-                   << ".");
+  TETRISCHED_DEBUG("Set utility to " << solution->utility.value()
+                                     << " for expression " << name
+                                     << " of type " << getTypeString() << ".");
 
   // Our default way of populating the placements is to retrieve the
   // children's placements and coalesce them into a single Placements map.
@@ -867,8 +864,44 @@ void ScaleExpression::addChild(ExpressionPtr child) {
 ParseResultPtr ScaleExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMap& capacityConstraints, Time currentTime) {
-  throw tetrisched::exceptions::ExpressionConstructionException(
-      "ScaleExpression parsing not implemented yet.");
+  // Sanity check the children.
+  if (children.size() != 1) {
+    throw tetrisched::exceptions::ExpressionConstructionException(
+        "ScaleExpression must have one child.");
+  }
+
+  // Parse the child expression.
+  auto childParseResult = children[0]->parse(solverModel, availablePartitions,
+                                             capacityConstraints, currentTime);
+  if (childParseResult->type == ParseResultType::EXPRESSION_UTILITY) {
+    parsedResult = std::make_shared<ParseResult>();
+    parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
+
+    if (!childParseResult->utility) {
+      throw tetrisched::exceptions::ExpressionConstructionException(
+          "ScaleExpression applied to a child that does not have any utility.");
+    }
+    TETRISCHED_DEBUG("The child utility is "
+                     << childParseResult->utility.value()->toString());
+    parsedResult->utility = std::make_shared<ObjectiveFunction>(
+        (*childParseResult->utility.value()) * scaleFactor);
+    TETRISCHED_DEBUG("The scale utility is "
+                     << parsedResult->utility.value()->toString());
+
+    if (childParseResult->startTime) {
+      parsedResult->startTime.emplace(childParseResult->startTime.value());
+    }
+    if (childParseResult->endTime) {
+      parsedResult->endTime.emplace(childParseResult->endTime.value());
+    }
+    if (childParseResult->indicator) {
+      parsedResult->indicator.emplace(childParseResult->indicator.value());
+    }
+    return parsedResult;
+  } else {
+    throw tetrisched::exceptions::ExpressionConstructionException(
+        "ScaleExpression applied to a child that does not have any utility.");
+  }
 }
 
 }  // namespace tetrisched

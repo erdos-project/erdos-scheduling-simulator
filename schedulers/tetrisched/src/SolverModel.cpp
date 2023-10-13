@@ -127,7 +127,7 @@ void ConstraintT<T>::addTerm(std::shared_ptr<VariableT<T>> variable) {
 }
 
 template <typename T>
-void ConstraintT<T>::addTerm(const XOrVariableT<T> &term) {
+void ConstraintT<T>::addTerm(const XOrVariableT<T>& term) {
   if (term.isVariable()) {
     this->addTerm(term.template get<VariablePtr>());
   } else {
@@ -136,7 +136,7 @@ void ConstraintT<T>::addTerm(const XOrVariableT<T> &term) {
 }
 
 template <typename T>
-void ConstraintT<T>::addTerm(T coefficient, const XOrVariableT<T> &term) {
+void ConstraintT<T>::addTerm(T coefficient, const XOrVariableT<T>& term) {
   if (term.isVariable()) {
     this->addTerm(coefficient, term.template get<VariablePtr>());
   } else {
@@ -147,7 +147,7 @@ void ConstraintT<T>::addTerm(T coefficient, const XOrVariableT<T> &term) {
 template <typename T>
 std::string ConstraintT<T>::toString() const {
   std::string constraintString;
-  for (auto &term : terms) {
+  for (auto& term : terms) {
     constraintString += "(" + std::to_string(term.first);
     if (term.second != nullptr) {
       constraintString += "*" + term.second->getName();
@@ -205,7 +205,7 @@ std::shared_ptr<ConstraintT<T>> ObjectiveFunctionT<T>::toConstraint(
     T rightHandSide) {
   auto constraint = std::make_shared<ConstraintT<T>>(
       constraintName, constraintType, rightHandSide);
-  for (auto &term : terms) {
+  for (auto& term : terms) {
     constraint->addTerm(term);
   }
   return constraint;
@@ -222,7 +222,7 @@ std::string ObjectiveFunctionT<T>::toString() const {
       objectiveString += "Minimize: ";
       break;
   }
-  for (auto &term : terms) {
+  for (auto& term : terms) {
     objectiveString +=
         "(" + std::to_string(term.first) + "*" + term.second->getName() + ")";
     if (&term != &terms.back()) objectiveString += "+";
@@ -236,18 +236,30 @@ size_t ObjectiveFunctionT<T>::size() const {
 }
 
 template <typename T>
-ObjectiveFunctionT<T> &ObjectiveFunctionT<T>::operator+=(
-    const ObjectiveFunctionT<T> &other) {
-  for (auto &term : other.terms) {
+ObjectiveFunctionT<T>& ObjectiveFunctionT<T>::operator+=(
+    const ObjectiveFunctionT<T>& other) {
+  for (auto& term : other.terms) {
     terms.push_back(term);
   }
   return *this;
 }
 
 template <typename T>
+ObjectiveFunctionT<T> ObjectiveFunctionT<T>::operator*(const T& scalar) const {
+  auto result = *this;
+  for (auto& term : result.terms) {
+    term.first *= scalar;
+  }
+  return result;
+}
+
+template <typename T>
 T ObjectiveFunctionT<T>::getValue() const {
   T value = 0;
-  for (const auto &[coefficient, variable] : terms) {
+  for (const auto& [coefficient, variable] : terms) {
+    TETRISCHED_DEBUG("The coefficient was " << coefficient
+                                            << " and the variable was "
+                                            << variable->getName() << ".");
     if (variable == nullptr) {
       value += coefficient;
     } else {
@@ -294,7 +306,7 @@ std::string SolverModelT<T>::toString() const {
   }
   if (constraints.size() > 0) {
     modelString += "Constraints: \n";
-    for (auto &[_, constraint] : constraints) {
+    for (auto& [_, constraint] : constraints) {
       modelString +=
           constraint->getName() + ": \t" + constraint->toString() + "\n";
     }
@@ -304,7 +316,7 @@ std::string SolverModelT<T>::toString() const {
   }
   if (variables.size() > 0) {
     modelString += "Variables: \n";
-    for (auto &[_, variable] : variables) {
+    for (auto& [_, variable] : variables) {
       modelString += "\t" + variable->toString();
     }
   } else {

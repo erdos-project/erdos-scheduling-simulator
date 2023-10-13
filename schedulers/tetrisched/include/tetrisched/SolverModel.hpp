@@ -286,6 +286,9 @@ class ObjectiveFunctionT {
   /// and returns a reference to the current utility.
   ObjectiveFunctionT<T>& operator+=(const ObjectiveFunctionT<T>& other);
 
+  /// Multiplies the objective function by a scalar and returns a new instance.
+  ObjectiveFunctionT<T> operator*(const T& scalar) const;
+
   /// Retrieves the value of the utility of this ObjectiveFunction.
   T getValue() const;
 
