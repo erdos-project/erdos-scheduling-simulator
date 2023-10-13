@@ -17,7 +17,7 @@ from main import FLAGS as main_flags
 from utils import STATS_FUNCTIONS, log_statistics, setup_logging
 
 # The formats that the Chrome trace can be output to.
-TRACE_FORMATS = ("task", "taskgraph", "application", "resource")
+TRACE_FORMATS = ("task", "taskgraph", "application", "resource", "scheduler")
 
 # The formats that the task stats can be output to.
 TASK_STATS_FORMATS = ("basic", "detailed")

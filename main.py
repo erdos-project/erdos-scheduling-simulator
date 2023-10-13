@@ -1,3 +1,4 @@
+import os
 import random
 import sys
 
@@ -53,6 +54,13 @@ flags.DEFINE_enum(
 )
 flags.DEFINE_string(
     "log_file_name", None, "Name of the file to log the results to.", short_name="log"
+)
+flags.DEFINE_enum(
+    "log_file_mode",
+    "write",
+    ["append", "write"],
+    "Sets the mode in which the log file is opened. If 'append', the log file is "
+    "opened in append mode, and if 'write', the log file is opened in write mode. ",
 )
 flags.DEFINE_string(
     "csv_file_name",
@@ -342,6 +350,13 @@ def main(args):
     """Main loop that loads the data from the given profile paths, and
     runs the Simulator on the data with the given scheduler.
     """
+    if FLAGS.log_file_mode == "write":
+        # Delete the prior log file if it exists.
+        if os.path.exists(FLAGS.log_file_name):
+            os.remove(FLAGS.log_file_name)
+        if os.path.exists(FLAGS.csv_file_name):
+            os.remove(FLAGS.csv_file_name)
+
     random.seed(FLAGS.random_seed)
     logger = setup_logging(
         name=__name__,
