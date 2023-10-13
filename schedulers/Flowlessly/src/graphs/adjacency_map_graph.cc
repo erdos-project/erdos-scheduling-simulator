@@ -90,7 +90,10 @@ AdjacencyMapGraph::~AdjacencyMapGraph() {
   // Delete every arc.
   for (uint32_t node_id = 1; node_id <= max_node_id_; node_id++) {
     for (auto& id_arc : arcs_[node_id]) {
-      delete id_arc.second;
+      if (id_arc.second != nullptr) {
+        delete id_arc.second;
+        id_arc.second = nullptr;  // set the pointer to nullptr after deletion
+      }
     }
   }
   // AdjacencyMapGraph does not own the stats_ object.
