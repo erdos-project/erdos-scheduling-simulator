@@ -59,6 +59,11 @@ class CPLEXSolver : public Solver {
 
   /// Get the name of the Solver.
   std::string getName() const override { return "CPLEXSolver"; };
+
+  /// Get the backend type of the Solver.
+  SolverBackendType getBackendType() const override {
+    return SolverBackendType::CPLEX;
+  };
 };
 }  // namespace tetrisched
 #endif  // _TETRISCHED_CPLEX_SOLVER_HPP_

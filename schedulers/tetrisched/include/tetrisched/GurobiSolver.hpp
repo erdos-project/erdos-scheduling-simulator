@@ -53,6 +53,11 @@ class GurobiSolver : public Solver {
 
   /// Get the name of the Solver.
   std::string getName() const override { return "GurobiSolver"; }
+
+  /// Get the backend type of the Solver.
+  SolverBackendType getBackendType() const override {
+    return SolverBackendType::GUROBI;
+  }
 };
 }  // namespace tetrisched
 #endif  // _TETRISCHED_GUROBI_SOLVER_HPP_
