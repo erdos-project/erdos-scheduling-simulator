@@ -257,9 +257,6 @@ template <typename T>
 T ObjectiveFunctionT<T>::getValue() const {
   T value = 0;
   for (const auto& [coefficient, variable] : terms) {
-    TETRISCHED_DEBUG("The coefficient was " << coefficient
-                                            << " and the variable was "
-                                            << variable->getName() << ".");
     if (variable == nullptr) {
       value += coefficient;
     } else {
