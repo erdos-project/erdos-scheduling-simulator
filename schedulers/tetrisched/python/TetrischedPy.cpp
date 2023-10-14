@@ -48,7 +48,10 @@ void defineScheduler(py::module_& tetrisched_m) {
            "Invokes the solver to schedule the registered STRL expression.")
       .def("getLastSolverSolution",
            &tetrisched::Scheduler::getLastSolverSolution,
-           "Retrieve the solution from the last invocation of the solver.");
+           "Retrieve the solution from the last invocation of the solver.")
+      .def("exportLastSolverModel",
+           &tetrisched::Scheduler::exportLastSolverModel,
+           "Exports the model from the last invocation of the solver.");
 }
 
 /// Define the Solver backends.

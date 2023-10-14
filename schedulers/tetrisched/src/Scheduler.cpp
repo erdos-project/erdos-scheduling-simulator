@@ -74,4 +74,20 @@ SolverSolutionPtr Scheduler::getLastSolverSolution() const {
   }
   return solverSolution.value();
 }
+
+void Scheduler::exportLastSolverModel(const std::string& fileName) const {
+  if (!solverSolution.has_value()) {
+    throw exceptions::ExpressionSolutionException(
+        "No solution has been computed yet. Please invoke schedule() first.");
+  }
+  solver->exportModel(fileName);
+}
+
+void Scheduler::exportLastSolverSolution(const std::string& fileName) const {
+  if (!solverSolution.has_value()) {
+    throw exceptions::ExpressionSolutionException(
+        "No solution has been computed yet. Please invoke schedule() first.");
+  }
+  throw exceptions::RuntimeException("Not Implemented yet!");
+}
 }  // namespace tetrisched

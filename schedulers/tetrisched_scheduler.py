@@ -42,6 +42,7 @@ class TetriSchedScheduler(BaseScheduler):
         retract_schedules: bool = False,
         release_taskgraphs: bool = False,
         time_discretization: EventTime = EventTime(1, EventTime.Unit.US),
+        log_to_file: bool = False,
         _flags: Optional["absl.flags"] = None,
     ):
         if preemptive:
@@ -59,6 +60,8 @@ class TetriSchedScheduler(BaseScheduler):
         self._scheduler = tetrisched.Scheduler(
             self._time_discretization.time, tetrisched.backends.SolverBackendType.GUROBI
         )
+        self._log_to_file = log_to_file
+        self._log_times = set(map(int, _flags.scheduler_log_times)) if _flags else set()
 
     def schedule(
         self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools
@@ -118,6 +121,12 @@ class TetriSchedScheduler(BaseScheduler):
             solver_time = EventTime(
                 int((solver_end_time - solver_start_time) * 1e6), EventTime.Unit.US
             )
+            if self._log_to_file or sim_time.time in self._log_times:
+                self._scheduler.exportLastSolverModel(f"tetrisched_{sim_time.time}.lp")
+                self._logger.debug(
+                    f"[{sim_time.to(EventTime.Unit.US).time}] Exported model to "
+                    f"tetrisched_{sim_time.time}.lp."
+                )
 
             # Retrieve the solution and check if we were able to schedule anything.
             solverSolution = objective_strl.getSolution()

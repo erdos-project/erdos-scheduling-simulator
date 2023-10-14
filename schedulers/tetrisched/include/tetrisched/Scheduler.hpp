@@ -35,6 +35,12 @@ class Scheduler {
 
   /// Retrieve the solution from the last invocation of the solver.
   SolverSolutionPtr getLastSolverSolution() const;
+
+  /// Exports the model from the last invocation of the solver.
+  void exportLastSolverModel(const std::string& fileName) const;
+
+  /// Exports the solution from the last invocation of the solver.
+  void exportLastSolverSolution(const std::string& fileName) const;
 };
 }  // namespace tetrisched
 

@@ -346,7 +346,7 @@ ParseResultPtr ChooseExpression::parse(
     // Register this indicator with the capacity constraints that
     // are being bubbled up.
     capacityConstraints.registerUsageForDuration(*partition, startTime,
-                                                 duration, allocationVar, 1);
+                                                 duration, allocationVar, std::nullopt);
   }
   // Ensure that if the Choose expression is satisfied, it fulfills the
   // demand for this expression. Pass the constraint to the model.
