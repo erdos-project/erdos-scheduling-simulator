@@ -103,7 +103,15 @@ void CapacityConstraintMap::registerUsageForDuration(
 void CapacityConstraintMap::translate(SolverModelPtr solverModel) {
   // Add the constraints to the SolverModel.
   for (auto& [mapKey, constraint] : capacityConstraints) {
-    solverModel->addConstraint(std::move(constraint));
+    if (!constraint->isTriviallySatisfiable()) {
+      // COMMENT (Sukrit): We can try to see if adding Lazy constraints
+      // helps ever. In my initial analysis, this makes the presolve and
+      // root relaxation less efficient making the overall solver time
+      // higher. Maybe for too many of the CapacityConstraintMap constraints,
+      // this will help.
+      // constraint->addAttribute(ConstraintAttribute::LAZY_CONSTRAINT);
+      solverModel->addConstraint(std::move(constraint));
+    }
   }
 
   // Clear the map now that the constraints have been drained.
@@ -146,6 +154,8 @@ std::string Expression::getTypeString() const {
       return "ScaleExpression";
     case ExpressionType::EXPR_LESSTHAN:
       return "LessThanExpression";
+    case ExpressionType::EXPR_ALLOCATION:
+      return "AllocationExpression";
     default:
       return "UnknownExpression";
   }
@@ -345,8 +355,8 @@ ParseResultPtr ChooseExpression::parse(
 
     // Register this indicator with the capacity constraints that
     // are being bubbled up.
-    capacityConstraints.registerUsageForDuration(*partition, startTime,
-                                                 duration, allocationVar, std::nullopt);
+    capacityConstraints.registerUsageForDuration(
+        *partition, startTime, duration, allocationVar, std::nullopt);
   }
   // Ensure that if the Choose expression is satisfied, it fulfills the
   // demand for this expression. Pass the constraint to the model.
@@ -403,6 +413,57 @@ SolutionResultPtr ChooseExpression::populateResults(
   } else {
     solution->placements[name] = std::move(placement);
   }
+  return solution;
+}
+
+/* Method definitions for AllocationExpression */
+AllocationExpression::AllocationExpression(
+    std::string taskName,
+    std::vector<std::pair<PartitionPtr, uint32_t>> allocatedResources,
+    Time startTime, Time duration)
+    : Expression(taskName, ExpressionType::EXPR_ALLOCATION),
+      allocatedResources(allocatedResources),
+      startTime(startTime),
+      duration(duration),
+      endTime(startTime + duration) {}
+
+void AllocationExpression::addChild(ExpressionPtr child) {
+  throw tetrisched::exceptions::ExpressionConstructionException(
+      "AllocationExpression cannot have a child.");
+}
+
+ParseResultPtr AllocationExpression::parse(
+    SolverModelPtr solverModel, Partitions availablePartitions,
+    CapacityConstraintMap& capacityConstraints, Time currentTime) {
+  // Check that the Expression was parsed before.
+  if (parsedResult != nullptr) {
+    // Return the already parsed sub-tree.
+    return parsedResult;
+  }
+
+  // Create and save the ParseResult.
+  parsedResult = std::make_shared<ParseResult>();
+  parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
+  parsedResult->startTime = startTime;
+  parsedResult->endTime = endTime;
+  parsedResult->indicator = 1;
+  parsedResult->utility =
+      std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
+  (parsedResult->utility).value()->addTerm(1);
+  for (const auto& [partition, allocation] : allocatedResources) {
+    capacityConstraints.registerUsageForDuration(
+        *partition, startTime, duration, static_cast<uint32_t>(allocation),
+        std::nullopt);
+  }
+  return parsedResult;
+}
+
+SolutionResultPtr AllocationExpression::populateResults(
+    SolverModelPtr solverModel) {
+  // Populate the results for the SolverModel's variables (i.e, this
+  // Expression's utility, start time and end time) from the Base Expression
+  // class.
+  Expression::populateResults(solverModel);
   return solution;
 }
 
@@ -762,6 +823,8 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
   // Sum(child_indicator) - max_indicator <= 0
   ConstraintPtr maxChildSubexprConstraint = std::make_shared<Constraint>(
       name + "_max_child_subexpr_constr", ConstraintType::CONSTR_LE, 0);
+  ConstraintPtr maxChildGUBConstraint = std::make_shared<Constraint>(
+      name + "_max_child_gub_constr", ConstraintType::CONSTR_LE, 1);
 
   // Constraint to set startTime of MAX
   // Sum(Indicator * child_start) >= maxStartTime
@@ -780,27 +843,34 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
     auto childParsedResult = children[i]->parse(
         solverModel, availablePartitions, capacityConstraints, currentTime);
 
+    if (childParsedResult->type != ParseResultType::EXPRESSION_UTILITY) {
+      TETRISCHED_DEBUG(name + " child-" + std::to_string(i) +
+                       " is not an Expression with utility. Skipping.");
+      continue;
+    }
+
     // Check that the MaxExpression's childrens were specified correctly.
     if (!childParsedResult->startTime ||
         childParsedResult->startTime.value().isVariable()) {
       throw tetrisched::exceptions::ExpressionConstructionException(
-          "MaxExpression child-" + std::to_string(i) +
-          " must have a non-variable start time.");
+          name + " child-" + std::to_string(i) + " (" + children[i]->getName() +
+          ") must have a non-variable start time.");
     }
     if (!childParsedResult->endTime ||
         childParsedResult->endTime.value().isVariable()) {
       throw tetrisched::exceptions::ExpressionConstructionException(
-          "MaxExpression child-" + std::to_string(i) +
-          " must have a non-variable end time.");
+          name + " child-" + std::to_string(i) + " (" + children[i]->getName() +
+          ") must have a non-variable end time.");
     }
     if (!childParsedResult->indicator) {
       throw tetrisched::exceptions::ExpressionConstructionException(
-          "MaxExpression child-" + std::to_string(i) +
-          " must have an indicator.");
+          name + " child-" + std::to_string(i) + " (" + children[i]->getName() +
+          ") must have an indicator.");
     }
     if (!childParsedResult->utility) {
       throw tetrisched::exceptions::ExpressionConstructionException(
-          "MaxExpression child-" + std::to_string(i) + " must have a utility.");
+          name + " child-" + std::to_string(i) + " (" + children[i]->getName() +
+          ") must have a utility.");
     }
 
     auto childStartTime = childParsedResult->startTime.value().get<Time>();
@@ -810,6 +880,7 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
 
     // Enforce that only one of the children is satisfied.
     maxChildSubexprConstraint->addTerm(childIndicator);
+    maxChildGUBConstraint->addTerm(childIndicator);
 
     // Add the start time of the child to the MaxExpression's start time.
     maxStartTimeConstraint->addTerm(childStartTime, childIndicator);

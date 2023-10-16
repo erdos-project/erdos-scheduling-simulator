@@ -26,7 +26,8 @@ template <typename T>
 VariableT<T>::VariableT(VariableType type, std::string name)
     : variableType(isTypeValid(type)),
       variableId(variableIdCounter++),
-      variableName(name) {}
+      variableName(name),
+      lowerBound(0) {}
 
 template <typename T>
 VariableT<T>::VariableT(VariableType type, std::string name, T lowerBound)
@@ -87,6 +88,16 @@ std::optional<T> VariableT<T>::getValue() const {
   return solutionValue;
 }
 
+template <typename T>
+std::optional<T> VariableT<T>::getLowerBound() const {
+  return lowerBound;
+}
+
+template <typename T>
+std::optional<T> VariableT<T>::getUpperBound() const {
+  return upperBound;
+}
+
 /*
  * Methods for Constraint.
  * These methods provide an implementation of the Constraint class.
@@ -145,6 +156,11 @@ void ConstraintT<T>::addTerm(T coefficient, const XOrVariableT<T>& term) {
 }
 
 template <typename T>
+void ConstraintT<T>::addAttribute(ConstraintAttribute attribute) {
+  attributes.insert(attribute);
+}
+
+template <typename T>
 std::string ConstraintT<T>::toString() const {
   std::string constraintString;
   for (auto& term : terms) {
@@ -185,6 +201,42 @@ size_t ConstraintT<T>::size() const {
   return terms.size();
 }
 
+template <typename T>
+bool ConstraintT<T>::isTriviallySatisfiable() const {
+  if (constraintType == CONSTR_EQ) {
+    // For now, we assume that EQ constraints cannot be trivially satisfied.
+    return false;
+  }
+  T bound = 0;
+  for (const auto& [coefficient, variable] : terms) {
+    if (variable) {
+      auto variableBound = constraintType == CONSTR_LE
+                               ? variable->getUpperBound()
+                               : variable->getLowerBound();
+      if (!variableBound.has_value()) {
+        // If there is any variable that does not have a relevant bound, we
+        // cannot guarantee trivial satisfiability.
+        return false;
+      } else {
+        // Add the bound of this variable to the bound of the constraint.
+        bound += coefficient * variableBound.value();
+      }
+    } else {
+      // There was no Variable in this term. Just add the coefficient.
+      bound += coefficient;
+    }
+  }
+
+  switch (constraintType) {
+    case CONSTR_LE:
+      return bound <= rightHandSide;
+    case CONSTR_GE:
+      return bound >= rightHandSide;
+    default:
+      return false;
+  }
+}
+
 /*
  * Methods for ObjectiveFunction.
  * These methods provide an implementation of the Constraint class.
@@ -197,6 +249,11 @@ template <typename T>
 void ObjectiveFunctionT<T>::addTerm(T coefficient,
                                     std::shared_ptr<VariableT<T>> variable) {
   terms.push_back(std::make_pair(coefficient, variable));
+}
+
+template <typename T>
+void ObjectiveFunctionT<T>::addTerm(T constant) {
+  terms.push_back(std::make_pair(constant, nullptr));
 }
 
 template <typename T>
@@ -223,8 +280,12 @@ std::string ObjectiveFunctionT<T>::toString() const {
       break;
   }
   for (auto& term : terms) {
-    objectiveString +=
-        "(" + std::to_string(term.first) + "*" + term.second->getName() + ")";
+    if (term.second) {
+      objectiveString +=
+          "(" + std::to_string(term.first) + "*" + term.second->getName() + ")";
+    } else {
+      objectiveString += std::to_string(term.first);
+    }
     if (&term != &terms.back()) objectiveString += "+";
   }
   return objectiveString;

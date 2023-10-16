@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <variant>
 #include <vector>
 
@@ -86,6 +87,12 @@ class VariableT {
   /// If the solution value is not set, then the solver hasn't found a solution
   /// (yet).
   std::optional<T> getValue() const;
+
+  /// Retrieve the lower bound of the value, if available.
+  std::optional<T> getLowerBound() const;
+
+  /// Retrieve the upper bound of the value, if available.
+  std::optional<T> getUpperBound() const;
 
   /// Annotate friend classes for Solvers so that they have access to internals.
   friend tetrisched::CPLEXSolver;
@@ -174,6 +181,14 @@ enum ConstraintType {
 };
 using ConstraintType = enum ConstraintType;
 
+/// A `ConstraintAttribute` enumeration represents the choices of any extra
+/// attributes that a STRL tree would like to convey to the Solver.
+enum ConstraintAttribute {
+  /// The constraint is lazy, do not use it for LP relaxation.
+  LAZY_CONSTRAINT = 0,
+};
+using ConstraintAttribute = enum ConstraintAttribute;
+
 template <typename T>
 class ConstraintT {
  private:
@@ -190,6 +205,8 @@ class ConstraintT {
   T rightHandSide;
   /// The operation between the terms and the right hand side.
   ConstraintType constraintType;
+  /// The attributes registered with this Constraint.
+  std::unordered_set<ConstraintAttribute> attributes;
 
  public:
   /// Generate a new constraint with the given type and right hand side.
@@ -217,6 +234,9 @@ class ConstraintT {
   /// coefficient and a term that can either be a constant or a variable.
   void addTerm(T coefficient, const XOrVariableT<T>& term);
 
+  /// Adds an attribute to this Constraint.
+  void addAttribute(ConstraintAttribute attribute);
+
   /// Retrieve a string representation of this Constraint.
   std::string toString() const;
 
@@ -228,6 +248,13 @@ class ConstraintT {
 
   /// Retrieve the number of terms in this Constraint.
   size_t size() const;
+
+  /// Check if the constraint is trivially-satisfiable.
+  /// A constraint is trivially satisfied if, given the upper and lower bounds
+  /// on the variables, there is no feasible value for the variables that can
+  /// violate the constraint. If there are no provided bounds on any of the
+  /// variables, then the constraint is not trivially satisfied.
+  bool isTriviallySatisfiable() const;
 
   /// Annotate friend classes for Solvers so that they have access to internals.
   friend tetrisched::CPLEXSolver;
@@ -270,6 +297,7 @@ class ObjectiveFunctionT {
 
   /// Adds a term to the left-hand side constraint.
   void addTerm(T coefficient, std::shared_ptr<VariableT<T>> variable);
+  void addTerm(T constant);
 
   // The objective is left hand side of the constraint
   std::shared_ptr<ConstraintT<T>> toConstraint(std::string constraintName,

@@ -322,4 +322,54 @@ TEST(Expression, TestScaleExpressionDoublesUtility) {
   EXPECT_EQ(1, chooseExpression->getSolution().value()->utility.value())
       << "The utility for the individual Choose should be 1.";
 }
+
+TEST(Expression, TestAllocationExpressionFailsChoice) {
+  // Construct the Partition.
+  tetrisched::PartitionPtr partition =
+      std::make_shared<tetrisched::Partition>(1, "partition1", 1);
+  tetrisched::Partitions partitions = tetrisched::Partitions({partition});
+
+  // Allocate one Task on the Partition.
+  std::vector<std::pair<tetrisched::PartitionPtr, uint32_t>>
+      partitionAssignments;
+  partitionAssignments.push_back({partition, 1});
+  tetrisched::ExpressionPtr allocationExpression =
+      std::make_shared<tetrisched::AllocationExpression>(
+          "task1", partitionAssignments, 0, 50);
+
+  // Construct the Choice for a second task.
+  tetrisched::ExpressionPtr chooseExpression =
+      std::make_shared<tetrisched::ChooseExpression>("task2", partitions, 1, 10,
+                                                     20);
+
+  // Try to meet both of the Expressions.
+  tetrisched::ExpressionPtr minExpression =
+      std::make_shared<tetrisched::MinExpression>("MinExpression");
+  minExpression->addChild(allocationExpression);
+  minExpression->addChild(chooseExpression);
+
+  // Construct an ObjectiveExpression.
+  tetrisched::ExpressionPtr objectiveExpression =
+      std::make_shared<tetrisched::ObjectiveExpression>("TestObjective");
+  objectiveExpression->addChild(minExpression);
+
+  // Construct a Solver.
+  tetrisched::CPLEXSolver cplexSolver = tetrisched::CPLEXSolver();
+  auto solverModelPtr = cplexSolver.getModel();
+
+  // Construct a CapacityConstraintMap and parse the expression tree.
+  tetrisched::CapacityConstraintMap capacityConstraintMap(10);
+  auto _ = objectiveExpression->parse(solverModelPtr, partitions,
+                                      capacityConstraintMap, 0);
+
+  // Translate and solve the model.
+  cplexSolver.translateModel();
+  cplexSolver.exportModel("testblahblah.lp");
+  cplexSolver.solveModel();
+
+  auto result = objectiveExpression->populateResults(solverModelPtr);
+  EXPECT_TRUE(result->utility) << "Result should have some utility.";
+  EXPECT_EQ(0, result->utility.value())
+      << "The utility for the Expressions should be 0";
+}
 #endif

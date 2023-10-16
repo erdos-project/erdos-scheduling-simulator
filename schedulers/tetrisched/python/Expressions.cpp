@@ -13,6 +13,7 @@ void defineSTRLExpressions(py::module_& tetrisched_m) {
       .value("EXPR_MAX", tetrisched::ExpressionType::EXPR_MAX)
       .value("EXPR_SCALE", tetrisched::ExpressionType::EXPR_SCALE)
       .value("EXPR_LESSTHAN", tetrisched::ExpressionType::EXPR_LESSTHAN)
+      .value("EXPR_ALLOCATION", tetrisched::ExpressionType::EXPR_ALLOCATION)
       .export_values();
 
   // Define the Placement object.
@@ -110,6 +111,22 @@ void defineSTRLExpressions(py::module_& tetrisched_m) {
            "Initializes a ChooseExpression for the given task to be placed on "
            "`numRequiredMachines` from the given partition at the given "
            "startTime, running for the given duration.");
+
+  // Define the AllocationExpression.
+  py::class_ < tetrisched::AllocationExpression, tetrisched::Expression,
+      std::shared_ptr<tetrisched::AllocationExpression>(tetrisched_m,
+                                                        "AllocationExpression")
+          .def(py::init(
+                   [](std::string taskName,
+                      std::vector<std::pair<PartitionPtr, TETRISCHED_ILP_TYPE>>
+                          partitionAssignments,
+                      Time startTime, Time duration) {
+                     return std::make_shared<tetrisched::AllocationExpression>(
+                         taskName, partitionAssignments, startTime, duration);
+                   }),
+               "Initializes an AllocationExpression for the given task to be "
+               "placed on the given partitions at the given startTime, "
+               "running for the given duration.");
 
   // Define the ObjectiveExpression.
   py::class_<tetrisched::ObjectiveExpression, tetrisched::Expression,

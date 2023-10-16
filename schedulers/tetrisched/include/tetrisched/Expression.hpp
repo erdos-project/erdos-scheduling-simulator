@@ -210,6 +210,10 @@ enum ExpressionType {
   /// ordered relationship such that the second child occurs after the first
   /// child.
   EXPR_LESSTHAN = 5,
+  /// An Allocation expression represents the allocation of the given number of
+  /// machines from the given Partition for the given duration starting at the
+  /// provided start_time.
+  EXPR_ALLOCATION = 6,
 };
 using ExpressionType = enum ExpressionType;
 
@@ -308,6 +312,33 @@ class ChooseExpression : public Expression {
  public:
   ChooseExpression(std::string taskName, Partitions resourcePartitions,
                    uint32_t numRequiredMachines, Time startTime, Time duration);
+  void addChild(ExpressionPtr child) override;
+  ParseResultPtr parse(SolverModelPtr solverModel,
+                       Partitions availablePartitions,
+                       CapacityConstraintMap& capacityConstraints,
+                       Time currentTime) override;
+  SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
+};
+
+/// An `AllocationExpression` represents the allocation of the given number of
+/// machines from the given Partition for the given duration starting at the
+/// provided start_time.
+class AllocationExpression : public Expression {
+ private:
+  /// The allocation from each Partition that is part of this Placement.
+  std::vector<std::pair<PartitionPtr, uint32_t>> allocatedResources;
+  /// The start time of the allocation represented by this Expression.
+  Time startTime;
+  /// The duration of the allocation represented by this Expression.
+  Time duration;
+  /// The end time of the allocation represented by this Expression.
+  Time endTime;
+
+ public:
+  AllocationExpression(std::string taskName,
+                       std::vector<std::pair<PartitionPtr, uint32_t>>
+                           partitionAssignments,
+                       Time startTime, Time duration);
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
