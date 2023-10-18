@@ -823,8 +823,6 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
   // Sum(child_indicator) - max_indicator <= 0
   ConstraintPtr maxChildSubexprConstraint = std::make_shared<Constraint>(
       name + "_max_child_subexpr_constr", ConstraintType::CONSTR_LE, 0);
-  ConstraintPtr maxChildGUBConstraint = std::make_shared<Constraint>(
-      name + "_max_child_gub_constr", ConstraintType::CONSTR_LE, 1);
 
   // Constraint to set startTime of MAX
   // Sum(Indicator * child_start) >= maxStartTime
@@ -880,7 +878,6 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
 
     // Enforce that only one of the children is satisfied.
     maxChildSubexprConstraint->addTerm(childIndicator);
-    maxChildGUBConstraint->addTerm(childIndicator);
 
     // Add the start time of the child to the MaxExpression's start time.
     maxStartTimeConstraint->addTerm(childStartTime, childIndicator);
