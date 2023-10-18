@@ -113,20 +113,20 @@ void defineSTRLExpressions(py::module_& tetrisched_m) {
            "startTime, running for the given duration.");
 
   // Define the AllocationExpression.
-  py::class_ < tetrisched::AllocationExpression, tetrisched::Expression,
-      std::shared_ptr<tetrisched::AllocationExpression>(tetrisched_m,
-                                                        "AllocationExpression")
-          .def(py::init(
-                   [](std::string taskName,
-                      std::vector<std::pair<PartitionPtr, TETRISCHED_ILP_TYPE>>
+  py::class_<tetrisched::AllocationExpression, tetrisched::Expression,
+             std::shared_ptr<tetrisched::AllocationExpression>>(
+      tetrisched_m, "AllocationExpression")
+      .def(
+          py::init([](std::string taskName,
+                      std::vector<std::pair<tetrisched::PartitionPtr, uint32_t>>
                           partitionAssignments,
-                      Time startTime, Time duration) {
-                     return std::make_shared<tetrisched::AllocationExpression>(
-                         taskName, partitionAssignments, startTime, duration);
-                   }),
-               "Initializes an AllocationExpression for the given task to be "
-               "placed on the given partitions at the given startTime, "
-               "running for the given duration.");
+                      tetrisched::Time startTime, tetrisched::Time duration) {
+            return std::make_shared<tetrisched::AllocationExpression>(
+                taskName, partitionAssignments, startTime, duration);
+          }),
+          "Initializes an AllocationExpression for the given task to be "
+          "placed on the given partitions at the given startTime, "
+          "running for the given duration.");
 
   // Define the ObjectiveExpression.
   py::class_<tetrisched::ObjectiveExpression, tetrisched::Expression,
