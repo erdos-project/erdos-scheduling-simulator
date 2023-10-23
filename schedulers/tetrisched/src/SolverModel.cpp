@@ -404,4 +404,11 @@ template <typename T>
 T SolverModelT<T>::getObjectiveValue() const {
   return objectiveFunction->getValue();
 }
+
+template <typename T>
+void SolverModelT<T>::clear() {
+  variables.clear();
+  constraints.clear();
+  objectiveFunction.reset();
+}
 }  // namespace tetrisched

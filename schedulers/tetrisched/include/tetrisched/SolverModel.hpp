@@ -375,6 +375,9 @@ class SolverModelT {
   /// Throws an error if the model was not solved first.
   T getObjectiveValue() const;
 
+  /// Clears all the Variables and Constraints from this Model.
+  void clear();
+
   /// All the Solver implementations should be a friend of the SolverModel.
   /// This allows Solver implementations to construct the model to pass
   /// back to the user.
