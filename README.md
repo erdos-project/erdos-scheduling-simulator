@@ -17,7 +17,7 @@ Start at the root of the repository:
 4. `cd build`
 5. `cmake ..`
 6. `make`
-7. `cp flowlessly_py.* ../../.`
+7. `cp flowlessly_py.* ../../../.`
 
 ## Executing Experiments
 
