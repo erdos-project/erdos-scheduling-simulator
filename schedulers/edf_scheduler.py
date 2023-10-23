@@ -45,6 +45,11 @@ class EDFScheduler(BaseScheduler):
             preemption=self.preemptive,
             worker_pools=worker_pools,
         )
+        
+        print(f"{sim_time=}")
+        for task in tasks_to_be_scheduled:
+            print(task)
+        print()
 
         if self.preemptive:
             # Restart the state of the WorkerPool.
