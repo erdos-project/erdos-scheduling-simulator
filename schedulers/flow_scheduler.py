@@ -152,7 +152,7 @@ class FlowScheduler(BaseScheduler):
         placements = self._extract_placement_from_flow_graph(flow_graph)
 
         ##################### Flow #####################
-                
+        # The rest is copied from EDFScheduler just for reference.
         ordered_tasks = list(
             sorted(
                 tasks_to_be_scheduled, key=lambda item: (item.deadline, item.task_graph)
