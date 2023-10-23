@@ -10,6 +10,7 @@ from .ilp_scheduler import ILPScheduler
 from .lsf_scheduler import LSFScheduler
 from .tetrisched_cplex_scheduler import TetriSchedCPLEXScheduler
 from .tetrisched_gurobi_scheduler import TetriSchedGurobiScheduler
+from .flow_scheduler import FlowScheduler
 
 try:
     from .tetrisched_scheduler import TetriSchedScheduler

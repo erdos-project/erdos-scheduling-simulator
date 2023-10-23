@@ -22,6 +22,7 @@ from schedulers import (
     TetriSchedCPLEXScheduler,
     TetriSchedGurobiScheduler,
     Z3Scheduler,
+    FlowScheduler,
 )
 
 try:
@@ -180,6 +181,7 @@ flags.DEFINE_enum(
         "TetriSched_Gurobi",
         "Clockwork",
         "TetriSched",
+        "Flow",
     ],
     "The scheduler to use for this execution.",
 )
@@ -540,6 +542,12 @@ def main(args):
             time_discretization=EventTime(
                 FLAGS.scheduler_time_discretization, EventTime.Unit.US
             ),
+            _flags=FLAGS,
+        )
+    elif FLAGS.scheduler == "Flow":
+        scheduler = FlowScheduler(
+            preemptive=FLAGS.preemption,
+            runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
             _flags=FLAGS,
         )
     else:
