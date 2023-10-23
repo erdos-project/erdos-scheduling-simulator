@@ -96,7 +96,15 @@ class FlowScheduler(BaseScheduler):
     def _extract_placement_from_flow_graph(self, flow_graph: flowlessly_py.AdjacencyMapGraph) -> list[Placement]:    
         placements: list[Placement] = []
         # TODO:
-        
+        min_cost = 0
+        for node_id in range(1, flow_graph.get_max_node_id() + 1):
+            for id_other_node, arc in flow_graph.get_arcs()[node_id].items():
+                if arc.is_fwd:
+                    flow = arc.reverse_arc.residual_cap + arc.min_flow
+                    if flow > 0:
+                        print(f"flow from {node_id} to {id_other_node} is {flow} with cost {flow * arc.cost}")
+                        min_cost += flow * arc.cost
+
         return placements
     
     def schedule(
