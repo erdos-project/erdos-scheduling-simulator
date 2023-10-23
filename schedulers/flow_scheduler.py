@@ -50,15 +50,8 @@ class FlowScheduler(BaseScheduler):
             _flags=_flags,
         )
 
-    def _build_min_cost_max_flow_graph(self, tasks_to_be_scheduled: list[Task], schedulable_worker_pools: WorkerPools):    
-        # Aggregate tasks with same task name from the same task graph. They can potentially be executed together with a larger batch size.
-        # Count the number of each unique task. 
-
+    def _populate_min_cost_max_flow_graph(self, flow_graph: flowlessly_py.AdjacencyMapGraph, tasks_to_be_scheduled: list[Task], schedulable_worker_pools: WorkerPools):
         # How to make sure that only one batch can be selected by the GPU?
-
-        # Build flow graph
-        stats = flowlessly_py.Statistics()
-        flow_graph = flowlessly_py.AdjacencyMapGraph(stats)
 
         # Create the global sink node
         node_id_global_sink = flow_graph.AddNode(-1, 0, flowlessly_py.NodeType.OTHER, False)
@@ -71,7 +64,9 @@ class FlowScheduler(BaseScheduler):
         # TODO: Create a node for each gpu? worker?
         for worker_pool in schedulable_worker_pools.worker_pools:
             for worker in worker_pool.workers:
-                node_id_global_sink = flow_graph.AddNode(0, 0, flowlessly_py.NodeType.OTHER, False)
+                node_id_woker = flow_graph.AddNode(0, 0, flowlessly_py.NodeType.OTHER, False)
+                # What should the capacity of this arc be?
+                # flow_graph.AddArc(node_id_woker, node_id_global_sink, 0, ?, 0, 0)
                 pass
 
         # Create node for each task
@@ -93,11 +88,16 @@ class FlowScheduler(BaseScheduler):
                             # Note that the Flowlessly librry expect the cost to be integer. Is this a problem?
                             # flow_graph.AddArc(execution_strategy_node_id, worker_id, 0, batch_size, latency // batch_size, 0)
                             pass
+
                 # Connect the node to the unscheduled node
                 flow_graph.AddArc(node_id_task, node_id_unscheduled, 0, 1, 0, 0)
                 pass
-
-        return flow_graph
+    
+    def _extract_placement_from_flow_graph(self, flow_graph: flowlessly_py.AdjacencyMapGraph) -> list[Placement]:    
+        placements: list[Placement] = []
+        # TODO:
+        
+        return placements
     
     def schedule(
         self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools
@@ -130,9 +130,21 @@ class FlowScheduler(BaseScheduler):
                 f"is:{os.linesep} {os.linesep.join(worker_pool.get_utilization())}"
             )
 
-        self._build_min_cost_max_flow_graph(tasks_to_be_scheduled, schedulable_worker_pools)
-
         scheduler_start_time = time.time()
+        ##################### Flow #####################
+
+        flow_stats = flowlessly_py.Statistics()
+        flow_graph = flowlessly_py.AdjacencyMapGraph(flow_stats)
+        
+        self._populate_min_cost_max_flow_graph(tasks_to_be_scheduled, schedulable_worker_pools)
+        
+        solver = flowlessly_py.SuccessiveShortest(flow_graph, flow_stats)
+        solver.Run()
+        
+        placements = self._extract_placement_from_flow_graph(flow_graph)
+
+        ##################### Flow #####################
+                
         ordered_tasks = list(
             sorted(
                 tasks_to_be_scheduled, key=lambda item: (item.deadline, item.task_graph)
