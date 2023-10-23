@@ -616,7 +616,7 @@ ParseResultPtr LessThanExpression::parse(
   // Add a constraint that the first child must occur before the second.
   auto happensBeforeConstraintName = name + "_happens_before_constraint";
   ConstraintPtr happensBeforeConstraint = std::make_shared<Constraint>(
-      happensBeforeConstraintName, ConstraintType::CONSTR_LE, 1);
+      happensBeforeConstraintName, ConstraintType::CONSTR_LE, -1);
   happensBeforeConstraint->addTerm(firstChildResult->endTime.value());
   happensBeforeConstraint->addTerm(-1, secondChildResult->startTime.value());
   solverModel->addConstraint(std::move(happensBeforeConstraint));
