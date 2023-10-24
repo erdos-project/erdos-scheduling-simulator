@@ -10,14 +10,19 @@ python3 setup.py develop
 ```
 
 ### To set up FlowScheduler dependencies
-Start at the root of the repository:
-1. `git submodule init && git submodule update`
-2. `cd schedulers/Flowlessly`
-3. `mkdir build`
-4. `cd build`
-5. `cmake ..`
-6. `make`
-7. `cp flowlessly_py.* ../../../.`
+
+#### Initialize submodules
+`git submodule init && git submodule update`
+
+#### Build Flowlessly and create python binding 
+```
+cd schedulers/Flowlessly
+mkdir build
+cd build
+cmake ..
+make
+cp flowlessly_py.* ../../../.
+```
 
 ## Executing Experiments
 
