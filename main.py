@@ -17,12 +17,12 @@ from schedulers import (
     ClockworkScheduler,
     EDFScheduler,
     FIFOScheduler,
+    FlowScheduler,
     ILPScheduler,
     LSFScheduler,
     TetriSchedCPLEXScheduler,
     TetriSchedGurobiScheduler,
     Z3Scheduler,
-    FlowScheduler,
 )
 
 try:
