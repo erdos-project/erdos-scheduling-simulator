@@ -184,7 +184,7 @@ class FlowScheduler(BaseScheduler):
         )
 
         self._logger.debug(
-                f"[{sim_time.to(EventTime.Unit.US).time}] Flow scheduler receive"
+                f"[{sim_time.to(EventTime.Unit.US).time}] Flow scheduler receive "
                 f"{tasks_to_be_scheduled=}"
             )
 
