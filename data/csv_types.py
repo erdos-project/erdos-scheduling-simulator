@@ -1,6 +1,6 @@
 from collections import namedtuple
 from functools import total_ordering
-from typing import Mapping, Optional, Sequence
+from typing import List, Mapping, Optional, Sequence
 
 Resource = namedtuple("Resource", ["name", "id", "quantity"])
 WorkerPoolStats = namedtuple(
@@ -23,14 +23,25 @@ class WorkerPool(object):
 class Placement(object):
     def __init__(
         self,
+        name: str,
+        timestamp: int,
+        task_id: str,
+        task_graph: str,
         placement_time: int,
+        deadline: int,
         worker_pool: WorkerPool,
-        resources_used: Sequence[Resource],
+        resources_used: Sequence[Resource] = [],
+        completion_time: Optional[int] = None,
     ):
+        self.task_name = name
+        self.timestamp = timestamp
+        self.id = task_id
+        self.task_graph = task_graph
         self.placement_time = placement_time
+        self.deadline = deadline
         self.worker_pool = worker_pool
         self.resources_used = resources_used
-        self.completion_time = None
+        self.completion_time = completion_time
 
 
 @total_ordering
@@ -122,6 +133,11 @@ class Task(object):
 
         placement_time = int(csv_reading[0])
         placement = Placement(
+            name=self.name,
+            timestamp=self.timestamp,
+            task_id=self.id,
+            task_graph=self.task_graph,
+            deadline=self.deadline,
             placement_time=placement_time,
             worker_pool=worker_pools[csv_reading[6]],
             resources_used=[
@@ -173,7 +189,12 @@ class Task(object):
             csv_reading[1] == "TASK_MIGRATED"
         ), f"The event {csv_reading[1]} was not of type TASK_MIGRATED."
         placement = Placement(
+            name=self.name,
+            timestamp=self.timestamp,
+            task_id=self.id,
+            task_graph=self.task_graph,
             placement_time=int(csv_reading[0]),
+            deadline=self.deadline,
             worker_pool=worker_pools[csv_reading[5]],
             resources_used=[
                 Resource(*csv_reading[i : i + 3]) for i in range(7, len(csv_reading), 3)
@@ -260,8 +281,11 @@ class Scheduler(object):
         self.end_time = None
         self.runtime = None
         self.true_runtime = None
-        self.placed_tasks = None
-        self.unplaced_tasks = None
+        self.num_placed_tasks = None
+        self.num_unplaced_tasks = None
+
+        # Values updated from TASK_SCHEDULED events.
+        self.task_placements = []
 
     def update_finish(self, csv_reading: str):
         """Updates the values of the Scheduler based on the SCHEDULER_FINISHED event
@@ -278,9 +302,26 @@ class Scheduler(object):
         ), f"The Scheduler at {self.start_time} was already finished."
         self.end_time = int(csv_reading[0])
         self.runtime = int(csv_reading[2])
-        self.placed_tasks = int(csv_reading[3])
-        self.unplaced_tasks = int(csv_reading[4])
+        self.num_placed_tasks = int(csv_reading[3])
+        self.num_unplaced_tasks = int(csv_reading[4])
         self.true_runtime = int(csv_reading[5])
+
+    def update_task_schedule(self, csv_reading: List[str]):
+        assert (
+            csv_reading[1] == "TASK_SCHEDULED"
+        ), f"Event {csv_reading[1]} is not of type TASK_SCHEDULED."
+        self.task_placements.append(
+            Placement(
+                name=csv_reading[2],
+                timestamp=int(csv_reading[4]),
+                task_id=csv_reading[5],
+                task_graph=csv_reading[3],
+                placement_time=int(csv_reading[7]),
+                deadline=csv_reading[6],
+                worker_pool=csv_reading[8],
+                completion_time=int(csv_reading[7]) + int(csv_reading[9]),
+            )
+        )
 
 
 class Simulator(object):

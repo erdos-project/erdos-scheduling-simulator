@@ -99,8 +99,14 @@ void defineModelObjective(py::module_& tetrisched_m) {
              return std::make_shared<tetrisched::ObjectiveFunction>(type);
            }),
            "Initializes the ObjectiveFunction with the given type.")
-      .def("addTerm", &tetrisched::ObjectiveFunction::addTerm,
+      .def("addTerm",
+           py::overload_cast<TETRISCHED_ILP_TYPE, tetrisched::VariablePtr>(
+               &tetrisched::ObjectiveFunction::addTerm),
            "Adds a new term to the ObjectiveFunction.")
+      .def("addTerm",
+           py::overload_cast<TETRISCHED_ILP_TYPE>(
+               &tetrisched::ObjectiveFunction::addTerm),
+           "Adds a new constant to the ObjectiveFunction.")
       .def("toConstraint", &tetrisched::ObjectiveFunction::toConstraint,
            "Converts this ObjectiveFunction into a Constraint.")
       .def("__str__", &tetrisched::ObjectiveFunction::toString)

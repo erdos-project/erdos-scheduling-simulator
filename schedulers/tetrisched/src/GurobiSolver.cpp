@@ -58,24 +58,42 @@ GRBConstr GurobiSolver::translateConstraint(
   }
 
   // Translate the constraint.
+  GRBConstr gurobiConstraint;
   switch (constraint->constraintType) {
     case ConstraintType::CONSTR_EQ:
-      return gurobiModel.addConstr(constraintExpr, GRB_EQUAL,
-                                   constraint->rightHandSide,
-                                   constraint->getName());
+      gurobiConstraint = gurobiModel.addConstr(constraintExpr, GRB_EQUAL,
+                                               constraint->rightHandSide,
+                                               constraint->getName());
+      break;
     case ConstraintType::CONSTR_GE:
-      return gurobiModel.addConstr(constraintExpr, GRB_GREATER_EQUAL,
-                                   constraint->rightHandSide,
-                                   constraint->getName());
+      gurobiConstraint = gurobiModel.addConstr(
+          constraintExpr, GRB_GREATER_EQUAL, constraint->rightHandSide,
+          constraint->getName());
+      break;
     case ConstraintType::CONSTR_LE:
-      return gurobiModel.addConstr(constraintExpr, GRB_LESS_EQUAL,
-                                   constraint->rightHandSide,
-                                   constraint->getName());
+      gurobiConstraint = gurobiModel.addConstr(constraintExpr, GRB_LESS_EQUAL,
+                                               constraint->rightHandSide,
+                                               constraint->getName());
+      break;
     default:
       throw tetrisched::exceptions::SolverException(
           "Invalid constraint type: " +
           std::to_string(constraint->constraintType));
   }
+
+  // Add the attributes (if any) to the constraint.
+  for (auto& attribute : constraint->attributes) {
+    switch (attribute) {
+      case ConstraintAttribute::LAZY_CONSTRAINT:
+        gurobiConstraint.set(GRB_IntAttr_Lazy, 1);
+        break;
+      default:
+        throw tetrisched::exceptions::SolverException(
+            "Constraint attribute: " + std::to_string(attribute) +
+            " not supported by Gurobi.");
+    }
+  }
+  return gurobiConstraint;
 }
 
 GRBLinExpr GurobiSolver::translateObjectiveFunction(

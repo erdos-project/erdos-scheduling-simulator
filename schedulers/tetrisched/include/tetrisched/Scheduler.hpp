@@ -7,8 +7,9 @@
 namespace tetrisched {
 class Scheduler {
  private:
-  /// The solver instance underlying the Scheduler.
+  /// The solver instance underlying the Scheduler with the given type.
   std::shared_ptr<Solver> solver;
+  SolverBackendType solverBackend;
   /// The solver model to be passed to the expressions during parsing.
   SolverModelPtr solverModel;
   /// The solution to the last solver invocation (if available).
@@ -20,7 +21,7 @@ class Scheduler {
 
  public:
   /// Initialize the scheduler with a solver backend.
-  Scheduler(Time discretization);
+  Scheduler(Time discretization, SolverBackendType solverBackend);
 
   /// Registers the STRL expression for the scheduler to schedule from
   /// and parses it to populate the SolverModel.
@@ -30,10 +31,16 @@ class Scheduler {
   /// Invokes the solver to schedule the registered STRL expression
   /// on the given partitions at the given time.
   /// Use expression->getSolution() to retrieve the solution.
-  void schedule();
+  void schedule(Time currentTime);
 
   /// Retrieve the solution from the last invocation of the solver.
   SolverSolutionPtr getLastSolverSolution() const;
+
+  /// Exports the model from the last invocation of the solver.
+  void exportLastSolverModel(const std::string& fileName) const;
+
+  /// Exports the solution from the last invocation of the solver.
+  void exportLastSolverSolution(const std::string& fileName) const;
 };
 }  // namespace tetrisched
 

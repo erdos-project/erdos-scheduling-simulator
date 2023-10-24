@@ -26,7 +26,8 @@ template <typename T>
 VariableT<T>::VariableT(VariableType type, std::string name)
     : variableType(isTypeValid(type)),
       variableId(variableIdCounter++),
-      variableName(name) {}
+      variableName(name),
+      lowerBound(0) {}
 
 template <typename T>
 VariableT<T>::VariableT(VariableType type, std::string name, T lowerBound)
@@ -87,6 +88,16 @@ std::optional<T> VariableT<T>::getValue() const {
   return solutionValue;
 }
 
+template <typename T>
+std::optional<T> VariableT<T>::getLowerBound() const {
+  return lowerBound;
+}
+
+template <typename T>
+std::optional<T> VariableT<T>::getUpperBound() const {
+  return upperBound;
+}
+
 /*
  * Methods for Constraint.
  * These methods provide an implementation of the Constraint class.
@@ -127,7 +138,7 @@ void ConstraintT<T>::addTerm(std::shared_ptr<VariableT<T>> variable) {
 }
 
 template <typename T>
-void ConstraintT<T>::addTerm(const XOrVariableT<T> &term) {
+void ConstraintT<T>::addTerm(const XOrVariableT<T>& term) {
   if (term.isVariable()) {
     this->addTerm(term.template get<VariablePtr>());
   } else {
@@ -136,7 +147,7 @@ void ConstraintT<T>::addTerm(const XOrVariableT<T> &term) {
 }
 
 template <typename T>
-void ConstraintT<T>::addTerm(T coefficient, const XOrVariableT<T> &term) {
+void ConstraintT<T>::addTerm(T coefficient, const XOrVariableT<T>& term) {
   if (term.isVariable()) {
     this->addTerm(coefficient, term.template get<VariablePtr>());
   } else {
@@ -145,9 +156,14 @@ void ConstraintT<T>::addTerm(T coefficient, const XOrVariableT<T> &term) {
 }
 
 template <typename T>
+void ConstraintT<T>::addAttribute(ConstraintAttribute attribute) {
+  attributes.insert(attribute);
+}
+
+template <typename T>
 std::string ConstraintT<T>::toString() const {
   std::string constraintString;
-  for (auto &term : terms) {
+  for (auto& term : terms) {
     constraintString += "(" + std::to_string(term.first);
     if (term.second != nullptr) {
       constraintString += "*" + term.second->getName();
@@ -185,6 +201,42 @@ size_t ConstraintT<T>::size() const {
   return terms.size();
 }
 
+template <typename T>
+bool ConstraintT<T>::isTriviallySatisfiable() const {
+  if (constraintType == CONSTR_EQ) {
+    // For now, we assume that EQ constraints cannot be trivially satisfied.
+    return false;
+  }
+  T bound = 0;
+  for (const auto& [coefficient, variable] : terms) {
+    if (variable) {
+      auto variableBound = constraintType == CONSTR_LE
+                               ? variable->getUpperBound()
+                               : variable->getLowerBound();
+      if (!variableBound.has_value()) {
+        // If there is any variable that does not have a relevant bound, we
+        // cannot guarantee trivial satisfiability.
+        return false;
+      } else {
+        // Add the bound of this variable to the bound of the constraint.
+        bound += coefficient * variableBound.value();
+      }
+    } else {
+      // There was no Variable in this term. Just add the coefficient.
+      bound += coefficient;
+    }
+  }
+
+  switch (constraintType) {
+    case CONSTR_LE:
+      return bound <= rightHandSide;
+    case CONSTR_GE:
+      return bound >= rightHandSide;
+    default:
+      return false;
+  }
+}
+
 /*
  * Methods for ObjectiveFunction.
  * These methods provide an implementation of the Constraint class.
@@ -200,12 +252,17 @@ void ObjectiveFunctionT<T>::addTerm(T coefficient,
 }
 
 template <typename T>
+void ObjectiveFunctionT<T>::addTerm(T constant) {
+  terms.push_back(std::make_pair(constant, nullptr));
+}
+
+template <typename T>
 std::shared_ptr<ConstraintT<T>> ObjectiveFunctionT<T>::toConstraint(
     std::string constraintName, ConstraintType constraintType,
     T rightHandSide) {
   auto constraint = std::make_shared<ConstraintT<T>>(
       constraintName, constraintType, rightHandSide);
-  for (auto &term : terms) {
+  for (auto& term : terms) {
     constraint->addTerm(term);
   }
   return constraint;
@@ -222,9 +279,13 @@ std::string ObjectiveFunctionT<T>::toString() const {
       objectiveString += "Minimize: ";
       break;
   }
-  for (auto &term : terms) {
-    objectiveString +=
-        "(" + std::to_string(term.first) + "*" + term.second->getName() + ")";
+  for (auto& term : terms) {
+    if (term.second) {
+      objectiveString +=
+          "(" + std::to_string(term.first) + "*" + term.second->getName() + ")";
+    } else {
+      objectiveString += std::to_string(term.first);
+    }
     if (&term != &terms.back()) objectiveString += "+";
   }
   return objectiveString;
@@ -236,18 +297,27 @@ size_t ObjectiveFunctionT<T>::size() const {
 }
 
 template <typename T>
-ObjectiveFunctionT<T> &ObjectiveFunctionT<T>::operator+=(
-    const ObjectiveFunctionT<T> &other) {
-  for (auto &term : other.terms) {
+ObjectiveFunctionT<T>& ObjectiveFunctionT<T>::operator+=(
+    const ObjectiveFunctionT<T>& other) {
+  for (auto& term : other.terms) {
     terms.push_back(term);
   }
   return *this;
 }
 
 template <typename T>
+ObjectiveFunctionT<T> ObjectiveFunctionT<T>::operator*(const T& scalar) const {
+  auto result = *this;
+  for (auto& term : result.terms) {
+    term.first *= scalar;
+  }
+  return result;
+}
+
+template <typename T>
 T ObjectiveFunctionT<T>::getValue() const {
   T value = 0;
-  for (const auto &[coefficient, variable] : terms) {
+  for (const auto& [coefficient, variable] : terms) {
     if (variable == nullptr) {
       value += coefficient;
     } else {
@@ -294,7 +364,7 @@ std::string SolverModelT<T>::toString() const {
   }
   if (constraints.size() > 0) {
     modelString += "Constraints: \n";
-    for (auto &[_, constraint] : constraints) {
+    for (auto& [_, constraint] : constraints) {
       modelString +=
           constraint->getName() + ": \t" + constraint->toString() + "\n";
     }
@@ -304,7 +374,7 @@ std::string SolverModelT<T>::toString() const {
   }
   if (variables.size() > 0) {
     modelString += "Variables: \n";
-    for (auto &[_, variable] : variables) {
+    for (auto& [_, variable] : variables) {
       modelString += "\t" + variable->toString();
     }
   } else {
@@ -333,5 +403,12 @@ size_t SolverModelT<T>::numConstraints() const {
 template <typename T>
 T SolverModelT<T>::getObjectiveValue() const {
   return objectiveFunction->getValue();
+}
+
+template <typename T>
+void SolverModelT<T>::clear() {
+  variables.clear();
+  constraints.clear();
+  objectiveFunction.reset();
 }
 }  // namespace tetrisched

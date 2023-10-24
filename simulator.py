@@ -868,6 +868,15 @@ class Simulator(object):
                         f"A Placement for the Task {placement.task.unique_name} "
                         f"occurred in the past at {placement.placement_time}."
                     )
+                if placement.is_placed():
+                    # If there was a Placement, log the Task scheduling event.
+                    self._csv_logger.debug(
+                        f"{event.time.time},TASK_SCHEDULED,{placement.task.name},"
+                        f"{placement.task.task_graph},{placement.task.timestamp},"
+                        f"{placement.task.id},{placement.task.deadline.time},"
+                        f"{placement.placement_time.time},{placement.worker_pool_id},"
+                        f"{placement.execution_strategy.runtime.time}"
+                    )
                 simulator_events.extend(
                     self.__create_events_from_task_placement(event.time, placement)
                 )

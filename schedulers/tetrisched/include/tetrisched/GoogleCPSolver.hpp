@@ -55,6 +55,11 @@ class GoogleCPSolver : public Solver {
 
   /// Get the name of the Solver.
   std::string getName() const override { return "GoogleCPSolver"; }
+
+  /// Get the backend type of the Solver.
+  SolverBackendType getBackendType() const override {
+    return SolverBackendType::GOOGLE_CP;
+  }
 };
 }  // namespace tetrisched
 #endif  // _TETRISCHED_GOOGLE_CP_SOLVER_HPP_

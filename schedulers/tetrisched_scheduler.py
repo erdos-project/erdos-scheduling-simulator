@@ -7,7 +7,15 @@ import tetrisched_py as tetrisched
 from schedulers import BaseScheduler
 from utils import EventTime
 from workers import Worker, WorkerPool, WorkerPools
-from workload import Placement, Placements, Resource, Task, TaskGraph, Workload
+from workload import (
+    Placement,
+    Placements,
+    Resource,
+    Task,
+    TaskGraph,
+    TaskState,
+    Workload,
+)
 
 
 class TetriSchedScheduler(BaseScheduler):
@@ -34,6 +42,7 @@ class TetriSchedScheduler(BaseScheduler):
         retract_schedules: bool = False,
         release_taskgraphs: bool = False,
         time_discretization: EventTime = EventTime(1, EventTime.Unit.US),
+        log_to_file: bool = False,
         _flags: Optional["absl.flags"] = None,
     ):
         if preemptive:
@@ -48,7 +57,11 @@ class TetriSchedScheduler(BaseScheduler):
             _flags=_flags,
         )
         self._time_discretization = time_discretization.to(EventTime.Unit.US)
-        self._scheduler = tetrisched.Scheduler(self._time_discretization.time)
+        self._scheduler = tetrisched.Scheduler(
+            self._time_discretization.time, tetrisched.backends.SolverBackendType.GUROBI
+        )
+        self._log_to_file = log_to_file
+        self._log_times = set(map(int, _flags.scheduler_log_times)) if _flags else set()
 
     def schedule(
         self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools
@@ -73,7 +86,9 @@ class TetriSchedScheduler(BaseScheduler):
         # Construct the STRL expression.
         scheduler_start_time = time.time()
         placements = []
-        if len(tasks_to_be_scheduled) > 0:
+        if len(tasks_to_be_scheduled) > 0 and any(
+            task.state != TaskState.SCHEDULED for task in tasks_to_be_scheduled
+        ):
             # Construct the partitions from the Workers in the WorkerPool.
             partitions = self.construct_partitions(worker_pools=worker_pools)
 
@@ -101,11 +116,17 @@ class TetriSchedScheduler(BaseScheduler):
             # Register the STRL expression with the scheduler and solve it.
             self._scheduler.registerSTRL(objective_strl, partitions, sim_time.time)
             solver_start_time = time.time()
-            self._scheduler.schedule()
+            self._scheduler.schedule(sim_time.time)
             solver_end_time = time.time()
             solver_time = EventTime(
                 int((solver_end_time - solver_start_time) * 1e6), EventTime.Unit.US
             )
+            if self._log_to_file or sim_time.time in self._log_times:
+                self._scheduler.exportLastSolverModel(f"tetrisched_{sim_time.time}.lp")
+                self._logger.debug(
+                    f"[{sim_time.to(EventTime.Unit.US).time}] Exported model to "
+                    f"tetrisched_{sim_time.time}.lp."
+                )
 
             # Retrieve the solution and check if we were able to schedule anything.
             solverSolution = objective_strl.getSolution()

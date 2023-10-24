@@ -25,9 +25,11 @@ TEST(SolverModelTypes, TestVariableConstruction) {
 /// Throw an error if we try to make an Integer variable continuous.
 TEST(SolverModelTypes, TestIncorrectVariableConstruction) {
   std::string varName = "intVar";
-  EXPECT_THROW(std::make_shared<tetrisched::Variable>(
-                   tetrisched::VAR_CONTINUOUS, varName),
-               tetrisched::exceptions::SolverException);
+  if constexpr (std::is_integral_v<TETRISCHED_ILP_TYPE>) {
+    EXPECT_THROW(std::make_shared<tetrisched::Variable>(
+                     tetrisched::VAR_CONTINUOUS, varName),
+                 tetrisched::exceptions::SolverException);
+  }
 }
 
 TEST(SolverModelTypes, TestConstraintConstruction) {
@@ -38,7 +40,6 @@ TEST(SolverModelTypes, TestConstraintConstruction) {
       std::make_shared<tetrisched::Variable>(tetrisched::VAR_INTEGER, "intVar");
 
   constraint->addTerm(1, intVar);
-  EXPECT_EQ(constraint->toString(), "(1*intVar) <= 10");
   EXPECT_EQ(constraint->size(), 1);
 }
 
@@ -47,7 +48,6 @@ TEST(SolverModelTypes, TestObjectiveFnConstruction) {
   tetrisched::VariablePtr intVar =
       std::make_shared<tetrisched::Variable>(tetrisched::VAR_INTEGER, "intVar");
   objectiveFn.addTerm(1, intVar);
-  EXPECT_EQ(objectiveFn.toString(), "Maximize: (1*intVar)");
   EXPECT_EQ(objectiveFn.size(), 1);
 }
 

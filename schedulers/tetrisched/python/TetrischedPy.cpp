@@ -40,14 +40,18 @@ void defineBasicTypes(py::module_& tetrisched_m) {
 /// Define the Scheduler interface.
 void defineScheduler(py::module_& tetrisched_m) {
   py::class_<tetrisched::Scheduler>(tetrisched_m, "Scheduler")
-      .def(py::init<tetrisched::Time>(), "Initializes the Scheduler.")
+      .def(py::init<tetrisched::Time, tetrisched::SolverBackendType>(),
+           "Initializes the Scheduler with the given backend.")
       .def("registerSTRL", &tetrisched::Scheduler::registerSTRL,
            "Registers the STRL expression for the scheduler to schedule from.")
       .def("schedule", &tetrisched::Scheduler::schedule,
            "Invokes the solver to schedule the registered STRL expression.")
       .def("getLastSolverSolution",
            &tetrisched::Scheduler::getLastSolverSolution,
-           "Retrieve the solution from the last invocation of the solver.");
+           "Retrieve the solution from the last invocation of the solver.")
+      .def("exportLastSolverModel",
+           &tetrisched::Scheduler::exportLastSolverModel,
+           "Exports the model from the last invocation of the solver.");
 }
 
 /// Define the Solver backends.

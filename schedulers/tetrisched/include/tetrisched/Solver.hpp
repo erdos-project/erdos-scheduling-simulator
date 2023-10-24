@@ -4,6 +4,23 @@
 #include "tetrisched/SolverModel.hpp"
 
 namespace tetrisched {
+/// The `SolverBackend` enum represents the different types of solver
+/// backends that we can use to solve the STRL expressions.
+enum SolverBackendType {
+#ifdef _TETRISCHED_WITH_GUROBI_
+  /// The Gurobi solver backend.
+  GUROBI = 0,
+#endif
+#ifdef _TETRISCHED_WITH_CPLEX_
+  /// The CPLEX solver backend.
+  CPLEX = 1,
+#endif
+#ifdef _TETRISCHED_WITH_OR_TOOLS_
+  /// The Google OR-Tools solver backend.
+  GOOGLE_CP = 2,
+#endif
+};
+
 /// The `SolutionType` enum represents the different types of solutions
 /// that we can retrieve from the solver.
 enum SolutionType {
@@ -75,6 +92,9 @@ class Solver {
 
   /// Get the name of the Solver.
   virtual std::string getName() const = 0;
+
+  /// Get the backend type of the Solver.
+  virtual SolverBackendType getBackendType() const = 0;
 };
 using SolverPtr = std::shared_ptr<tetrisched::Solver>;
 }  // namespace tetrisched

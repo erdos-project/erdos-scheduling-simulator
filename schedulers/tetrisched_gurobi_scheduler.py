@@ -902,7 +902,8 @@ class TetriSchedGurobiScheduler(BaseScheduler):
                             task_variable.start_time
                             >= parent_variable.start_time
                             + parent_strategy.runtime.to(EventTime.Unit.US).time
-                            + 1,
+                            + 1
+                            ,
                             name=f"{task_name}_start_after_{parent_variable.name}",
                         )
 
@@ -1045,6 +1046,11 @@ class TetriSchedGurobiScheduler(BaseScheduler):
             # the scheduler.
             task_reward_variables = []
             for task_variable in tasks_to_variables.values():
+                task_graph = workload.get_task_graph(task_variable.task.task_graph)
+                if self.release_taskgraphs and not task_graph.is_sink_task(
+                    task_variable.task
+                ):
+                    continue
                 task_reward_variables.extend(
                     [
                         task_variable._placement_rewards[t] * value

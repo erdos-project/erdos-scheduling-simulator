@@ -123,8 +123,11 @@ class CSVReader(object):
                     elif reading[1] == "TASK_MIGRATED":
                         # Update the placement with the migration time.
                         tasks[reading[4]].update_migration(reading, worker_pools)
+                    elif reading[1] == "TASK_SCHEDULED":
+                        # Add the task to the last scheduler's invocation.
+                        schedulers[-1].update_task_schedule(reading)
                     else:
-                        continue
+                        print(f"[x] Unknown event type: {reading[1]}")
                 except Exception as e:
                     raise ValueError(
                         f"Error while parsing the following line: {reading}"
@@ -335,11 +338,36 @@ class CSVReader(object):
                         "released_tasks": scheduler_event.released_tasks,
                         "previously_placed_tasks": previously_placed_tasks,
                         "total_tasks": scheduler_event.total_tasks,
-                        "placed_tasks": scheduler_event.placed_tasks,
-                        "unplaced_tasks": scheduler_event.unplaced_tasks,
+                        "num_placed_tasks": scheduler_event.num_placed_tasks,
+                        "num_unplaced_tasks": scheduler_event.num_unplaced_tasks,
                     },
                 }
                 trace["traceEvents"].append(trace_event)
+
+                # Output the scheduler's placement as individual elements, if requested.
+                if trace_fmt == "scheduler":
+                    for placement in scheduler_event.task_placements:
+                        trace_event = {
+                            "name": f"{placement.task_name}::{placement.timestamp}",
+                            "cat": "scheduler,placement",
+                            "ph": "X",
+                            "ts": placement.placement_time,
+                            "dur": placement.completion_time - placement.placement_time,
+                            "pid": f"{scheduler_label}::{scheduler_event.instance_id} "
+                            f"({scheduler_event.start_time})",
+                            "tid": placement.task_graph,
+                            "args": {
+                                "name": placement.task_name,
+                                "task_graph": placement.task_graph,
+                                "id": str(placement.id),
+                                "placement_time": placement.placement_time,
+                                "timestamp": placement.timestamp,
+                                "worker_pool": placement.worker_pool,
+                                "intended_completion_time": placement.completion_time,
+                                "deadline": placement.deadline,
+                            },
+                        }
+                        trace["traceEvents"].append(trace_event)
 
         if trace_fmt == "resource":
             resource_ids_to_canonical_names = {}
@@ -352,120 +380,40 @@ class CSVReader(object):
                     ] = f"{resource.name}_{resource_counter[resource.name]}"
 
         # Output all the tasks and the requested deadlines.
-        for task in self.get_tasks(csv_path):
-            # Do not output the tasks if it does not fall within the given time.
-            if not check_if_time_intersects(
-                between_time, task.start_time, task.completion_time
-            ):
-                continue
-            if trace_fmt in ["task", "taskgraph", "application"]:
-                if trace_fmt == "task":
-                    if "." in task.name:
-                        # pid = operator name, tid = callback name
-                        pid, tid = task.name.split(".", 1)
+        if trace_fmt in ["task", "taskgraph", "application", "resource"]:
+            for task in self.get_tasks(csv_path):
+                # Do not output the tasks if it does not fall within the given time.
+                if not check_if_time_intersects(
+                    between_time, task.start_time, task.completion_time
+                ):
+                    continue
+                if trace_fmt in ["task", "taskgraph", "application"]:
+                    if trace_fmt == "task":
+                        if "." in task.name:
+                            # pid = operator name, tid = callback name
+                            pid, tid = task.name.split(".", 1)
+                        else:
+                            pid = tid = task.name
                     else:
-                        pid = tid = task.name
-                else:
-                    if trace_fmt == "taskgraph":
-                        pid = task.task_graph
-                        tid = task.name
-                    else:
-                        pid = task.task_graph.split("@", 1)[0]
-                        tid = task.task_graph
+                        if trace_fmt == "taskgraph":
+                            pid = task.task_graph
+                            tid = task.name
+                        else:
+                            pid = task.task_graph.split("@", 1)[0]
+                            tid = task.task_graph
 
-                # Output the task's placement as individual elements.
-                for placement in task.placements:
-                    if placement.completion_time is None:
-                        # In case the task didn't finish in the simulation.
-                        continue
-                    trace_event = {
-                        "name": f"{task.name}::{task.timestamp}",
-                        "cat": "task,duration",
-                        "ph": "X",
-                        "ts": placement.placement_time,
-                        "dur": placement.completion_time - placement.placement_time,
-                        "pid": pid,
-                        "tid": tid,
-                        "args": {
-                            "name": task.name,
-                            "task_graph": task.task_graph,
-                            "id": str(task.id),
-                            "timestamp": task.timestamp,
-                            "intended_release_time": task.intended_release_time,
-                            "release_time": task.release_time,
-                            "runtime": task.runtime,
-                            "deadline": task.deadline,
-                            "start_time": task.start_time,
-                            "completion_time": task.completion_time,
-                            "missed_deadline": task.missed_deadline,
-                            "skipped_times": task.skipped_times,
-                        },
-                    }
-                    trace["traceEvents"].append(trace_event)
-
-                # Output the release times.
-                if (
-                    show_release_times == "intended"
-                    and task.intended_release_time != -1
-                ) or show_release_times == "always":
-                    # The scope of the release time events is per thread if we
-                    # are outputting a task focused trace, and process if we are
-                    # outputting an application or a taskgraph focused trace.
-                    scope = "t" if trace_fmt == "task" else "p"
-                    timestamp = (
-                        task.intended_release_time
-                        if show_release_times == "intended"
-                        else task.release_time
-                    )
-                    trace_event = {
-                        "name": f"{task.name}::{task.timestamp}",
-                        "cat": "task,releasetime,intended,instant",
-                        "ph": "i",
-                        "ts": timestamp,
-                        "pid": pid,
-                        "tid": tid,
-                        "s": scope,
-                    }
-                    trace["traceEvents"].append(trace_event)
-
-                # Output the deadline.
-                if (
-                    show_deadlines == "missed" and task.missed_deadline
-                ) or show_deadlines == "always":
-                    # The scope of the missed deadline events is per thread if we
-                    # are outputting a task focused trace, and process if we are
-                    # outputting an application or a taskgraph focused trace.
-                    scope = "t" if trace_fmt == "task" else "p"
-                    trace_event = {
-                        "name": f"{task.name}::{task.timestamp}",
-                        "cat": "task,missed,deadline,instant",
-                        "ph": "i",
-                        "ts": task.deadline,
-                        "pid": pid,
-                        "tid": tid,
-                        "s": scope,
-                    }
-                    trace["traceEvents"].append(trace_event)
-
-                # Output the release time.
-            elif trace_fmt == "resource":
-                # Output the task's placement as individual elements.
-                for placement in task.placements:
-                    if placement.completion_time is None:
-                        # In case the task didn't finish by the end of the simulation.
-                        continue
-                    tids = [
-                        resource_ids_to_canonical_names[resource.id]
-                        for resource in placement.resources_used
-                    ]
-                    for tid in tids:
+                    # Output the task's placement as individual elements.
+                    for placement in task.placements:
+                        if placement.completion_time is None:
+                            # In case the task didn't finish in the simulation.
+                            continue
                         trace_event = {
                             "name": f"{task.name}::{task.timestamp}",
                             "cat": "task,duration",
                             "ph": "X",
                             "ts": placement.placement_time,
                             "dur": placement.completion_time - placement.placement_time,
-                            "pid": placement.worker_pool.name,
+                            "pid": pid,
                             "tid": tid,
                             "args": {
                                 "name": task.name,
@@ -480,33 +428,115 @@ class CSVReader(object):
                                 "completion_time": task.completion_time,
                                 "missed_deadline": task.missed_deadline,
                                 "skipped_times": task.skipped_times,
-                                "worker_name": placement.worker_pool.name,
                             },
                         }
                         trace["traceEvents"].append(trace_event)
 
-                        # Output the deadline.
-                        if (
-                            show_deadlines == "missed" and task.missed_deadline
-                        ) or show_deadlines == "always":
-                            if check_if_time_intersects(
-                                task.deadline,
-                                placement.placement_time,
-                                placement.completion_time,
-                            ):
-                                trace_event = {
-                                    "name": f"{task.name}::{task.timestamp}",
-                                    "cat": "task,missed,deadline,instant",
-                                    "ph": "i",
-                                    "ts": task.deadline,
-                                    "pid": placement.worker_pool.name,
-                                    "tid": tid,
-                                    # The scope of missed deadline events is per thread.
-                                    "s": "t",
-                                }
-                                trace["traceEvents"].append(trace_event)
-            else:
-                raise ValueError(f"Undefined execution mode: {trace_fmt}")
+                    # Output the release times.
+                    if (
+                        show_release_times == "intended"
+                        and task.intended_release_time != -1
+                    ) or show_release_times == "always":
+                        # The scope of the release time events is per thread if we
+                        # are outputting a task focused trace, and process if we are
+                        # outputting an application or a taskgraph focused trace.
+                        scope = "t" if trace_fmt == "task" else "p"
+                        timestamp = (
+                            task.intended_release_time
+                            if show_release_times == "intended"
+                            else task.release_time
+                        )
+                        trace_event = {
+                            "name": f"{task.name}::{task.timestamp}",
+                            "cat": "task,releasetime,intended,instant",
+                            "ph": "i",
+                            "ts": timestamp,
+                            "pid": pid,
+                            "tid": tid,
+                            "s": scope,
+                        }
+                        trace["traceEvents"].append(trace_event)
+
+                    # Output the deadline.
+                    if (
+                        show_deadlines == "missed" and task.missed_deadline
+                    ) or show_deadlines == "always":
+                        # The scope of the missed deadline events is per thread if we
+                        # are outputting a task focused trace, and process if we are
+                        # outputting an application or a taskgraph focused trace.
+                        scope = "t" if trace_fmt == "task" else "p"
+                        trace_event = {
+                            "name": f"{task.name}::{task.timestamp}",
+                            "cat": "task,missed,deadline,instant",
+                            "ph": "i",
+                            "ts": task.deadline,
+                            "pid": pid,
+                            "tid": tid,
+                            "s": scope,
+                        }
+                        trace["traceEvents"].append(trace_event)
+
+                    # Output the release time.
+                elif trace_fmt == "resource":
+                    # Output the task's placement as individual elements.
+                    for placement in task.placements:
+                        if placement.completion_time is None:
+                            # The task didn't finish by the end of the simulation.
+                            continue
+                        tids = [
+                            resource_ids_to_canonical_names[resource.id]
+                            for resource in placement.resources_used
+                        ]
+                        for tid in tids:
+                            trace_event = {
+                                "name": f"{task.name}::{task.timestamp}",
+                                "cat": "task,duration",
+                                "ph": "X",
+                                "ts": placement.placement_time,
+                                "dur": placement.completion_time
+                                - placement.placement_time,
+                                "pid": placement.worker_pool.name,
+                                "tid": tid,
+                                "args": {
+                                    "name": task.name,
+                                    "task_graph": task.task_graph,
+                                    "id": str(task.id),
+                                    "timestamp": task.timestamp,
+                                    "intended_release_time": task.intended_release_time,
+                                    "release_time": task.release_time,
+                                    "runtime": task.runtime,
+                                    "deadline": task.deadline,
+                                    "start_time": task.start_time,
+                                    "completion_time": task.completion_time,
+                                    "missed_deadline": task.missed_deadline,
+                                    "skipped_times": task.skipped_times,
+                                    "worker_name": placement.worker_pool.name,
+                                },
+                            }
+                            trace["traceEvents"].append(trace_event)
+
+                            # Output the deadline.
+                            if (
+                                show_deadlines == "missed" and task.missed_deadline
+                            ) or show_deadlines == "always":
+                                if check_if_time_intersects(
+                                    task.deadline,
+                                    placement.placement_time,
+                                    placement.completion_time,
+                                ):
+                                    trace_event = {
+                                        "name": f"{task.name}::{task.timestamp}",
+                                        "cat": "task,missed,deadline,instant",
+                                        "ph": "i",
+                                        "ts": task.deadline,
+                                        "pid": placement.worker_pool.name,
+                                        "tid": tid,
+                                        # The scope of missed deadline events is thread.
+                                        "s": "t",
+                                    }
+                                    trace["traceEvents"].append(trace_event)
+                else:
+                    raise ValueError(f"Undefined execution mode: {trace_fmt}")
 
         # If placement issues were requested in resource trace, output all the tasks
         # with their actual release time and runtime if the skipped events were within
