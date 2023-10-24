@@ -1,7 +1,6 @@
 import os
 import time
 from copy import copy, deepcopy
-from operator import attrgetter
 from typing import Optional
 
 import absl  # noqa: F401
@@ -12,16 +11,7 @@ from utils import EventTime
 from workers import WorkerPools
 from workers.workers import Worker, WorkerPool
 from workload import Placement, Placements, Workload, Task
-from workload.strategy import ExecutionStrategies, ExecutionStrategy
-
-"""
-PR checklist
-- Per class, function doc string
-- Unit test
-- Updated readme on using dev container and installing Flowlessly
-- A script to build Flowlessly
-
-"""
+from workload.strategy import ExecutionStrategy
 
 def select_best_execution_strategies(task: Task, worker: Worker) -> Optional[ExecutionStrategy]:
     """
@@ -187,12 +177,6 @@ class FlowScheduler(BaseScheduler):
                 f"[{sim_time.to(EventTime.Unit.US).time}] Flow scheduler receive "
                 f"{tasks_to_be_scheduled=}"
             )
-
-        print(f"{sim_time=}")
-        for task in tasks_to_be_scheduled:
-            print(f"{task.name=}, {task.task_graph=}, {task._timestamp=}, {task.deadline=}")
-            print(f"execution strategies: {task.available_execution_strategies._strategies}")
-        print()
         
         # TODO: How to handle preemption?
         if self.preemptive:
