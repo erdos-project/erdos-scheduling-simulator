@@ -1,0 +1,39 @@
+# Compiled Object files
+*.slo
+*.lo
+*.o
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+
+# CMake files
+cmake_install.cmake
+CMakeFiles*
+CMakeCache*
+CTestTestfile.cmake
+Makefile
+
+# Ignore build directory
+build
+
+*~
+
+graph.out
+test*.dm
+
+ext/*
+
+# Latex stuff
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out

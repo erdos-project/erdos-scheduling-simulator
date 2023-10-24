@@ -1,0 +1,201 @@
+c ===========================
+p min 57 86
+c ===========================
+c === ALL NODES FOLLOW ===
+c nd 0 SINK
+n 1 -4
+c nd 0 4e308a18-ded5-49ae-8506-ec76052f1441
+n 2 0
+c nd 0 dc15b90e-0a43-401a-af37-f3feab4392f8
+n 3 0
+c nd 0 6b9690ae-71b0-4ed3-81e2-9fa6939ed614
+n 4 0
+c nd 0 711a2817-cb48-4e18-9e49-e338fd3753e4
+n 5 0
+c nd 0 519a7235-baa7-41cb-a5cc-ab8b4a57bd72
+n 6 0
+c nd 0 c8ad75ed-20a2-4a82-9a2d-85608f12a752
+n 7 0
+c nd 0 bf040e74-016a-4b7a-a476-288903b891c9
+n 8 0
+c nd 0 5958f286-4f8a-43b9-9268-39e4f455a407
+n 9 0
+c nd 0 df8ef518-7812-4f6d-b1bb-0cc2dac5c926
+n 10 0
+c nd 0 ec07171d-0ea6-40b4-827f-3bbec2525f9e
+n 11 0
+c nd 0 ecf179bf-bba4-418d-b9b3-23c33bda57fb
+n 12 0
+c nd 0 221c287a-9948-41d1-ba64-5d1ed87613b9
+n 13 0
+c nd 0 8ea7f6f2-5762-4e4a-a7d9-19732f2f5e01
+n 14 0
+c nd 0 a3121b70-4450-490f-a19a-7c1fb745c6e0
+n 15 0
+c nd 0 1bce408f-3db2-45cd-b502-6a742b7cf8d7
+n 16 0
+c nd 0 94821a45-fc8f-49c9-b445-3ef706db7fa4
+n 17 0
+c nd 0 acddbcbe-4f0b-4937-83a3-4b85b75f1ea7
+n 18 0
+c nd 0 27a4e3db-7b86-4b1a-a3e7-ce81fcdc78df
+n 19 0
+c nd 0 e6b7079a-180f-409f-8670-828d5c2b416a
+n 20 0
+c nd 0 8b2ae5c0-429b-4792-93b2-359c217d3956
+n 21 0
+c nd 0 7f9a2fe3-b78d-4b90-bf5e-a8bcd7b3ef1b
+n 22 0
+c nd 0 027c59a8-337d-49e0-a6e0-0e3f007484af
+n 23 0
+c nd 0 74d4be2e-bb5a-4fb4-9bda-4338142904e4
+n 24 0
+c nd 0 80f322b6-9dc2-4dfe-a749-a528d5b2800e
+n 25 0
+c nd 0 c718ea52-c1c6-444e-91fd-e1cafacf0dda
+n 26 0
+c nd 0 003adcde-0bab-470d-a41c-27257addcfa7
+n 27 0
+c nd 0 85ac5f32-a52a-4e36-8328-fd084798b08b
+n 28 0
+c nd 0 7cf9517e-4fe9-4cae-8e42-d5b66ddbedb8
+n 29 0
+c nd 0 e7f37e7d-f7e0-448f-8cbc-aecf69d81493
+n 30 0
+c nd 0 0d1b7876-9200-4f2f-aefb-a50ebcd168b5
+n 31 0
+c nd 0 fe204869-7544-4a5b-b927-0aa5c5133919
+n 32 0
+c nd 0 e8062cd8-e8f1-4ac7-8caa-8c2e20f332bc
+n 33 0
+c nd 0 7fd77a8a-172a-41b3-81f8-e3cc552c5849
+n 34 0
+c nd 0 15205697-b6eb-459d-ac8f-2abd12ccaee4
+n 35 0
+c nd 0 ce6fb40e-48c0-4134-a2bf-bc3d4030d440
+n 36 0
+c nd 0 2270869f-7a1a-4d1f-981d-9d07db8d399e
+n 37 0
+c nd 0 a06aa198-99ca-4583-b87d-192e94a0e445
+n 38 0
+c nd 0 ccdebe91-b091-46a0-8979-446130a389c5
+n 39 0
+c nd 0 b34c82a4-8b5f-40c3-aeae-69621f3ce720
+n 40 0
+c nd 0 4b5a8add-0677-4b27-9a7b-3911e082a0e0
+n 41 0
+c nd 0 e57e0e4c-8702-4329-ad81-7f09b2c7b95a
+n 42 0
+c nd 0 4809274d-3e61-46ac-a18f-0e2ec9e76e99
+n 43 0
+c nd 0 2da3048c-b078-4961-a28b-9efe37843fe3
+n 44 0
+c nd 0 ae577c06-f452-42ba-b731-a50c4ef760a9
+n 45 0
+c nd 0 3fbaf8ad-b1bf-47ce-af9d-cd105a46fc4a
+n 46 0
+c nd 0 336a7833-33ab-4855-83c4-4b5dd86958f6
+n 47 0
+c nd 0 9fb8ae5f-677f-487d-966e-4305aef593e8
+n 48 0
+c nd 0 UNSCHED_AGG_for_d6579ba4-6f95-41ed-a26a-1676ccbef46a
+n 49 0
+n 50 1
+c nd 0 EC_AGG_2654435769
+n 51 0
+c nd 0 UNSCHED_AGG_for_edd7c6ba-5e71-4c82-96c7-d2a2db9e0137
+n 52 0
+n 53 1
+c nd 0 UNSCHED_AGG_for_c99d7bf3-a6b3-40b7-9d7d-e2bbb7df030d
+n 54 0
+n 55 1
+c nd 0 UNSCHED_AGG_for_f9547986-1c1e-416f-a372-2e9b28a5fe0f
+n 56 0
+n 57 1
+c === ALL ARCS FOLLOW ===
+a 2 26 0 8 39
+a 31 33 0 1 0
+a 57 2 0 1 318
+a 20 1 0 1 0
+a 18 20 0 1 0
+a 43 1 0 1 0
+a 15 1 0 1 0
+a 5 21 0 2 59
+a 5 16 0 2 44
+a 41 42 0 1 0
+a 36 37 0 1 0
+a 5 6 0 2 83
+a 57 10 0 0 0
+a 34 35 0 2 61
+a 55 2 0 1 102
+a 52 1 0 1 0
+a 33 1 0 1 0
+a 57 33 0 0 0
+a 28 44 0 2 227
+a 28 29 0 2 152
+a 48 1 0 1 0
+a 50 2 0 1 40
+a 57 51 0 0 153
+a 18 19 0 1 0
+a 26 27 0 8 85
+a 35 36 0 2 177
+a 45 46 0 2 95
+a 57 56 0 1 993
+a 19 1 0 1 0
+a 9 1 0 1 0
+a 30 31 0 2 150
+a 13 15 0 1 0
+a 23 24 0 1 0
+a 46 47 0 1 0
+a 39 40 0 2 240
+a 12 13 0 2 115
+a 50 49 0 1 796
+a 50 42 0 0 0
+a 6 7 0 2 46
+a 22 23 0 2 179
+a 53 52 0 1 879
+a 55 19 0 0 0
+a 46 48 0 1 0
+a 32 1 0 1 0
+a 53 2 0 1 435
+a 49 1 0 1 0
+a 40 41 0 2 13
+a 53 24 0 0 0
+a 38 1 0 1 0
+a 53 43 0 0 0
+a 23 25 0 1 0
+a 55 24 0 0 0
+a 50 43 0 0 0
+a 29 30 0 2 5
+a 50 51 0 0 71
+a 5 11 0 2 118
+a 55 51 0 0 403
+a 3 4 0 8 125
+a 11 12 0 2 185
+a 7 8 0 2 65
+a 28 39 0 2 119
+a 36 38 0 1 0
+a 37 1 0 1 0
+a 21 22 0 2 27
+a 13 14 0 1 0
+a 47 1 0 1 0
+a 27 28 0 8 154
+a 53 51 0 0 468
+a 41 43 0 1 0
+a 14 1 0 1 0
+a 54 1 0 1 0
+a 10 1 0 1 0
+a 31 32 0 1 0
+a 44 45 0 2 87
+a 4 5 0 8 146
+a 25 1 0 1 0
+a 16 17 0 2 1
+a 55 54 0 1 598
+a 8 9 0 1 0
+a 2 3 0 8 108
+a 8 10 0 1 0
+a 56 1 0 1 0
+a 42 1 0 1 0
+a 17 18 0 2 88
+a 24 1 0 1 0
+a 28 34 0 2 183

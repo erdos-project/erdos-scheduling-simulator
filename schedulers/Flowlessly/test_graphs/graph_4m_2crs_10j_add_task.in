@@ -1,0 +1,14 @@
+c === Add tasks vertex to the graph. The change can affect the flow because the cluster
+c === is oversubscribed
+d 0 0 6
+c === Arc from source
+a 1 0 0 1 0
+c === Arc to unscheduled
+a 0 12 0 1 255
+c === Arc to cluster agg
+a 0 15 0 1 155
+c === Arc to devil agg
+a 0 13 0 1 75
+c === Preference arcs to cores
+a 0 20 0 1 84
+a 0 24 0 1 92

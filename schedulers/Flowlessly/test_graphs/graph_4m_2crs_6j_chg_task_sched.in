@@ -1,0 +1,3 @@
+c === Changing the cost of an arc to the cluster aggregator. The task is not scheduled using
+c === the aggregator. Hence, it should have a minor impact on the min cost flow.
+x 3 11 0 1 150

@@ -1,0 +1,21 @@
+c === Remove completed task ===
+r 3
+c === Machine that receives a task via a equiv class preference arc ===
+r 24
+c === Machine that receives a task via a preference arc ===
+r 21
+c === Machine that receives a task via the topology ===
+r 23
+c === Reduce cost for preference arc that is currently not used
+x 8 23 0 1 1
+c === Add machine
+d 0 5
+c === Arc from switch
+a 18 0 0 1 15
+c === Arcs from tasks
+a 3 0 0 1 20
+a 8 0 0 1 25
+c === Arc for equiv class
+a 14 0 0 1 20
+c == Arc to the sink
+a 0 28 0 1 0

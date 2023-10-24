@@ -1,0 +1,6 @@
+c === Adding preference arc from task to core. 21 is an available core. The should just
+c === move the task on the core using the newly added arc
+x 4 21 0 1 15
+c === Adding preference arc from task to core. 18 is an already used core. The addition may
+c === change the flow of the entire graph
+c === x 4 18 0 1 10
