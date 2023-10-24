@@ -75,6 +75,10 @@ class Placement(object):
         worker_id: Optional[str] = None,
         strategy: ExecutionStrategy = None,
     ) -> None:
+        if worker_id is not None and worker_pool_id is None:
+            raise ValueError(f"Receive worker_pool_id=None while {worker_id=} when instantiating Placement object."
+                             "Did you forget to pass in worker_pool_id?")
+
         self._placement_type = type
         self._computation = computation
         self._placement_time = placement_time
