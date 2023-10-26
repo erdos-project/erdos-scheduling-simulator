@@ -156,6 +156,8 @@ std::string Expression::getTypeString() const {
       return "LessThanExpression";
     case ExpressionType::EXPR_ALLOCATION:
       return "AllocationExpression";
+    case ExpressionType::EXPR_MALLEABLE_CHOOSE:
+      return "MalleableChooseExpression";
     default:
       return "UnknownExpression";
   }
@@ -416,7 +418,322 @@ SolutionResultPtr ChooseExpression::populateResults(
   return solution;
 }
 
+/* Method definitions for GeneralizedChoose */
+MalleableChooseExpression::MalleableChooseExpression(
+    std::string taskName, Partitions resourcePartitions,
+    uint32_t resourceTimeSlots, Time startTime, Time endTime, Time granularity)
+    : Expression(taskName, ExpressionType::EXPR_MALLEABLE_CHOOSE),
+      resourcePartitions(resourcePartitions),
+      resourceTimeSlots(resourceTimeSlots),
+      startTime(startTime),
+      endTime(endTime),
+      granularity(granularity),
+      partitionVariables() {}
+
+void MalleableChooseExpression::addChild(ExpressionPtr child) {
+  throw tetrisched::exceptions::ExpressionConstructionException(
+      "MalleableChooseExpression cannot have a child.");
+}
+
+ParseResultPtr MalleableChooseExpression::parse(
+    SolverModelPtr solverModel, Partitions availablePartitions,
+    CapacityConstraintMap& capacityConstraints, Time currentTime) {
+  // Check that the Expression was parsed before
+  if (parsedResult != nullptr) {
+    // Return the alread parsed sub-tree.
+    return parsedResult;
+  }
+
+  // Create and save the ParseResult.
+  parsedResult = std::make_shared<ParseResult>();
+
+  if (currentTime > startTime) {
+    TETRISCHED_DEBUG("Pruning MalleableChooseExpression "
+                     << name << " to be placed starting at time " << startTime
+                     << " and ending at " << endTime
+                     << " because it is in the past.");
+    parsedResult->type = ParseResultType::EXPRESSION_PRUNE;
+    return parsedResult;
+  }
+  TETRISCHED_DEBUG("Parsing MalleableChooseExpression "
+                   << name << " to be placed starting at time " << startTime
+                   << " and ending at " << endTime << ".")
+
+  // Find the partitions that this Choose expression can be placed in.
+  // This is the intersection of the Partitions that the Choose expression
+  // was instantiated with and the Partitions that are available at the
+  // time of the parsing.
+  Partitions schedulablePartitions = resourcePartitions | availablePartitions;
+  TETRISCHED_DEBUG("The MalleableChooseExpression "
+                   << name << " will be limited to "
+                   << schedulablePartitions.size() << " partitions.");
+
+  // We generate an Indicator variable for the Choose expression signifying
+  // if this expression was satisfied.
+  std::string satisfiedVarName = name + "_placed_from_" +
+                                 std::to_string(startTime) + "_to_" +
+                                 std::to_string(endTime);
+  VariablePtr isSatisfiedVar =
+      std::make_shared<Variable>(VariableType::VAR_INDICATOR, satisfiedVarName);
+  solverModel->addVariable(isSatisfiedVar);
+  TETRISCHED_DEBUG(
+      "The MalleableChooseExpression's satisfaction will be indicated by "
+      << satisfiedVarName << ".");
+
+  ConstraintPtr fulfillsDemandConstraint = std::make_shared<Constraint>(
+      name + "_fulfills_demand_from_" + std::to_string(startTime) + "_to_" +
+          std::to_string(endTime),
+      ConstraintType::CONSTR_EQ, 0);
+
+  // For each partition, and each time unit, generate an integer that
+  // represents how many resources were taken from this partition at
+  // this particular time.
+  for (PartitionPtr& partition : schedulablePartitions.getPartitions()) {
+    for (auto time = startTime; time < endTime; time += granularity) {
+      auto mapKey = std::make_pair(partition->getPartitionId(), time);
+      if (partitionVariables.find(mapKey) == partitionVariables.end()) {
+        // Create a new Integer variable specifying how many resources we
+        // have from this Partition.
+        VariablePtr allocationAtTime = std::make_shared<Variable>(
+            VariableType::VAR_INTEGER,
+            name + "_using_partition_" +
+                std::to_string(partition->getPartitionId()) + "_at_" +
+                std::to_string(time),
+            0,
+            std::min(static_cast<uint32_t>(partition->getQuantity()),
+                     resourceTimeSlots));
+        solverModel->addVariable(allocationAtTime);
+        partitionVariables[mapKey] = allocationAtTime;
+        fulfillsDemandConstraint->addTerm(allocationAtTime);
+
+        // Register this Integer variable with the CapacityConstraintMap
+        // that is being bubbled up.
+        capacityConstraints.registerUsageForDuration(
+            *partition, time, granularity, allocationAtTime, std::nullopt);
+      } else {
+        throw tetrisched::exceptions::ExpressionConstructionException(
+            "Multiple variables detected for the Partition " +
+            partition->getPartitionName() + " at time " + std::to_string(time));
+      }
+    }
+  }
+
+  // Ensure that if the Choose expression is satisfied, it fulfills the
+  // demand for this expression. Pass the constraint to the model.
+  fulfillsDemandConstraint->addTerm(
+      -1 * static_cast<TETRISCHED_ILP_TYPE>(resourceTimeSlots), isSatisfiedVar);
+  solverModel->addConstraint(std::move(fulfillsDemandConstraint));
+
+  // We now need to ensure that for each time, there is an indicator variable
+  // that signifies if there was *any* allocation to this Expression at that
+  // time.
+  std::unordered_map<Time, VariablePtr> timeToOccupationIndicator;
+  // For each time instance, we have an Indicator variable that specifies if
+  // this Expression is using any partitions at that time. To set the correct
+  // values for the Indicator, we add a constraint such that:
+  // Indicator <= Sum(Allocation). Thus, if there is no allocation (i.e., the
+  // sum of Partition variables is 0, then Indicator has to be 0).
+  std::unordered_map<Time, ConstraintPtr> timeToLowerBoundConstraint;
+  // In the above example, we correctly set the Indicator if there is no
+  // allocation to the Expression. However, if there is an allocation, we
+  // need to ensure that the Indicator is set to 1. We do this by adding a
+  // constraint such that: Sum(Allocation) <= Indicator * resourceTimeSlots.
+  // Thus, there was any allocation, then the Indicator has to be 1.
+  std::unordered_map<Time, ConstraintPtr> timeToUpperBoundConstraint;
+  for (auto& [key, variable] : partitionVariables) {
+    auto& [partition, time] = key;
+
+    // Generate the Indicator variable for this time.
+    if (timeToOccupationIndicator.find(time) ==
+        timeToOccupationIndicator.end()) {
+      VariablePtr occupationAtTime = std::make_shared<Variable>(
+          VariableType::VAR_INDICATOR,
+          name + "_occupied_at_" + std::to_string(time));
+      solverModel->addVariable(occupationAtTime);
+      timeToOccupationIndicator[time] = occupationAtTime;
+    }
+
+    // Lower bound the Indicator variable to allow a value of 0.
+    if (timeToLowerBoundConstraint.find(time) ==
+        timeToLowerBoundConstraint.end()) {
+      ConstraintPtr lowerBoundConstraint = std::make_shared<Constraint>(
+          name + "_lower_bound_occupation_at_" + std::to_string(time),
+          ConstraintType::CONSTR_LE, 0);
+      solverModel->addConstraint(lowerBoundConstraint);
+      lowerBoundConstraint->addTerm(1, timeToOccupationIndicator[time]);
+      timeToLowerBoundConstraint[time] = lowerBoundConstraint;
+    }
+    timeToLowerBoundConstraint[time]->addTerm(-1, variable);
+
+    // Upper bound the Indicator variable to allow a value of 1.
+    if (timeToUpperBoundConstraint.find(time) ==
+        timeToUpperBoundConstraint.end()) {
+      ConstraintPtr upperBoundConstraint = std::make_shared<Constraint>(
+          name + "_upper_bound_occupation_at_" + std::to_string(time),
+          ConstraintType::CONSTR_LE, 0);
+      solverModel->addConstraint(upperBoundConstraint);
+      upperBoundConstraint->addTerm(
+          -1 * static_cast<TETRISCHED_ILP_TYPE>(resourceTimeSlots),
+          timeToOccupationIndicator[time]);
+      timeToUpperBoundConstraint[time] = upperBoundConstraint;
+    }
+    timeToUpperBoundConstraint[time]->addTerm(1, variable);
+  }
+
+  // Now that we have the Indicator variables specifying if there is
+  // an allocation to the Task for each time, we need to find the first
+  // time when the Task is allocated any resources. To do this, we add
+  // a new set of Indicator variables such that only one of them is
+  // set to 1, and the one that is set to 1 indicates the first phase-shift
+  // of the resource assignments (i.e., 0...0, 1)
+  std::unordered_map<Time, VariablePtr> timeToPhaseShiftIndicatorForStartTime;
+  for (auto time = startTime; time < endTime; time += granularity) {
+    VariablePtr phaseShiftIndicator = std::make_shared<Variable>(
+        VariableType::VAR_INDICATOR,
+        name + "_phase_shift_start_time_at_" + std::to_string(time));
+    solverModel->addVariable(phaseShiftIndicator);
+    timeToPhaseShiftIndicatorForStartTime[time] = phaseShiftIndicator;
+  }
+
+  // Add a constraint that forces only one phase shift to be allowed.
+  ConstraintPtr startTimePhaseShiftGUBConstraint = std::make_shared<Constraint>(
+      name + "_phase_shift_start_time_gub_constraint",
+      ConstraintType::CONSTR_LE, 1);
+  for (auto& [time, variable] : timeToPhaseShiftIndicatorForStartTime) {
+    startTimePhaseShiftGUBConstraint->addTerm(variable);
+  }
+  solverModel->addConstraint(std::move(startTimePhaseShiftGUBConstraint));
+
+  // Add constraints that ensures that the phase shift does not happen
+  // when the resource allocation indicator is 0.
+  for (auto& [time, variable] : timeToPhaseShiftIndicatorForStartTime) {
+    ConstraintPtr phaseShiftLowerBoundConstraint = std::make_shared<Constraint>(
+        name + "_phase_shift_start_time_constraint_lower_bounded_at_" +
+            std::to_string(time),
+        ConstraintType::CONSTR_LE, 0);
+    phaseShiftLowerBoundConstraint->addTerm(variable);
+    phaseShiftLowerBoundConstraint->addTerm(-1,
+                                            timeToOccupationIndicator[time]);
+    solverModel->addConstraint(std::move(phaseShiftLowerBoundConstraint));
+  }
+
+  // Add constraints that ensure that each allocation indicator is
+  // less than or equal to the sum of its past phase-shift indicators.
+  // This critical constraint ensures that the first time the allocation
+  // turns to 1, the phase shift indicator is set to 1.
+  for (auto& [allocationTime, occupationIndicator] :
+       timeToOccupationIndicator) {
+    ConstraintPtr phaseShiftConstraint = std::make_shared<Constraint>(
+        name + "_phase_shift_start_time_constraint_at_" +
+            std::to_string(allocationTime),
+        ConstraintType::CONSTR_LE, 0);
+    phaseShiftConstraint->addTerm(occupationIndicator);
+    for (auto& [phaseShiftTime, phaseShiftIndicator] :
+         timeToPhaseShiftIndicatorForStartTime) {
+      if (phaseShiftTime > allocationTime) {
+        // We only care about the phase shift indicators up-till this point.
+        continue;
+      }
+      phaseShiftConstraint->addTerm(-1, phaseShiftIndicator);
+    }
+    solverModel->addConstraint(std::move(phaseShiftConstraint));
+  }
+
+  // Emit the start-time of the Expression using the phase-shift indicators.
+  VariablePtr startTimeVariable = std::make_shared<Variable>(
+      VariableType::VAR_INTEGER, name + "_start_time", 0, endTime);
+  solverModel->addVariable(startTimeVariable);
+  ConstraintPtr startTimeConstraint = std::make_shared<Constraint>(
+      name + "_start_time_constraint", ConstraintType::CONSTR_EQ, 0);
+  for (auto& [time, phaseShiftIndicator] :
+       timeToPhaseShiftIndicatorForStartTime) {
+    startTimeConstraint->addTerm(time, phaseShiftIndicator);
+  }
+  startTimeConstraint->addTerm(-1, startTimeVariable);
+  solverModel->addConstraint(std::move(startTimeConstraint));
+
+  // Similar to the start time, we generate indicator variables for
+  // the end time of the Expression by reversing the phase-shift assignment.
+  std::unordered_map<Time, VariablePtr> timeToPhaseShiftIndicatorForEndTime;
+  for (auto time = startTime; time < endTime; time += granularity) {
+    VariablePtr phaseShiftIndicator = std::make_shared<Variable>(
+        VariableType::VAR_INDICATOR,
+        name + "_phase_shift_end_time_at_" + std::to_string(time));
+    solverModel->addVariable(phaseShiftIndicator);
+    timeToPhaseShiftIndicatorForEndTime[time] = phaseShiftIndicator;
+  }
+
+  // Only one of the end time phase shifts is allowed.
+  ConstraintPtr endTimePhaseShiftGUBConstraint = std::make_shared<Constraint>(
+      name + "_phase_shift_end_time_gub_constraint", ConstraintType::CONSTR_LE,
+      1);
+  for (auto& [time, variable] : timeToPhaseShiftIndicatorForEndTime) {
+    endTimePhaseShiftGUBConstraint->addTerm(variable);
+  }
+  solverModel->addConstraint(std::move(endTimePhaseShiftGUBConstraint));
+
+  // Add constraints that ensure that the phase shift does not happen
+  // when the resource allocation indicator is 0.
+  for (auto& [time, variable] : timeToPhaseShiftIndicatorForEndTime) {
+    ConstraintPtr phaseShiftLowerBoundConstraint = std::make_shared<Constraint>(
+        name + "_phase_shift_end_time_constraint_lower_bounded_at_" +
+            std::to_string(time),
+        ConstraintType::CONSTR_LE, 0);
+    phaseShiftLowerBoundConstraint->addTerm(variable);
+    phaseShiftLowerBoundConstraint->addTerm(-1,
+                                            timeToOccupationIndicator[time]);
+    solverModel->addConstraint(std::move(phaseShiftLowerBoundConstraint));
+  }
+
+  // Add constraints that ensure that each allocation indicator is
+  // less than or equal to the sum of its future phase-shift indicators.
+  for (auto& [allocationTime, occupationIndicator] :
+       timeToOccupationIndicator) {
+    ConstraintPtr phaseShiftConstraint = std::make_shared<Constraint>(
+        name + "_phase_shift_end_time_constraint_at_" +
+            std::to_string(allocationTime),
+        ConstraintType::CONSTR_LE, 0);
+    phaseShiftConstraint->addTerm(occupationIndicator);
+    for (auto& [phaseShiftTime, phaseShiftIndicator] :
+         timeToPhaseShiftIndicatorForEndTime) {
+      if (phaseShiftTime < allocationTime) {
+        // We only care about the phase shift indicators after this point.
+        continue;
+      }
+      phaseShiftConstraint->addTerm(-1, phaseShiftIndicator);
+    }
+    solverModel->addConstraint(std::move(phaseShiftConstraint));
+  }
+
+  // Emit the end-time of the Expression using the phase-shift indicators.
+  VariablePtr endTimeVariable = std::make_shared<Variable>(
+      VariableType::VAR_INTEGER, name + "_end_time", 0, endTime);
+  solverModel->addVariable(endTimeVariable);
+  ConstraintPtr endTimeConstraint = std::make_shared<Constraint>(
+      name + "_end_time_constraint", ConstraintType::CONSTR_EQ, 0);
+  for (auto& [time, phaseShiftIndicator] :
+       timeToPhaseShiftIndicatorForEndTime) {
+    endTimeConstraint->addTerm(time, phaseShiftIndicator);
+  }
+  endTimeConstraint->addTerm(-1, endTimeVariable);
+  solverModel->addConstraint(std::move(endTimeConstraint));
+
+  // Construct the Utility function for this Choose expression.
+  auto utility =
+      std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
+  utility->addTerm(1, isSatisfiedVar);
+
+  // Construct the return value.
+  parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
+  parsedResult->startTime = startTimeVariable;
+  parsedResult->endTime = endTimeVariable;
+  parsedResult->indicator = isSatisfiedVar;
+  parsedResult->utility = std::move(utility);
+  return parsedResult;
+}
+
 /* Method definitions for AllocationExpression */
+
 AllocationExpression::AllocationExpression(
     std::string taskName,
     std::vector<std::pair<PartitionPtr, uint32_t>> allocatedResources,

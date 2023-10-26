@@ -364,12 +364,87 @@ TEST(Expression, TestAllocationExpressionFailsChoice) {
 
   // Translate and solve the model.
   cplexSolver.translateModel();
-  cplexSolver.exportModel("testblahblah.lp");
   cplexSolver.solveModel();
 
   auto result = objectiveExpression->populateResults(solverModelPtr);
   EXPECT_TRUE(result->utility) << "Result should have some utility.";
   EXPECT_EQ(0, result->utility.value())
       << "The utility for the Expressions should be 0";
+}
+#endif
+
+#ifdef _TETRISCHED_WITH_GUROBI_
+#include "tetrisched/GurobiSolver.hpp"
+
+/// Test that a MalleableChooseExpression correctly generates the ILP.
+TEST(Expression, TestMalleableChooseExpressionConstruction) {
+  // Construct the Partition.
+  tetrisched::PartitionPtr partition1 =
+      std::make_shared<tetrisched::Partition>(1, "partition1", 5);
+  //   tetrisched::PartitionPtr partition2 =
+  //       std::make_shared<tetrisched::Partition>(2, "partition2", 5);
+  tetrisched::Partitions partitions = tetrisched::Partitions({partition1});
+
+  // Construct the MalleableChooseExpression.
+  tetrisched::ExpressionPtr malleableChooseExpression =
+      std::make_shared<tetrisched::MalleableChooseExpression>(
+          "task1", partitions, 15, 5, 10, 1);
+
+  // Construct an ObjectiveExpression.
+  tetrisched::ExpressionPtr objectiveExpression =
+      std::make_shared<tetrisched::ObjectiveExpression>("TestObjective");
+  objectiveExpression->addChild(malleableChooseExpression);
+
+  // Construct a Solver.
+  tetrisched::GurobiSolver gurobiSolver = tetrisched::GurobiSolver();
+  auto solverModelPtr = gurobiSolver.getModel();
+
+  // Construct a CapacityConstraintMap and parse the expression tree.
+  tetrisched::CapacityConstraintMap capacityConstraintMap;
+  auto _ = objectiveExpression->parse(solverModelPtr, partitions,
+                                      capacityConstraintMap, 0);
+  solverModelPtr->exportModel("testMalleableChooseExpression.lp");
+}
+
+/// Test that a MalleableChooseExpression constructs variable space-time
+/// rectangles.
+TEST(Expression, TestMalleableChooseExpressionConstructsVariableRectangles) {
+  // Construct the Partition.
+  tetrisched::PartitionPtr partition1 =
+      std::make_shared<tetrisched::Partition>(1, "partition1", 5);
+  tetrisched::Partitions partitions = tetrisched::Partitions({partition1});
+
+  // Construct an AllocationExpression to allocate the task to the partition.
+  std::vector<std::pair<tetrisched::PartitionPtr, uint32_t>>
+      partitionAssignments;
+  partitionAssignments.push_back(std::make_pair(partition1, 3));
+  tetrisched::ExpressionPtr allocationExpression =
+      std::make_shared<tetrisched::AllocationExpression>(
+          "task1", partitionAssignments, 5, 2);
+
+  // Construct a MalleableChooseExpression to allocate around the previous
+  // usage.
+  tetrisched::ExpressionPtr malleableChooseExpression =
+      std::make_shared<tetrisched::MalleableChooseExpression>(
+          "task1", partitions, 10, 4, 10, 1);
+
+  // Construct an ObjectiveExpression.
+  tetrisched::ExpressionPtr objectiveExpression =
+      std::make_shared<tetrisched::ObjectiveExpression>("TestObjective");
+  objectiveExpression->addChild(allocationExpression);
+  objectiveExpression->addChild(malleableChooseExpression);
+
+  // Construct a Solver.
+  tetrisched::GurobiSolver gurobiSolver = tetrisched::GurobiSolver();
+  auto solverModelPtr = gurobiSolver.getModel();
+
+  // Construct a CapacityConstraintMap and parse the expression tree.
+  tetrisched::CapacityConstraintMap capacityConstraintMap;
+  auto _ = objectiveExpression->parse(solverModelPtr, partitions,
+                                      capacityConstraintMap, 0);
+  solverModelPtr->exportModel("testMalleableChooseVariableRectangle.lp");
+
+  gurobiSolver.translateModel();
+  gurobiSolver.exportModel("testblah.lp");
 }
 #endif

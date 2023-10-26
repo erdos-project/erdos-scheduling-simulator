@@ -214,6 +214,15 @@ enum ExpressionType {
   /// machines from the given Partition for the given duration starting at the
   /// provided start_time.
   EXPR_ALLOCATION = 6,
+  /// A `MalleableChoose` expression represents a choice of a flexible set of
+  /// requirements of resources at each time that sums up to the total required
+  /// space-time allocations from the given start to the given end time.
+  /// Note that a Choose expression is a specialization of this Expression that
+  /// places a rectangle of length d (duration), and height r (resources)
+  /// at the given start time from the space-time allocation. However, this
+  /// specialization is extremely effective to lower, and whenever possible
+  /// should be used insteado of the generalized choose expression.
+  EXPR_MALLEABLE_CHOOSE = 7,
 };
 using ExpressionType = enum ExpressionType;
 
@@ -318,6 +327,38 @@ class ChooseExpression : public Expression {
                        CapacityConstraintMap& capacityConstraints,
                        Time currentTime) override;
   SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
+};
+
+class MalleableChooseExpression : public Expression {
+ private:
+  /// The Resource partitions that the Expression is being asked to
+  /// choose resources from.
+  Partitions resourcePartitions;
+  /// The total resource-time slots that this Expression needs to choose.
+  /// Note that the resource-time slots are defined by the
+  /// discretization of the CapacityConstraintMap.
+  uint32_t resourceTimeSlots;
+  /// The start time of the choice represented by this Expression.
+  Time startTime;
+  /// The end time of the choice represented by this Expression.
+  Time endTime;
+  /// The granularity at which the rectangle choices are to be made.
+  Time granularity;
+  /// The variables that represent the choice of machines from each
+  /// Partition at each time corresponding to this Expression.
+  std::unordered_map<std::pair<uint32_t, Time>, VariablePtr,
+                     PartitionTimePairHasher>
+      partitionVariables;
+
+ public:
+  MalleableChooseExpression(std::string taskName, Partitions resourcePartitions,
+                            uint32_t resourceTimeSlots, Time startTime,
+                            Time endTime, Time granularity);
+  void addChild(ExpressionPtr child) override;
+  ParseResultPtr parse(SolverModelPtr solverModel,
+                       Partitions availablePartitions,
+                       CapacityConstraintMap& capacityConstraints,
+                       Time currentTime) override;
 };
 
 /// An `AllocationExpression` represents the allocation of the given number of
