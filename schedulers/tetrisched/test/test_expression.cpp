@@ -120,17 +120,22 @@ TEST(Expression, TestLessThanEnforcesOrdering) {
   EXPECT_EQ(result->placements.size(), 2) << "There should be 2 placements.";
   EXPECT_TRUE(result->placements["task1"]->isPlaced())
       << "task1 should be placed";
-  EXPECT_EQ(result->placements["task1"]->getPartitionAssignments()[0].first,
-            partition->getPartitionId())
-      << "task1 should be placed on partition.";
+
+  auto allocationsForTask1 =
+      result->placements["task1"]->getPartitionAllocations();
+  EXPECT_TRUE(allocationsForTask1.find(partition->getPartitionId()) !=
+              allocationsForTask1.end())
+      << "task1 should be placed on partition 1.";
   EXPECT_EQ(result->placements["task1"]->getStartTime().value(), 0)
       << "task1 should start at 0.";
 
   EXPECT_TRUE(result->placements["task2"]->isPlaced())
       << "task2 should be placed";
-  EXPECT_EQ(result->placements["task2"]->getPartitionAssignments()[0].first,
-            partition->getPartitionId())
-      << "task2 should be placed on partition.";
+  auto allocationsForTask2 =
+      result->placements["task2"]->getPartitionAllocations();
+  EXPECT_TRUE(allocationsForTask2.find(partition->getPartitionId()) !=
+              allocationsForTask2.end())
+      << "task2 should be placed on partition 1.";
   EXPECT_EQ(result->placements["task2"]->getStartTime().value(), 200)
       << "task2 should start at 200.";
 }
@@ -426,7 +431,7 @@ TEST(Expression, TestMalleableChooseExpressionConstructsVariableRectangles) {
   // usage.
   tetrisched::ExpressionPtr malleableChooseExpression =
       std::make_shared<tetrisched::MalleableChooseExpression>(
-          "task1", partitions, 10, 4, 10, 1);
+          "task2", partitions, 10, 4, 10, 1);
 
   // Construct an ObjectiveExpression.
   tetrisched::ExpressionPtr objectiveExpression =
@@ -444,7 +449,23 @@ TEST(Expression, TestMalleableChooseExpressionConstructsVariableRectangles) {
                                       capacityConstraintMap, 0);
   solverModelPtr->exportModel("testMalleableChooseVariableRectangle.lp");
 
+  // Translate and Solve the model.
   gurobiSolver.translateModel();
-  gurobiSolver.exportModel("testblah.lp");
+  gurobiSolver.solveModel();
+
+  auto result = objectiveExpression->populateResults(solverModelPtr);
+  EXPECT_TRUE(result->utility) << "Result should have some utility.";
+  EXPECT_EQ(2, result->utility.value()) << "The utility should be 2.";
+  auto task2Placement = result->placements["task2"]->getPartitionAllocations();
+  EXPECT_TRUE(task2Placement.find(partition1->getPartitionId()) !=
+              task2Placement.end())
+      << "task2 should be placed on partition 1.";
+  auto partition1Allocation = task2Placement[partition1->getPartitionId()];
+  uint32_t totalAllocationSum = 0;
+  for (auto& [time, allocation] : partition1Allocation) {
+    totalAllocationSum += allocation;
+  }
+  EXPECT_EQ(totalAllocationSum, 10)
+      << "The total allocation on partition 1 should be 10.";
 }
 #endif

@@ -5,37 +5,37 @@
 namespace tetrisched {
 
 /* Method definitions for Placement */
-Placement::Placement(std::string taskName, Time startTime)
-    : taskName(taskName), startTime(startTime), placed(true) {}
+Placement::Placement(std::string taskName, Time startTime, Time endTime)
+    : taskName(taskName),
+      startTime(startTime),
+      endTime(endTime),
+      placed(true) {}
 
 Placement::Placement(std::string taskName)
     : taskName(taskName), startTime(std::nullopt), placed(false) {}
 
 bool Placement::isPlaced() const { return placed; }
 
-void Placement::addPartition(uint32_t partitionId, TETRISCHED_ILP_TYPE usage) {
-  partitionToResources[partitionId] = usage;
+void Placement::addPartitionAllocation(uint32_t partitionId, Time time,
+                                       uint32_t allocation) {
+  if (partitionToResourceAllocations.find(partitionId) ==
+      partitionToResourceAllocations.end()) {
+    partitionToResourceAllocations[partitionId] =
+        std::set<std::pair<Time, uint32_t>>();
+  }
+  partitionToResourceAllocations[partitionId].insert(
+      std::make_pair(time, allocation));
 }
 
 std::string Placement::getName() const { return taskName; }
 
 std::optional<Time> Placement::getStartTime() const { return startTime; }
 
-std::vector<std::pair<uint32_t, TETRISCHED_ILP_TYPE>>
-Placement::getPartitionAssignments() const {
-  std::vector<std::pair<uint32_t, TETRISCHED_ILP_TYPE>> partitionAssignments;
-  for (const auto& [partitionId, usage] : partitionToResources) {
-    partitionAssignments.push_back(std::make_pair(partitionId, usage));
-  }
-  return partitionAssignments;
-}
+std::optional<Time> Placement::getEndTime() const { return endTime; }
 
-TETRISCHED_ILP_TYPE Placement::getTotalResources() const {
-  TETRISCHED_ILP_TYPE totalResources = 0;
-  for (const auto& [_, usage] : partitionToResources) {
-    totalResources += usage;
-  }
-  return totalResources;
+const std::unordered_map<uint32_t, std::set<std::pair<Time, uint32_t>>>&
+Placement::getPartitionAllocations() const {
+  return partitionToResourceAllocations;
 }
 
 /* Method definitions for CapacityConstraintMap */
@@ -318,8 +318,8 @@ ParseResultPtr ChooseExpression::parse(
                    << name << " will be limited to "
                    << schedulablePartitions.size() << " partitions.");
   if (schedulablePartitions.size() == 0) {
-    // There are no schedulable partitions, this expression cannot be satisfied.
-    // and should provide 0 utility.
+    // There are no schedulable partitions, this expression cannot be
+    // satisfied. and should provide 0 utility.
     parsedResult->type = ParseResultType::EXPRESSION_NO_UTILITY;
     return parsedResult;
   }
@@ -396,8 +396,8 @@ SolutionResultPtr ChooseExpression::populateResults(
   }
 
   // Find the ID of the Partition that was chosen.
-  PlacementPtr placement =
-      std::make_shared<Placement>(name, solution->startTime.value());
+  PlacementPtr placement = std::make_shared<Placement>(
+      name, solution->startTime.value(), solution->endTime.value());
   for (const auto& [partitionId, variable] : partitionVariables) {
     auto variableValue = variable->getValue();
     if (variableValue == 0) {
@@ -405,16 +405,10 @@ SolutionResultPtr ChooseExpression::populateResults(
       continue;
     }
     // This partition was used. Add it to the Placement.
-    placement->addPartition(partitionId, variableValue.value());
+    placement->addPartitionAllocation(partitionId, solution->startTime.value(),
+                                      variableValue.value());
   }
-
-  if (placement->getTotalResources() != numRequiredMachines) {
-    throw tetrisched::exceptions::ExpressionSolutionException(
-        "ChooseExpression for " + name +
-        " was satisfied but did not use the correct number of machines.");
-  } else {
-    solution->placements[name] = std::move(placement);
-  }
+  solution->placements[name] = std::move(placement);
   return solution;
 }
 
@@ -732,6 +726,36 @@ ParseResultPtr MalleableChooseExpression::parse(
   return parsedResult;
 }
 
+SolutionResultPtr MalleableChooseExpression::populateResults(
+    SolverModelPtr solverModel) {
+  // Populate the results for the SolverModel's variables (i.e, this
+  // Expression's utility, start time and end time) from the Base Expression
+  // class.
+  Expression::populateResults(solverModel);
+
+  // Populate the Placements from the SolverModel.
+  if (!solution->utility || solution->utility.value() == 0) {
+    // This Choose expression was not satisfied.
+    // No placements to populate.
+    return solution;
+  }
+
+  // Find the IDs of the Partitions that were chosen.
+  PlacementPtr placement = std::make_shared<Placement>(
+      name, solution->startTime.value(), solution->endTime.value());
+  for (const auto& [partitionPair, variable] : partitionVariables) {
+    auto variableValue = variable->getValue();
+    if (variableValue == 0) {
+      // This partition was not used.
+      continue;
+    }
+    auto& [partitionId, time] = partitionPair;
+    placement->addPartitionAllocation(partitionId, time, variableValue.value());
+  }
+  solution->placements[name] = std::move(placement);
+  return solution;
+}
+
 /* Method definitions for AllocationExpression */
 
 AllocationExpression::AllocationExpression(
@@ -913,7 +937,8 @@ ParseResultPtr LessThanExpression::parse(
   if (firstChildResult->type != ParseResultType::EXPRESSION_UTILITY ||
       secondChildResult->type != ParseResultType::EXPRESSION_UTILITY) {
     throw tetrisched::exceptions::ExpressionConstructionException(
-        "LessThanExpression must have two children that are being evaluated.");
+        "LessThanExpression must have two children that are being "
+        "evaluated.");
   }
 
   // Generate the result of parsing the expression.
@@ -1264,7 +1289,8 @@ ParseResultPtr ScaleExpression::parse(
 
     if (!childParseResult->utility) {
       throw tetrisched::exceptions::ExpressionConstructionException(
-          "ScaleExpression applied to a child that does not have any utility.");
+          "ScaleExpression applied to a child that does not have any "
+          "utility.");
     }
     TETRISCHED_DEBUG("The child utility is "
                      << childParseResult->utility.value()->toString());

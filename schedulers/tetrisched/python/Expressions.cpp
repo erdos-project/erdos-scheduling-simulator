@@ -26,8 +26,8 @@ void defineSTRLExpressions(py::module_& tetrisched_m) {
       .def_property_readonly("startTime", &tetrisched::Placement::getStartTime)
       .def("isPlaced", &tetrisched::Placement::isPlaced,
            "Returns true if the Placement was placed, false otherwise.")
-      .def("getPartitionAssignments",
-           &tetrisched::Placement::getPartitionAssignments,
+      .def("getPartitionAllocations",
+           &tetrisched::Placement::getPartitionAllocations,
            "Returns the Partition assignments for this Placement.");
 
   // Define the SolutionResult.

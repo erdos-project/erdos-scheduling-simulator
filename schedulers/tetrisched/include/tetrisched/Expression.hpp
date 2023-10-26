@@ -3,6 +3,7 @@
 
 #include <functional>
 #include <optional>
+#include <set>
 #include <unordered_map>
 
 #include "tetrisched/Partition.hpp"
@@ -65,13 +66,19 @@ class Placement {
   bool placed;
   /// The start time of the Placement.
   std::optional<Time> startTime;
-  /// The ID of the Partition that the Task is placed on.
-  std::unordered_map<uint32_t, TETRISCHED_ILP_TYPE> partitionToResources;
+  /// The end time of the Placement.
+  std::optional<Time> endTime;
+  /// A <PartitionID, <Time, Allocation>> vector that represents the
+  /// allocation of resources from each Partition to this Placement at a
+  /// particular time. Note that the last Partition assignments are valid
+  /// until the end of the Placement.
+  std::unordered_map<uint32_t, std::set<std::pair<Time, uint32_t>>>
+      partitionToResourceAllocations;
 
  public:
   /// Initialize a Placement with the given Task name, start time and Partition
   /// ID.
-  Placement(std::string taskName, Time startTime);
+  Placement(std::string taskName, Time startTime, Time endTime);
 
   /// Initialize a Placement with the given Task name signifying that the Task
   /// was not actually placed.
@@ -80,9 +87,9 @@ class Placement {
   /// Check if the Task was actually placed.
   bool isPlaced() const;
 
-  /// Add a Partition along with the resources it is contributing to this
-  /// Placement.
-  void addPartition(uint32_t partitionId, TETRISCHED_ILP_TYPE resources);
+  /// Add an allocation for the Partition at the given time.
+  void addPartitionAllocation(uint32_t partitionId, Time time,
+                              uint32_t allocation);
 
   /// Retrieve the name of the Task.
   std::string getName() const;
@@ -90,14 +97,12 @@ class Placement {
   /// Retrieve the start time of the Placement, if available.
   std::optional<Time> getStartTime() const;
 
-  /// Retrieve an assignment from the Partition ID to the resources it is
-  /// contributing to this Placement.
-  std::vector<std::pair<uint32_t, TETRISCHED_ILP_TYPE>>
-  getPartitionAssignments() const;
+  /// Retrieve the end time of the Placement, if available.
+  std::optional<Time> getEndTime() const;
 
-  /// Retrieve the total resources contributed by all Partitions to this
-  /// Placement.
-  TETRISCHED_ILP_TYPE getTotalResources() const;
+  /// Retrieve the allocations.
+  const std::unordered_map<uint32_t, std::set<std::pair<Time, uint32_t>>>&
+  getPartitionAllocations() const;
 };
 using PlacementPtr = std::shared_ptr<Placement>;
 
@@ -359,6 +364,7 @@ class MalleableChooseExpression : public Expression {
                        Partitions availablePartitions,
                        CapacityConstraintMap& capacityConstraints,
                        Time currentTime) override;
+  SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
 };
 
 /// An `AllocationExpression` represents the allocation of the given number of
