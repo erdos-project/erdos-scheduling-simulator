@@ -14,6 +14,8 @@ void defineSTRLExpressions(py::module_& tetrisched_m) {
       .value("EXPR_SCALE", tetrisched::ExpressionType::EXPR_SCALE)
       .value("EXPR_LESSTHAN", tetrisched::ExpressionType::EXPR_LESSTHAN)
       .value("EXPR_ALLOCATION", tetrisched::ExpressionType::EXPR_ALLOCATION)
+      .value("EXPR_MALLEABLE_CHOOSE",
+             tetrisched::ExpressionType::EXPR_MALLEABLE_CHOOSE)
       .export_values();
 
   // Define the Placement object.
@@ -111,6 +113,22 @@ void defineSTRLExpressions(py::module_& tetrisched_m) {
            "Initializes a ChooseExpression for the given task to be placed on "
            "`numRequiredMachines` from the given partition at the given "
            "startTime, running for the given duration.");
+
+  // Define the MalleableChooseExpression.
+  py::class_<tetrisched::MalleableChooseExpression, tetrisched::Expression,
+             std::shared_ptr<tetrisched::MalleableChooseExpression>>(
+      tetrisched_m, "MalleableChooseExpression")
+      .def(py::init([](std::string taskName, tetrisched::Partitions partitions,
+                       uint32_t resourceTimeSlots, tetrisched::Time startTime,
+                       tetrisched::Time endTime, tetrisched::Time granularity) {
+             return std::make_shared<tetrisched::MalleableChooseExpression>(
+                 taskName, partitions, resourceTimeSlots, startTime, endTime,
+                 granularity);
+           }),
+           "Initializes a MalleableChooseExpression for the given task to be "
+           "placed on the given partitions at the given startTime, "
+           "ending at the given end time and taking up the given "
+           "resourceTimeSlots");
 
   // Define the AllocationExpression.
   py::class_<tetrisched::AllocationExpression, tetrisched::Expression,
