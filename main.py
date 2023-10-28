@@ -1,10 +1,12 @@
 import os
 import random
 import sys
+from collections import namedtuple
 
 from absl import app, flags
 
 from data import (
+    AlibabaLoader,
     TaskLoaderBenchmark,
     TaskLoaderPylot,
     TaskLoaderSynthetic,
@@ -35,6 +37,11 @@ from workload import BranchPredictionPolicy, Workload
 
 FLAGS = flags.FLAGS
 
+Task = namedtuple(
+    "Task",
+    field_names="name,job,instances,status,start_time,end_time,duration,cpu,mem",
+)
+
 # Define the flags.
 flags.DEFINE_enum(
     "execution_mode",
@@ -49,7 +56,7 @@ flags.DEFINE_enum(
 flags.DEFINE_enum(
     "replay_trace",
     "pylot",
-    ["pylot", "clockwork_bursty"],
+    ["pylot", "clockwork_bursty", "alibaba"],
     "Sets the trace to replay in the replay mode.",
 )
 flags.DEFINE_string(
@@ -308,6 +315,27 @@ flags.DEFINE_bool(
 )
 
 # Workload definition related flags.
+flags.DEFINE_integer(
+    "randomize_start_time_min",
+    0,
+    "Choose a random start time for the Workload release from this range (in µs).",
+)
+flags.DEFINE_integer(
+    "randomize_start_time_max",
+    0,
+    "Choose a random start time for the Workload release from this range (in µs).",
+)
+flags.DEFINE_enum(
+    "override_release_policy",
+    "fixed",
+    ["periodic", "poisson", "gamma", "fixed", "closed_loop"],
+    "Override the release policy for all TaskGraphs defined in the Workload.",
+)
+flags.DEFINE_integer(
+    "override_num_invocations",
+    0,
+    "Override the number of invocations for all TaskGraphs defined in the Workload.",
+)
 flags.DEFINE_float(
     "override_poisson_arrival_rate",
     0.0,
@@ -352,9 +380,9 @@ def main(args):
     """
     if FLAGS.log_file_mode == "write":
         # Delete the prior log file if it exists.
-        if os.path.exists(FLAGS.log_file_name):
+        if FLAGS.log_file_name is not None and os.path.exists(FLAGS.log_file_name):
             os.remove(FLAGS.log_file_name)
-        if os.path.exists(FLAGS.csv_file_name):
+        if FLAGS.csv_file_name is not None and os.path.exists(FLAGS.csv_file_name):
             os.remove(FLAGS.csv_file_name)
 
     random.seed(FLAGS.random_seed)
@@ -386,9 +414,18 @@ def main(args):
                 {"pylot_dataflow": task_loader.get_task_graph()},
                 _flags=FLAGS,
             )
-        else:
+        elif FLAGS.replay_trace == "clockwork_bursty":
             workload_loader = WorkloadLoaderClockworkBursty()
             workload = workload_loader.workload
+        elif FLAGS.replay_trace == "alibaba":
+            workload_loader = AlibabaLoader(
+                path=FLAGS.workload_profile_path, _flags=FLAGS
+            )
+            workload = workload_loader.workload
+        else:
+            raise NotImplementedError(
+                f"Replay trace {FLAGS.replay_trace} is not implemented yet."
+            )
     elif FLAGS.execution_mode == "synthetic":
         task_loader = TaskLoaderSynthetic(
             num_perception_sensors=2,

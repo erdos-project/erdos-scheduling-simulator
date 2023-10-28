@@ -363,11 +363,18 @@ class Simulator(object):
             self._workload.task_graphs.values(),
             key=lambda task_graph: task_graph.release_time,
         )
+        if len(task_graphs) == 0:
+            self._logger.info("No TaskGraphs found in the workload.")
+            return
+
         for task_graph in task_graphs:
             self._logger.info(
-                "[%s] The TaskGraph %s will be released.",
+                "[%s] The TaskGraph %s will be released with deadline "
+                "%s and completion time %s.",
                 task_graph.release_time,
                 task_graph.name,
+                task_graph.deadline,
+                task_graph.completion_time,
             )
 
     def simulate(self) -> None:
