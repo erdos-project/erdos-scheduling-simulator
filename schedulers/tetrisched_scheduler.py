@@ -1,12 +1,12 @@
 import time
-from typing import List, Mapping, Optional, Set, Tuple
+from typing import List, Mapping, Optional, Set
 
 import absl  # noqa: F401
 import tetrisched_py as tetrisched
 
 from schedulers import BaseScheduler
 from utils import EventTime
-from workers import Worker, WorkerPool, WorkerPools
+from workers import WorkerPools
 from workload import (
     Placement,
     Placements,
@@ -77,10 +77,29 @@ class TetriSchedScheduler(BaseScheduler):
             branch_prediction_accuracy=self.branch_prediction_accuracy,
             release_taskgraphs=self.release_taskgraphs,
         )
+        task_description_string = [
+            f"{t.unique_name} ("
+            f"{t.available_execution_strategies.get_fastest_strategy().runtime}, "
+            f"{t.deadline})"
+            for t in tasks_to_be_scheduled
+        ]
+        task_graph_names: Set[TaskGraph] = {
+            task.task_graph for task in tasks_to_be_scheduled
+        }
+        # for task_graph_name in task_graph_names:
+        #     task_graph = workload.get_task_graph(task_graph_name)
+        #     print(
+        #         "The TaskGraph {} has {} completion time and {} deadline".format(
+        #             task_graph_name,
+        #             task_graph.job_graph.completion_time,
+        #             task_graph.deadline,
+        #         )
+        #     )
         self._logger.debug(
             f"[{sim_time.time}] The scheduler received {len(tasks_to_be_scheduled)} "
-            f"tasks to be scheduled. These tasks along with their deadlines were: "
-            f"{[f'{t.unique_name} ({t.deadline})' for t in tasks_to_be_scheduled]}"
+            f"tasks to be scheduled from {len(task_graph_names)} TaskGraphs. "
+            f"These tasks along with their "
+            f"(runtimes, deadlines) were: {task_description_string}."
         )
 
         # Construct the STRL expression.
@@ -94,9 +113,6 @@ class TetriSchedScheduler(BaseScheduler):
 
             # Construct the STRL expressions for each TaskGraph and add them together
             # in a single objective expression.
-            task_graph_names: Set[TaskGraph] = {
-                task.task_graph for task in tasks_to_be_scheduled
-            }
             objective_strl = tetrisched.strl.ObjectiveExpression(
                 f"TetriSched_{sim_time.to(EventTime.Unit.US).time}"
             )
@@ -136,7 +152,9 @@ class TetriSchedScheduler(BaseScheduler):
                 f"was {self._scheduler.getLastSolverSolution()}."
             )
             if solverSolution.utility == 0:
-                raise RuntimeError("TetrischedScheduler was unable to schedule tasks.")
+                raise RuntimeError(
+                    f"TetrischedScheduler was unable to schedule tasks at {sim_time}."
+                )
 
             # Retrieve the Placements for each task.
             for task in tasks_to_be_scheduled:
@@ -147,11 +165,13 @@ class TetriSchedScheduler(BaseScheduler):
                         f"Task {task.unique_name}."
                     )
                     placements.append(Placement.create_task_placement(task=task))
+                    continue
 
                 # Retrieve the Partition where the task was placed.
                 # The task was placed, retrieve the Partition where the task
                 # was placed.
-                partitionId = task_placement.getPartitionAssignments()[0][0]
+                partitionAllocations = task_placement.getPartitionAllocations()
+                partitionId = list(partitionAllocations.keys())[0]
                 partition = partitions.partitionMap[partitionId]
                 task_placement = Placement.create_task_placement(
                     task=task,
@@ -234,6 +254,34 @@ class TetriSchedScheduler(BaseScheduler):
                 worker_index += 1
         return partitions
 
+    def _get_time_discretizations_until(
+        self, current_time: EventTime, end_time: EventTime
+    ) -> List[EventTime]:
+        """Constructs the time discretizations from current_time to end_time in the
+        granularity provided by the scheduler.
+
+        Note that the first time discretization is always <= current_time and should
+        only be allowed placement for tasks in RUNNING state. This is because the
+        simulator does not allow scheduling of tasks in the past.
+
+        Args:
+            current_time (`EventTime`): The time at which the scheduling is occurring.
+            end_time (`EventTime`): The time at which the scheduling is to end.
+
+        Returns:
+            A list of EventTimes that represent the time discretizations.
+        """
+        time_discretization = self._time_discretization.to(EventTime.Unit.US).time
+        start_time = (
+            current_time.to(EventTime.Unit.US).time // time_discretization
+        ) * time_discretization
+        end_time = end_time.to(EventTime.Unit.US).time
+
+        discretizations = []
+        for discretization_time in range(start_time, end_time + 1, time_discretization):
+            discretizations.append(EventTime(discretization_time, EventTime.Unit.US))
+        return discretizations
+
     def construct_task_strl(
         self,
         current_time: EventTime,
@@ -284,15 +332,10 @@ class TetriSchedScheduler(BaseScheduler):
             resource=Resource(name="Slot", _id="any")
         )
 
-        num_choose_expressions_generated = 0
-        for placement_time in range(
-            current_time.to(EventTime.Unit.US).time,
-            task.deadline.to(EventTime.Unit.US).time
-            - execution_strategy.runtime.to(EventTime.Unit.US).time
-            + 1,
-            self._time_discretization.time,
-        ):
-            num_choose_expressions_generated += 1
+        time_discretizations = self._get_time_discretizations_until(
+            current_time, task.deadline - execution_strategy.runtime
+        )
+        for placement_time in time_discretizations:
             # Construct a ChooseExpression for placement at this time.
             # TODO (Sukrit): We just assume for now that all Slots are the same and
             # thus the task can be placed on any Slot. This is not true in general.
@@ -300,7 +343,7 @@ class TetriSchedScheduler(BaseScheduler):
                 task.unique_name,
                 partitions,
                 num_slots_required,
-                placement_time,
+                placement_time.time,
                 execution_strategy.runtime.to(EventTime.Unit.US).time,
             )
 
@@ -308,10 +351,10 @@ class TetriSchedScheduler(BaseScheduler):
             chooseOneFromSet.addChild(chooseAtTime)
 
         self._logger.debug(
-            f"[{current_time.time}] Generated {num_choose_expressions_generated} "
-            f"ChooseExpressions for {task.unique_name} from {current_time} to "
-            f"{task.deadline-execution_strategy.runtime} for "
-            f"{num_slots_required} slots for {execution_strategy.runtime}."
+            f"[{current_time.time}] Generated {len(time_discretizations)} "
+            f"ChooseExpressions for {task.unique_name} from {time_discretizations[0]} "
+            f"to {time_discretizations[-1]} for {num_slots_required} slots for "
+            f"{execution_strategy.runtime}."
         )
         return chooseOneFromSet
 
@@ -442,7 +485,9 @@ class TetriSchedScheduler(BaseScheduler):
                 to be scheduled. If `None`, then all the Tasks in the TaskGraph are
                 considered. Defaults to `None`.
         """
-        self._logger.debug(f"The generated STRLs were: {task_strls.keys()}")
+        # Maintain a cache to be used across the construction of the TaskGraph to make
+        # it DAG-aware.
+        task_strls = task_strls if task_strls else {}
 
         # Construct the STRL expression for all the roots of the TaskGraph.
         root_task_strls = []
@@ -457,7 +502,7 @@ class TetriSchedScheduler(BaseScheduler):
                 root,
                 task_graph,
                 partitions,
-                task_strls if task_strls else {},
+                task_strls,
                 tasks_to_be_scheduled,
             )
             if root_task_strl:
