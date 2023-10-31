@@ -320,7 +320,7 @@ class ChooseExpression : public Expression {
   /// The end time of the choice represented by this Expression.
   Time endTime;
   // The utility of the choice represented by this Expression.
-  double utility;
+  TETRISCHED_ILP_TYPE utility;
   /// The variables that represent the choice of each Partition for this
   /// Expression.
   std::unordered_map<uint32_t, VariablePtr> partitionVariables;
@@ -353,7 +353,7 @@ class MalleableChooseExpression : public Expression {
   /// The granularity at which the rectangle choices are to be made.
   Time granularity;
   // The utility of the choice represented by this Expression.
-  double utility;
+  TETRISCHED_ILP_TYPE utility;
   /// The variables that represent the choice of machines from each
   /// Partition at each time corresponding to this Expression.
   std::unordered_map<std::pair<uint32_t, Time>, VariablePtr,
