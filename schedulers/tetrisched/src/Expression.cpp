@@ -1,6 +1,7 @@
 #include "tetrisched/Expression.hpp"
 
 #include <algorithm>
+#include <limits>
 
 namespace tetrisched {
 
