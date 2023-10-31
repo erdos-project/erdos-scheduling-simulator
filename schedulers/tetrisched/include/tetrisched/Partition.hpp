@@ -1,5 +1,6 @@
 #ifndef _TETRISCHED_PARTITION_HPP_
 #define _TETRISCHED_PARTITION_HPP_
+#include <optional>
 #include <unordered_map>
 #include <vector>
 

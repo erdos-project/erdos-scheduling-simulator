@@ -1,7 +1,8 @@
 import time
 from typing import List, Mapping, Optional, Set
 
-import absl  # noqa: F401
+import absl # noqa: F401
+import numpy as np 
 import tetrisched_py as tetrisched
 
 from schedulers import BaseScheduler
@@ -338,6 +339,16 @@ class TetriSchedScheduler(BaseScheduler):
             current_time, task.deadline - execution_strategy.runtime
         )
 
+        time_range = [time_discretization.time for time_discretization in time_discretizations]
+        # The placement reward skews the reward towards placing the task earlier.
+        # We interpolate the time range to a range between 2 and 1 and use that to
+        # skew the reward towards earlier placement.
+        placement_rewards = dict(
+            zip(
+                time_range,
+                np.interp(time_range, (min(time_range), max(time_range)), (2, 1)),
+            )
+        )
         task_choose_expressions = []
         for placement_time in time_discretizations:
             if placement_time < current_time and task.state != TaskState.RUNNING:
@@ -355,6 +366,7 @@ class TetriSchedScheduler(BaseScheduler):
                     num_slots_required,
                     placement_time.time,
                     execution_strategy.runtime.to(EventTime.Unit.US).time,
+                    placement_rewards[placement_time.time],
                 )
             )
 

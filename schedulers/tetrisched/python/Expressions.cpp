@@ -108,10 +108,10 @@ void defineSTRLExpressions(py::module_& tetrisched_m) {
                                                             "ChooseExpression")
       .def(py::init([](std::string taskName, tetrisched::Partitions partitions,
                        uint32_t numRequiredMachines, tetrisched::Time startTime,
-                       tetrisched::Time duration) {
+                       tetrisched::Time duration, TETRISCHED_ILP_TYPE utility) {
              return std::make_shared<tetrisched::ChooseExpression>(
                  taskName, partitions, numRequiredMachines, startTime,
-                 duration);
+                 duration, utility);
            }),
            "Initializes a ChooseExpression for the given task to be placed on "
            "`numRequiredMachines` from the given partition at the given "
@@ -123,10 +123,11 @@ void defineSTRLExpressions(py::module_& tetrisched_m) {
       tetrisched_m, "MalleableChooseExpression")
       .def(py::init([](std::string taskName, tetrisched::Partitions partitions,
                        uint32_t resourceTimeSlots, tetrisched::Time startTime,
-                       tetrisched::Time endTime, tetrisched::Time granularity) {
+                       tetrisched::Time endTime, tetrisched::Time granularity,
+                       TETRISCHED_ILP_TYPE utility) {
              return std::make_shared<tetrisched::MalleableChooseExpression>(
                  taskName, partitions, resourceTimeSlots, startTime, endTime,
-                 granularity);
+                 granularity, utility);
            }),
            "Initializes a MalleableChooseExpression for the given task to be "
            "placed on the given partitions at the given startTime, "
