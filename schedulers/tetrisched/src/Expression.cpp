@@ -1179,6 +1179,8 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
   // Parse each of the children and constrain the MaxExpression's start time,
   // end time and utility as a function of the children's start time, end time
   // and utility.
+  Time maxEndTimeOfChildren = 0;
+  bool anyChildrenWithUtilities = false;
   for (int i = 0; i < numChildren; i++) {
     auto childParsedResult = children[i]->parse(
         solverModel, availablePartitions, capacityConstraints, currentTime);
@@ -1188,6 +1190,7 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
                        " is not an Expression with utility. Skipping.");
       continue;
     }
+    anyChildrenWithUtilities = true;
 
     // Check that the MaxExpression's childrens were specified correctly.
     if (!childParsedResult->startTime ||
@@ -1225,14 +1228,29 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
     maxStartTimeConstraint->addTerm(childStartTime, childIndicator);
 
     // Add the end time of the child to the MaxExpression's end time.
+    if (childEndTime > maxEndTimeOfChildren) {
+      maxEndTimeOfChildren = childEndTime;
+    }
     maxEndTimeConstraint->addTerm(childEndTime, childIndicator);
 
     // Add the utility of the child to the MaxExpression's utility.
     (*maxObjectiveFunction) += (*childUtility);
   }
 
+  if (!anyChildrenWithUtilities) {
+    throw tetrisched::exceptions::ExpressionConstructionException(
+        name + " must have at least one child with utility.");
+  }
+
   // Constrain the MaxExpression's start time to be less than or equal to the
-  // start time of the chosen child.
+  // start time of the chosen child. However, if the MaxExpression is not placed
+  // i.e., the sum of its childrens indicator is 0, then we have to let the
+  // start time be free. We do this by adding the maximum end time of the
+  // children as a constant that is activated if the children cannot be placed.
+  maxStartTimeConstraint->addTerm(maxEndTimeOfChildren);
+  maxStartTimeConstraint->addTerm(
+      -1 * static_cast<TETRISCHED_ILP_TYPE>(maxEndTimeOfChildren),
+      maxIndicator);
   maxStartTimeConstraint->addTerm(-1, maxStartTime);
 
   // Constrain the MaxExpression's end time to be greater than or equal to the
