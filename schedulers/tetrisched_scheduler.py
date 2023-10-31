@@ -131,13 +131,26 @@ class TetriSchedScheduler(BaseScheduler):
                     objective_strl.addChild(task_graph_strl)
 
             # Register the STRL expression with the scheduler and solve it.
-            self._scheduler.registerSTRL(objective_strl, partitions, sim_time.time)
-            solver_start_time = time.time()
-            self._scheduler.schedule(sim_time.time)
-            solver_end_time = time.time()
-            solver_time = EventTime(
-                int((solver_end_time - solver_start_time) * 1e6), EventTime.Unit.US
-            )
+            try:
+                self._scheduler.registerSTRL(objective_strl, partitions, sim_time.time)
+                solver_start_time = time.time()
+                self._scheduler.schedule(sim_time.time)
+                solver_end_time = time.time()
+                solver_time = EventTime(
+                    int((solver_end_time - solver_start_time) * 1e6), EventTime.Unit.US
+                )
+            except RuntimeError as e:
+                self._logger.error(
+                    f'[{sim_time.time}] Received error with description: "{e}" '
+                    f"while invoking the STRL-based Scheduler. Dumping the model to "
+                    f"tetrisched_error_{sim_time.time}.lp."
+                )
+                self._scheduler.exportLastSolverModel(
+                    f"tetrisched_error_{sim_time.time}.lp"
+                )
+                raise e
+
+            # If requested, log the model to a file.
             if self._log_to_file or sim_time.time in self._log_times:
                 self._scheduler.exportLastSolverModel(f"tetrisched_{sim_time.time}.lp")
                 self._logger.debug(
@@ -316,17 +329,6 @@ class TetriSchedScheduler(BaseScheduler):
                     "TetrischedScheduler currently only supports Slot resources."
                 )
 
-        # Construct the STRL MAX expression for this Task.
-        # This enforces the choice of only one placement for this Task.
-        self._logger.debug(
-            f"[{current_time.time}] Constructing a STRL expression tree for "
-            f"{task.name} (runtime={execution_strategy.runtime}, "
-            f"deadline={task.deadline}) with name: {task.unique_name}_placement."
-        )
-        chooseOneFromSet = tetrisched.strl.MaxExpression(
-            f"{task.unique_name}_placement"
-        )
-
         # Construct the STRL ChooseExpressions for this Task.
         # This expression represents a particular placement choice for this Task.
         num_slots_required = execution_strategy.resources.get_total_quantity(
@@ -347,28 +349,54 @@ class TetriSchedScheduler(BaseScheduler):
                 np.interp(time_range, (min(time_range), max(time_range)), (2, 1)),
             )
         )
+        task_choose_expressions = []
         for placement_time in time_discretizations:
+            if placement_time < current_time and task.state != TaskState.RUNNING:
+                # If the placement time is in the past, then we cannot place the task
+                # unless it is already running.
+                continue
+
             # Construct a ChooseExpression for placement at this time.
             # TODO (Sukrit): We just assume for now that all Slots are the same and
             # thus the task can be placed on any Slot. This is not true in general.
-            chooseAtTime = tetrisched.strl.ChooseExpression(
-                task.unique_name,
-                partitions,
-                num_slots_required,
-                placement_time.time,
-                execution_strategy.runtime.to(EventTime.Unit.US).time,
-                placement_rewards[placement_time.time],
+            task_choose_expressions.append(
+                tetrisched.strl.ChooseExpression(
+                    task.unique_name,
+                    partitions,
+                    num_slots_required,
+                    placement_time.time,
+                    execution_strategy.runtime.to(EventTime.Unit.US).time,
+                    placement_rewards[placement_time.time],
+                )
             )
 
-            # Register this expression with the MAX expression.
-            chooseOneFromSet.addChild(chooseAtTime)
+        if len(task_choose_expressions) == 0:
+            self._logger.warn(
+                f"[{current_time.time}] No ChooseExpressions were generated for "
+                f"{task.unique_name} with deadline {task.deadline}."
+            )
+            return None
 
         self._logger.debug(
-            f"[{current_time.time}] Generated {len(time_discretizations)} "
-            f"ChooseExpressions for {task.unique_name} from {time_discretizations[0]} "
-            f"to {time_discretizations[-1]} for {num_slots_required} slots for "
-            f"{execution_strategy.runtime}."
+            f"[{current_time.time}] Generated {len(task_choose_expressions)} "
+            f"ChooseExpressions for {task.unique_name} for times "
+            f"{[str(t) for t in time_discretizations]} for {num_slots_required} slots "
+            f"for {execution_strategy.runtime}."
         )
+
+        # Construct the STRL MAX expression for this Task.
+        # This enforces the choice of only one placement for this Task.
+        self._logger.debug(
+            f"[{current_time.time}] Constructing a STRL expression tree for "
+            f"{task.name} (runtime={execution_strategy.runtime}, "
+            f"deadline={task.deadline}) with name: {task.unique_name}_placement."
+        )
+        chooseOneFromSet = tetrisched.strl.MaxExpression(
+            f"{task.unique_name}_placement"
+        )
+        for choose_expression in task_choose_expressions:
+            chooseOneFromSet.addChild(choose_expression)
+
         return chooseOneFromSet
 
     def _construct_task_graph_strl(
@@ -410,7 +438,6 @@ class TetriSchedScheduler(BaseScheduler):
                 f"graph {task_graph.name} rooted at {task.unique_name}."
             )
             task_expression = self.construct_task_strl(current_time, task, partitions)
-            task_strls[task.id] = task_expression
         else:
             # If this Task is not in the set of Tasks that we are required to schedule,
             # then we just return a None expression.
@@ -434,8 +461,9 @@ class TetriSchedScheduler(BaseScheduler):
             if child_expression:
                 child_expressions.append(child_expression)
 
-        # If there are no children, return the expression for this Task.
+        # If there are no children, cache and return the expression for this Task.
         if len(child_expressions) == 0:
+            task_strls[task.id] = task_expression
             return task_expression
 
         # Construct the subtree for the children of this Task.
@@ -475,6 +503,8 @@ class TetriSchedScheduler(BaseScheduler):
         else:
             task_graph_expression = child_expression
 
+        # Cache and return the expression for this Task.
+        task_strls[task.id] = task_graph_expression
         return task_graph_expression
 
     def construct_task_graph_strl(
@@ -529,6 +559,11 @@ class TetriSchedScheduler(BaseScheduler):
             return root_task_strls[0]
         else:
             # Construct a MinExpression to order the roots of the TaskGraph.
+            self._logger.debug(
+                f"[{current_time.time}] Collecting {len(root_task_strls)} STRLs "
+                f"for {task_graph.name} into a MinExpression "
+                f"{task_graph.name}_min_expression."
+            )
             min_expression_task_graph = tetrisched.strl.MinExpression(
                 f"{task_graph.name}_min_expression"
             )

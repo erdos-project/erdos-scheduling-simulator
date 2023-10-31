@@ -2,6 +2,16 @@
 
 #include <algorithm>
 #include <limits>
+#include <boost/uuid/uuid.hpp>
+#include <boost/uuid/uuid_generators.hpp>
+#include <boost/uuid/uuid_io.hpp>
+#include <stack>
+
+/// A method to generate a UUID for different classes.
+std::string generateUUID() {
+  boost::uuids::uuid uuid = boost::uuids::random_generator()();
+  return boost::uuids::to_string(uuid);
+}
 
 namespace tetrisched {
 
@@ -126,9 +136,11 @@ size_t CapacityConstraintMap::size() const {
 /* Method definitions for Expression */
 
 Expression::Expression(std::string name, ExpressionType type)
-    : name(name), type(type) {}
+    : name(name), id(generateUUID()), type(type) {}
 
 std::string Expression::getName() const { return name; }
+
+std::string Expression::getId() const { return id; }
 
 size_t Expression::getNumChildren() const { return children.size(); }
 
@@ -265,6 +277,50 @@ std::optional<SolutionResultPtr> Expression::getSolution() const {
     return std::nullopt;
   }
   return solution;
+}
+
+void Expression::exportToDot(std::string fileName) const {
+  // Open the file for writing.
+  std::ofstream dotFile;
+  dotFile.open(fileName);
+
+  // Output the Graph.
+  dotFile << "digraph " << name << " {" << std::endl;
+
+  // Go through all the nodes in the graph and output a mapping from
+  std::stack<const Expression*> nodesToVisit;
+  nodesToVisit.push(this);
+  std::unordered_set<std::string> visitedNodes;
+
+  while (!nodesToVisit.empty()) {
+    const Expression* node = nodesToVisit.top();
+    nodesToVisit.pop();
+
+    // Check if we have already visited this node.
+    if (visitedNodes.find(node->getId()) != visitedNodes.end()) {
+      // We have already visited this node. Skip it.
+      continue;
+    }
+    visitedNodes.insert(node->getId());
+
+    // Output the node.
+    dotFile << "\"" << node->getId() << "\" [label=\""
+            << node->getDescriptiveName() << "\"]" << std::endl;
+
+    // Output the edges.
+    for (auto& child : node->getChildren()) {
+      dotFile << "\"" << node->getId() << "\" -> \"" << child->getId() << "\""
+              << std::endl;
+      nodesToVisit.push(child.get());
+    }
+  }
+
+  // their ID to their name.
+  dotFile << "}";
+}
+
+std::string Expression::getDescriptiveName() const {
+  return this->getTypeString();
 }
 
 /* Method definitions for ChooseExpression */
@@ -413,6 +469,11 @@ SolutionResultPtr ChooseExpression::populateResults(
   }
   solution->placements[name] = std::move(placement);
   return solution;
+}
+
+std::string ChooseExpression::getDescriptiveName() const {
+  return "Choose(" + name + ", S=" + std::to_string(startTime) +
+         ", F=" + std::to_string(endTime) + ")";
 }
 
 /* Method definitions for GeneralizedChoose */
@@ -761,6 +822,11 @@ SolutionResultPtr MalleableChooseExpression::populateResults(
   return solution;
 }
 
+std::string MalleableChooseExpression::getDescriptiveName() const {
+  return "MalleableChoose(" + name + ", S=" + std::to_string(startTime) +
+         ", F=" + std::to_string(endTime) + ")";
+}
+
 /* Method definitions for AllocationExpression */
 
 AllocationExpression::AllocationExpression(
@@ -811,6 +877,11 @@ SolutionResultPtr AllocationExpression::populateResults(
   // class.
   Expression::populateResults(solverModel);
   return solution;
+}
+
+std::string AllocationExpression::getDescriptiveName() const {
+  return "Allocation(" + name + ", S=" + std::to_string(startTime) +
+         ", F=" + std::to_string(endTime) + ")";
 }
 
 /* Method definitions for ObjectiveExpression */
@@ -1184,6 +1255,8 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
   // Parse each of the children and constrain the MaxExpression's start time,
   // end time and utility as a function of the children's start time, end time
   // and utility.
+  Time maxEndTimeOfChildren = 0;
+  bool anyChildrenWithUtilities = false;
   for (int i = 0; i < numChildren; i++) {
     auto childParsedResult = children[i]->parse(
         solverModel, availablePartitions, capacityConstraints, currentTime);
@@ -1193,6 +1266,7 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
                        " is not an Expression with utility. Skipping.");
       continue;
     }
+    anyChildrenWithUtilities = true;
 
     // Check that the MaxExpression's childrens were specified correctly.
     if (!childParsedResult->startTime ||
@@ -1230,14 +1304,29 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
     maxStartTimeConstraint->addTerm(childStartTime, childIndicator);
 
     // Add the end time of the child to the MaxExpression's end time.
+    if (childEndTime > maxEndTimeOfChildren) {
+      maxEndTimeOfChildren = childEndTime;
+    }
     maxEndTimeConstraint->addTerm(childEndTime, childIndicator);
 
     // Add the utility of the child to the MaxExpression's utility.
     (*maxObjectiveFunction) += (*childUtility);
   }
 
+  if (!anyChildrenWithUtilities) {
+    throw tetrisched::exceptions::ExpressionConstructionException(
+        name + " must have at least one child with utility.");
+  }
+
   // Constrain the MaxExpression's start time to be less than or equal to the
-  // start time of the chosen child.
+  // start time of the chosen child. However, if the MaxExpression is not placed
+  // i.e., the sum of its childrens indicator is 0, then we have to let the
+  // start time be free. We do this by adding the maximum end time of the
+  // children as a constant that is activated if the children cannot be placed.
+  maxStartTimeConstraint->addTerm(maxEndTimeOfChildren);
+  maxStartTimeConstraint->addTerm(
+      -1 * static_cast<TETRISCHED_ILP_TYPE>(maxEndTimeOfChildren),
+      maxIndicator);
   maxStartTimeConstraint->addTerm(-1, maxStartTime);
 
   // Constrain the MaxExpression's end time to be greater than or equal to the
