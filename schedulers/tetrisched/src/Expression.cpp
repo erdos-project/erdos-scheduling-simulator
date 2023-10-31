@@ -272,13 +272,15 @@ std::optional<SolutionResultPtr> Expression::getSolution() const {
 ChooseExpression::ChooseExpression(std::string taskName,
                                    Partitions resourcePartitions,
                                    uint32_t numRequiredMachines, Time startTime,
-                                   Time duration)
+                                   Time duration,
+                                   double utility)
     : Expression(taskName, ExpressionType::EXPR_CHOOSE),
       resourcePartitions(resourcePartitions),
       numRequiredMachines(numRequiredMachines),
       startTime(startTime),
       duration(duration),
-      endTime(startTime + duration) {}
+      endTime(startTime + duration),
+      utility(utility) {}
 
 void ChooseExpression::addChild(ExpressionPtr child) {
   throw tetrisched::exceptions::ExpressionConstructionException(
@@ -369,16 +371,16 @@ ParseResultPtr ChooseExpression::parse(
   solverModel->addConstraint(std::move(fulfillsDemandConstraint));
 
   // Construct the Utility function for this Choose expression.
-  auto utility =
+  auto utilityFunction =
       std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
-  utility->addTerm(1, isSatisfiedVar);
+  utilityFunction->addTerm(utility, isSatisfiedVar);
 
   // Construct the return value.
   parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
   parsedResult->startTime = startTime;
   parsedResult->endTime = endTime;
   parsedResult->indicator = isSatisfiedVar;
-  parsedResult->utility = std::move(utility);
+  parsedResult->utility = std::move(utilityFunction);
   return parsedResult;
 }
 
@@ -416,14 +418,16 @@ SolutionResultPtr ChooseExpression::populateResults(
 /* Method definitions for GeneralizedChoose */
 MalleableChooseExpression::MalleableChooseExpression(
     std::string taskName, Partitions resourcePartitions,
-    uint32_t resourceTimeSlots, Time startTime, Time endTime, Time granularity)
+    uint32_t resourceTimeSlots, Time startTime, Time endTime, Time granularity,
+    double utility)
     : Expression(taskName, ExpressionType::EXPR_MALLEABLE_CHOOSE),
       resourcePartitions(resourcePartitions),
       resourceTimeSlots(resourceTimeSlots),
       startTime(startTime),
       endTime(endTime),
       granularity(granularity),
-      partitionVariables() {}
+      partitionVariables(), 
+      utility(utility) {}
 
 void MalleableChooseExpression::addChild(ExpressionPtr child) {
   throw tetrisched::exceptions::ExpressionConstructionException(
@@ -714,16 +718,16 @@ ParseResultPtr MalleableChooseExpression::parse(
   solverModel->addConstraint(std::move(endTimeConstraint));
 
   // Construct the Utility function for this Choose expression.
-  auto utility =
+  auto utilityFunction =
       std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
-  utility->addTerm(1, isSatisfiedVar);
+  utilityFunction->addTerm(utility, isSatisfiedVar);
 
   // Construct the return value.
   parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
   parsedResult->startTime = startTimeVariable;
   parsedResult->endTime = endTimeVariable;
   parsedResult->indicator = isSatisfiedVar;
-  parsedResult->utility = std::move(utility);
+  parsedResult->utility = std::move(utilityFunction);
   return parsedResult;
 }
 

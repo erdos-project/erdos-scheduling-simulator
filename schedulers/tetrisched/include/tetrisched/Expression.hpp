@@ -319,13 +319,16 @@ class ChooseExpression : public Expression {
   Time duration;
   /// The end time of the choice represented by this Expression.
   Time endTime;
+  // The utility of the choice represented by this Expression.
+  double utility;
   /// The variables that represent the choice of each Partition for this
   /// Expression.
   std::unordered_map<uint32_t, VariablePtr> partitionVariables;
 
  public:
   ChooseExpression(std::string taskName, Partitions resourcePartitions,
-                   uint32_t numRequiredMachines, Time startTime, Time duration);
+                   uint32_t numRequiredMachines, Time startTime, Time duration, 
+                   double utility);
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
@@ -349,6 +352,8 @@ class MalleableChooseExpression : public Expression {
   Time endTime;
   /// The granularity at which the rectangle choices are to be made.
   Time granularity;
+  // The utility of the choice represented by this Expression.
+  double utility;
   /// The variables that represent the choice of machines from each
   /// Partition at each time corresponding to this Expression.
   std::unordered_map<std::pair<uint32_t, Time>, VariablePtr,
@@ -358,7 +363,7 @@ class MalleableChooseExpression : public Expression {
  public:
   MalleableChooseExpression(std::string taskName, Partitions resourcePartitions,
                             uint32_t resourceTimeSlots, Time startTime,
-                            Time endTime, Time granularity);
+                            Time endTime, Time granularity, double utility);
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,

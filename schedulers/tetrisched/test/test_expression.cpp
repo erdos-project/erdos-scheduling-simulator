@@ -12,9 +12,9 @@
 TEST(Expression, TestChooseExpressionIsLeaf) {
   tetrisched::Partitions partitions = tetrisched::Partitions();
   auto chooseExpression = std::make_unique<tetrisched::ChooseExpression>(
-      "task1", partitions, 0, 0, 10);
+      "task1", partitions, 0, 0, 10, 1);
   auto chooseExpression2 = std::make_unique<tetrisched::ChooseExpression>(
-      "task1", partitions, 0, 0, 10);
+      "task1", partitions, 0, 0, 10, 1);
   EXPECT_THROW(chooseExpression->addChild(std::move(chooseExpression2)),
                tetrisched::exceptions::ExpressionConstructionException);
 }
@@ -23,10 +23,10 @@ TEST(Expression, TestMinExpressionIsNOTLeaf) {
   tetrisched::Partitions partitions = tetrisched::Partitions();
   tetrisched::ExpressionPtr chooseExpression =
       std::make_shared<tetrisched::ChooseExpression>("task1", partitions, 0, 0,
-                                                     10);
+                                                     10, 1);
   tetrisched::ExpressionPtr chooseExpression2 =
       std::make_shared<tetrisched::ChooseExpression>("task1", partitions, 0, 0,
-                                                     10);
+                                                     10, 1);
 
   tetrisched::ExpressionPtr minExpression =
       std::make_shared<tetrisched::MinExpression>("TEST_MIN");
@@ -44,7 +44,7 @@ TEST(Expression, TestMaxExpressionOnlyAllowsChooseExpressionChildren) {
   // Ensure ChooseExpression can be added to MaxExpression.
   tetrisched::ExpressionPtr chooseExpression =
       std::make_shared<tetrisched::ChooseExpression>("task1", partitions, 0, 0,
-                                                     10);
+                                                     10, 1);
   tetrisched::ExpressionPtr maxExpression =
       std::make_shared<tetrisched::MaxExpression>("TestMax");
   EXPECT_NO_THROW(maxExpression->addChild(chooseExpression))
@@ -70,10 +70,10 @@ TEST(Expression, TestLessThanEnforcesOrdering) {
   // Construct the choice for the two tasks.
   tetrisched::ExpressionPtr chooseTask1 =
       std::make_shared<tetrisched::ChooseExpression>("task1", partitions, 1, 0,
-                                                     100);
+                                                     100, 1);
   tetrisched::ExpressionPtr chooseTask2 =
       std::make_shared<tetrisched::ChooseExpression>("task2", partitions, 1,
-                                                     200, 100);
+                                                     200, 100, 1);
 
   // Construct the LessThan expression.
   tetrisched::ExpressionPtr lessThanExpression =
@@ -151,10 +151,10 @@ TEST(Expression, TestMaxExpressionEnforcesSingleChoice) {
   // Construct two choices for a task.
   tetrisched::ExpressionPtr chooseTask1_1 =
       std::make_shared<tetrisched::ChooseExpression>("task1", partitions, 1, 0,
-                                                     100);
+                                                     100, 1);
   tetrisched::ExpressionPtr chooseTask1_2 =
       std::make_shared<tetrisched::ChooseExpression>("task1", partitions, 1,
-                                                     100, 100);
+                                                     100, 100, 1);
 
   // Constrain only one choice to actually happen.
   tetrisched::ExpressionPtr maxChooseExpr =
@@ -197,10 +197,10 @@ TEST(Expression, TestMinExpressionEnforcesAllChildrenSatisfied) {
   // Construct two choices for a task.
   tetrisched::ExpressionPtr chooseTask1_1 =
       std::make_shared<tetrisched::ChooseExpression>("task1_1", partitions, 1,
-                                                     0, 100);
+                                                     0, 100, 1);
   tetrisched::ExpressionPtr chooseTask1_2 =
       std::make_shared<tetrisched::ChooseExpression>("task1_2", partitions, 1,
-                                                     100, 100);
+                                                     100, 100, 1);
 
   // Constrain both choices to actually happen.
   tetrisched::ExpressionPtr minChooseExpr =
@@ -248,10 +248,10 @@ TEST(Expression, TestMinExpressionEnforcesNoneSatisfied) {
   // Construct two choices for a task.
   tetrisched::ExpressionPtr chooseTask1_1 =
       std::make_shared<tetrisched::ChooseExpression>("task1_1", partitions, 1,
-                                                     0, 100);
+                                                     0, 100, 1);
   tetrisched::ExpressionPtr chooseTask1_2 =
       std::make_shared<tetrisched::ChooseExpression>("task1_2", partitions, 1,
-                                                     50, 100);
+                                                     50, 100, 1);
 
   // Constrain both choices to actually happen.
   tetrisched::ExpressionPtr minChooseExpr =
@@ -296,7 +296,7 @@ TEST(Expression, TestScaleExpressionDoublesUtility) {
   // Construct the choice for a task.
   tetrisched::ExpressionPtr chooseExpression =
       std::make_shared<tetrisched::ChooseExpression>("task1", partitions, 1, 0,
-                                                     10);
+                                                     10, 1);
   // Scale the utility by 2.
   tetrisched::ExpressionPtr scaleExpression =
       std::make_shared<tetrisched::ScaleExpression>("TEST_SCALE", 4);
@@ -345,7 +345,7 @@ TEST(Expression, TestAllocationExpressionFailsChoice) {
   // Construct the Choice for a second task.
   tetrisched::ExpressionPtr chooseExpression =
       std::make_shared<tetrisched::ChooseExpression>("task2", partitions, 1, 10,
-                                                     20);
+                                                     20, 1);
 
   // Try to meet both of the Expressions.
   tetrisched::ExpressionPtr minExpression =
@@ -393,7 +393,7 @@ TEST(Expression, TestMalleableChooseExpressionConstruction) {
   // Construct the MalleableChooseExpression.
   tetrisched::ExpressionPtr malleableChooseExpression =
       std::make_shared<tetrisched::MalleableChooseExpression>(
-          "task1", partitions, 15, 5, 10, 1);
+          "task1", partitions, 15, 5, 10, 1, 1);
 
   // Construct an ObjectiveExpression.
   tetrisched::ExpressionPtr objectiveExpression =
@@ -431,7 +431,7 @@ TEST(Expression, TestMalleableChooseExpressionConstructsVariableRectangles) {
   // usage.
   tetrisched::ExpressionPtr malleableChooseExpression =
       std::make_shared<tetrisched::MalleableChooseExpression>(
-          "task2", partitions, 10, 4, 10, 1);
+          "task2", partitions, 10, 4, 10, 1, 1);
 
   // Construct an ObjectiveExpression.
   tetrisched::ExpressionPtr objectiveExpression =
