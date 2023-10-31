@@ -328,7 +328,7 @@ class ChooseExpression : public Expression {
  public:
   ChooseExpression(std::string taskName, Partitions resourcePartitions,
                    uint32_t numRequiredMachines, Time startTime, Time duration, 
-                   double utility);
+                   TETRISCHED_ILP_TYPE utility);
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
@@ -363,7 +363,7 @@ class MalleableChooseExpression : public Expression {
  public:
   MalleableChooseExpression(std::string taskName, Partitions resourcePartitions,
                             uint32_t resourceTimeSlots, Time startTime,
-                            Time endTime, Time granularity, double utility);
+                            Time endTime, Time granularity, TETRISCHED_ILP_TYPE utility);
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,

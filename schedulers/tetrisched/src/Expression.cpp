@@ -273,7 +273,7 @@ ChooseExpression::ChooseExpression(std::string taskName,
                                    Partitions resourcePartitions,
                                    uint32_t numRequiredMachines, Time startTime,
                                    Time duration,
-                                   double utility)
+                                   TETRISCHED_ILP_TYPE utility)
     : Expression(taskName, ExpressionType::EXPR_CHOOSE),
       resourcePartitions(resourcePartitions),
       numRequiredMachines(numRequiredMachines),
@@ -419,7 +419,7 @@ SolutionResultPtr ChooseExpression::populateResults(
 MalleableChooseExpression::MalleableChooseExpression(
     std::string taskName, Partitions resourcePartitions,
     uint32_t resourceTimeSlots, Time startTime, Time endTime, Time granularity,
-    double utility)
+    TETRISCHED_ILP_TYPE utility)
     : Expression(taskName, ExpressionType::EXPR_MALLEABLE_CHOOSE),
       resourcePartitions(resourcePartitions),
       resourceTimeSlots(resourceTimeSlots),
