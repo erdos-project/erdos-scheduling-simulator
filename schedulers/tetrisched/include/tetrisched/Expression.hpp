@@ -236,6 +236,8 @@ class Expression : public std::enable_shared_from_this<Expression> {
  protected:
   /// The name of the Expression.
   std::string name;
+  /// A unique ID for the Expression.
+  std::string id;
   /// The parsed result from the Expression.
   /// Used for retrieving the solution from the solver.
   ParseResultPtr parsedResult;
@@ -275,6 +277,9 @@ class Expression : public std::enable_shared_from_this<Expression> {
   /// Returns the name of this Expression.
   std::string getName() const;
 
+  /// Returns the ID of this Expression.
+  std::string getId() const;
+
   /// Returns the number of children of this Expression.
   size_t getNumChildren() const;
 
@@ -301,6 +306,12 @@ class Expression : public std::enable_shared_from_this<Expression> {
   /// The Solution is only available if `populateResults` has been called on
   /// this Expression.
   std::optional<SolutionResultPtr> getSolution() const;
+
+  /// Exports the STRL rooted at this Expression into a DOT file.
+  void exportToDot(std::string filename) const;
+
+  /// Retrieves the descriptive name for the Expression.
+  virtual std::string getDescriptiveName() const;
 };
 
 /// A `ChooseExpression` represents a choice of a required number of machines
@@ -332,6 +343,7 @@ class ChooseExpression : public Expression {
                        CapacityConstraintMap& capacityConstraints,
                        Time currentTime) override;
   SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
+  std::string getDescriptiveName() const override;
 };
 
 class MalleableChooseExpression : public Expression {
@@ -365,6 +377,7 @@ class MalleableChooseExpression : public Expression {
                        CapacityConstraintMap& capacityConstraints,
                        Time currentTime) override;
   SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
+  std::string getDescriptiveName() const override;
 };
 
 /// An `AllocationExpression` represents the allocation of the given number of
@@ -392,6 +405,7 @@ class AllocationExpression : public Expression {
                        CapacityConstraintMap& capacityConstraints,
                        Time currentTime) override;
   SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
+  std::string getDescriptiveName() const override;
 };
 
 /// An `ObjectiveExpression` collates the objectives from its children and

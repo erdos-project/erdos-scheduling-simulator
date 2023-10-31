@@ -92,12 +92,15 @@ void defineSTRLExpressions(py::module_& tetrisched_m) {
            "Adds a child to this Expression.")
       .def("getSolution", &tetrisched::Expression::getSolution,
            "Returns the solution for this Expression.")
+      .def("exportToDot", &tetrisched::Expression::exportToDot,
+           "Exports the Expression to a dot file.")
       .def("__str__",
            [](const tetrisched::Expression& expr) {
              return "Expression<name=" + expr.getName() +
                     ", type=" + expr.getTypeString() + ">";
            })
-      .def_property_readonly("name", &tetrisched::Expression::getName);
+      .def_property_readonly("name", &tetrisched::Expression::getName)
+      .def_property_readonly("id", &tetrisched::Expression::getId);
 
   // Define the ChooseExpression.
   py::class_<tetrisched::ChooseExpression, tetrisched::Expression,
