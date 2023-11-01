@@ -1,8 +1,8 @@
 import time
 from typing import List, Mapping, Optional, Set
 
-import absl # noqa: F401
-import numpy as np 
+import absl  # noqa: F401
+import numpy as np
 import tetrisched_py as tetrisched
 
 from schedulers import BaseScheduler
@@ -78,6 +78,7 @@ class TetriSchedScheduler(BaseScheduler):
             branch_prediction_accuracy=self.branch_prediction_accuracy,
             release_taskgraphs=self.release_taskgraphs,
         )
+
         task_description_string = [
             f"{t.unique_name} ("
             f"{t.available_execution_strategies.get_fastest_strategy().runtime}, "
@@ -87,20 +88,31 @@ class TetriSchedScheduler(BaseScheduler):
         task_graph_names: Set[TaskGraph] = {
             task.task_graph for task in tasks_to_be_scheduled
         }
-        # for task_graph_name in task_graph_names:
-        #     task_graph = workload.get_task_graph(task_graph_name)
-        #     print(
-        #         "The TaskGraph {} has {} completion time and {} deadline".format(
-        #             task_graph_name,
-        #             task_graph.job_graph.completion_time,
-        #             task_graph.deadline,
-        #         )
-        #     )
         self._logger.debug(
             f"[{sim_time.time}] The scheduler received {len(tasks_to_be_scheduled)} "
             f"tasks to be scheduled from {len(task_graph_names)} TaskGraphs. "
             f"These tasks along with their "
             f"(runtimes, deadlines) were: {task_description_string}."
+        )
+
+        # Find the currently running and scheduled tasks to inform
+        # the scheduler of previous placements.
+        if self.retract_schedules:
+            # If we are retracting schedules, the scheduler will re-place
+            # the scheduled tasks, so we should only consider RUNNING tasks.
+            filter_fn = lambda task: task.state == TaskState.RUNNING  # noqa: E731
+        else:
+            # If we are not retracting schedules, we should consider both
+            # RUNNING and SCHEDULED task placements as permanent.
+            filter_fn = lambda task: task.state in (  # noqa: E731
+                TaskState.RUNNING,
+                TaskState.SCHEDULED,
+            )
+        previously_placed_tasks = workload.filter(filter_fn)
+        self._logger.debug(
+            f"[{sim_time.time}] The scheduler is also considering the following "
+            f"{len(previously_placed_tasks)} for their effects on the current "
+            f"placements: {[task.unique_name for task in previously_placed_tasks]}."
         )
 
         # Construct the STRL expression.
@@ -112,11 +124,21 @@ class TetriSchedScheduler(BaseScheduler):
             # Construct the partitions from the Workers in the WorkerPool.
             partitions = self.construct_partitions(worker_pools=worker_pools)
 
-            # Construct the STRL expressions for each TaskGraph and add them together
-            # in a single objective expression.
+            # Construct the ObjectiveExpression to be optimized.
             objective_strl = tetrisched.strl.ObjectiveExpression(
                 f"TetriSched_{sim_time.to(EventTime.Unit.US).time}"
             )
+
+            # For the tasks that have been previously placed, add an
+            # AllocationExpression for their current allocations so as to correctly
+            # account for capacities at each time discretization.
+            for task in previously_placed_tasks:
+                task_strl = self.construct_task_strl(sim_time, task, partitions)
+                if task_strl is not None:
+                    objective_strl.addChild(task_strl)
+
+            # Construct the STRL expressions for each TaskGraph and add them together
+            # in a single objective expression.
             for task_graph_name in task_graph_names:
                 # Retrieve the TaskGraph and construct its STRL.
                 task_graph = workload.get_task_graph(task_graph_name)
@@ -124,7 +146,6 @@ class TetriSchedScheduler(BaseScheduler):
                     current_time=sim_time,
                     task_graph=task_graph,
                     partitions=partitions,
-                    task_strls={},
                     tasks_to_be_scheduled=tasks_to_be_scheduled,
                 )
                 if task_graph_strl is not None:
@@ -143,8 +164,10 @@ class TetriSchedScheduler(BaseScheduler):
                 self._logger.error(
                     f'[{sim_time.time}] Received error with description: "{e}" '
                     f"while invoking the STRL-based Scheduler. Dumping the model to "
-                    f"tetrisched_error_{sim_time.time}.lp."
+                    f"tetrisched_error_{sim_time.time}.lp and STRL expression to "
+                    f"tetrisched_error_{sim_time.time}.dot."
                 )
+                objective_strl.exportToDot(f"tetrisched_error_{sim_time.time}.dot")
                 self._scheduler.exportLastSolverModel(
                     f"tetrisched_error_{sim_time.time}.lp"
                 )
@@ -153,9 +176,11 @@ class TetriSchedScheduler(BaseScheduler):
             # If requested, log the model to a file.
             if self._log_to_file or sim_time.time in self._log_times:
                 self._scheduler.exportLastSolverModel(f"tetrisched_{sim_time.time}.lp")
+                objective_strl.exportToDot(f"tetrisched_{sim_time.time}.dot")
                 self._logger.debug(
                     f"[{sim_time.to(EventTime.Unit.US).time}] Exported model to "
-                    f"tetrisched_{sim_time.time}.lp."
+                    f"tetrisched_{sim_time.time}.lp and STRL to "
+                    f"tetrisched_{sim_time.time}.dot"
                 )
 
             # Retrieve the solution and check if we were able to schedule anything.
@@ -165,49 +190,58 @@ class TetriSchedScheduler(BaseScheduler):
                 f" and took {solver_time} to solve. The solution result "
                 f"was {self._scheduler.getLastSolverSolution()}."
             )
-            if solverSolution.utility == 0:
-                raise RuntimeError(
-                    f"TetrischedScheduler was unable to schedule tasks at {sim_time}."
-                )
+            if solverSolution.utility > 0:
+                # Retrieve the Placements for each task.
+                for task in tasks_to_be_scheduled:
+                    task_placement = solverSolution.getPlacement(task.unique_name)
+                    if task_placement is None or not task_placement.isPlaced():
+                        self._logger.error(
+                            f"[{sim_time.time}] No Placement was found for "
+                            f"Task {task.unique_name}."
+                        )
+                        placements.append(Placement.create_task_placement(task=task))
+                        continue
 
-            # Retrieve the Placements for each task.
-            for task in tasks_to_be_scheduled:
-                task_placement = solverSolution.getPlacement(task.unique_name)
-                if task_placement is None or not task_placement.isPlaced():
-                    self._logger.error(
-                        f"[{sim_time.time}] No Placement was found for "
-                        f"Task {task.unique_name}."
+                    # Retrieve the Partition where the task was placed.
+                    # The task was placed, retrieve the Partition where the task
+                    # was placed.
+                    partitionAllocations = task_placement.getPartitionAllocations()
+                    partitionId = list(partitionAllocations.keys())[0]
+                    partition = partitions.partitionMap[partitionId]
+                    task_placement = Placement.create_task_placement(
+                        task=task,
+                        placement_time=EventTime(
+                            task_placement.startTime, EventTime.Unit.US
+                        ),
+                        worker_id=partition.associatedWorker.id,
+                        worker_pool_id=partition.associatedWorkerPool.id,
+                        execution_strategy=task.available_execution_strategies[0],
                     )
-                    placements.append(Placement.create_task_placement(task=task))
-                    continue
-
-                # Retrieve the Partition where the task was placed.
-                # The task was placed, retrieve the Partition where the task
-                # was placed.
-                partitionAllocations = task_placement.getPartitionAllocations()
-                partitionId = list(partitionAllocations.keys())[0]
-                partition = partitions.partitionMap[partitionId]
-                task_placement = Placement.create_task_placement(
-                    task=task,
-                    placement_time=EventTime(
-                        task_placement.startTime, EventTime.Unit.US
-                    ),
-                    worker_id=partition.associatedWorker.id,
-                    worker_pool_id=partition.associatedWorkerPool.id,
-                    execution_strategy=task.available_execution_strategies[0],
-                )
-                placements.append(task_placement)
-                self._logger.debug(
-                    "[%s] Placed %s (with deadline %s and remaining time %s) on "
-                    "WorkerPool (%s) to be started at %s and executed with %s.",
-                    sim_time.to(EventTime.Unit.US).time,
-                    task_placement.task.unique_name,
-                    task_placement.task.deadline,
-                    task_placement.execution_strategy.runtime,
-                    task_placement.worker_pool_id,
-                    task_placement.placement_time,
-                    task_placement.execution_strategy,
-                )
+                    placements.append(task_placement)
+                    self._logger.debug(
+                        "[%s] Placed %s (with deadline %s and remaining time %s) on "
+                        "WorkerPool (%s) to be started at %s and executed with %s.",
+                        sim_time.to(EventTime.Unit.US).time,
+                        task_placement.task.unique_name,
+                        task_placement.task.deadline,
+                        task_placement.execution_strategy.runtime,
+                        task_placement.worker_pool_id,
+                        task_placement.placement_time,
+                        task_placement.execution_strategy,
+                    )
+            else:
+                # There were no Placements from the Scheduler. Inform the Simulator.
+                for task in tasks_to_be_scheduled:
+                    placements.append(
+                        Placement.create_task_placement(
+                            task=task,
+                            placement_time=None,
+                            worker_pool_id=None,
+                            worker_id=None,
+                            execution_strategy=None,
+                        )
+                    )
+                self._logger.warning(f"[{sim_time.time}] Failed to place any tasks.")
 
         scheduler_end_time = time.time()
         scheduler_runtime = EventTime(
@@ -329,17 +363,100 @@ class TetriSchedScheduler(BaseScheduler):
                     "TetrischedScheduler currently only supports Slot resources."
                 )
 
-        # Construct the STRL ChooseExpressions for this Task.
-        # This expression represents a particular placement choice for this Task.
+        # Find the number of slots required to execute this Task.
         num_slots_required = execution_strategy.resources.get_total_quantity(
             resource=Resource(name="Slot", _id="any")
         )
 
-        time_discretizations = self._get_time_discretizations_until(
-            current_time, task.deadline - execution_strategy.runtime
+        # Compute the remaining time.
+        task_remaining_time = (
+            task.remaining_time
+            if task.state == TaskState.RUNNING
+            else execution_strategy.runtime
         )
 
-        time_range = [time_discretization.time for time_discretization in time_discretizations]
+        # Compute the time discretizations for this Task.
+        time_discretizations = self._get_time_discretizations_until(
+            current_time, task.deadline - task_remaining_time
+        )
+        if len(time_discretizations) == 0:
+            self._logger.warn(
+                f"[{current_time.time}] No time discretizations were feasible for "
+                f"{task.unique_name} from range {current_time} to "
+                f"{task.deadline - task_remaining_time}."
+            )
+            return None
+
+        # If the task is already running or scheduled and we're not reconsidering
+        # previous schedulings, we block off all the time discretizations from the
+        # task's start until it completes.
+        if task.state == TaskState.RUNNING or (
+            task.state == TaskState.SCHEDULED and not self.retract_schedules
+        ):
+            # Find the Partition where the task is running or to be scheduled.
+            scheduled_partition = None
+            for partition in partitions.partitionMap.values():
+                if partition.associatedWorker.id == task.current_placement.worker_id:
+                    scheduled_partition = partition
+                    break
+
+            if scheduled_partition is None:
+                raise ValueError(
+                    f"Could not find the Partition for the Task "
+                    f"{task.unique_name} in state {task.state}."
+                )
+
+            # Find the discretization where the Task is running or to be scheduled.
+            scheduled_discretization = None
+            if task.state == TaskState.RUNNING:
+                scheduled_discretization = time_discretizations[0]
+                # BUG (Sukrit): If we go back in time and set the discretization from
+                # the past, then we need to correctly account for the remaining time
+                # from that point, instead of the current.
+                task_remaining_time = (
+                    current_time - scheduled_discretization
+                ) + task_remaining_time
+            else:
+                for index, time_discretization in enumerate(time_discretizations):
+                    if (
+                        time_discretization <= task.current_placement.placement_time
+                        and (
+                            index == len(time_discretizations) - 1
+                            or time_discretizations[index + 1]
+                            > task.current_placement.placement_time
+                        )
+                    ):
+                        # This is the first discretization where we should be blocking.
+                        scheduled_discretization = time_discretization
+                        break
+
+            if scheduled_discretization is None:
+                raise ValueError(
+                    f"Could not find the discretization for the Task "
+                    f"{task.unique_name} in state {task.state} starting at "
+                    f"{task.current_placement.placement_time} from "
+                    f"{', '.join([str(t) for t in time_discretizations])}."
+                )
+
+            # Block off all the time discretizations from the task's start until it
+            # completes.
+            task_allocation_expression = tetrisched.strl.AllocationExpression(
+                task.unique_name,
+                [(scheduled_partition, num_slots_required)],
+                scheduled_discretization.to(EventTime.Unit.US).time,
+                task_remaining_time.to(EventTime.Unit.US).time,
+            )
+            self._logger.debug(
+                f"[{current_time.time}] Generated an AllocationExpression for "
+                f"task {task.unique_name} in state {task.state} starting at "
+                f"{scheduled_discretization} and running for {task.remaining_time} "
+                f"on Partition {scheduled_partition.id}."
+            )
+            return task_allocation_expression
+
+        time_range = [
+            time_discretization.time for time_discretization in time_discretizations
+        ]
         # The placement reward skews the reward towards placing the task earlier.
         # We interpolate the time range to a range between 2 and 1 and use that to
         # skew the reward towards earlier placement.
@@ -376,28 +493,34 @@ class TetriSchedScheduler(BaseScheduler):
                 f"{task.unique_name} with deadline {task.deadline}."
             )
             return None
+        elif len(task_choose_expressions) == 1:
+            self._logger.debug(
+                f"[{current_time.time}] Generated a single ChooseExpression for "
+                f"{task.unique_name} with deadline {task.deadline}."
+            )
+            return task_choose_expressions[0]
+        else:
+            self._logger.debug(
+                f"[{current_time.time}] Generated {len(task_choose_expressions)} "
+                f"ChooseExpressions for {task.unique_name} for times "
+                f"{[str(t) for t in time_discretizations]} for {num_slots_required} "
+                f"slots for {execution_strategy.runtime}."
+            )
 
-        self._logger.debug(
-            f"[{current_time.time}] Generated {len(task_choose_expressions)} "
-            f"ChooseExpressions for {task.unique_name} for times "
-            f"{[str(t) for t in time_discretizations]} for {num_slots_required} slots "
-            f"for {execution_strategy.runtime}."
-        )
+            # Construct the STRL MAX expression for this Task.
+            # This enforces the choice of only one placement for this Task.
+            self._logger.debug(
+                f"[{current_time.time}] Constructing a STRL expression tree for "
+                f"{task.name} (runtime={execution_strategy.runtime}, "
+                f"deadline={task.deadline}) with name: {task.unique_name}_placement."
+            )
+            chooseOneFromSet = tetrisched.strl.MaxExpression(
+                f"{task.unique_name}_placement"
+            )
+            for choose_expression in task_choose_expressions:
+                chooseOneFromSet.addChild(choose_expression)
 
-        # Construct the STRL MAX expression for this Task.
-        # This enforces the choice of only one placement for this Task.
-        self._logger.debug(
-            f"[{current_time.time}] Constructing a STRL expression tree for "
-            f"{task.name} (runtime={execution_strategy.runtime}, "
-            f"deadline={task.deadline}) with name: {task.unique_name}_placement."
-        )
-        chooseOneFromSet = tetrisched.strl.MaxExpression(
-            f"{task.unique_name}_placement"
-        )
-        for choose_expression in task_choose_expressions:
-            chooseOneFromSet.addChild(choose_expression)
-
-        return chooseOneFromSet
+            return chooseOneFromSet
 
     def _construct_task_graph_strl(
         self,
@@ -512,7 +635,6 @@ class TetriSchedScheduler(BaseScheduler):
         current_time: EventTime,
         task_graph: TaskGraph,
         partitions: tetrisched.Partitions,
-        task_strls: Optional[Mapping[str, tetrisched.strl.Expression]] = None,
         tasks_to_be_scheduled: Optional[List[Task]] = None,
     ) -> tetrisched.strl.Expression:
         """Constructs the STRL expression subtree for a given TaskGraph.
@@ -530,7 +652,7 @@ class TetriSchedScheduler(BaseScheduler):
         """
         # Maintain a cache to be used across the construction of the TaskGraph to make
         # it DAG-aware.
-        task_strls = task_strls if task_strls else {}
+        task_strls = {}
 
         # Construct the STRL expression for all the roots of the TaskGraph.
         root_task_strls = []
@@ -569,4 +691,8 @@ class TetriSchedScheduler(BaseScheduler):
             )
             for root_task_strl in root_task_strls:
                 min_expression_task_graph.addChild(root_task_strl)
+            return min_expression_task_graph
+            return min_expression_task_graph
+            return min_expression_task_graph
+            return min_expression_task_graph
             return min_expression_task_graph

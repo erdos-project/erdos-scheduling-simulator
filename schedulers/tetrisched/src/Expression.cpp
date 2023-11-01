@@ -1,10 +1,10 @@
 #include "tetrisched/Expression.hpp"
 
 #include <algorithm>
-#include <limits>
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
+#include <limits>
 #include <stack>
 
 /// A method to generate a UUID for different classes.
@@ -95,7 +95,7 @@ void CapacityConstraintMap::registerUsageForDuration(
     const Partition& partition, Time startTime, Time duration,
     VariablePtr variable, std::optional<Time> granularity) {
   Time _granularity = granularity.value_or(this->granularity);
-  for (Time time = startTime; time < startTime + duration;
+  for (Time time = startTime; time <= startTime + duration;
        time += _granularity) {
     registerUsageAtTime(partition, time, variable);
   }
@@ -105,7 +105,7 @@ void CapacityConstraintMap::registerUsageForDuration(
     const Partition& partition, Time startTime, Time duration, uint32_t usage,
     std::optional<Time> granularity) {
   Time _granularity = granularity.value_or(this->granularity);
-  for (Time time = startTime; time < startTime + duration;
+  for (Time time = startTime; time <= startTime + duration;
        time += _granularity) {
     registerUsageAtTime(partition, time, usage);
   }
@@ -147,6 +147,10 @@ size_t Expression::getNumChildren() const { return children.size(); }
 std::vector<ExpressionPtr> Expression::getChildren() const { return children; }
 
 void Expression::addChild(ExpressionPtr child) {
+  if (child == nullptr) {
+    throw tetrisched::exceptions::ExpressionConstructionException(
+        "Cannot add a null child to the Expression " + name + ".");
+  }
   child->addParent(shared_from_this());
   children.push_back(child);
 }
@@ -189,6 +193,8 @@ std::vector<ExpressionPtr> Expression::getParents() const {
 }
 
 SolutionResultPtr Expression::populateResults(SolverModelPtr solverModel) {
+  TETRISCHED_DEBUG("Populating results for " << name << " of type "
+                                             << getTypeString() << ".")
   // Check that the Expression was parsed before.
   if (!parsedResult) {
     throw tetrisched::exceptions::ExpressionSolutionException(
@@ -209,9 +215,13 @@ SolutionResultPtr Expression::populateResults(SolverModelPtr solverModel) {
   solution = std::make_shared<SolutionResult>();
   switch (parsedResult->type) {
     case ParseResultType::EXPRESSION_PRUNE:
+      TETRISCHED_DEBUG("Pruning Expression " << name << " of type "
+                                             << getTypeString() << ".")
       solution->type = SolutionResultType::EXPRESSION_PRUNE;
       return solution;
     case ParseResultType::EXPRESSION_NO_UTILITY:
+      TETRISCHED_DEBUG("Expression " << name << " of type " << getTypeString()
+                                     << " had no utility to maximize.")
       solution->type = SolutionResultType::EXPRESSION_NO_UTILITY;
       return solution;
     case ParseResultType::EXPRESSION_UTILITY:
@@ -257,18 +267,27 @@ SolutionResultPtr Expression::populateResults(SolverModelPtr solverModel) {
   // Our default way of populating the placements is to retrieve the
   // children's placements and coalesce them into a single Placements map.
   for (auto& childExpression : children) {
-    auto childExpressionSolution = childExpression->getSolution().value();
-    if (childExpressionSolution->utility == 0) {
+    auto childExpressionSolution = childExpression->getSolution();
+    if (!childExpressionSolution.has_value()) {
+      throw tetrisched::exceptions::ExpressionSolutionException(
+          "Expression " + name +
+          " with a utility was parsed without a solution for child " +
+          childExpression->getName() + ".");
+    }
+    if (childExpressionSolution.value()->utility == 0) {
       // This child was not satisfied. Skip it.
       continue;
     }
 
     // The child was satisfied, merge its Placement objects with our own.
-    for (auto& [taskName, placement] : childExpressionSolution->placements) {
+    for (auto& [taskName, placement] :
+         childExpressionSolution.value()->placements) {
       solution->placements[taskName] = placement;
     }
   }
 
+  TETRISCHED_DEBUG("Finished populating results for " << name << " of type "
+                                                      << getTypeString() << ".")
   return solution;
 }
 
@@ -328,8 +347,7 @@ std::string Expression::getDescriptiveName() const {
 ChooseExpression::ChooseExpression(std::string taskName,
                                    Partitions resourcePartitions,
                                    uint32_t numRequiredMachines, Time startTime,
-                                   Time duration,
-                                   TETRISCHED_ILP_TYPE utility)
+                                   Time duration, TETRISCHED_ILP_TYPE utility)
     : Expression(taskName, ExpressionType::EXPR_CHOOSE),
       resourcePartitions(resourcePartitions),
       numRequiredMachines(numRequiredMachines),
@@ -487,7 +505,7 @@ MalleableChooseExpression::MalleableChooseExpression(
       startTime(startTime),
       endTime(endTime),
       granularity(granularity),
-      partitionVariables(), 
+      partitionVariables(),
       utility(utility) {}
 
 void MalleableChooseExpression::addChild(ExpressionPtr child) {
@@ -946,21 +964,37 @@ SolutionResultPtr ObjectiveExpression::populateResults(
   Time minStartTime = std::numeric_limits<Time>::max();
   Time maxEndTime = std::numeric_limits<Time>::min();
   for (auto& childExpression : children) {
-    auto childExpressionSolution = childExpression->getSolution().value();
+    auto childExpressionSolution = childExpression->getSolution();
+    if (!childExpressionSolution.has_value()) {
+      throw tetrisched::exceptions::ExpressionSolutionException(
+          "ObjectiveExpression " + name + "'s child " +
+          childExpression->getName() + " does not have a solution.");
+    }
+
+    auto childExpressionSolutionValue = childExpressionSolution.value();
 
     // If the child expression was not satisfied, skip it.
-    if (childExpressionSolution->utility == 0) {
+    if (childExpressionSolutionValue->type !=
+            ParseResultType::EXPRESSION_UTILITY ||
+        childExpressionSolutionValue->utility == 0) {
       continue;
     }
 
+    if (!childExpressionSolutionValue->startTime.has_value() ||
+        !childExpressionSolutionValue->endTime.has_value()) {
+      throw tetrisched::exceptions::ExpressionSolutionException(
+          "ObjectiveExpression " + name + "'s child " +
+          childExpression->getName() + " does not have a start or end time.");
+    }
+
     // If the child has a smaller start time, use it.
-    if (childExpressionSolution->startTime.value() < minStartTime) {
-      minStartTime = childExpressionSolution->startTime.value();
+    if (childExpressionSolutionValue->startTime.value() < minStartTime) {
+      minStartTime = childExpressionSolution.value()->startTime.value();
     }
 
     // If the child has a larger end time, use it.
-    if (childExpressionSolution->endTime.value() > maxEndTime) {
-      maxEndTime = childExpressionSolution->endTime.value();
+    if (childExpressionSolutionValue->endTime.value() > maxEndTime) {
+      maxEndTime = childExpressionSolution.value()->endTime.value();
     }
   }
 
@@ -1033,7 +1067,7 @@ ParseResultPtr LessThanExpression::parse(
     auto secondChildStartTime =
         static_cast<int64_t>(secondChildResult->startTime->get<Time>());
 
-    if (firstChildEndTime - secondChildStartTime <= 1) {
+    if (firstChildEndTime <= secondChildStartTime - 1) {
       // This clause is trivially satisfied, populate the results.
       parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
       parsedResult->startTime.emplace(firstChildResult->startTime.value());
