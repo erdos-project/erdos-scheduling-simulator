@@ -1,0 +1,109 @@
+graphs:
+    - name: Query2
+      graph:
+          - name: Scan_csv_1
+            children: ["WholeStageCodegen_0"]
+            work_profile: SensorProfile
+          - name: WholeStageCodegen_0
+            children: ["Exchange_0"]
+            work_profile: SensorProfile
+          - name: Exchange_0
+            children: ["WholeStageCodegen_1"]
+            work_profile: SensorProfile
+          - name: WholeStageCodegen_1
+            children: ["Filter_0", "Filter_1", "Filter_2"]
+            work_profile: SensorProfile
+          - name: Filter_0
+            children: []
+            work_profile: SensorProfile
+          - name: Filter_1
+            children: []
+            work_profile: SensorProfile
+          - name: Filter_2
+            children: []
+            work_profile: SensorProfile
+          - name: WholeStageCodegen_2
+            children: ["Filter_3", "Filter_4"]
+            work_profile: SensorProfile
+          - name: Filter_3
+            children: []
+            work_profile: SensorProfile
+          - name: Filter_4
+            children: []
+            work_profile: SensorProfile
+          - name: WholeStageCodegen_3
+            children: ["Aggregate_0"]
+            work_profile: SensorProfile
+          - name: Aggregate_0
+            children: ["WholeStageCodegen_4"]
+            work_profile: SensorProfile
+          - name: WholeStageCodegen_4
+            children: ["Aggregate_1"]
+            work_profile: SensorProfile
+          - name: Aggregate_1
+            children: ["WholeStageCodegen_5"]
+            work_profile: SensorProfile
+          - name: WholeStageCodegen_5
+            children: ["Filter_5"]
+            work_profile: SensorProfile
+          - name: Filter_5
+            children: []
+            work_profile: SensorProfile
+          - name: WholeStageCodegen_6
+            children: ["BroadcastHashJoin_0"]
+            work_profile: SensorProfile
+          - name: BroadcastHashJoin_0
+            children: ["WholeStageCodegen_7", "WholeStageCodegen_8"]
+            work_profile: SensorProfile
+          - name: WholeStageCodegen_7
+            children: ["Sort_0"]
+            work_profile: SensorProfile
+          - name: Sort_0
+            children: ["Generate_0"]
+            work_profile: SensorProfile
+          - name: Generate_0
+            children: []
+            work_profile: SensorProfile
+          - name: WholeStageCodegen_8
+            children: ["Filter_6"]
+            work_profile: SensorProfile
+          - name: Filter_6
+            children: []
+            work_profile: SensorProfile
+
+      release_policy: fixed
+      period: 0 # In us for now.
+      invocations: 1
+      deadline_variance: [2000, 2000]
+
+profiles:
+    - name: SensorProfile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 20
+            resource_requirements:
+                GPU:any: 1
+    - name: PerceptionProfile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 200
+            resource_requirements:
+                GPU:any: 1
+    - name: PredictionProfile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 100
+            resource_requirements:
+                GPU:any: 1
+    - name: PlanningProfile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 300
+            resource_requirements:
+                GPU:any: 1
+    - name: ControlProfile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 10
+            resource_requirements:
+                GPU:any: 1
