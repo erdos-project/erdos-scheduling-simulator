@@ -17,6 +17,9 @@ class GurobiSolver : public Solver {
   /// variables.
   std::unordered_map<uint32_t, GRBVar> gurobiVariables;
 
+  /// Set the defaults for parameters on the model.
+  void setDefaultParameters(GRBModel& gurobiModel);
+
   /// Translate the variable to a Gurobi variable.
   GRBVar translateVariable(GRBModel& gurobiModel,
                            const VariablePtr& variable) const;
@@ -25,7 +28,7 @@ class GurobiSolver : public Solver {
   GRBConstr translateConstraint(GRBModel& gurobiModel,
                                 const ConstraintPtr& constraint) const;
 
-  /// Translate teh ObjectiveFunction into a Gurobi expression.
+  /// Translate the ObjectiveFunction into a Gurobi expression.
   GRBLinExpr translateObjectiveFunction(
       GRBModel& gurobiModel,
       const ObjectiveFunctionPtr& objectiveFunction) const;

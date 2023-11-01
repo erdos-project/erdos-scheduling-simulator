@@ -1,10 +1,13 @@
 #include "tetrisched/GurobiSolver.hpp"
 
 #include <chrono>
+#include <thread>
 
 namespace tetrisched {
 GurobiSolver::GurobiSolver()
-    : gurobiEnv(new GRBEnv()), gurobiModel(new GRBModel(*gurobiEnv)) {}
+    : gurobiEnv(new GRBEnv()), gurobiModel(new GRBModel(*gurobiEnv)) {
+  setDefaultParameters(*gurobiModel);
+}
 
 SolverModelPtr GurobiSolver::getModel() {
   if (!solverModel) {
@@ -15,6 +18,18 @@ SolverModelPtr GurobiSolver::getModel() {
 
 void GurobiSolver::setModel(SolverModelPtr solverModelPtr) {
   solverModel = solverModelPtr;
+}
+
+void GurobiSolver::setDefaultParameters(GRBModel& gurobiModel) {
+  // Set the maximum numer of threads.
+  const auto thread_count = std::thread::hardware_concurrency();
+  gurobiModel.set(GRB_IntParam_Threads, thread_count);
+
+  // Ask Gurobi to aggressively cut the search space.
+  gurobiModel.set(GRB_IntParam_Cuts, 3);
+
+  // Ask Gurobi to find new incumbent solutions rather than prove bounds.
+  gurobiModel.set(GRB_IntParam_MIPFocus, 1);
 }
 
 GRBVar GurobiSolver::translateVariable(GRBModel& gurobiModel,
@@ -129,6 +144,7 @@ void GurobiSolver::translateModel() {
   }
 
   gurobiModel = std::make_unique<GRBModel>(*gurobiEnv);
+  setDefaultParameters(*gurobiModel);
 
   // Generate all the variables and keep a cache of the variable indices
   // to the Gurobi variables.
