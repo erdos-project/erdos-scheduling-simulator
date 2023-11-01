@@ -1,4 +1,3 @@
-import logging
 import random
 import sys
 import uuid
@@ -628,6 +627,14 @@ class JobGraph(Graph[Job]):
             resolve_conditionals = False
             task_logger = setup_logging(name="Task")
 
+        # Generate the deadline for all the Tasks.
+        # TODO (Sukrit): Right now, this assumes that all Tasks in the TaskGraph come
+        # with the same deadline. At some point, we will have to implement a
+        # heuristic-based deadline splitting technique.
+        task_deadline = release_time + fuzz_time(
+            self.completion_time, deadline_variance
+        )
+
         # Generate all the `Task`s from the `Job`s in the graph.
         job_to_task_mapping = {}
         for job in self.breadth_first():
@@ -635,10 +642,6 @@ class JobGraph(Graph[Job]):
                 release_time
                 if self.is_source(job)
                 else EventTime(-1, EventTime.Unit.US)
-            )
-            task_deadline = release_time + fuzz_time(
-                self.__get_completion_time(),
-                deadline_variance,
             )
             job_to_task_mapping[job.name] = Task(
                 name=job.name,
