@@ -288,6 +288,7 @@ void Expression::exportToDot(std::string fileName) const {
   dotFile << "digraph " << name << " {" << std::endl;
 
   // Go through all the nodes in the graph and output a mapping from
+  // nodes to other nodes.
   std::stack<const Expression*> nodesToVisit;
   nodesToVisit.push(this);
   std::unordered_set<std::string> visitedNodes;
@@ -296,14 +297,13 @@ void Expression::exportToDot(std::string fileName) const {
     const Expression* node = nodesToVisit.top();
     nodesToVisit.pop();
 
-    // Check if we have already visited this node.
+    // Check if we have already visited this node. If so, skip.
     if (visitedNodes.find(node->getId()) != visitedNodes.end()) {
-      // We have already visited this node. Skip it.
       continue;
     }
     visitedNodes.insert(node->getId());
 
-    // Output the node.
+    // Output the label for the node.
     dotFile << "\"" << node->getId() << "\" [label=\""
             << node->getDescriptiveName() << "\"]" << std::endl;
 
@@ -1009,39 +1009,73 @@ ParseResultPtr LessThanExpression::parse(
   TETRISCHED_DEBUG(
       "Finished parsing the children for LessThanExpression with name " << name
                                                                         << ".")
-
-  if (firstChildResult->type != ParseResultType::EXPRESSION_UTILITY ||
-      secondChildResult->type != ParseResultType::EXPRESSION_UTILITY) {
-    throw tetrisched::exceptions::ExpressionConstructionException(
-        "LessThanExpression must have two children that are being "
-        "evaluated.");
-  }
-
   // Generate the result of parsing the expression.
   parsedResult = std::make_shared<ParseResult>();
-  parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
 
-  // Bubble up the start time of the first expression and the end time of
-  // the second expression as a bound on the
-  if (!firstChildResult->endTime || !secondChildResult->startTime ||
-      !firstChildResult->startTime || !secondChildResult->endTime) {
-    throw tetrisched::exceptions::ExpressionConstructionException(
-        "LessThanExpression must have children with start and end times.");
+  // If either of the children cannot be satisfied, then this expression cannot
+  // be satisfied.
+  if (firstChildResult->type != ParseResultType::EXPRESSION_UTILITY ||
+      secondChildResult->type != ParseResultType::EXPRESSION_UTILITY) {
+    parsedResult->type = ParseResultType::EXPRESSION_NO_UTILITY;
+    TETRISCHED_DEBUG("LessThanExpression with name "
+                     << name
+                     << " has no utility because one of its children has no "
+                        "utility.")
+    return parsedResult;
   }
-  parsedResult->startTime.emplace(firstChildResult->startTime.value());
-  parsedResult->endTime.emplace(secondChildResult->endTime.value());
 
-  // Add a constraint that the first child must occur before the second.
-  auto happensBeforeConstraintName = name + "_happens_before_constraint";
-  ConstraintPtr happensBeforeConstraint = std::make_shared<Constraint>(
-      happensBeforeConstraintName, ConstraintType::CONSTR_LE, -1);
-  happensBeforeConstraint->addTerm(firstChildResult->endTime.value());
-  happensBeforeConstraint->addTerm(-1, secondChildResult->startTime.value());
-  solverModel->addConstraint(std::move(happensBeforeConstraint));
-  TETRISCHED_DEBUG("Finished adding constraint "
-                   << happensBeforeConstraintName
-                   << " to enforce ordering in LessThanExpression with name "
-                   << name << ".")
+  // If we have known values for the children, then we can just do a simple
+  // check instead of emitting constraints into the model.
+  if (!firstChildResult->endTime->isVariable() &&
+      !secondChildResult->startTime->isVariable()) {
+    auto firstChildEndTime =
+        static_cast<int64_t>(firstChildResult->endTime->get<Time>());
+    auto secondChildStartTime =
+        static_cast<int64_t>(secondChildResult->startTime->get<Time>());
+
+    if (firstChildEndTime - secondChildStartTime <= 1) {
+      // This clause is trivially satisfied, populate the results.
+      parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
+      parsedResult->startTime.emplace(firstChildResult->startTime.value());
+      parsedResult->endTime.emplace(secondChildResult->endTime.value());
+    } else {
+      // The first child does not end by the time the second child has to start,
+      // this expression cannot be satisfied.
+      parsedResult->type = ParseResultType::EXPRESSION_NO_UTILITY;
+      TETRISCHED_DEBUG(
+          "LessThanExpression with name "
+          << name << " has no utility because the first child ends ("
+          << firstChildEndTime << ") after the second child starts ("
+          << secondChildStartTime << ").");
+      return parsedResult;
+    }
+  } else {
+    // We do not have known values for the children, so we need to emit
+    // constraints into the model.
+    parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
+
+    // Bubble up the start time of the first expression and the end time of
+    // the second expression as a bound on the
+    if (!firstChildResult->endTime || !secondChildResult->startTime ||
+        !firstChildResult->startTime || !secondChildResult->endTime) {
+      throw tetrisched::exceptions::ExpressionConstructionException(
+          "LessThanExpression must have children with start and end times.");
+    }
+    parsedResult->startTime.emplace(firstChildResult->startTime.value());
+    parsedResult->endTime.emplace(secondChildResult->endTime.value());
+
+    // Add a constraint that the first child must occur before the second.
+    auto happensBeforeConstraintName = name + "_happens_before_constraint";
+    ConstraintPtr happensBeforeConstraint = std::make_shared<Constraint>(
+        happensBeforeConstraintName, ConstraintType::CONSTR_LE, -1);
+    happensBeforeConstraint->addTerm(firstChildResult->endTime.value());
+    happensBeforeConstraint->addTerm(-1, secondChildResult->startTime.value());
+    solverModel->addConstraint(std::move(happensBeforeConstraint));
+    TETRISCHED_DEBUG("Finished adding constraint "
+                     << happensBeforeConstraintName
+                     << " to enforce ordering in LessThanExpression with name "
+                     << name << ".")
+  }
 
   // Construct a utility function that is the minimum of the two utilities.
   // Maximizing this utility will force the solver to place both of the
