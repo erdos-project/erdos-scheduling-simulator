@@ -13,6 +13,7 @@
 /*.log
 /*.dot
 /*.png
+/*.pdf
 
 # Virtual environment.
 venv
