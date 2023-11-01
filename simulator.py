@@ -369,9 +369,6 @@ class Simulator(object):
         
         for task_graph in task_graphs:
             # Convert all task graphs to dot files.
-            print(task_graph.name)
-            task_graph.to_dot(f"./{task_graph.name}.dot")
-            continue
             self._logger.info(
                 "[%s] The TaskGraph %s will be released with deadline "
                 "%s and completion time %s.",
