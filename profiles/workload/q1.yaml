@@ -1,0 +1,61 @@
+graphs:
+    - name: Query0
+      graph:
+          - name: Scan_csv_1
+            work_profile: SensorProfile
+            children: ["WholeStageCodegen_1"]
+          - name: WholeStageCodegen_1
+            work_profile: SensorProfile
+            children: ["Filter"]
+          - name: Filter
+            work_profile: PerceptionProfile
+            children: ["WholeStageCodegen_2"]
+          - name: WholeStageCodegen_2
+            work_profile: PerceptionProfile
+            children: ["Exchange"]
+          - name: Exchange
+            work_profile: SensorProfile
+            children: ["WholeStageCodegen_3"]
+          - name: WholeStageCodegen_3
+            work_profile: SensorProfile
+            children: []
+
+
+          
+
+      release_policy: fixed
+      period: 0 # In us for now.
+      invocations: 1
+      deadline_variance: [2000, 2000]
+
+profiles:
+    - name: SensorProfile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 20
+            resource_requirements:
+                GPU:any: 1
+    - name: PerceptionProfile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 200
+            resource_requirements:
+                GPU:any: 1
+    - name: PredictionProfile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 100
+            resource_requirements:
+                GPU:any: 1
+    - name: PlanningProfile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 300
+            resource_requirements:
+                GPU:any: 1
+    - name: ControlProfile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 10
+            resource_requirements:
+                GPU:any: 1
