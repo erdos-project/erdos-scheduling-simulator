@@ -95,7 +95,7 @@ void CapacityConstraintMap::registerUsageForDuration(
     const Partition& partition, Time startTime, Time duration,
     VariablePtr variable, std::optional<Time> granularity) {
   Time _granularity = granularity.value_or(this->granularity);
-  for (Time time = startTime; time <= startTime + duration;
+  for (Time time = startTime; time < startTime + duration;
        time += _granularity) {
     registerUsageAtTime(partition, time, variable);
   }
@@ -105,7 +105,7 @@ void CapacityConstraintMap::registerUsageForDuration(
     const Partition& partition, Time startTime, Time duration, uint32_t usage,
     std::optional<Time> granularity) {
   Time _granularity = granularity.value_or(this->granularity);
-  for (Time time = startTime; time <= startTime + duration;
+  for (Time time = startTime; time < startTime + duration;
        time += _granularity) {
     registerUsageAtTime(partition, time, usage);
   }
@@ -1067,7 +1067,7 @@ ParseResultPtr LessThanExpression::parse(
     auto secondChildStartTime =
         static_cast<int64_t>(secondChildResult->startTime->get<Time>());
 
-    if (firstChildEndTime <= secondChildStartTime - 1) {
+    if (firstChildEndTime <= secondChildStartTime) {
       // This clause is trivially satisfied, populate the results.
       parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
       parsedResult->startTime.emplace(firstChildResult->startTime.value());
@@ -1101,7 +1101,7 @@ ParseResultPtr LessThanExpression::parse(
     // Add a constraint that the first child must occur before the second.
     auto happensBeforeConstraintName = name + "_happens_before_constraint";
     ConstraintPtr happensBeforeConstraint = std::make_shared<Constraint>(
-        happensBeforeConstraintName, ConstraintType::CONSTR_LE, -1);
+        happensBeforeConstraintName, ConstraintType::CONSTR_LE, 0);
     happensBeforeConstraint->addTerm(firstChildResult->endTime.value());
     happensBeforeConstraint->addTerm(-1, secondChildResult->startTime.value());
     solverModel->addConstraint(std::move(happensBeforeConstraint));

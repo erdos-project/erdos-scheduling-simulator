@@ -306,6 +306,16 @@ ObjectiveFunctionT<T>& ObjectiveFunctionT<T>::operator+=(
 }
 
 template <typename T>
+ObjectiveFunctionT<T> ObjectiveFunctionT<T>::operator+(
+    const ObjectiveFunctionT<T>& other) const {
+  auto result = *this;
+  for (auto& term : other.terms) {
+    result.terms.push_back(term);
+  }
+  return result;
+}
+
+template <typename T>
 ObjectiveFunctionT<T> ObjectiveFunctionT<T>::operator*(const T& scalar) const {
   auto result = *this;
   for (auto& term : result.terms) {
