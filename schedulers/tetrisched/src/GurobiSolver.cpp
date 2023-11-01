@@ -51,7 +51,14 @@ GRBConstr GurobiSolver::translateConstraint(
   // Construct all the terms.
   for (const auto& [coefficient, variable] : constraint->terms) {
     if (variable) {
-      constraintExpr += coefficient * gurobiVariables.at(variable->getId());
+      try {
+        auto gurobiVariable = gurobiVariables.at(variable->getId());
+        constraintExpr += coefficient * gurobiVariable;
+      } catch (std::exception& e) {
+        throw tetrisched::exceptions::SolverException(
+            "Variable " + variable->getName() +
+            " was not found in the Gurobi model.");
+      }
     } else {
       constraintExpr += coefficient;
     }
@@ -85,7 +92,7 @@ GRBConstr GurobiSolver::translateConstraint(
   for (auto& attribute : constraint->attributes) {
     switch (attribute) {
       case ConstraintAttribute::LAZY_CONSTRAINT:
-        gurobiConstraint.set(GRB_IntAttr_Lazy, 1);
+        gurobiConstraint.set(GRB_IntAttr_Lazy, 3);
         break;
       default:
         throw tetrisched::exceptions::SolverException(
@@ -120,6 +127,8 @@ void GurobiSolver::translateModel() {
     throw tetrisched::exceptions::SolverException(
         "Empty SolverModel for GurobiSolver. Nothing to translate!");
   }
+
+  gurobiModel = std::make_unique<GRBModel>(*gurobiEnv);
 
   // Generate all the variables and keep a cache of the variable indices
   // to the Gurobi variables.

@@ -33,7 +33,7 @@ Scheduler::Scheduler(Time discretization, SolverBackendType solverBackend)
 void Scheduler::registerSTRL(ExpressionPtr expression,
                              Partitions availablePartitions, Time currentTime) {
   // Clear the previously saved expressions in the SolverModel.
-  // solverModel->clear();
+  solverModel->clear();
 
   // Check if the expression is an objective function.
   if (expression->getType() != ExpressionType::EXPR_OBJECTIVE) {

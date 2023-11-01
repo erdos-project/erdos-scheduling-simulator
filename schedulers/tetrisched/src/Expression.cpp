@@ -1,19 +1,48 @@
 #include "tetrisched/Expression.hpp"
 
 #include <algorithm>
-#include <boost/uuid/uuid.hpp>
-#include <boost/uuid/uuid_generators.hpp>
-#include <boost/uuid/uuid_io.hpp>
 #include <limits>
+#include <random>
+#include <sstream>
 #include <stack>
 
-/// A method to generate a UUID for different classes.
-std::string generateUUID() {
-  boost::uuids::uuid uuid = boost::uuids::random_generator()();
-  return boost::uuids::to_string(uuid);
-}
-
 namespace tetrisched {
+
+// UUID Generation. Copied from
+// https://stackoverflow.com/questions/24365331/how-can-i-generate-uuid-in-c-without-using-boost-library
+namespace uuid {
+static std::random_device rd;
+static std::mt19937 gen(rd());
+static std::uniform_int_distribution<> dis(0, 15);
+static std::uniform_int_distribution<> dis2(8, 11);
+
+std::string generate_uuid() {
+  std::stringstream ss;
+  int i;
+  ss << std::hex;
+  for (i = 0; i < 8; i++) {
+    ss << dis(gen);
+  }
+  ss << "-";
+  for (i = 0; i < 4; i++) {
+    ss << dis(gen);
+  }
+  ss << "-4";
+  for (i = 0; i < 3; i++) {
+    ss << dis(gen);
+  }
+  ss << "-";
+  ss << dis2(gen);
+  for (i = 0; i < 3; i++) {
+    ss << dis(gen);
+  }
+  ss << "-";
+  for (i = 0; i < 12; i++) {
+    ss << dis(gen);
+  };
+  return ss.str();
+}
+}  // namespace uuid
 
 /* Method definitions for Placement */
 Placement::Placement(std::string taskName, Time startTime, Time endTime)
@@ -136,7 +165,7 @@ size_t CapacityConstraintMap::size() const {
 /* Method definitions for Expression */
 
 Expression::Expression(std::string name, ExpressionType type)
-    : name(name), id(generateUUID()), type(type) {}
+    : name(name), id(tetrisched::uuid::generate_uuid()), type(type) {}
 
 std::string Expression::getName() const { return name; }
 
