@@ -100,7 +100,8 @@ set(TETRISCHED_SOURCE
      "src/Expression.cpp"
      "src/Partition.cpp"
      "src/SolverModel.cpp"
-     "src/Scheduler.cpp")
+     "src/Scheduler.cpp"
+     "src/OptimizationPasses.cpp")
 
 if (EXISTS "${CPLEX_DIR}")
      LIST(APPEND TETRISCHED_SOURCE "src/CPLEXSolver.cpp")
@@ -125,7 +126,8 @@ target_link_libraries(tetrisched PRIVATE ${SOLVER_BACKEND_LINK_LIBRARIES})
 set(TETRISCHED_TESTS
      "test/test_expression.cpp"
      "test/test_partitions.cpp"
-     "test/test_solver.cpp")
+     "test/test_solver.cpp"
+     "test/test_optimization.cpp")
 
 add_executable(test_tetrisched ${TETRISCHED_TESTS})
 target_include_directories(test_tetrisched PRIVATE include)
