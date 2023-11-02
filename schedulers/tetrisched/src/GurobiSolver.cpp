@@ -5,8 +5,10 @@
 
 namespace tetrisched {
 GurobiSolver::GurobiSolver()
-    : gurobiEnv(new GRBEnv()), gurobiModel(new GRBModel(*gurobiEnv)) {
-  setDefaultParameters(*gurobiModel);
+    : gurobiEnv(new GRBEnv()),
+      gurobiModel(new GRBModel(*gurobiEnv)),
+      logFileName("") {
+  setParameters(*gurobiModel);
 }
 
 SolverModelPtr GurobiSolver::getModel() {
@@ -20,7 +22,7 @@ void GurobiSolver::setModel(SolverModelPtr solverModelPtr) {
   solverModel = solverModelPtr;
 }
 
-void GurobiSolver::setDefaultParameters(GRBModel& gurobiModel) {
+void GurobiSolver::setParameters(GRBModel& gurobiModel) {
   // Set the maximum numer of threads.
   const auto thread_count = std::thread::hardware_concurrency();
   gurobiModel.set(GRB_IntParam_Threads, thread_count);
@@ -28,8 +30,16 @@ void GurobiSolver::setDefaultParameters(GRBModel& gurobiModel) {
   // Ask Gurobi to aggressively cut the search space.
   gurobiModel.set(GRB_IntParam_Cuts, 3);
 
+  // Ask Gurobi to aggressively presolve the model.
+  gurobiModel.set(GRB_IntParam_Presolve, 2);
+
   // Ask Gurobi to find new incumbent solutions rather than prove bounds.
   gurobiModel.set(GRB_IntParam_MIPFocus, 1);
+
+  // Ask Gurobi to not output to the console, and instead direct it
+  // to the specified file.
+  // gurobiModel.set(GRB_IntParam_LogToConsole, 0);
+  gurobiModel.set(GRB_StringParam_LogFile, logFileName);
 }
 
 GRBVar GurobiSolver::translateVariable(GRBModel& gurobiModel,
@@ -144,7 +154,7 @@ void GurobiSolver::translateModel() {
   }
 
   gurobiModel = std::make_unique<GRBModel>(*gurobiEnv);
-  setDefaultParameters(*gurobiModel);
+  setParameters(*gurobiModel);
 
   // Generate all the variables and keep a cache of the variable indices
   // to the Gurobi variables.
@@ -181,6 +191,10 @@ void GurobiSolver::translateModel() {
 
 void GurobiSolver::exportModel(const std::string& fileName) {
   gurobiModel->write(fileName);
+}
+
+void GurobiSolver::setLogFile(const std::string& fileName) {
+  logFileName = fileName;
 }
 
 SolverSolutionPtr GurobiSolver::solveModel() {

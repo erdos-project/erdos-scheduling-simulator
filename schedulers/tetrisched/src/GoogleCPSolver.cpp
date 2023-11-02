@@ -166,6 +166,11 @@ void GoogleCPSolver::exportModel(const std::string& fileName) {
   cpModel->ExportToFile(fileName);
 }
 
+void GoogleCPSolver::setLogFile(const std::string& fname) {
+  throw tetrisched::exceptions::SolverException(
+      "setLogFile() not implemented for GoogleCPSolver.");
+}
+
 SolverSolutionPtr GoogleCPSolver::solveModel() {
   throw exceptions::SolverException("Not implemented yet!");
 }

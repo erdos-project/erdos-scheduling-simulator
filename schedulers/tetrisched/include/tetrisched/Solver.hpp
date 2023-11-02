@@ -87,6 +87,9 @@ class Solver {
   /// Export the constructed model to the given file.
   virtual void exportModel(const std::string& fileName) = 0;
 
+  /// Set the log file for the solver to output its log to.
+  virtual void setLogFile(const std::string& fileName) = 0;
+
   /// Solve the constructed model.
   virtual SolverSolutionPtr solveModel() = 0;
 

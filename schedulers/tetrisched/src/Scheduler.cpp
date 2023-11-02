@@ -60,6 +60,10 @@ void Scheduler::schedule(Time currentTime) {
         "Please invoke registerSTRL() first.");
   }
 
+  // Set the log file based on the current time.
+  std::string logFileName = "tetrisched_" + std::to_string(currentTime) + ".log";
+  this->solver->setLogFile(logFileName);
+
   // Translate the model to the solver backend.
   this->solver->translateModel();
 
