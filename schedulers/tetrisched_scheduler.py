@@ -273,9 +273,6 @@ class TetriSchedScheduler(BaseScheduler):
                     )
                 self._logger.warning(f"[{sim_time.time}] Failed to place any tasks.")
 
-        # if sim_time == EventTime(2, EventTime.Unit.US):
-        #     raise RuntimeError("Stopping the Simulation.")
-
         scheduler_end_time = time.time()
         scheduler_runtime = EventTime(
             int((scheduler_end_time - scheduler_start_time) * 1e6), EventTime.Unit.US
@@ -633,7 +630,7 @@ class TetriSchedScheduler(BaseScheduler):
             task_expression = None
 
         # Retrieve the STRL expressions for all the children of this Task.
-        child_expressions = []
+        child_expressions = {}
         for child in task_graph.get_children(task):
             child_expression = self._construct_task_graph_strl(
                 current_time,
@@ -645,7 +642,7 @@ class TetriSchedScheduler(BaseScheduler):
                 placement_rewards,
             )
             if child_expression:
-                child_expressions.append(child_expression)
+                child_expressions[child_expression.id] = child_expression
 
         # If there are no children, cache and return the expression for this Task.
         if len(child_expressions) == 0:
@@ -664,11 +661,11 @@ class TetriSchedScheduler(BaseScheduler):
             child_expression = tetrisched.strl.MinExpression(
                 f"{task.unique_name}_children"
             )
-            for child in child_expressions:
+            for child in child_expressions.values():
                 child_expression.addChild(child)
         else:
             # If there is just one child, then we can just use that subtree.
-            child_expression = child_expressions[0]
+            child_expression = next(iter(child_expressions.values()))
 
         # Construct a LessThanExpression to order the two trees.
         # If the current Task has to be scheduled, then we need to ensure that it
@@ -719,7 +716,7 @@ class TetriSchedScheduler(BaseScheduler):
         task_strls = {}
 
         # Construct the STRL expression for all the roots of the TaskGraph.
-        root_task_strls = []
+        root_task_strls = {}
         for root in task_graph.get_source_tasks():
             self._logger.debug(
                 f"[{current_time.time}] Constructing the STRL for root "
@@ -736,14 +733,14 @@ class TetriSchedScheduler(BaseScheduler):
                 placement_rewards,
             )
             if root_task_strl:
-                root_task_strls.append(root_task_strl)
+                root_task_strls[root_task_strl.id] = root_task_strl
 
         if len(root_task_strls) == 0:
             # No roots, possibly empty TaskGraph, return None.
             return None
         elif len(root_task_strls) == 1:
             # Single root, reduce constraints and just bubble this up.
-            return root_task_strls[0]
+            return next(iter(root_task_strls.values()))
         else:
             # Construct a MinExpression to order the roots of the TaskGraph.
             self._logger.debug(
@@ -754,6 +751,6 @@ class TetriSchedScheduler(BaseScheduler):
             min_expression_task_graph = tetrisched.strl.MinExpression(
                 f"{task_graph.name}_min_expression"
             )
-            for root_task_strl in root_task_strls:
+            for root_task_strl in root_task_strls.values():
                 min_expression_task_graph.addChild(root_task_strl)
             return min_expression_task_graph
