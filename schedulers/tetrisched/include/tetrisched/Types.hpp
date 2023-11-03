@@ -74,6 +74,17 @@ class RuntimeException : public std::exception {
 /// double.
 using Time = uint32_t;
 
+/// A representation of a range of time.
+/// This is intended to represent a start and finish time for either the
+/// start or the finish times from each Expression.
+using TimeRange = std::pair<Time, Time>;
+
+/// A representation of the ranges on start and finish time.
+struct ExpressionTimeBounds {
+  TimeRange startTimeRange;
+  TimeRange endTimeRange;
+};
+
 /// General forward declarations.
 class Expression;
 using ExpressionPtr = std::shared_ptr<Expression>;

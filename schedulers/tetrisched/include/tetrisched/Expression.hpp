@@ -250,7 +250,7 @@ class Expression : public std::enable_shared_from_this<Expression> {
   /// The Solution result from this Expression.
   SolutionResultPtr solution;
 
-  /// Adds a parent to this epxression.
+  /// Adds a parent to this expression.
   void addParent(ExpressionPtr parent);
 
   /// Returns the parents of this Expression.
@@ -274,6 +274,9 @@ class Expression : public std::enable_shared_from_this<Expression> {
   /// if an incorrect number of children are registered.
   virtual void addChild(ExpressionPtr child);
 
+  /// Removes a child from this Expression.
+  void removeChild(ExpressionPtr child);
+
   /// Returns the name of this Expression.
   std::string getName() const;
 
@@ -294,6 +297,9 @@ class Expression : public std::enable_shared_from_this<Expression> {
 
   /// Returns the type of this Expression as a string.
   std::string getTypeString() const;
+
+  /// Returns the time range that this Expression will be subject to.
+  virtual ExpressionTimeBounds getTimeBounds() const;
 
   /// Populates the solution of the subtree rooted at this Expression and
   /// returns the Solution for this Expression. It assumes that the
@@ -338,7 +344,7 @@ class ChooseExpression : public Expression {
 
  public:
   ChooseExpression(std::string taskName, Partitions resourcePartitions,
-                   uint32_t numRequiredMachines, Time startTime, Time duration, 
+                   uint32_t numRequiredMachines, Time startTime, Time duration,
                    TETRISCHED_ILP_TYPE utility);
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
@@ -347,6 +353,7 @@ class ChooseExpression : public Expression {
                        Time currentTime) override;
   SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
   std::string getDescriptiveName() const override;
+  ExpressionTimeBounds getTimeBounds() const override;
 };
 
 class MalleableChooseExpression : public Expression {
@@ -375,7 +382,8 @@ class MalleableChooseExpression : public Expression {
  public:
   MalleableChooseExpression(std::string taskName, Partitions resourcePartitions,
                             uint32_t resourceTimeSlots, Time startTime,
-                            Time endTime, Time granularity, TETRISCHED_ILP_TYPE utility);
+                            Time endTime, Time granularity,
+                            TETRISCHED_ILP_TYPE utility);
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
@@ -383,6 +391,7 @@ class MalleableChooseExpression : public Expression {
                        Time currentTime) override;
   SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
   std::string getDescriptiveName() const override;
+  ExpressionTimeBounds getTimeBounds() const override;
 };
 
 /// An `AllocationExpression` represents the allocation of the given number of
@@ -411,6 +420,7 @@ class AllocationExpression : public Expression {
                        Time currentTime) override;
   SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
   std::string getDescriptiveName() const override;
+  ExpressionTimeBounds getTimeBounds() const override;
 };
 
 /// An `ObjectiveExpression` collates the objectives from its children and
@@ -476,6 +486,7 @@ class LessThanExpression : public Expression {
                        Partitions availablePartitions,
                        CapacityConstraintMap& capacityConstraints,
                        Time currentTime) override;
+  ExpressionTimeBounds getTimeBounds() const override;
 };
 }  // namespace tetrisched
 #endif  // _TETRISCHED_EXPRESSION_HPP_

@@ -184,6 +184,16 @@ void Expression::addChild(ExpressionPtr child) {
   children.push_back(child);
 }
 
+void Expression::removeChild(ExpressionPtr child) {
+  if (child == nullptr) {
+    throw tetrisched::exceptions::ExpressionConstructionException(
+        "Cannot remove a null child from the Expression " + name + ".");
+  }
+  std::erase_if(children, [&child](ExpressionPtr& childPtr) {
+    return childPtr->getId() == child->getId();
+  });
+}
+
 ExpressionType Expression::getType() const { return type; }
 
 std::string Expression::getTypeString() const {
@@ -206,6 +216,48 @@ std::string Expression::getTypeString() const {
       return "MalleableChooseExpression";
     default:
       return "UnknownExpression";
+  }
+}
+
+ExpressionTimeBounds Expression::getTimeBounds() const {
+  if (getNumChildren() == 0) {
+    throw tetrisched::exceptions::ExpressionConstructionException(
+        "Expression " + name + " of type " + getTypeString() +
+        " does not have any children.");
+  } else if (getNumChildren() == 1) {
+    return children[0]->getTimeBounds();
+  } else {
+    // For multiple children, we merge their time bounds.
+    TimeRange startTimeRange =
+        std::make_pair(std::numeric_limits<Time>::max(), 0);
+    TimeRange endTimeRange =
+        std::make_pair(std::numeric_limits<Time>::max(), 0);
+
+    for (auto& child : children) {
+      auto childTimeBounds = child->getTimeBounds();
+      // If this child starts earlier than any other previous start time bound,
+      // or starts later than any other previous child, use its bound.
+      if (childTimeBounds.startTimeRange.first < startTimeRange.first) {
+        startTimeRange.first = childTimeBounds.startTimeRange.first;
+      }
+      if (childTimeBounds.startTimeRange.second > startTimeRange.second) {
+        startTimeRange.second = childTimeBounds.startTimeRange.second;
+      }
+
+      // If this child ends later than any other previous end time bound, use
+      // it.
+      if (childTimeBounds.endTimeRange.first < endTimeRange.first) {
+        endTimeRange.first = childTimeBounds.endTimeRange.first;
+      }
+      if (childTimeBounds.endTimeRange.second > endTimeRange.second) {
+        endTimeRange.second = childTimeBounds.endTimeRange.second;
+      }
+    }
+
+    return {
+        .startTimeRange = startTimeRange,
+        .endTimeRange = endTimeRange,
+    };
   }
 }
 
@@ -388,6 +440,13 @@ ChooseExpression::ChooseExpression(std::string taskName,
 void ChooseExpression::addChild(ExpressionPtr child) {
   throw tetrisched::exceptions::ExpressionConstructionException(
       "ChooseExpression cannot have a child.");
+}
+
+ExpressionTimeBounds ChooseExpression::getTimeBounds() const {
+  return {
+      .startTimeRange = std::make_pair(startTime, startTime),
+      .endTimeRange = std::make_pair(endTime, endTime),
+  };
 }
 
 ParseResultPtr ChooseExpression::parse(
@@ -874,6 +933,13 @@ std::string MalleableChooseExpression::getDescriptiveName() const {
          ", F=" + std::to_string(endTime) + ")";
 }
 
+ExpressionTimeBounds MalleableChooseExpression::getTimeBounds() const {
+  return {
+      .startTimeRange = std::make_pair(startTime, startTime),
+      .endTimeRange = std::make_pair(endTime, endTime),
+  };
+}
+
 /* Method definitions for AllocationExpression */
 
 AllocationExpression::AllocationExpression(
@@ -929,6 +995,13 @@ SolutionResultPtr AllocationExpression::populateResults(
 std::string AllocationExpression::getDescriptiveName() const {
   return "Allocation(" + name + ", S=" + std::to_string(startTime) +
          ", F=" + std::to_string(endTime) + ")";
+}
+
+ExpressionTimeBounds AllocationExpression::getTimeBounds() const {
+  return {
+      .startTimeRange = std::make_pair(startTime, startTime),
+      .endTimeRange = std::make_pair(endTime, endTime),
+  };
 }
 
 /* Method definitions for ObjectiveExpression */
@@ -1174,6 +1247,20 @@ ParseResultPtr LessThanExpression::parse(
 
   // Return the result.
   return parsedResult;
+}
+
+ExpressionTimeBounds LessThanExpression::getTimeBounds() const {
+  if (getNumChildren() != 2) {
+    throw tetrisched::exceptions::ExpressionConstructionException(
+        "LessThanExpression must have two children.");
+  }
+
+  // The start and end time ranges of a LessThanExpression are defined
+  // by the start of the first child and the end of the second.
+  return {
+      .startTimeRange = children[0]->getTimeBounds().startTimeRange,
+      .endTimeRange = children[1]->getTimeBounds().endTimeRange,
+  };
 }
 
 /* Method definitions for MinExpression */
@@ -1505,5 +1592,4 @@ ParseResultPtr ScaleExpression::parse(
         "ScaleExpression applied to a child that does not have any utility.");
   }
 }
-
 }  // namespace tetrisched
