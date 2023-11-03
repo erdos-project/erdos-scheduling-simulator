@@ -273,6 +273,9 @@ class TetriSchedScheduler(BaseScheduler):
                     )
                 self._logger.warning(f"[{sim_time.time}] Failed to place any tasks.")
 
+        # if sim_time == EventTime(2, EventTime.Unit.US):
+        #     raise RuntimeError("Stopping the Simulation.")
+
         scheduler_end_time = time.time()
         scheduler_runtime = EventTime(
             int((scheduler_end_time - scheduler_start_time) * 1e6), EventTime.Unit.US
@@ -644,6 +647,16 @@ class TetriSchedScheduler(BaseScheduler):
             if child_expression:
                 child_expressions[child_expression.id] = child_expression
 
+        # If the number of children does not equal the number of children in the
+        # TaskGraph, then we have not been able to construct the STRL for all the
+        # children. Return None.
+        if len(child_expressions) != len(task_graph.get_children(task)):
+            self._logger.warn(
+                f"[{current_time.time}] Could not construct the STRL for all the "
+                f"children of {task.unique_name}."
+            )
+            return None
+
         # If there are no children, cache and return the expression for this Task.
         if len(child_expressions) == 0:
             task_strls[task.id] = task_expression
@@ -717,6 +730,7 @@ class TetriSchedScheduler(BaseScheduler):
 
         # Construct the STRL expression for all the roots of the TaskGraph.
         root_task_strls = {}
+        strl_construction_success = True
         for root in task_graph.get_source_tasks():
             self._logger.debug(
                 f"[{current_time.time}] Constructing the STRL for root "
@@ -732,10 +746,16 @@ class TetriSchedScheduler(BaseScheduler):
                 tasks_to_be_scheduled,
                 placement_rewards,
             )
-            if root_task_strl:
+            if root_task_strl is None:
+                if tasks_to_be_scheduled is None or root in tasks_to_be_scheduled:
+                    # If this is a root that we need to schedule, then we should fail
+                    # the construction of the TaskGraph.
+                    strl_construction_success = False
+                    break
+            else:
                 root_task_strls[root_task_strl.id] = root_task_strl
 
-        if len(root_task_strls) == 0:
+        if len(root_task_strls) == 0 or not strl_construction_success:
             # No roots, possibly empty TaskGraph, return None.
             return None
         elif len(root_task_strls) == 1:

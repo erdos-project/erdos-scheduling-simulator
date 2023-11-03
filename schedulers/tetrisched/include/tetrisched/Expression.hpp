@@ -231,6 +231,13 @@ enum ExpressionType {
 };
 using ExpressionType = enum ExpressionType;
 
+/// A representation of the ranges on start and finish time.
+struct ExpressionTimeBounds {
+  TimeRange startTimeRange;
+  TimeRange endTimeRange;
+  std::string toString() const;
+};
+
 /// A Base Class for all expressions in the STRL language.
 class Expression : public std::enable_shared_from_this<Expression> {
  protected:
@@ -252,9 +259,6 @@ class Expression : public std::enable_shared_from_this<Expression> {
 
   /// Adds a parent to this expression.
   void addParent(ExpressionPtr parent);
-
-  /// Returns the parents of this Expression.
-  std::vector<ExpressionPtr> getParents() const;
 
  public:
   /// Construct the Expression class of the given type.
@@ -283,11 +287,14 @@ class Expression : public std::enable_shared_from_this<Expression> {
   /// Returns the ID of this Expression.
   std::string getId() const;
 
-  /// Returns the number of children of this Expression.
-  size_t getNumChildren() const;
-
   /// Returns the number of parents of this Expression.
   size_t getNumParents() const;
+
+  /// Returns the parents of this Expression.
+  std::vector<ExpressionPtr> getParents() const;
+
+  /// Returns the number of children of this Expression.
+  size_t getNumChildren() const;
 
   /// Returns the children of this Expression.
   std::vector<ExpressionPtr> getChildren() const;

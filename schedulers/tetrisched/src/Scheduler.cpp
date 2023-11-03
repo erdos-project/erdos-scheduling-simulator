@@ -47,11 +47,7 @@ void Scheduler::registerSTRL(ExpressionPtr expression,
   this->expression = expression;
 
   // Run the OptimizationPasses on this expression.
-  expression->exportToDot("PreOptimizationPass_" + std::to_string(currentTime) +
-                          ".dot");
   optimizationPasses.runPasses(expression);
-  expression->exportToDot("PostOptimizationPass_" +
-                          std::to_string(currentTime) + ".dot");
 
   // Create the CapacityConstraintMap for the STRL tree to add constraints to.
   CapacityConstraintMap capacityConstraintMap(discretization);

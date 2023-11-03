@@ -24,6 +24,15 @@ class CriticalPathOptimizationPass : public OptimizationPass {
   /// A map from an Expression's ID to the valid time bounds for it.
   std::unordered_map<std::string, ExpressionTimeBounds> expressionTimeBoundMap;
 
+  /// A helper method to recursively compute the time bounds for an Expression.
+  void computeTimeBounds(ExpressionPtr expression);
+
+  /// A helper method to push down the time bounds into the Expression tree.
+  void pushDownTimeBounds(ExpressionPtr expression);
+
+  /// A helper method to purge the nodes that do not fit their time bounds.
+  void purgeNodes(ExpressionPtr expression);
+
  public:
   /// Instantiate the Critical Path optimization pass.
   CriticalPathOptimizationPass();

@@ -79,12 +79,6 @@ using Time = uint32_t;
 /// start or the finish times from each Expression.
 using TimeRange = std::pair<Time, Time>;
 
-/// A representation of the ranges on start and finish time.
-struct ExpressionTimeBounds {
-  TimeRange startTimeRange;
-  TimeRange endTimeRange;
-};
-
 /// General forward declarations.
 class Expression;
 using ExpressionPtr = std::shared_ptr<Expression>;

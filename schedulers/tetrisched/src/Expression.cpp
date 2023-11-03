@@ -164,6 +164,13 @@ size_t CapacityConstraintMap::size() const {
 
 /* Method definitions for Expression */
 
+std::string ExpressionTimeBounds::toString() const {
+  return "Start: [" + std::to_string(startTimeRange.first) + ", " +
+         std::to_string(startTimeRange.second) + "], End: [" +
+         std::to_string(endTimeRange.first) + ", " +
+         std::to_string(endTimeRange.second) + "]";
+}
+
 Expression::Expression(std::string name, ExpressionType type)
     : name(name), id(tetrisched::uuid::generate_uuid()), type(type) {}
 
@@ -420,7 +427,7 @@ void Expression::exportToDot(std::string fileName) const {
 }
 
 std::string Expression::getDescriptiveName() const {
-  return this->getTypeString();
+  return this->getTypeString() + "(" + name + ")";
 }
 
 /* Method definitions for ChooseExpression */
