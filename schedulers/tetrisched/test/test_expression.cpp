@@ -58,6 +58,74 @@ TEST(Expression, TestMaxExpressionOnlyAllowsChooseExpressionChildren) {
       << "MaxExpression should not allow MinExpression children.";
 }
 
+/// Checks that the time bound ranges are calculated correctly.
+TEST(Expression, TestExpressionTimeBoundRanges) {
+  // Test the time bound ranges for a ChooseExpression.
+  tetrisched::Partitions partitions = tetrisched::Partitions();
+  tetrisched::ExpressionPtr chooseExpression_1 =
+      std::make_shared<tetrisched::ChooseExpression>("task1", partitions, 0, 10,
+                                                     20, 1);
+  auto timeBounds = chooseExpression_1->getTimeBounds();
+
+  EXPECT_EQ(timeBounds.startTimeRange.first, 10)
+      << "Start time for choose should be 10.";
+  EXPECT_EQ(timeBounds.startTimeRange.second, 10)
+      << "Start time for choose should be 10.";
+  EXPECT_EQ(timeBounds.endTimeRange.first, 30)
+      << "End time for choose should be 30.";
+  EXPECT_EQ(timeBounds.endTimeRange.second, 30)
+      << "End time for choose should be 30.";
+
+  // Test the time bound ranges for a MaxExpression.
+  tetrisched::ExpressionPtr chooseExpression_2 =
+      std::make_shared<tetrisched::ChooseExpression>("task1", partitions, 0, 20,
+                                                     20, 1);
+  tetrisched::ExpressionPtr chooseExpression_3 =
+      std::make_shared<tetrisched::ChooseExpression>("task1", partitions, 0, 30,
+                                                     20, 1);
+  tetrisched::ExpressionPtr maxExpression_1 =
+      std::make_shared<tetrisched::MaxExpression>("MaxTask1");
+  maxExpression_1->addChild(chooseExpression_1);
+  maxExpression_1->addChild(chooseExpression_2);
+  maxExpression_1->addChild(chooseExpression_3);
+  timeBounds = maxExpression_1->getTimeBounds();
+
+  EXPECT_EQ(timeBounds.startTimeRange.first, 10)
+      << "Start time for max should be 10.";
+  EXPECT_EQ(timeBounds.startTimeRange.second, 30)
+      << "Start time for max should be 30.";
+  EXPECT_EQ(timeBounds.endTimeRange.first, 30)
+      << "Start time for max should be 30.";
+  EXPECT_EQ(timeBounds.endTimeRange.second, 50)
+      << "Start time for max should be 50.";
+
+  // Test the time bounds for a LessThanExpression.
+  tetrisched::ExpressionPtr chooseExpression_4 =
+      std::make_shared<tetrisched::ChooseExpression>("task2", partitions, 0, 30,
+                                                     30, 1);
+  tetrisched::ExpressionPtr chooseExpression_5 =
+      std::make_shared<tetrisched::ChooseExpression>("task2", partitions, 0, 40,
+                                                     30, 1);
+  tetrisched::ExpressionPtr maxExpression_2 =
+      std::make_shared<tetrisched::MaxExpression>("MaxTask2");
+  maxExpression_2->addChild(chooseExpression_4);
+  maxExpression_2->addChild(chooseExpression_5);
+  tetrisched::ExpressionPtr lessThanExpression =
+      std::make_shared<tetrisched::LessThanExpression>("LessThanTask1_2");
+  lessThanExpression->addChild(maxExpression_1);
+  lessThanExpression->addChild(maxExpression_2);
+  timeBounds = lessThanExpression->getTimeBounds();
+
+  EXPECT_EQ(timeBounds.startTimeRange.first, 10)
+      << "Start time for less than should be 10.";
+  EXPECT_EQ(timeBounds.startTimeRange.second, 30)
+      << "Start time for less than should be 30.";
+  EXPECT_EQ(timeBounds.endTimeRange.first, 60)
+      << "End time for less than should be 60.";
+  EXPECT_EQ(timeBounds.endTimeRange.second, 70)
+      << "End time for less than should be 70.";
+}
+
 #ifdef _TETRISCHED_WITH_CPLEX_
 /// Checks that for two trivially satisfiable expressions, the less than
 /// expression is only satisfied if their times are ordered.

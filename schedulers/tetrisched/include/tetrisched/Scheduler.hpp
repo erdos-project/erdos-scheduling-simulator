@@ -3,6 +3,7 @@
 
 #include "tetrisched/Partition.hpp"
 #include "tetrisched/Solver.hpp"
+#include "tetrisched/OptimizationPasses.hpp"
 
 namespace tetrisched {
 class Scheduler {
@@ -18,6 +19,8 @@ class Scheduler {
   Time discretization;
   /// The registered STRL expression (if available).
   std::optional<ExpressionPtr> expression;
+  /// The registered OptimizationPasses to run.
+  OptimizationPassRunner optimizationPasses;
 
  public:
   /// Initialize the scheduler with a solver backend.

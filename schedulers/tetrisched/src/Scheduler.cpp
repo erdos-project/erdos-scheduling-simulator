@@ -28,6 +28,7 @@ Scheduler::Scheduler(Time discretization, SolverBackendType solverBackend)
           "The solver backend type is not supported.");
   }
   solverModel = solver->getModel();
+  optimizationPasses = OptimizationPassRunner();
 }
 
 void Scheduler::registerSTRL(ExpressionPtr expression,
@@ -45,6 +46,9 @@ void Scheduler::registerSTRL(ExpressionPtr expression,
   // Save the expression.
   this->expression = expression;
 
+  // Run the OptimizationPasses on this expression.
+  optimizationPasses.runPasses(expression);
+
   // Create the CapacityConstraintMap for the STRL tree to add constraints to.
   CapacityConstraintMap capacityConstraintMap(discretization);
 
@@ -59,6 +63,11 @@ void Scheduler::schedule(Time currentTime) {
         "No expression has been registered with the scheduler. "
         "Please invoke registerSTRL() first.");
   }
+
+  // Set the log file based on the current time.
+  std::string logFileName =
+      "tetrisched_" + std::to_string(currentTime) + ".log";
+  this->solver->setLogFile(logFileName);
 
   // Translate the model to the solver backend.
   this->solver->translateModel();

@@ -50,6 +50,9 @@ class GoogleCPSolver : public Solver {
   /// Export the constructed model to the given file.
   void exportModel(const std::string& fileName) override;
 
+  /// Set the log file for the solver to output its log to.
+  void setLogFile(const std::string& fileName) override;
+
   /// Solve the constructed model.
   SolverSolutionPtr solveModel() override;
 

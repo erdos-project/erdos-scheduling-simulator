@@ -762,6 +762,7 @@ class TetriSchedGurobiScheduler(BaseScheduler):
                         )
                     )
                 self._logger.warning(f"[{sim_time.time}] Failed to place any task.")
+
         scheduler_end_time = time.time()
         scheduler_runtime = EventTime(
             int((scheduler_end_time - scheduler_start_time) * 1e6),
@@ -902,8 +903,7 @@ class TetriSchedGurobiScheduler(BaseScheduler):
                             task_variable.start_time
                             >= parent_variable.start_time
                             + parent_strategy.runtime.to(EventTime.Unit.US).time
-                            + 1
-                            ,
+                            + 1,
                             name=f"{task_name}_start_after_{parent_variable.name}",
                         )
 

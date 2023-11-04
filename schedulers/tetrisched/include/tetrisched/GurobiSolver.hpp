@@ -16,9 +16,11 @@ class GurobiSolver : public Solver {
   /// A map from the ID of the SolverModel variables to internal Gurobi
   /// variables.
   std::unordered_map<uint32_t, GRBVar> gurobiVariables;
+  /// The name of the log file for the Gurobi solving.
+  std::string logFileName;
 
   /// Set the defaults for parameters on the model.
-  void setDefaultParameters(GRBModel& gurobiModel);
+  void setParameters(GRBModel& gurobiModel);
 
   /// Translate the variable to a Gurobi variable.
   GRBVar translateVariable(GRBModel& gurobiModel,
@@ -50,6 +52,9 @@ class GurobiSolver : public Solver {
 
   /// Export the constructed model to the given file.
   void exportModel(const std::string& fileName) override;
+
+  /// Set the log file for the solver to output its log to.
+  void setLogFile(const std::string& fileName) override;
 
   /// Solve the constructed model.
   SolverSolutionPtr solveModel() override;

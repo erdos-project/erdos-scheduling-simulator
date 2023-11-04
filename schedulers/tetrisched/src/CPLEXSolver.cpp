@@ -201,6 +201,11 @@ void CPLEXSolver::exportModel(const std::string& fname) {
   cplexInstance.exportModel(fname.c_str());
 }
 
+void CPLEXSolver::setLogFile(const std::string& fname) {
+  throw tetrisched::exceptions::SolverException(
+      "setLogFile() not implemented for CPLEXSolver.");
+}
+
 SolverSolutionPtr CPLEXSolver::solveModel() {
   // Create the result object.
   SolverSolutionPtr solverSolution = std::make_shared<SolverSolution>();
