@@ -362,7 +362,7 @@ void SolverModelT<T>::addVariable(std::shared_ptr<VariableT<T>> variable) {
   auto it = solutionValueCache.find(variable->getName());
   if (it != solutionValueCache.end()) {
     // If it exists, use the value from the cache as a hint for the initial value of the variable
-    std::cout << "Found " << variable->getName() << " in cache. Giving it initial value " << it->second << std::endl;
+    TETRISCHED_DEBUG("Found " << variable->getName() << " in cache. Giving it initial value " << it->second);
     variable->hint(it->second);
   }
   variables[variable->getId()] = variable;
