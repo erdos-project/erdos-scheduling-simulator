@@ -351,6 +351,13 @@ T ObjectiveFunctionT<T>::getValue() const {
 
 template <typename T>
 void SolverModelT<T>::addVariable(std::shared_ptr<VariableT<T>> variable) {
+  // Check if variable name exists in the solutionValueCache
+  auto it = solutionValueCache.find(variable->getName());
+  if (it != solutionValueCache.end()) {
+    // If it exists, use the value from the cache as a hint for the initial value of the variable
+    std::cout << "Found " << variable->getName() << " in cache. Giving it initial value " << it->second << std::endl;
+    variable->hint(it->second);
+  }
   variables[variable->getId()] = variable;
 }
 
@@ -417,14 +424,14 @@ T SolverModelT<T>::getObjectiveValue() const {
 
 template <typename T>
 void SolverModelT<T>::clear() {
-  std::cout << "Inside SolverModelT<T>::clear" << std::endl;
+  // std::cout << "Inside SolverModelT<T>::clear" << std::endl;
   // Clear the cache first
   solutionValueCache.clear();
   // TODO: For each variable, if it has a solution value, then save it to the cache
   for (auto const& [id, variable] : variables) {
     if (variable->getValue()) {
       solutionValueCache[variable->getName()] = variable->getValue().value();
-      std::cout << "Caching solution value for variable " << variable->getName() << "(" << id << ")" << std::endl;
+      // std::cout << "Caching solution value for variable " << variable->getName() << "(" << id << ")" << std::endl;
     }
   }
 
