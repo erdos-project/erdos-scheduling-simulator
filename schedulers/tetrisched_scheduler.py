@@ -131,17 +131,6 @@ class TetriSchedScheduler(BaseScheduler):
                 f"TetriSched_{sim_time.to(EventTime.Unit.US).time}"
             )
 
-            # For the tasks that have been previously placed, add an
-            # AllocationExpression for their current allocations so as to correctly
-            # account for capacities at each time discretization.
-            for task in previously_placed_tasks:
-                # If this child is not in the TaskGraphs to be scheduled, then we
-                # add it to the root expression.
-                if task.task_graph not in task_graph_names:
-                    task_strl = self.construct_task_strl(sim_time, task, partitions)
-                    if task_strl is not None:
-                        objective_strl.addChild(task_strl)
-
             # Construct the rewards for placement of the tasks.
             # Find the plan-ahead window to normalize the rewards for the tasks.
             plan_ahead = self._plan_ahead
@@ -171,6 +160,7 @@ class TetriSchedScheduler(BaseScheduler):
 
             # Construct the STRL expressions for each TaskGraph and add them together
             # in a single objective expression.
+            constructed_task_graphs: Set[str] = set()
             for task_graph_name in task_graph_names:
                 # Retrieve the TaskGraph and construct its STRL.
                 task_graph = workload.get_task_graph(task_graph_name)
@@ -183,12 +173,24 @@ class TetriSchedScheduler(BaseScheduler):
                     placement_rewards=placement_rewards,
                 )
                 if task_graph_strl is not None:
+                    constructed_task_graphs.add(task_graph_name)
                     objective_strl.addChild(task_graph_strl)
+
+            # For the tasks that have been previously placed, add an
+            # AllocationExpression for their current allocations so as to correctly
+            # account for capacities at each time discretization.
+            for task in previously_placed_tasks:
+                # If this child is not in the TaskGraphs to be scheduled, then we
+                # add it to the root expression.
+                if task.task_graph not in constructed_task_graphs:
+                    task_strl = self.construct_task_strl(sim_time, task, partitions)
+                    if task_strl is not None:
+                        objective_strl.addChild(task_strl)
 
             # Register the STRL expression with the scheduler and solve it.
             try:
                 self._scheduler.registerSTRL(
-                    objective_strl, partitions, sim_time.time, True
+                    objective_strl, partitions, sim_time.time, False
                 )
                 solver_start_time = time.time()
                 self._scheduler.schedule(sim_time.time)
