@@ -362,7 +362,7 @@ void SolverModelT<T>::addVariable(std::shared_ptr<VariableT<T>> variable) {
   auto it = solutionValueCache.find(variable->getName());
   if (it != solutionValueCache.end()) {
     // If it exists, use the value from the cache as a hint for the initial value of the variable
-    TETRISCHED_DEBUG("Found " << variable->getName() << " in cache. Giving it initial value " << it->second);
+    TETRISCHED_DEBUG("Found " << variable->getName() << " in solution value cache. Giving it initial value " << it->second);
     variable->hint(it->second);
   }
   variables[variable->getId()] = variable;
@@ -431,12 +431,12 @@ T SolverModelT<T>::getObjectiveValue() const {
 
 template <typename T>
 void SolverModelT<T>::clear() {
-  // Clear the cache first
+  // Clear the solution value cache first. 
+  // As of now we only keep track of the solution value from the previous invocation of the solver.
   solutionValueCache.clear();
-  // For each variable, if it has a solution value, then save it to the cache
+  // For each variable, if it has a solution value, then save it to the solution value cache.
   for (auto const& [id, variable] : variables) {
     if (variable->getValue().has_value()) {
-      // std::cout << "Caching solution value for variable " << variable->getName() << "(" << id << ")" << std::endl;
       TETRISCHED_DEBUG("Caching solution value " << variable->getValue().value() << " for variable " << variable->getName() << "(" << id << ")");
       solutionValueCache[variable->getName()] = variable->getValue().value();
     }
