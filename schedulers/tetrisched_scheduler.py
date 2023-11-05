@@ -135,9 +135,12 @@ class TetriSchedScheduler(BaseScheduler):
             # AllocationExpression for their current allocations so as to correctly
             # account for capacities at each time discretization.
             for task in previously_placed_tasks:
-                task_strl = self.construct_task_strl(sim_time, task, partitions)
-                if task_strl is not None:
-                    objective_strl.addChild(task_strl)
+                # If this child is not in the TaskGraphs to be scheduled, then we
+                # add it to the root expression.
+                if task.task_graph not in task_graph_names:
+                    task_strl = self.construct_task_strl(sim_time, task, partitions)
+                    if task_strl is not None:
+                        objective_strl.addChild(task_strl)
 
             # Construct the rewards for placement of the tasks.
             # Find the plan-ahead window to normalize the rewards for the tasks.
@@ -175,7 +178,8 @@ class TetriSchedScheduler(BaseScheduler):
                     current_time=sim_time,
                     task_graph=task_graph,
                     partitions=partitions,
-                    tasks_to_be_scheduled=tasks_to_be_scheduled,
+                    tasks_to_be_scheduled=tasks_to_be_scheduled
+                    + previously_placed_tasks,
                     placement_rewards=placement_rewards,
                 )
                 if task_graph_strl is not None:
