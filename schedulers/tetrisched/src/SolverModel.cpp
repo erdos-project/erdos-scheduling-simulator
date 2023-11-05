@@ -417,6 +417,17 @@ T SolverModelT<T>::getObjectiveValue() const {
 
 template <typename T>
 void SolverModelT<T>::clear() {
+  TETRISCHED_DEBUG("Inside SolverModelT<T>::clear");
+  // Clear the cache first
+  solutionValueCache.clear();
+  // TODO: For each variable, if it has a solution value, then save it to the cache
+  for (auto const& [id, variable] : variables) {
+    if (variable->getValue()) {
+      solutionValueCache[variable->getName()] = variable->getValue().value();
+      TETRISCHED_DEBUG("Caching solution value for variable " << variable->getName() << "(" << id << ")");
+    }
+  }
+
   variables.clear();
   constraints.clear();
   objectiveFunction.reset();
