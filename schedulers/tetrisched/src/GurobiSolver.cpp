@@ -162,6 +162,9 @@ void GurobiSolver::translateModel() {
     TETRISCHED_DEBUG("Adding variable " << variable->getName() << "("
                                         << variableId << ") to Gurobi Model.");
     gurobiVariables[variableId] = translateVariable(*gurobiModel, variable);
+    // Give the Gurobi variable an initial solution value if it is available.
+    if (variable->getInitialValue().has_value())
+        gurobiVariables[variableId].set(GRB_DoubleAttr_Start, variable->getInitialValue().value());
   }
 
   // Generate all the constraints.

@@ -84,8 +84,15 @@ uint32_t VariableT<T>::getId() const {
 }
 
 template <typename T>
-std::optional<T> VariableT<T>::getValue() const {
-  return solutionValue;
+std::optional<T> VariableT<T>::getInitialValue() const
+{
+    return initialValue;
+}
+
+template <typename T>
+std::optional<T> VariableT<T>::getValue() const
+{
+    return solutionValue;
 }
 
 template <typename T>
@@ -424,14 +431,14 @@ T SolverModelT<T>::getObjectiveValue() const {
 
 template <typename T>
 void SolverModelT<T>::clear() {
-  // std::cout << "Inside SolverModelT<T>::clear" << std::endl;
   // Clear the cache first
   solutionValueCache.clear();
-  // TODO: For each variable, if it has a solution value, then save it to the cache
+  // For each variable, if it has a solution value, then save it to the cache
   for (auto const& [id, variable] : variables) {
-    if (variable->getValue()) {
-      solutionValueCache[variable->getName()] = variable->getValue().value();
+    if (variable->getValue().has_value()) {
       // std::cout << "Caching solution value for variable " << variable->getName() << "(" << id << ")" << std::endl;
+      TETRISCHED_DEBUG("Caching solution value " << variable->getValue().value() << " for variable " << variable->getName() << "(" << id << ")");
+      solutionValueCache[variable->getName()] = variable->getValue().value();
     }
   }
 
