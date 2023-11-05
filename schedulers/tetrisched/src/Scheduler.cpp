@@ -32,7 +32,8 @@ Scheduler::Scheduler(Time discretization, SolverBackendType solverBackend)
 }
 
 void Scheduler::registerSTRL(ExpressionPtr expression,
-                             Partitions availablePartitions, Time currentTime) {
+                             Partitions availablePartitions, Time currentTime,
+                             bool optimize) {
   // Clear the previously saved expressions in the SolverModel.
   solverModel->clear();
 
@@ -43,11 +44,14 @@ void Scheduler::registerSTRL(ExpressionPtr expression,
         "but is of type: " +
         std::to_string(expression->getType()) + ".");
   }
+
   // Save the expression.
   this->expression = expression;
 
   // Run the OptimizationPasses on this expression.
-  optimizationPasses.runPasses(expression);
+  if (optimize) {
+    optimizationPasses.runPasses(expression);
+  }
 
   // Create the CapacityConstraintMap for the STRL tree to add constraints to.
   CapacityConstraintMap capacityConstraintMap(discretization);

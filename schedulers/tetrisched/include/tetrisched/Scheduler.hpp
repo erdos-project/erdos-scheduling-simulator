@@ -1,9 +1,9 @@
 #ifndef _TETRISCHED_SCHEDULER_HPP_
 #define _TETRISCHED_SCHEDULER_HPP_
 
+#include "tetrisched/OptimizationPasses.hpp"
 #include "tetrisched/Partition.hpp"
 #include "tetrisched/Solver.hpp"
-#include "tetrisched/OptimizationPasses.hpp"
 
 namespace tetrisched {
 class Scheduler {
@@ -29,7 +29,7 @@ class Scheduler {
   /// Registers the STRL expression for the scheduler to schedule from
   /// and parses it to populate the SolverModel.
   void registerSTRL(ExpressionPtr expression, Partitions availablePartitions,
-                    Time currentTime);
+                    Time currentTime, bool optimize = false);
 
   /// Invokes the solver to schedule the registered STRL expression
   /// on the given partitions at the given time.

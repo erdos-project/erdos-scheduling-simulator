@@ -350,8 +350,7 @@ void CriticalPathOptimizationPass::runPass(ExpressionPtr strlExpression) {
   computeTimeBounds(strlExpression);
 
   /* Phase 2: The previous phase computes the tight bounds but does not
-  push them down necessarily. In this phase, we push the bounds down and
-  purge nodes that cannot be used. */
+  push them down necessarily. In this phase, we push the bounds down. */
   pushDownTimeBounds(strlExpression);
 
   /* Phase 3: The bounds have been pushed down now, we can do a bottom-up

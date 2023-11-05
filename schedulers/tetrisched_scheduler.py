@@ -183,7 +183,9 @@ class TetriSchedScheduler(BaseScheduler):
 
             # Register the STRL expression with the scheduler and solve it.
             try:
-                self._scheduler.registerSTRL(objective_strl, partitions, sim_time.time)
+                self._scheduler.registerSTRL(
+                    objective_strl, partitions, sim_time.time, True
+                )
                 solver_start_time = time.time()
                 self._scheduler.schedule(sim_time.time)
                 solver_end_time = time.time()
