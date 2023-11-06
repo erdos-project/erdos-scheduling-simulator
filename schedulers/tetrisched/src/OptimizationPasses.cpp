@@ -6,11 +6,15 @@
 namespace tetrisched {
 
 /* Methods for OptimizationPass */
-OptimizationPass::OptimizationPass(std::string name) : name(name) {}
+OptimizationPass::OptimizationPass(std::string name, OptimizationPassType type)
+    : name(name), type(type) {}
+
+OptimizationPassType OptimizationPass::getType() const { return type; }
 
 /* Methods for CriticalPathOptimizationPass */
 CriticalPathOptimizationPass::CriticalPathOptimizationPass()
-    : OptimizationPass("CriticalPathOptimizationPass") {}
+    : OptimizationPass("CriticalPathOptimizationPass",
+                       OptimizationPassType::PRE_TRANSLATION_PASS) {}
 
 void CriticalPathOptimizationPass::computeTimeBounds(ExpressionPtr expression) {
   /* Do a Post-Order Traversal of the DAG. */
@@ -344,7 +348,8 @@ void CriticalPathOptimizationPass::purgeNodes(ExpressionPtr expression) {
   }
 }
 
-void CriticalPathOptimizationPass::runPass(ExpressionPtr strlExpression) {
+void CriticalPathOptimizationPass::runPass(
+    ExpressionPtr strlExpression, CapacityConstraintMap& capacityConstraints) {
   /* Phase 1: We first do a bottom-up traversal of the tree to compute
   a tight bound for each node in the STRL tree. */
   computeTimeBounds(strlExpression);
@@ -358,16 +363,43 @@ void CriticalPathOptimizationPass::runPass(ExpressionPtr strlExpression) {
   purgeNodes(strlExpression);
 }
 
+/* Methods for CapacityConstraintMapPurgingOptimizationPass */
+CapacityConstraintMapPurgingOptimizationPass::
+    CapacityConstraintMapPurgingOptimizationPass()
+    : OptimizationPass("CapacityConstraintMapPurgingOptimizationPass",
+                       OptimizationPassType::POST_TRANSLATION_PASS) {}
+
+void CapacityConstraintMapPurgingOptimizationPass::runPass(
+    ExpressionPtr strlExpression, CapacityConstraintMap& capacityConstraints) {
+  throw tetrisched::exceptions::RuntimeException("Not implemented yet!");
+}
+
 /* Methods for OptimizationPassRunner */
 OptimizationPassRunner::OptimizationPassRunner() {
   // Register the Critical Path optimization pass.
   registeredPasses.push_back(std::make_shared<CriticalPathOptimizationPass>());
+  // Register the CapacityConstraintMapPurging optimization pass.
+  registeredPasses.push_back(
+      std::make_shared<CapacityConstraintMapPurgingOptimizationPass>());
 }
 
-void OptimizationPassRunner::runPasses(ExpressionPtr strlExpression) {
+void OptimizationPassRunner::runPreTranslationPasses(
+    ExpressionPtr strlExpression, CapacityConstraintMap& capacityConstraints) {
   // Run the registered optimization passes on the given STRL expression.
   for (auto& pass : registeredPasses) {
-    pass->runPass(strlExpression);
+    if (pass->getType() == OptimizationPassType::PRE_TRANSLATION_PASS) {
+      pass->runPass(strlExpression, capacityConstraints);
+    }
+  }
+}
+
+void OptimizationPassRunner::runPostTranslationPasses(
+    ExpressionPtr strlExpression, CapacityConstraintMap& capacityConstraints) {
+  // Run the registered optimization passes on the given STRL expression.
+  for (auto& pass : registeredPasses) {
+    if (pass->getType() == OptimizationPassType::POST_TRANSLATION_PASS) {
+      pass->runPass(strlExpression, capacityConstraints);
+    }
   }
 }
 }  // namespace tetrisched

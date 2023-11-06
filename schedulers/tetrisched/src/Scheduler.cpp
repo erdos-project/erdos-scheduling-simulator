@@ -48,17 +48,24 @@ void Scheduler::registerSTRL(ExpressionPtr expression,
   // Save the expression.
   this->expression = expression;
 
-  // Run the OptimizationPasses on this expression.
-  if (optimize) {
-    optimizationPasses.runPasses(expression);
-  }
-
   // Create the CapacityConstraintMap for the STRL tree to add constraints to.
   CapacityConstraintMap capacityConstraintMap(discretization);
+
+  // Run the Pre-Translation OptimizationPasses on this expression.
+  if (optimize) {
+    optimizationPasses.runPreTranslationPasses(expression,
+                                               capacityConstraintMap);
+  }
 
   // Parse the ExpressionTree to populate the solver model.
   auto _ = expression->parse(solverModel, availablePartitions,
                              capacityConstraintMap, currentTime);
+
+  // Run the Post-Translation OptimizationPasses on this expression.
+  if (optimize) {
+    optimizationPasses.runPostTranslationPasses(expression,
+                                                capacityConstraintMap);
+  }
 }
 
 void Scheduler::schedule(Time currentTime) {

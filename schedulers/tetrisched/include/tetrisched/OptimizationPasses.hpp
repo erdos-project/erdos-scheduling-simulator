@@ -6,16 +6,33 @@
 #include "tetrisched/Expression.hpp"
 
 namespace tetrisched {
+enum OptimizationPassType {
+  /// A `PRE_TRANSLATION_PASS` is a pass that is run before the translation
+  /// of the STRL expression into a solver model.
+  PRE_TRANSLATION_PASS = 0,
+  /// A `POST_TRANSLATION_PASS` is a pass that is run after the translation
+  /// of the STRL expression into a solver model.
+  POST_TRANSLATION_PASS = 1,
+};
+
+/// An `OptimizationPass` is a base class for all Optimization passes that
+/// run on the STRL tree.
 class OptimizationPass {
   /// A representative name of the optimization pass.
   std::string name;
+  /// The type of the optimization pass.
+  OptimizationPassType type;
 
  public:
   /// Construct the base OptimizationPass class.
-  OptimizationPass(std::string name);
+  OptimizationPass(std::string name, OptimizationPassType type);
+
+  /// Get the type of the optimization pass.
+  OptimizationPassType getType() const;
 
   /// Run the pass on the given STRL expression.
-  virtual void runPass(ExpressionPtr strlExpression) = 0;
+  virtual void runPass(ExpressionPtr strlExpression,
+                       CapacityConstraintMap& capacityConstraints) = 0;
 };
 using OptimizationPassPtr = std::shared_ptr<OptimizationPass>;
 
@@ -38,7 +55,22 @@ class CriticalPathOptimizationPass : public OptimizationPass {
   CriticalPathOptimizationPass();
 
   /// Run the Critical Path optimization pass on the given STRL expression.
-  void runPass(ExpressionPtr strlExpression) override;
+  void runPass(ExpressionPtr strlExpression,
+               CapacityConstraintMap& capacityConstraints) override;
+};
+
+/// A `CapacityConstraintMapPurgingOptimizationPass` is an optimization pass
+/// that aims to remove the capacity constraints that are not needed because
+/// they are trivially satisfied by the Expression tree.
+class CapacityConstraintMapPurgingOptimizationPass : public OptimizationPass {
+ public:
+  /// Instantiate the CapacityConstraintMapPurgingOptimizationPass.
+  CapacityConstraintMapPurgingOptimizationPass();
+
+  /// Run the CapacityConstraintMapPurgingOptimizationPass on the given STRL
+  /// expression.
+  void runPass(ExpressionPtr strlExpression,
+               CapacityConstraintMap& capacityConstraints) override;
 };
 
 class OptimizationPassRunner {
@@ -50,8 +82,13 @@ class OptimizationPassRunner {
   /// Initialize the OptimizationPassRunner.
   OptimizationPassRunner();
 
-  /// Run the registered optimization passes on the given STRL expression.
-  void runPasses(ExpressionPtr strlExpression);
+  /// Run the pre-translation optimization passes on the given STRL expression.
+  void runPreTranslationPasses(ExpressionPtr strlExpression,
+                               CapacityConstraintMap& capacityConstraints);
+
+  /// Run the post-translation optimization passes on the given STRL expression.
+  void runPostTranslationPasses(ExpressionPtr strlExpression,
+                                CapacityConstraintMap& capacityConstraints);
 };
 }  // namespace tetrisched
 #endif  // _TETRISCHED_OPTIMIZATION_PASSES_HPP_
