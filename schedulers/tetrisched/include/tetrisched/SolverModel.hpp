@@ -82,7 +82,7 @@ class VariableT {
 
   /// Retrieve the ID of this VariableT.
   uint32_t getId() const;
-
+  
   /// Retrieve the solution value for this VariableT.
   /// If the solution value is not set, then the solver hasn't found a solution
   /// (yet).
@@ -343,6 +343,8 @@ class SolverModelT {
   std::unordered_map<uint32_t, std::shared_ptr<VariableT<T>>> variables;
   /// The constraints in this model.
   std::unordered_map<uint32_t, std::shared_ptr<ConstraintT<T>>> constraints;
+  /// Cache for the solution values from previous invocations of the solver.
+  std::unordered_map<std::string, T> solutionValueCache;
   /// The objective function in this model.
   std::shared_ptr<ObjectiveFunctionT<T>> objectiveFunction;
 
