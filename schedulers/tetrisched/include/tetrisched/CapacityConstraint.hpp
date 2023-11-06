@@ -13,15 +13,37 @@ struct PartitionTimePairHasher {
   size_t operator()(const std::pair<uint32_t, Time>& pair) const;
 };
 
+/// A `CapacityConstraint` is a constraint that enforces the resource usage
+/// for a Partition at a particular time.
+class CapacityConstraint {
+ private:
+  /// The SolverModel constraint that enforces the resource usage.
+  ConstraintPtr capacityConstraint;
+
+  /// The CapacityConstraintMap is allowed to translate this CapacityConstraint.
+  void translate(SolverModelPtr solverModel);
+  friend class CapacityConstraintMap;
+
+ public:
+  /// Constructs a new CapacityConstraint for the given Partition
+  /// at the given Time.
+  CapacityConstraint(const Partition& partition, Time time);
+
+  /// Registers the given usage in this CapacityConstraint.
+  void registerUsage(uint32_t usage);
+  void registerUsage(VariablePtr variable);
+};
+using CapacityConstraintPtr = std::shared_ptr<CapacityConstraint>;
+
 /// A `CapacityConstraintMap` aggregates the terms that may potentially
 /// affect the capacity of a Partition at a particular time, and provides
 /// the ability for Expressions to register a variable that represents their
 /// potential intent to use the Partition at a particular time.
 class CapacityConstraintMap {
  private:
-  /// A map from the Partition ID and the time to the ConstraintPtr that
-  /// enforces the resource usage for that time.
-  std::unordered_map<std::pair<uint32_t, Time>, ConstraintPtr,
+  /// A map from the Partition ID and the time to the
+  /// CapacityConstraint that enforces the resource usage for that time.
+  std::unordered_map<std::pair<uint32_t, Time>, CapacityConstraintPtr,
                      PartitionTimePairHasher>
       capacityConstraints;
   /// The default granularity for the capacity constraints.

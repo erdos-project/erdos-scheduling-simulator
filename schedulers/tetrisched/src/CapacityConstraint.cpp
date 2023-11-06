@@ -4,14 +4,46 @@ namespace tetrisched {
 
 /* Method definitions for PartitionTimePairHasher */
 
-size_t PartitionTimePairHasher::operator()(const std::pair<uint32_t, Time>& pair) const {
-    auto partitionIdHash = std::hash<uint32_t>()(pair.first);
-    auto timeHash = std::hash<Time>()(pair.second);
-    if (partitionIdHash != timeHash) {
-      return partitionIdHash ^ timeHash;
-    }
-    return partitionIdHash;
+size_t PartitionTimePairHasher::operator()(
+    const std::pair<uint32_t, Time>& pair) const {
+  auto partitionIdHash = std::hash<uint32_t>()(pair.first);
+  auto timeHash = std::hash<Time>()(pair.second);
+  if (partitionIdHash != timeHash) {
+    return partitionIdHash ^ timeHash;
   }
+  return partitionIdHash;
+}
+
+/* Method definitions for CapacityConstraint */
+CapacityConstraint::CapacityConstraint(const Partition& partition, Time time)
+    : capacityConstraint(std::make_shared<Constraint>(
+          "CapacityConstraint_" + partition.getPartitionName() + "_at_" +
+              std::to_string(time),
+          ConstraintType::CONSTR_LE, partition.getQuantity())) {}
+
+void CapacityConstraint::registerUsage(uint32_t usage) {
+  if (usage == 0) {
+    // No usage was registered. We don't need to add anything.
+    return;
+  }
+  capacityConstraint->addTerm(usage);
+}
+
+void CapacityConstraint::registerUsage(VariablePtr variable) {
+  capacityConstraint->addTerm(variable);
+}
+
+void CapacityConstraint::translate(SolverModelPtr solverModel) {
+  if (!capacityConstraint->isTriviallySatisfiable()) {
+    // COMMENT (Sukrit): We can try to see if adding Lazy constraints
+    // helps ever. In my initial analysis, this makes the presolve and
+    // root relaxation less efficient making the overall solver time
+    // higher. Maybe for too many of the CapacityConstraintMap constraints,
+    // this will help.
+    // capacityConstraint->addAttribute(ConstraintAttribute::LAZY_CONSTRAINT);
+    solverModel->addConstraint(capacityConstraint);
+  }
+}
 
 /* Method definitions for CapacityConstraintMap */
 
@@ -26,14 +58,12 @@ void CapacityConstraintMap::registerUsageAtTime(const Partition& partition,
   // Get or insert the Constraint corresponding to this partition and time.
   auto mapKey = std::make_pair(partition.getPartitionId(), time);
   if (capacityConstraints.find(mapKey) == capacityConstraints.end()) {
-    capacityConstraints[mapKey] = std::make_shared<Constraint>(
-        "CapacityConstraint_" + partition.getPartitionName() + "_at_" +
-            std::to_string(time),
-        ConstraintType::CONSTR_LE, partition.getQuantity());
+    capacityConstraints[mapKey] =
+        std::make_shared<CapacityConstraint>(partition, time);
   }
 
   // Add the variable to the Constraint.
-  capacityConstraints[mapKey]->addTerm(variable);
+  capacityConstraints[mapKey]->registerUsage(variable);
 }
 
 void CapacityConstraintMap::registerUsageAtTime(const Partition& partition,
@@ -45,14 +75,12 @@ void CapacityConstraintMap::registerUsageAtTime(const Partition& partition,
   // Get or insert the Constraint corresponding to this partition and time.
   auto mapKey = std::make_pair(partition.getPartitionId(), time);
   if (capacityConstraints.find(mapKey) == capacityConstraints.end()) {
-    capacityConstraints[mapKey] = std::make_shared<Constraint>(
-        "CapacityConstraint_" + partition.getPartitionName() + "_at_" +
-            std::to_string(time),
-        ConstraintType::CONSTR_LE, partition.getQuantity());
+    capacityConstraints[mapKey] =
+        std::make_shared<CapacityConstraint>(partition, time);
   }
 
   // Add the variable to the Constraint.
-  capacityConstraints[mapKey]->addTerm(usage);
+  capacityConstraints[mapKey]->registerUsage(usage);
 }
 
 void CapacityConstraintMap::registerUsageForDuration(
@@ -78,15 +106,7 @@ void CapacityConstraintMap::registerUsageForDuration(
 void CapacityConstraintMap::translate(SolverModelPtr solverModel) {
   // Add the constraints to the SolverModel.
   for (auto& [mapKey, constraint] : capacityConstraints) {
-    if (!constraint->isTriviallySatisfiable()) {
-      // COMMENT (Sukrit): We can try to see if adding Lazy constraints
-      // helps ever. In my initial analysis, this makes the presolve and
-      // root relaxation less efficient making the overall solver time
-      // higher. Maybe for too many of the CapacityConstraintMap constraints,
-      // this will help.
-      // constraint->addAttribute(ConstraintAttribute::LAZY_CONSTRAINT);
-      solverModel->addConstraint(std::move(constraint));
-    }
+    constraint->translate(solverModel);
   }
 
   // Clear the map now that the constraints have been drained.
@@ -96,5 +116,4 @@ void CapacityConstraintMap::translate(SolverModelPtr solverModel) {
 size_t CapacityConstraintMap::size() const {
   return capacityConstraints.size();
 }
-
 }  // namespace tetrisched
