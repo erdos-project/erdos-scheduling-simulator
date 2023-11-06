@@ -1,5 +1,6 @@
 #include "tetrisched/OptimizationPasses.hpp"
 
+#include <chrono>
 #include <queue>
 #include <stack>
 
@@ -363,16 +364,172 @@ void CriticalPathOptimizationPass::runPass(
   purgeNodes(strlExpression);
 }
 
+void CriticalPathOptimizationPass::clean() { expressionTimeBoundMap.clear(); }
+
 /* Methods for CapacityConstraintMapPurgingOptimizationPass */
 CapacityConstraintMapPurgingOptimizationPass::
     CapacityConstraintMapPurgingOptimizationPass()
     : OptimizationPass("CapacityConstraintMapPurgingOptimizationPass",
                        OptimizationPassType::POST_TRANSLATION_PASS) {}
 
+void CapacityConstraintMapPurgingOptimizationPass::computeCliques(
+    ExpressionPtr expression) {
+  /* Do a Depth-First Search of the DAG and match Max -> {Leaves} */
+  std::stack<ExpressionPtr> expressionStack;
+  std::set<std::string> visitedExpressions;
+  expressionStack.push(expression);
+
+  while (!expressionStack.empty()) {
+    // Pop the expression from the stack, and check if it needs to be visited.
+    auto currentExpression = expressionStack.top();
+    expressionStack.pop();
+    if (visitedExpressions.find(currentExpression->getId()) !=
+        visitedExpressions.end()) {
+      continue;
+    }
+    visitedExpressions.insert(currentExpression->getId());
+
+    TETRISCHED_DEBUG("Visiting " << currentExpression->getId() << " ("
+                                 << currentExpression->getName() << ") of type "
+                                 << currentExpression->getTypeString())
+
+    // If the Expression is a MaxExpression, and all of its children are
+    // ChooseExpressions, then we use this clique.
+    if (currentExpression->getType() == ExpressionType::EXPR_MAX) {
+      bool allChildrenAreChooseExpressions = true;
+      for (auto& child : currentExpression->getChildren()) {
+        if (child->getType() != ExpressionType::EXPR_CHOOSE &&
+            child->getType() != ExpressionType::EXPR_MALLEABLE_CHOOSE) {
+          allChildrenAreChooseExpressions = false;
+          TETRISCHED_DEBUG("Child "
+                           << child->getId() << " (" << child->getName()
+                           << ") is not a ChooseExpression. It is of type "
+                           << child->getTypeString())
+          break;
+        }
+      }
+      if (allChildrenAreChooseExpressions) {
+        TETRISCHED_DEBUG("Creating a clique for Expression "
+                         << currentExpression->getId() << " ("
+                         << currentExpression->getName() << ")")
+        std::unordered_set<std::string> clique;
+        for (auto& child : currentExpression->getChildren()) {
+          clique.insert(child->getId());
+          TETRISCHED_DEBUG("Inserting " << child->getId() << " ("
+                                        << child->getName()
+                                        << ") to the clique for "
+                                        << currentExpression->getId())
+        }
+        cliques.push_back(clique);
+      }
+    }
+
+    // Visit all the children.
+    for (auto& child : currentExpression->getChildren()) {
+      if (child->getNumChildren() > 0) {
+        expressionStack.push(child);
+      }
+    }
+  }
+  TETRISCHED_DEBUG("Computed " << cliques.size() << " cliques.")
+}
+
+void CapacityConstraintMapPurgingOptimizationPass::
+    deactivateCapacityConstraints(CapacityConstraintMap& capacityConstraints) {
+  // Construct a vector of the size of the number of cliques.
+  // This vector will keep track of if the clique was used in a constraint, and
+  // if so, its maximum usage.
+  std::vector<std::pair<bool, uint32_t>> cliqueUsage(cliques.size());
+  TETRISCHED_DEBUG("Running deactivation of constraints from a map of size "
+                   << capacityConstraints.size())
+  size_t deactivatedConstraints = 0;
+
+  // Iterate over each of the individual CapacityConstraints in the map.
+  for (auto& [key, capacityConstraint] :
+       capacityConstraints.capacityConstraints) {
+    // Reset the clique usage vector.
+    cliqueUsage.assign(cliqueUsage.size(), std::make_pair(false, 0));
+
+    // Iterate over all the Expressions that contribute to a usage in
+    // this CapacityConstraint, and turn on their clique usage.
+    for (auto& [expression, usage] : capacityConstraint->usageVector) {
+      // Check if the Expression is in a clique.
+      for (size_t i = 0; i < cliques.size(); ++i) {
+        if (cliques[i].find(expression->getId()) != cliques[i].end()) {
+          // The Expression is in the clique, so we turn on the usage.
+          cliqueUsage[i].first = true;
+
+          // We make note of the maximum usage that this clique can
+          // contribute to the CapacityConstraint.
+          uint32_t constraintUsage = std::numeric_limits<uint32_t>::max();
+          if (usage.isVariable()) {
+            auto usageUpperBound = usage.get<VariablePtr>()->getUpperBound();
+            if (usageUpperBound.has_value()) {
+              constraintUsage = static_cast<uint32_t>(usageUpperBound.value());
+            }
+          } else {
+            constraintUsage = usage.get<uint32_t>();
+          }
+          cliqueUsage[i].second =
+              std::max(cliqueUsage[i].second, constraintUsage);
+        }
+      }
+    }
+
+    // If the clique usage is <= RHS, then we can deactivate this constraint.
+    uint32_t totalUsage = 0;
+    for (auto& [used, usage] : cliqueUsage) {
+      if (used) {
+        totalUsage += usage;
+      }
+    }
+    if (totalUsage <= capacityConstraint->getQuantity()) {
+      deactivatedConstraints++;
+      capacityConstraint->deactivate();
+      TETRISCHED_DEBUG("Deactivating " << capacityConstraint->getName()
+                                       << " since its total quantity is "
+                                       << capacityConstraint->getQuantity()
+                                       << " and its maximum resource usage is "
+                                       << totalUsage)
+    } else {
+      TETRISCHED_DEBUG("Cannot deactivate "
+                       << capacityConstraint->getName()
+                       << " since its total quantity is "
+                       << capacityConstraint->getQuantity()
+                       << " and its maximum resource usage is " << totalUsage)
+    }
+  }
+  TETRISCHED_DEBUG("Deactivated " << deactivatedConstraints << " out of "
+                                  << capacityConstraints.size()
+                                  << " constraints.")
+}
+
 void CapacityConstraintMapPurgingOptimizationPass::runPass(
     ExpressionPtr strlExpression, CapacityConstraintMap& capacityConstraints) {
-  throw tetrisched::exceptions::RuntimeException("Not implemented yet!");
+  /* Phase 1: We compute the cliques from  the Expressions in the DAG. */
+  auto cliqueStartTime = std::chrono::high_resolution_clock::now();
+  computeCliques(strlExpression);
+  auto cliqueEndTime = std::chrono::high_resolution_clock::now();
+  auto cliqueDuration = std::chrono::duration_cast<std::chrono::microseconds>(
+                            cliqueEndTime - cliqueStartTime)
+                            .count();
+  TETRISCHED_DEBUG("Computing cliques took: " << cliqueDuration
+                                              << " microseconds.")
+
+  /* Phase 2: We go over each of the CapacityConstraint in the map, and
+  deactivate the constraint that is trivially satisfied. */
+  auto deactivationStartTime = std::chrono::high_resolution_clock::now();
+  deactivateCapacityConstraints(capacityConstraints);
+  auto deactivationEndTime = std::chrono::high_resolution_clock::now();
+  auto deactivationDuration =
+      std::chrono::duration_cast<std::chrono::microseconds>(
+          deactivationEndTime - deactivationStartTime)
+          .count();
+  TETRISCHED_DEBUG("Deactivating constraints took: " << deactivationDuration
+                                                     << " microseconds.")
 }
+
+void CapacityConstraintMapPurgingOptimizationPass::clean() { cliques.clear(); }
 
 /* Methods for OptimizationPassRunner */
 OptimizationPassRunner::OptimizationPassRunner() {
@@ -389,6 +546,7 @@ void OptimizationPassRunner::runPreTranslationPasses(
   for (auto& pass : registeredPasses) {
     if (pass->getType() == OptimizationPassType::PRE_TRANSLATION_PASS) {
       pass->runPass(strlExpression, capacityConstraints);
+      pass->clean();
     }
   }
 }
@@ -399,6 +557,7 @@ void OptimizationPassRunner::runPostTranslationPasses(
   for (auto& pass : registeredPasses) {
     if (pass->getType() == OptimizationPassType::POST_TRANSLATION_PASS) {
       pass->runPass(strlExpression, capacityConstraints);
+      pass->clean();
     }
   }
 }

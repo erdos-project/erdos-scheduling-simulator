@@ -17,15 +17,21 @@ struct PartitionTimePairHasher {
 /// for a Partition at a particular time.
 class CapacityConstraint {
  private:
+  /// The name of this CapacityConstraint.
+  std::string name;
+  /// The RHS of this constraint i.e., the quantity of this Partition
+  /// at this time.
+  uint32_t quantity;
   /// The SolverModel constraint that enforces the resource usage.
   ConstraintPtr capacityConstraint;
 
-  /// A Map from the ExpressionPtr to the usage of that Expression.
-  std::unordered_map<ExpressionPtr, XOrVariableT<uint32_t>> usageMap;
+  /// A vector of the Expression contributing the given usage to Constraint.
+  std::vector<std::pair<ExpressionPtr, XOrVariableT<uint32_t>>> usageVector;
 
   /// The CapacityConstraintMap is allowed to translate this CapacityConstraint.
   void translate(SolverModelPtr solverModel);
   friend class CapacityConstraintMap;
+  friend class CapacityConstraintMapPurgingOptimizationPass;
 
  public:
   /// Constructs a new CapacityConstraint for the given Partition
@@ -35,6 +41,15 @@ class CapacityConstraint {
   /// Registers the given usage in this CapacityConstraint.
   void registerUsage(const ExpressionPtr expression, uint32_t usage);
   void registerUsage(const ExpressionPtr expression, VariablePtr variable);
+
+  /// Retrieves the maximum quantity of this CapacityConstraint.
+  uint32_t getQuantity() const;
+
+  /// Retrieves the name for this CapacityConstraint.
+  std::string getName() const;
+
+  /// Deactivates this CapacityConstraint.
+  void deactivate();
 };
 using CapacityConstraintPtr = std::shared_ptr<CapacityConstraint>;
 
@@ -52,9 +67,7 @@ class CapacityConstraintMap {
   /// The default granularity for the capacity constraints.
   Time granularity;
 
-  /// The ObjectiveExpression is allowed to translate this map.
-  void translate(SolverModelPtr solverModel);
-  friend class ObjectiveExpression;
+  friend class CapacityConstraintMapPurgingOptimizationPass;
 
  public:
   /// Initialize a CapacityConstraintMap with the given granularity.
@@ -95,6 +108,10 @@ class CapacityConstraintMap {
                                 const Partition& partition, Time startTime,
                                 Time duration, uint32_t usage,
                                 std::optional<Time> granularity);
+
+  /// Translate the CapacityConstraintMap by moving its constraints
+  /// to the given model.
+  void translate(SolverModelPtr solverModel);
 
   /// The number of constraints in this map.
   size_t size() const;

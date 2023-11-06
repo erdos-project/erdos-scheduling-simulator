@@ -1,5 +1,7 @@
 #include "tetrisched/Scheduler.hpp"
 
+#include <chrono>
+
 #ifdef _TETRISCHED_WITH_CPLEX_
 #include "tetrisched/CPLEXSolver.hpp"
 #endif
@@ -53,8 +55,15 @@ void Scheduler::registerSTRL(ExpressionPtr expression,
 
   // Run the Pre-Translation OptimizationPasses on this expression.
   if (optimize) {
+    auto optimizerStartTime = std::chrono::high_resolution_clock::now();
     optimizationPasses.runPreTranslationPasses(expression,
                                                capacityConstraintMap);
+    auto optimizerEndTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
+                        optimizerEndTime - optimizerStartTime)
+                        .count();
+    TETRISCHED_DEBUG("Pre Translation Optimization Passes took: "
+                     << duration << " microseconds.")
   }
 
   // Parse the ExpressionTree to populate the solver model.
@@ -63,8 +72,15 @@ void Scheduler::registerSTRL(ExpressionPtr expression,
 
   // Run the Post-Translation OptimizationPasses on this expression.
   if (optimize) {
+    auto optimizerStartTime = std::chrono::high_resolution_clock::now();
     optimizationPasses.runPostTranslationPasses(expression,
                                                 capacityConstraintMap);
+    auto optimizerEndTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
+                        optimizerEndTime - optimizerStartTime)
+                        .count();
+    TETRISCHED_DEBUG("Post Translation Optimization Passes took: "
+                     << duration << " microseconds.")
   }
 }
 

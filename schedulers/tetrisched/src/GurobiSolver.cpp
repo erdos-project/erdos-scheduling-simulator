@@ -30,8 +30,8 @@ void GurobiSolver::setParameters(GRBModel& gurobiModel) {
   // Ask Gurobi to aggressively cut the search space.
   gurobiModel.set(GRB_IntParam_Cuts, 3);
 
-  // Ask Gurobi to aggressively presolve the model.
-  gurobiModel.set(GRB_IntParam_Presolve, 2);
+  // Ask Gurobi to conservatively presolve the model.
+  gurobiModel.set(GRB_IntParam_Presolve, 1);
 
   // Ask Gurobi to find new incumbent solutions rather than prove bounds.
   gurobiModel.set(GRB_IntParam_MIPFocus, 1);
@@ -51,19 +51,19 @@ GRBVar GurobiSolver::translateVariable(GRBModel& gurobiModel,
   double upperBound = variable->upperBound.has_value()
                           ? variable->upperBound.value()
                           : GRB_INFINITY;
-  GRBVar var;                      
+  GRBVar var;
   switch (variable->variableType) {
     case VariableType::VAR_INTEGER:
       var = gurobiModel.addVar(lowerBound, upperBound, 0.0, GRB_INTEGER,
-                                variable->variableName);
-      break;                                
+                               variable->variableName);
+      break;
     case VariableType::VAR_CONTINUOUS:
       var = gurobiModel.addVar(lowerBound, upperBound, 0.0, GRB_CONTINUOUS,
-                                variable->variableName);
+                               variable->variableName);
       break;
     case VariableType::VAR_INDICATOR:
       var = gurobiModel.addVar(lowerBound, upperBound, 0.0, GRB_BINARY,
-                                variable->variableName);
+                               variable->variableName);
       break;
     default:
       throw tetrisched::exceptions::SolverException(
@@ -71,8 +71,10 @@ GRBVar GurobiSolver::translateVariable(GRBModel& gurobiModel,
   }
   // Give the Gurobi variable an initial solution value if it is available.
   if (variable->initialValue.has_value()) {
-      var.set(GRB_DoubleAttr_Start, variable->initialValue.value());
-      TETRISCHED_DEBUG("Setting start value of variable " << variable->getName() << "(" << variable->getId() << ") to " << variable->initialValue.value());
+    var.set(GRB_DoubleAttr_Start, variable->initialValue.value());
+    TETRISCHED_DEBUG("Setting start value of variable "
+                     << variable->getName() << "(" << variable->getId()
+                     << ") to " << variable->initialValue.value());
   }
   return var;
 }
@@ -176,10 +178,16 @@ void GurobiSolver::translateModel() {
 
   // Generate all the constraints.
   for (const auto& [constraintId, constraint] : solverModel->constraints) {
-    TETRISCHED_DEBUG("Adding Constraint " << constraint->getName() << "("
-                                          << constraintId
-                                          << ") to Gurobi Model.");
-    auto _ = translateConstraint(*gurobiModel, constraint);
+    if (constraint->isActive()) {
+      TETRISCHED_DEBUG("Adding active Constraint " << constraint->getName()
+                                                   << "(" << constraintId
+                                                   << ") to Gurobi Model.");
+      auto _ = translateConstraint(*gurobiModel, constraint);
+    } else {
+      TETRISCHED_DEBUG("Skipping the addition of inactive Constraint "
+                       << constraint->getName() << "(" << constraintId
+                       << ") to Gurobi Model.");
+    }
   }
 
   // Translate the objective function.

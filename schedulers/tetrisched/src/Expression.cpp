@@ -1299,8 +1299,6 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
         }
       }
     } else {
-      std::cout << "Type of child was: " << childParsedResult->type
-                << std::endl;
       throw tetrisched::exceptions::ExpressionConstructionException(
           "Indicator needed from child-" + std::to_string(i) + "(" +
           children[i]->getName() + ") for MIN, but was not present!");

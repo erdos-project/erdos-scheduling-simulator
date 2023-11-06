@@ -168,8 +168,6 @@ TEST(Expression, TestLessThanEnforcesOrdering) {
 
   // Translate and solve the model.
   cplexSolver.translateModel();
-  EXPECT_EQ(0, capacityConstraintMap.size())
-      << "Capacity map should be drained after translation.";
   cplexSolver.solveModel();
 
   auto result = objectiveExpression->populateResults(solverModelPtr);

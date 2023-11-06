@@ -33,6 +33,9 @@ class OptimizationPass {
   /// Run the pass on the given STRL expression.
   virtual void runPass(ExpressionPtr strlExpression,
                        CapacityConstraintMap& capacityConstraints) = 0;
+
+  // Clean the pass after a run.
+  virtual void clean() = 0;
 };
 using OptimizationPassPtr = std::shared_ptr<OptimizationPass>;
 
@@ -57,12 +60,26 @@ class CriticalPathOptimizationPass : public OptimizationPass {
   /// Run the Critical Path optimization pass on the given STRL expression.
   void runPass(ExpressionPtr strlExpression,
                CapacityConstraintMap& capacityConstraints) override;
+
+  /// Clean the pass data structures.
+  void clean() override;
 };
 
 /// A `CapacityConstraintMapPurgingOptimizationPass` is an optimization pass
 /// that aims to remove the capacity constraints that are not needed because
 /// they are trivially satisfied by the Expression tree.
 class CapacityConstraintMapPurgingOptimizationPass : public OptimizationPass {
+ private:
+  /// A Vector of the cliques in the Expression tree.
+  std::vector<std::unordered_set<std::string>> cliques;
+
+  /// Computes the cliques from a bottom-up traversal of the STRL.
+  void computeCliques(ExpressionPtr expression);
+
+  /// Deactivates the CapacityConstraints that are trivially satisfied.
+  void deactivateCapacityConstraints(
+      CapacityConstraintMap& capacityConstraints);
+
  public:
   /// Instantiate the CapacityConstraintMapPurgingOptimizationPass.
   CapacityConstraintMapPurgingOptimizationPass();
@@ -71,6 +88,9 @@ class CapacityConstraintMapPurgingOptimizationPass : public OptimizationPass {
   /// expression.
   void runPass(ExpressionPtr strlExpression,
                CapacityConstraintMap& capacityConstraints) override;
+
+  /// Clean the pass data structures.
+  void clean() override;
 };
 
 class OptimizationPassRunner {

@@ -82,7 +82,7 @@ class VariableT {
 
   /// Retrieve the ID of this VariableT.
   uint32_t getId() const;
-  
+
   /// Retrieve the solution value for this VariableT.
   /// If the solution value is not set, then the solver hasn't found a solution
   /// (yet).
@@ -192,6 +192,9 @@ using ConstraintAttribute = enum ConstraintAttribute;
 template <typename T>
 class ConstraintT {
  private:
+  /// A boolean variable to signify if the constraint is active.
+  /// If True, the solvers should put it into the model.
+  bool active;
   /// Used to generate unique IDs for each Constraint.
   static uint32_t constraintIdCounter;
   /// The ID of this constraint.
@@ -248,6 +251,14 @@ class ConstraintT {
 
   /// Retrieve the number of terms in this Constraint.
   size_t size() const;
+
+  /// Deactivates this Constraint.
+  /// Backend solvers may choose to not add this constraint
+  /// to the model if it is deactivated.
+  void deactivate();
+
+  /// Checks if the constraint is active.
+  bool isActive() const;
 
   /// Check if the constraint is trivially-satisfiable.
   /// A constraint is trivially satisfied if, given the upper and lower bounds

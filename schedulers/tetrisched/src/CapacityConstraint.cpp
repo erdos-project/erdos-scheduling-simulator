@@ -16,10 +16,11 @@ size_t PartitionTimePairHasher::operator()(
 
 /* Method definitions for CapacityConstraint */
 CapacityConstraint::CapacityConstraint(const Partition& partition, Time time)
-    : capacityConstraint(std::make_shared<Constraint>(
-          "CapacityConstraint_" + partition.getPartitionName() + "_at_" +
-              std::to_string(time),
-          ConstraintType::CONSTR_LE, partition.getQuantity())) {}
+    : name("CapacityConstraint_" + partition.getPartitionName() + "_at_" +
+           std::to_string(time)),
+      quantity(partition.getQuantity()),
+      capacityConstraint(std::make_shared<Constraint>(
+          name, ConstraintType::CONSTR_LE, quantity)) {}
 
 void CapacityConstraint::registerUsage(const ExpressionPtr expression,
                                        uint32_t usage) {
@@ -28,26 +29,34 @@ void CapacityConstraint::registerUsage(const ExpressionPtr expression,
     return;
   }
   capacityConstraint->addTerm(usage);
-  usageMap[expression] = usage;
+  usageVector.emplace_back(expression, usage);
 }
 
 void CapacityConstraint::registerUsage(const ExpressionPtr expression,
                                        VariablePtr variable) {
   capacityConstraint->addTerm(variable);
-  usageMap[expression] = variable;
+  usageVector.emplace_back(expression, variable);
 }
 
 void CapacityConstraint::translate(SolverModelPtr solverModel) {
-  if (!capacityConstraint->isTriviallySatisfiable()) {
-    // COMMENT (Sukrit): We can try to see if adding Lazy constraints
-    // helps ever. In my initial analysis, this makes the presolve and
-    // root relaxation less efficient making the overall solver time
-    // higher. Maybe for too many of the CapacityConstraintMap constraints,
-    // this will help.
-    // capacityConstraint->addAttribute(ConstraintAttribute::LAZY_CONSTRAINT);
-    solverModel->addConstraint(capacityConstraint);
-  }
+  solverModel->addConstraint(capacityConstraint);
+  // if (!capacityConstraint->isTriviallySatisfiable()) {
+  //   // COMMENT (Sukrit): We can try to see if adding Lazy constraints
+  //   // helps ever. In my initial analysis, this makes the presolve and
+  //   // root relaxation less efficient making the overall solver time
+  //   // higher. Maybe for too many of the CapacityConstraintMap constraints,
+  //   // this will help.
+  //   //
+  //   capacityConstraint->addAttribute(ConstraintAttribute::LAZY_CONSTRAINT);
+  //   solverModel->addConstraint(capacityConstraint);
+  // }
 }
+
+void CapacityConstraint::deactivate() { capacityConstraint->deactivate(); }
+
+uint32_t CapacityConstraint::getQuantity() const { return quantity; }
+
+std::string CapacityConstraint::getName() const { return name; }
 
 /* Method definitions for CapacityConstraintMap */
 
@@ -116,7 +125,7 @@ void CapacityConstraintMap::translate(SolverModelPtr solverModel) {
   }
 
   // Clear the map now that the constraints have been drained.
-  capacityConstraints.clear();
+  // capacityConstraints.clear();
 }
 
 size_t CapacityConstraintMap::size() const {
