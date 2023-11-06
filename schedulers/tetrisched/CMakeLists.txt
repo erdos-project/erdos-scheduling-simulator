@@ -97,11 +97,12 @@ else()
 endif()
 
 set(TETRISCHED_SOURCE
+     "src/CapacityConstraint.cpp"
      "src/Expression.cpp"
+     "src/OptimizationPasses.cpp"
      "src/Partition.cpp"
      "src/SolverModel.cpp"
-     "src/Scheduler.cpp"
-     "src/OptimizationPasses.cpp")
+     "src/Scheduler.cpp")
 
 if (EXISTS "${CPLEX_DIR}")
      LIST(APPEND TETRISCHED_SOURCE "src/CPLEXSolver.cpp")
