@@ -441,8 +441,9 @@ ParseResultPtr ChooseExpression::parse(
 
     // Register this indicator with the capacity constraints that
     // are being bubbled up.
-    capacityConstraints.registerUsageForDuration(
-        *partition, startTime, duration, allocationVar, std::nullopt);
+    capacityConstraints.registerUsageForDuration(shared_from_this(), *partition,
+                                                 startTime, duration,
+                                                 allocationVar, std::nullopt);
   }
   // Ensure that if the Choose expression is satisfied, it fulfills the
   // demand for this expression. Pass the constraint to the model.
@@ -594,7 +595,8 @@ ParseResultPtr MalleableChooseExpression::parse(
         // Register this Integer variable with the CapacityConstraintMap
         // that is being bubbled up.
         capacityConstraints.registerUsageForDuration(
-            *partition, time, granularity, allocationAtTime, std::nullopt);
+            shared_from_this(), *partition, time, granularity, allocationAtTime,
+            std::nullopt);
       } else {
         throw tetrisched::exceptions::ExpressionConstructionException(
             "Multiple variables detected for the Partition " +
@@ -895,9 +897,9 @@ ParseResultPtr AllocationExpression::parse(
       std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
   (parsedResult->utility).value()->addTerm(1);
   for (const auto& [partition, allocation] : allocatedResources) {
-    capacityConstraints.registerUsageForDuration(
-        *partition, startTime, duration, static_cast<uint32_t>(allocation),
-        std::nullopt);
+    capacityConstraints.registerUsageForDuration(shared_from_this(), *partition,
+                                                 startTime, duration,
+                                                 allocation, std::nullopt);
   }
   return parsedResult;
 }

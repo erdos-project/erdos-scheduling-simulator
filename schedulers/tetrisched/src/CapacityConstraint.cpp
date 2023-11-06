@@ -21,16 +21,20 @@ CapacityConstraint::CapacityConstraint(const Partition& partition, Time time)
               std::to_string(time),
           ConstraintType::CONSTR_LE, partition.getQuantity())) {}
 
-void CapacityConstraint::registerUsage(uint32_t usage) {
+void CapacityConstraint::registerUsage(const ExpressionPtr expression,
+                                       uint32_t usage) {
   if (usage == 0) {
     // No usage was registered. We don't need to add anything.
     return;
   }
   capacityConstraint->addTerm(usage);
+  usageMap[expression] = usage;
 }
 
-void CapacityConstraint::registerUsage(VariablePtr variable) {
+void CapacityConstraint::registerUsage(const ExpressionPtr expression,
+                                       VariablePtr variable) {
   capacityConstraint->addTerm(variable);
+  usageMap[expression] = variable;
 }
 
 void CapacityConstraint::translate(SolverModelPtr solverModel) {
@@ -52,7 +56,8 @@ CapacityConstraintMap::CapacityConstraintMap(Time granularity)
 
 CapacityConstraintMap::CapacityConstraintMap() : granularity(1) {}
 
-void CapacityConstraintMap::registerUsageAtTime(const Partition& partition,
+void CapacityConstraintMap::registerUsageAtTime(const ExpressionPtr expression,
+                                                const Partition& partition,
                                                 Time time,
                                                 VariablePtr variable) {
   // Get or insert the Constraint corresponding to this partition and time.
@@ -63,10 +68,11 @@ void CapacityConstraintMap::registerUsageAtTime(const Partition& partition,
   }
 
   // Add the variable to the Constraint.
-  capacityConstraints[mapKey]->registerUsage(variable);
+  capacityConstraints[mapKey]->registerUsage(expression, variable);
 }
 
-void CapacityConstraintMap::registerUsageAtTime(const Partition& partition,
+void CapacityConstraintMap::registerUsageAtTime(const ExpressionPtr expression,
+                                                const Partition& partition,
                                                 Time time, uint32_t usage) {
   if (usage == 0) {
     // No usage was registered. We don't need to add anything.
@@ -80,26 +86,26 @@ void CapacityConstraintMap::registerUsageAtTime(const Partition& partition,
   }
 
   // Add the variable to the Constraint.
-  capacityConstraints[mapKey]->registerUsage(usage);
+  capacityConstraints[mapKey]->registerUsage(expression, usage);
 }
 
 void CapacityConstraintMap::registerUsageForDuration(
-    const Partition& partition, Time startTime, Time duration,
-    VariablePtr variable, std::optional<Time> granularity) {
+    const ExpressionPtr expression, const Partition& partition, Time startTime,
+    Time duration, VariablePtr variable, std::optional<Time> granularity) {
   Time _granularity = granularity.value_or(this->granularity);
   for (Time time = startTime; time < startTime + duration;
        time += _granularity) {
-    registerUsageAtTime(partition, time, variable);
+    registerUsageAtTime(expression, partition, time, variable);
   }
 }
 
 void CapacityConstraintMap::registerUsageForDuration(
-    const Partition& partition, Time startTime, Time duration, uint32_t usage,
-    std::optional<Time> granularity) {
+    const ExpressionPtr expression, const Partition& partition, Time startTime,
+    Time duration, uint32_t usage, std::optional<Time> granularity) {
   Time _granularity = granularity.value_or(this->granularity);
   for (Time time = startTime; time < startTime + duration;
        time += _granularity) {
-    registerUsageAtTime(partition, time, usage);
+    registerUsageAtTime(expression, partition, time, usage);
   }
 }
 

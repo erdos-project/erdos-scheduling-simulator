@@ -20,6 +20,9 @@ class CapacityConstraint {
   /// The SolverModel constraint that enforces the resource usage.
   ConstraintPtr capacityConstraint;
 
+  /// A Map from the ExpressionPtr to the usage of that Expression.
+  std::unordered_map<ExpressionPtr, XOrVariableT<uint32_t>> usageMap;
+
   /// The CapacityConstraintMap is allowed to translate this CapacityConstraint.
   void translate(SolverModelPtr solverModel);
   friend class CapacityConstraintMap;
@@ -30,8 +33,8 @@ class CapacityConstraint {
   CapacityConstraint(const Partition& partition, Time time);
 
   /// Registers the given usage in this CapacityConstraint.
-  void registerUsage(uint32_t usage);
-  void registerUsage(VariablePtr variable);
+  void registerUsage(const ExpressionPtr expression, uint32_t usage);
+  void registerUsage(const ExpressionPtr expression, VariablePtr variable);
 };
 using CapacityConstraintPtr = std::shared_ptr<CapacityConstraint>;
 
@@ -60,32 +63,36 @@ class CapacityConstraintMap {
   /// Initialize a CapacityConstraintMap with the granularity of 1.
   CapacityConstraintMap();
 
-  /// Registers the usage for the given Partition at the given time
-  /// as specified by the value of the variable, which is to be
+  /// Registers the usage by the Expression for the Partition at the
+  /// time specified by the value of the variable, which is to be
   /// decided by the solver.
-  void registerUsageAtTime(const Partition& partition, Time time,
+  void registerUsageAtTime(const ExpressionPtr expression,
+                           const Partition& partition, Time time,
                            VariablePtr variable);
 
-  /// Registers the usage for the given Partition at the given time
-  /// as specified by the known usage.
-  void registerUsageAtTime(const Partition& partition, Time time,
+  /// Registers the usage by the Expression for the Partition at the
+  /// time specified by the known usage.
+  void registerUsageAtTime(const ExpressionPtr expression,
+                           const Partition& partition, Time time,
                            uint32_t usage);
 
-  /// Registers the usage for the given Partition in the time range
-  /// starting from startTime and lasting for duration as specified
-  /// by the value of the variable, which is to be decided by the solver.
+  /// Registers the usage by the Expression for the Partition in the
+  /// time range starting from startTime and lasting for duration as
+  /// specified by the variable, which is to be decided by the solver.
   /// Optionally, a step granularity can be provided. The default granularity
   /// is the one that the CapacityConstraintMap was initialized with.
-  void registerUsageForDuration(const Partition& partition, Time startTime,
+  void registerUsageForDuration(const ExpressionPtr expression,
+                                const Partition& partition, Time startTime,
                                 Time duration, VariablePtr variable,
                                 std::optional<Time> granularity);
 
-  /// Registers the usage for the given Partition in the time range
-  /// starting from startTime and lasting for duration as specified
-  /// by the value of the variable known at runtime. Optionally, a step
+  /// Registers the usage by the Expression for the Partition in the
+  /// time range starting from startTime and lasting for duration as
+  /// specified by the variable known at runtime. Optionally, a step
   /// granularity can be provided. The default granularity is the one
   /// that the CapacityConstraintMap was initialized with.
-  void registerUsageForDuration(const Partition& partition, Time startTime,
+  void registerUsageForDuration(const ExpressionPtr expression,
+                                const Partition& partition, Time startTime,
                                 Time duration, uint32_t usage,
                                 std::optional<Time> granularity);
 
