@@ -84,12 +84,6 @@ uint32_t VariableT<T>::getId() const {
 }
 
 template <typename T>
-std::optional<T> VariableT<T>::getInitialValue() const
-{
-    return initialValue;
-}
-
-template <typename T>
 std::optional<T> VariableT<T>::getValue() const
 {
     return solutionValue;

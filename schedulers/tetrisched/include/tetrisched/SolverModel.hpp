@@ -82,9 +82,6 @@ class VariableT {
 
   /// Retrieve the ID of this VariableT.
   uint32_t getId() const;
-
-  /// Retrieve the initial value for this VariableT, if available.
-  std::optional<T> getInitialValue() const;
   
   /// Retrieve the solution value for this VariableT.
   /// If the solution value is not set, then the solver hasn't found a solution
