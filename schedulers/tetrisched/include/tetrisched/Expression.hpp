@@ -11,13 +11,6 @@
 #include "tetrisched/Types.hpp"
 
 namespace tetrisched {
-
-/// A `UtilityFn` represents the function that is used to calculate the utility
-/// of a particular expression.
-template <typename T>
-using UtilityFnT = std::function<T(Time, Time)>;
-using UtilityFn = UtilityFnT<TETRISCHED_ILP_TYPE>;
-
 /// A `ParseResultType` enumeration represents the types of results that
 /// parsing an expression can return.
 enum ParseResultType {
