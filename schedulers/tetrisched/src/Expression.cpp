@@ -303,11 +303,6 @@ SolutionResultPtr Expression::populateResults(SolverModelPtr solverModel) {
   // Construct the SolutionResult.
   solution = std::make_shared<SolutionResult>();
   switch (parsedResult->type) {
-    case ParseResultType::EXPRESSION_PRUNE:
-      TETRISCHED_DEBUG("Pruning Expression " << name << " of type "
-                                             << getTypeString() << ".")
-      solution->type = SolutionResultType::EXPRESSION_PRUNE;
-      return solution;
     case ParseResultType::EXPRESSION_NO_UTILITY:
       TETRISCHED_DEBUG("Expression " << name << " of type " << getTypeString()
                                      << " had no utility to maximize.")
@@ -471,11 +466,11 @@ ParseResultPtr ChooseExpression::parse(
   parsedResult = std::make_shared<ParseResult>();
 
   if (currentTime > startTime) {
-    TETRISCHED_DEBUG("Pruning Choose expression for "
+    TETRISCHED_DEBUG("Choose expression for "
                      << name << " to be placed starting at time " << startTime
                      << " and ending at " << endTime
-                     << " because it is in the past.");
-    parsedResult->type = ParseResultType::EXPRESSION_PRUNE;
+                     << " does not provide utility because it is in the past.");
+    parsedResult->type = ParseResultType::EXPRESSION_NO_UTILITY;
     return parsedResult;
   }
   TETRISCHED_DEBUG("Parsing Choose expression for "
@@ -622,11 +617,11 @@ ParseResultPtr MalleableChooseExpression::parse(
   parsedResult = std::make_shared<ParseResult>();
 
   if (currentTime > startTime) {
-    TETRISCHED_DEBUG("Pruning MalleableChooseExpression "
+    TETRISCHED_DEBUG("MalleableChooseExpression "
                      << name << " to be placed starting at time " << startTime
                      << " and ending at " << endTime
-                     << " because it is in the past.");
-    parsedResult->type = ParseResultType::EXPRESSION_PRUNE;
+                     << " does not provide utility because it is in the past.");
+    parsedResult->type = ParseResultType::EXPRESSION_NO_UTILITY;
     return parsedResult;
   }
   TETRISCHED_DEBUG("Parsing MalleableChooseExpression "

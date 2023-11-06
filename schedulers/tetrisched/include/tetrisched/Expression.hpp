@@ -21,10 +21,6 @@ using UtilityFn = UtilityFnT<TETRISCHED_ILP_TYPE>;
 /// A `ParseResultType` enumeration represents the types of results that
 /// parsing an expression can return.
 enum ParseResultType {
-  /// The expression can be pruned from the subtree.
-  /// This occurs if the time bounds for the choices
-  /// have evolved past the current time.
-  EXPRESSION_PRUNE = 0,
   /// The expression is known to provide no utility.
   /// Parent expressions can safely ignore this subtree.
   EXPRESSION_NO_UTILITY = 1,
