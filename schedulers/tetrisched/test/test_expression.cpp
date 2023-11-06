@@ -176,7 +176,7 @@ TEST(Expression, TestLessThanEnforcesOrdering) {
 
   // Ensure that the LessThanExpression's variables are correct.
   EXPECT_TRUE(result->utility.has_value()) << "Utility should be set.";
-  EXPECT_EQ(1, result->utility.value()) << "Utility should be 1.";
+  EXPECT_EQ(2, result->utility.value()) << "Utility should be 2.";
 
   EXPECT_TRUE(result->startTime.has_value()) << "Start time should be set.";
   EXPECT_EQ(0, result->startTime.value()) << "Start time should be 0.";
@@ -298,7 +298,7 @@ TEST(Expression, TestMinExpressionEnforcesAllChildrenSatisfied) {
 
   auto result = objectiveExpression->populateResults(solverModelPtr);
   EXPECT_TRUE(result->utility);
-  EXPECT_EQ(1, result->utility.value()) << "Both choices should be satisfied.";
+  EXPECT_EQ(2, result->utility.value()) << "Both choices should be satisfied.";
   EXPECT_EQ(chooseTask1_1->getSolution().value()->utility.value(), 1)
       << "First Choose expression must be satisfied.";
   EXPECT_EQ(chooseTask1_2->getSolution().value()->utility.value(), 1)
@@ -437,6 +437,7 @@ TEST(Expression, TestAllocationExpressionFailsChoice) {
 
   // Translate and solve the model.
   cplexSolver.translateModel();
+  solverModelPtr->exportModel("testAllocationExpressionFailsChoice.lp");
   cplexSolver.solveModel();
 
   auto result = objectiveExpression->populateResults(solverModelPtr);

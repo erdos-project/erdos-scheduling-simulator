@@ -285,8 +285,9 @@ SolutionResultPtr Expression::populateResults(SolverModelPtr solverModel) {
                                              << getTypeString() << ".")
   // Check that the Expression was parsed before.
   if (!parsedResult) {
-    throw tetrisched::exceptions::ExpressionSolutionException(
-        "Expression " + name + " was not parsed before solve.");
+    solution = std::make_shared<SolutionResult>();
+    solution->type = SolutionResultType::EXPRESSION_NO_UTILITY;
+    return solution;
   }
 
   if (solution) {
@@ -1134,6 +1135,7 @@ ParseResultPtr LessThanExpression::parse(
     throw tetrisched::exceptions::ExpressionConstructionException(
         "LessThanExpression must have two children.");
   }
+
   // Check that the Expression was parsed before
   if (parsedResult != nullptr) {
     // return the already parsed sub-tree from another parent
@@ -1152,6 +1154,7 @@ ParseResultPtr LessThanExpression::parse(
   TETRISCHED_DEBUG(
       "Finished parsing the children for LessThanExpression with name " << name
                                                                         << ".")
+
   // Generate the result of parsing the expression.
   parsedResult = std::make_shared<ParseResult>();
 
@@ -1181,6 +1184,13 @@ ParseResultPtr LessThanExpression::parse(
       parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
       parsedResult->startTime.emplace(firstChildResult->startTime.value());
       parsedResult->endTime.emplace(secondChildResult->endTime.value());
+      parsedResult->indicator = 1;
+      TETRISCHED_DEBUG(
+          "LessThanExpression with name "
+          << name
+          << " has been trivially satisfied since the left child's end time is "
+          << firstChildEndTime << " and the right child's start time is "
+          << secondChildStartTime << ".")
     } else {
       // The first child does not end by the time the second child has to start,
       // this expression cannot be satisfied.
@@ -1207,6 +1217,47 @@ ParseResultPtr LessThanExpression::parse(
     parsedResult->startTime.emplace(firstChildResult->startTime.value());
     parsedResult->endTime.emplace(secondChildResult->endTime.value());
 
+    // Add a constraint that the Expression is only satisfied if both the
+    // children are satisfied.
+    VariablePtr isSatisfiedVar = std::make_shared<Variable>(
+        VariableType::VAR_INDICATOR, name + "_is_satisfied");
+    solverModel->addVariable(isSatisfiedVar);
+
+    // Ensure that both of the children of the LessThanExpression can be
+    // enforced.
+    ConstraintPtr lessThanIndicatorConstraint = std::make_shared<Constraint>(
+        name + "_less_than_indicator_constraint", ConstraintType::CONSTR_EQ, 0);
+    double numEnforceableChildren = 0;
+
+    if (!firstChildResult->indicator || !secondChildResult->indicator) {
+      throw tetrisched::exceptions::ExpressionConstructionException(
+          "LessThanExpression must have children with indicators.");
+    }
+    if (firstChildResult->indicator->isVariable()) {
+      lessThanIndicatorConstraint->addTerm(
+          firstChildResult->indicator->get<VariablePtr>());
+      numEnforceableChildren += 1;
+    } else if (firstChildResult->indicator->get<uint32_t>() == 0) {
+      throw tetrisched::exceptions::ExpressionConstructionException(
+          "LessThanExpression must have children with non-0 indicators. "
+          "Child " +
+          children[0]->getName() + " has indicator 0.");
+    }
+    if (secondChildResult->indicator->isVariable()) {
+      lessThanIndicatorConstraint->addTerm(
+          secondChildResult->indicator->get<VariablePtr>());
+      numEnforceableChildren += 1;
+    } else if (secondChildResult->indicator->get<uint32_t>() == 0) {
+      throw tetrisched::exceptions::ExpressionConstructionException(
+          "LessThanExpression must have children with non-0 indicators. "
+          "Child " +
+          children[1]->getName() + " has indicator 0.");
+    }
+    lessThanIndicatorConstraint->addTerm(-1 * numEnforceableChildren,
+                                         isSatisfiedVar);
+    solverModel->addConstraint(lessThanIndicatorConstraint);
+    parsedResult->indicator = isSatisfiedVar;
+
     // Add a constraint that the first child must occur before the second.
     auto happensBeforeConstraintName = name + "_happens_before_constraint";
     ConstraintPtr happensBeforeConstraint = std::make_shared<Constraint>(
@@ -1220,37 +1271,18 @@ ParseResultPtr LessThanExpression::parse(
                      << name << ".")
   }
 
-  // Construct a utility function that is the minimum of the two utilities.
-  // Maximizing this utility will force the solver to place both of the
-  // subexpressions.
-  VariablePtr utilityVar =
-      std::make_shared<Variable>(VariableType::VAR_INTEGER, name + "_utility");
-  solverModel->addVariable(utilityVar);
+  // Construct a utility function that is the sum of the two utilities.
   if (!firstChildResult->utility || !secondChildResult->utility) {
     throw tetrisched::exceptions::ExpressionConstructionException(
         "LessThanExpression must have children with utilities.");
   }
 
-  ConstraintPtr constrainUtilityLessThanFirstChild =
-      firstChildResult->utility.value()->toConstraint(
-          name + "_utility_less_than_first_child", ConstraintType::CONSTR_GE,
-          0);
-  constrainUtilityLessThanFirstChild->addTerm(-1, utilityVar);
-  solverModel->addConstraint(std::move(constrainUtilityLessThanFirstChild));
-
-  ConstraintPtr constrainUtilityLessThanSecondChild =
-      secondChildResult->utility.value()->toConstraint(
-          name + "_utility_less_than_second_child", ConstraintType::CONSTR_GE,
-          0);
-  constrainUtilityLessThanSecondChild->addTerm(-1, utilityVar);
-  solverModel->addConstraint(std::move(constrainUtilityLessThanSecondChild));
-
-  // Convert the utility variable to a utility function.
-  parsedResult->utility =
+  auto utility =
       std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
-  parsedResult->utility.value()->addTerm(1, utilityVar);
-  TETRISCHED_DEBUG("LessThanExpression with name "
-                   << name << " has utility " << utilityVar->getName() << ".");
+  (*utility) += *(firstChildResult->utility.value());
+  (*utility) += *(secondChildResult->utility.value());
+
+  parsedResult->utility = std::move(utility);
 
   // Return the result.
   return parsedResult;
@@ -1281,39 +1313,87 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
                                     Time currentTime) {
   // Check that the Expression was parsed before
   if (parsedResult != nullptr) {
-    // return the already parsed sub-tree from another parent
+    // Return the already parsed sub-tree from another parent
     // this assumes a sub-tree can have > 1 parent and enables
     // STRL DAG structures
     return parsedResult;
   }
+
   /// Create and save the ParseResult.
   parsedResult = std::make_shared<ParseResult>();
 
+  // Check that there are more than 0 children.
   auto numChildren = this->getNumChildren();
   if (numChildren == 0) {
     throw tetrisched::exceptions::ExpressionSolutionException(
         "Number of children should be >=1 for MIN");
   }
-  // start time of MIN
+
+  // Indicator for MIN.
+  VariablePtr minIndicator = std::make_shared<Variable>(
+      VariableType::VAR_INDICATOR, name + "_min_indicator");
+  solverModel->addVariable(minIndicator);
+
+  // Start Time of MIN
   VariablePtr minStartTime = std::make_shared<Variable>(
       VariableType::VAR_INTEGER, name + "_min_start_time");
   solverModel->addVariable(minStartTime);
 
-  // end time of MIN
+  // End Time of MIN
   VariablePtr minEndTime = std::make_shared<Variable>(VariableType::VAR_INTEGER,
                                                       name + "_min_end_time");
   solverModel->addVariable(minEndTime);
 
-  // Utility of MIN operator
+  // Constraint to ensure that all children of the MIN operator are satisfied.
+  ConstraintPtr minIndicatorConstraint = std::make_shared<Constraint>(
+      name + "_min_enforce_all_children", ConstraintType::CONSTR_EQ, 0);
+  double numEnforceableChildren = 0;
+
+  // Utility of MIN.
   auto minUtility =
       std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
-  VariablePtr minUtilityVariable = std::make_shared<Variable>(
-      VariableType::VAR_INTEGER, name + "_min_utility_variable");
-  solverModel->addVariable(minUtilityVariable);
 
   for (int i = 0; i < numChildren; i++) {
+    // Parse the Child.
     auto childParsedResult = children[i]->parse(
         solverModel, availablePartitions, capacityConstraints, currentTime);
+
+    if (childParsedResult->type != ParseResultType::EXPRESSION_UTILITY) {
+      // If any of the children cannot provide a utility, the MIN expression
+      // cannot be satisfied.
+      parsedResult->type = ParseResultType::EXPRESSION_NO_UTILITY;
+      return parsedResult;
+    }
+
+    // Ensure that the MIN is satisfied only if this child is satisfied.
+    if (childParsedResult->indicator.has_value()) {
+      auto childIndicator = childParsedResult->indicator.value();
+      if (childIndicator.isVariable()) {
+        minIndicatorConstraint->addTerm(childIndicator);
+        numEnforceableChildren += 1;
+      } else {
+        auto indicatorValue = childIndicator.get<uint32_t>();
+        if (indicatorValue == 1) {
+          // This child is trivially satisifed, we shouldn't add its utility.
+          TETRISCHED_DEBUG("Child " << i << " of MIN " << name << " with name "
+                                    << children[i]->getName()
+                                    << " is trivially satisfied.")
+          continue;
+        } else {
+          throw tetrisched::exceptions::ExpressionConstructionException(
+              "Indicator needed from child-" + std::to_string(i) + "(" +
+              children[i]->getName() + ") for MIN, but was 0.");
+        }
+      }
+    } else {
+      std::cout << "Type of child was: " << childParsedResult->type
+                << std::endl;
+      throw tetrisched::exceptions::ExpressionConstructionException(
+          "Indicator needed from child-" + std::to_string(i) + "(" +
+          children[i]->getName() + ") for MIN, but was not present!");
+    }
+
+    // Ensure that the MIN's start time is <= the start time of this child.
     ConstraintPtr minStartTimeConstraint = std::make_shared<Constraint>(
         name + "_min_start_time_constr_child_" + std::to_string(i),
         ConstraintType::CONSTR_GE, 0);  // minStartTime < childStartTime
@@ -1329,11 +1409,12 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
       // Add the constraint to solver
       solverModel->addConstraint(std::move(minStartTimeConstraint));
     } else {
-      throw tetrisched::exceptions::ExpressionSolutionException(
+      throw tetrisched::exceptions::ExpressionConstructionException(
           "Start Time needed from child-" + std::to_string(i) +
           " for MIN. But not present!");
     }
-    // constraint of end time: childEndTime <= minEndTime
+
+    // Ensure that the MIN's end time is >= the end time of this child.
     ConstraintPtr minEndTimeConstraint = std::make_shared<Constraint>(
         name + "_min_end_time_constr_child_" + std::to_string(i),
         ConstraintType::CONSTR_LE, 0);
@@ -1348,28 +1429,31 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
       // Add the constraint to solver
       solverModel->addConstraint(std::move(minEndTimeConstraint));
     } else {
-      throw tetrisched::exceptions::ExpressionSolutionException(
+      throw tetrisched::exceptions::ExpressionConstructionException(
           "End Time needed from child-" + std::to_string(i) +
           " for MIN. But not present!");
     }
 
     if (childParsedResult->utility.has_value()) {
-      // child_utility - minUVar >= 0
-      auto childUtilityConstr =
-          childParsedResult->utility.value()->toConstraint(
-              name + "_min_utility_constraint_child_" + std::to_string(i),
-              ConstraintType::CONSTR_GE, 0);
-      childUtilityConstr->addTerm(-1, minUtilityVariable);
-      solverModel->addConstraint(std::move(childUtilityConstr));
+      (*minUtility) += *(childParsedResult->utility.value());
     } else {
-      throw tetrisched::exceptions::ExpressionSolutionException(
+      throw tetrisched::exceptions::ExpressionConstructionException(
           "Utility needed from child-" + std::to_string(i) +
           " for MIN. But not present!");
     }
   }
-  // MinU = Max(MinUVar)
-  minUtility->addTerm(1, minUtilityVariable);
+  // Ensure that MIN satisfies all of its children.
+  if (numEnforceableChildren == 0) {
+    // All the children have been trivially satisfied.
+    parsedResult->indicator = 1;
+    minUtility->addTerm(1);
+  } else {
+    minIndicatorConstraint->addTerm(-1 * numEnforceableChildren, minIndicator);
+    solverModel->addConstraint(std::move(minIndicatorConstraint));
+    parsedResult->indicator = minIndicator;
+  }
 
+  // Construct and return the ParsedResult.
   parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
   parsedResult->startTime = minStartTime;
   parsedResult->endTime = minEndTime;
@@ -1431,7 +1515,7 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
   // Constraint to allow only one sub-expression to have indicator = 1
   // Sum(child_indicator) - max_indicator <= 0
   ConstraintPtr maxChildSubexprConstraint = std::make_shared<Constraint>(
-      name + "_max_child_subexpr_constr", ConstraintType::CONSTR_LE, 0);
+      name + "_max_child_subexpr_constr", ConstraintType::CONSTR_EQ, 0);
 
   // Constraint to set startTime of MAX
   // Sum(Indicator * child_start) >= maxStartTime
@@ -1510,10 +1594,11 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
   }
 
   // Constrain the MaxExpression's start time to be less than or equal to the
-  // start time of the chosen child. However, if the MaxExpression is not placed
-  // i.e., the sum of its childrens indicator is 0, then we have to let the
-  // start time be free. We do this by adding the maximum end time of the
-  // children as a constant that is activated if the children cannot be placed.
+  // start time of the chosen child. However, if the MaxExpression is not
+  // placed i.e., the sum of its childrens indicator is 0, then we have to let
+  // the start time be free. We do this by adding the maximum end time of the
+  // children as a constant that is activated if the children cannot be
+  // placed.
   maxStartTimeConstraint->addTerm(maxEndTimeOfChildren);
   maxStartTimeConstraint->addTerm(
       -1 * static_cast<TETRISCHED_ILP_TYPE>(maxEndTimeOfChildren),
