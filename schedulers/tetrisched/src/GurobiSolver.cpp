@@ -51,20 +51,30 @@ GRBVar GurobiSolver::translateVariable(GRBModel& gurobiModel,
   double upperBound = variable->upperBound.has_value()
                           ? variable->upperBound.value()
                           : GRB_INFINITY;
+  GRBVar var;                      
   switch (variable->variableType) {
     case VariableType::VAR_INTEGER:
-      return gurobiModel.addVar(lowerBound, upperBound, 0.0, GRB_INTEGER,
+      var = gurobiModel.addVar(lowerBound, upperBound, 0.0, GRB_INTEGER,
                                 variable->variableName);
+      break;                                
     case VariableType::VAR_CONTINUOUS:
-      return gurobiModel.addVar(lowerBound, upperBound, 0.0, GRB_CONTINUOUS,
+      var = gurobiModel.addVar(lowerBound, upperBound, 0.0, GRB_CONTINUOUS,
                                 variable->variableName);
+      break;
     case VariableType::VAR_INDICATOR:
-      return gurobiModel.addVar(lowerBound, upperBound, 0.0, GRB_BINARY,
+      var = gurobiModel.addVar(lowerBound, upperBound, 0.0, GRB_BINARY,
                                 variable->variableName);
+      break;
     default:
       throw tetrisched::exceptions::SolverException(
           "Invalid variable type: " + std::to_string(variable->variableType));
   }
+  // Give the Gurobi variable an initial solution value if it is available.
+  if (variable->initialValue.has_value()) {
+      var.set(GRB_DoubleAttr_Start, variable->initialValue.value());
+      TETRISCHED_DEBUG("Setting start value of variable " << variable->getName() << "(" << variable->getId() << ") to " << variable->initialValue.value());
+  }
+  return var;
 }
 
 GRBConstr GurobiSolver::translateConstraint(
@@ -162,11 +172,6 @@ void GurobiSolver::translateModel() {
     TETRISCHED_DEBUG("Adding variable " << variable->getName() << "("
                                         << variableId << ") to Gurobi Model.");
     gurobiVariables[variableId] = translateVariable(*gurobiModel, variable);
-    // Give the Gurobi variable an initial solution value if it is available.
-    if (variable->getInitialValue().has_value()) {
-        gurobiVariables[variableId].set(GRB_DoubleAttr_Start, variable->getInitialValue().value());
-        TETRISCHED_DEBUG("Setting start value of variable " << variable->getName() << "(" << variableId << ") to " << variable->getInitialValue().value());
-    }
   }
 
   // Generate all the constraints.
