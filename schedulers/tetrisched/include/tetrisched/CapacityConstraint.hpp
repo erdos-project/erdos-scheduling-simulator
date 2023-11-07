@@ -55,7 +55,7 @@ class CapacityConstraint {
   /// Registers the given usage in this CapacityConstraint.
   void registerUsage(const ExpressionPtr expression,
                      const IndicatorT usageIndicator,
-                     const PartitionUsageT usageVariable);
+                     const PartitionUsageT usageVariable, Time duration);
 
   /// Retrieves the maximum quantity of this CapacityConstraint.
   uint32_t getQuantity() const;
@@ -92,13 +92,13 @@ class CapacityConstraintMap {
   CapacityConstraintMap();
 
   /// Registers the usage by the Expression for the Partition at the
-  /// time specified by the value of the variable, which is to be
+  /// specified time for the specified duration, which is to be
   /// decided by the solver. The variable is expected to take on a
   /// value >= 0 only if the indicator is 1.
   void registerUsageAtTime(const ExpressionPtr expression,
                            const Partition& partition, Time time,
                            const IndicatorT usageIndicator,
-                           const PartitionUsageT usageVariable);
+                           const PartitionUsageT usageVariable, Time duration);
 
   /// Registers the usage by the Expression for the Partition in the
   /// time range starting from startTime and lasting for duration as

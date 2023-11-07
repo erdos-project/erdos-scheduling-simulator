@@ -34,7 +34,8 @@ CapacityConstraint::CapacityConstraint(const Partition& partition,
 
 void CapacityConstraint::registerUsage(const ExpressionPtr expression,
                                        const IndicatorT usageIndicator,
-                                       const PartitionUsageT usageVariable) {
+                                       const PartitionUsageT usageVariable,
+                                       Time duration) {
   if (!usageVariable.isVariable() && usageVariable.get<uint32_t>() == 0) {
     // No usage was registered. We don't need to add anything.
     return;
@@ -72,7 +73,8 @@ CapacityConstraintMap::CapacityConstraintMap() : granularity(1) {}
 
 void CapacityConstraintMap::registerUsageAtTime(
     const ExpressionPtr expression, const Partition& partition, Time time,
-    const IndicatorT usageIndicator, const PartitionUsageT usageVariable) {
+    const IndicatorT usageIndicator, const PartitionUsageT usageVariable,
+    Time duration) {
   if (!usageIndicator.isVariable() && usageIndicator.get<uint32_t>() == 0) {
     // No usage was registered. We don't need to add anything.
     return;
@@ -86,7 +88,7 @@ void CapacityConstraintMap::registerUsageAtTime(
 
   // Add the variable to the Constraint.
   capacityConstraints[mapKey]->registerUsage(expression, usageIndicator,
-                                             usageVariable);
+                                             usageVariable, duration);
 }
 
 void CapacityConstraintMap::registerUsageForDuration(
@@ -94,9 +96,18 @@ void CapacityConstraintMap::registerUsageForDuration(
     Time duration, const IndicatorT usageIndicator,
     const PartitionUsageT variable, std::optional<Time> granularity) {
   Time _granularity = granularity.value_or(this->granularity);
+  Time remainderTime = duration;
   for (Time time = startTime; time < startTime + duration;
        time += _granularity) {
-    registerUsageAtTime(expression, partition, time, usageIndicator, variable);
+    if (remainderTime > _granularity) {
+      registerUsageAtTime(expression, partition, time, usageIndicator, variable,
+                          _granularity);
+      remainderTime -= _granularity;
+    } else {
+      registerUsageAtTime(expression, partition, time, usageIndicator, variable,
+                          remainderTime);
+      remainderTime = 0;
+    }
   }
 }
 
