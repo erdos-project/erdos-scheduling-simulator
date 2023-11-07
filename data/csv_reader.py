@@ -208,7 +208,7 @@ class CSVReader(object):
 
     def get_goodput(self, csv_path: str) -> float:
         return self._simulators[csv_path].goodput_taskgraphs
-    
+
     def get_tasks(self, csv_path: str) -> Sequence[Task]:
         """Retrieves the tasks ordered by their release time.
 
