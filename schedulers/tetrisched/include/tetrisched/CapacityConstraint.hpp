@@ -22,6 +22,19 @@ class CapacityConstraint {
   /// The RHS of this constraint i.e., the quantity of this Partition
   /// at this time.
   uint32_t quantity;
+  /// The granularity of this CapacityConstraint.
+  /// This is typically the duration of the Constraint.
+  Time granularity;
+  /// The upper bound for the usage of this Partition at this time.
+  TETRISCHED_ILP_TYPE usageUpperBound;
+  /// The upper bound for the duration of this Partition at this time.
+  TETRISCHED_ILP_TYPE durationUpperBound;
+  /// The VariablePtr that checks if there is any overlapping usage.
+  VariablePtr overlapVariable;
+  /// The SolverModel constraints that ensures the correct setting of
+  /// the overlap variable.
+  ConstraintPtr upperBoundConstraint;
+  ConstraintPtr lowerBoundConstraint;
   /// The SolverModel constraint that enforces the resource usage.
   ConstraintPtr capacityConstraint;
 
@@ -36,11 +49,13 @@ class CapacityConstraint {
  public:
   /// Constructs a new CapacityConstraint for the given Partition
   /// at the given Time.
-  CapacityConstraint(const Partition& partition, Time time);
+  CapacityConstraint(const Partition& partition, Time constraintTime,
+                     Time granularity);
 
   /// Registers the given usage in this CapacityConstraint.
-  void registerUsage(const ExpressionPtr expression, uint32_t usage);
-  void registerUsage(const ExpressionPtr expression, VariablePtr variable);
+  void registerUsage(const ExpressionPtr expression,
+                     const IndicatorT usageIndicator,
+                     const PartitionUsageT usageVariable);
 
   /// Retrieves the maximum quantity of this CapacityConstraint.
   uint32_t getQuantity() const;
@@ -78,16 +93,12 @@ class CapacityConstraintMap {
 
   /// Registers the usage by the Expression for the Partition at the
   /// time specified by the value of the variable, which is to be
-  /// decided by the solver.
+  /// decided by the solver. The variable is expected to take on a
+  /// value >= 0 only if the indicator is 1.
   void registerUsageAtTime(const ExpressionPtr expression,
                            const Partition& partition, Time time,
-                           VariablePtr variable);
-
-  /// Registers the usage by the Expression for the Partition at the
-  /// time specified by the known usage.
-  void registerUsageAtTime(const ExpressionPtr expression,
-                           const Partition& partition, Time time,
-                           uint32_t usage);
+                           const IndicatorT usageIndicator,
+                           const PartitionUsageT usageVariable);
 
   /// Registers the usage by the Expression for the Partition in the
   /// time range starting from startTime and lasting for duration as
@@ -96,17 +107,8 @@ class CapacityConstraintMap {
   /// is the one that the CapacityConstraintMap was initialized with.
   void registerUsageForDuration(const ExpressionPtr expression,
                                 const Partition& partition, Time startTime,
-                                Time duration, VariablePtr variable,
-                                std::optional<Time> granularity);
-
-  /// Registers the usage by the Expression for the Partition in the
-  /// time range starting from startTime and lasting for duration as
-  /// specified by the variable known at runtime. Optionally, a step
-  /// granularity can be provided. The default granularity is the one
-  /// that the CapacityConstraintMap was initialized with.
-  void registerUsageForDuration(const ExpressionPtr expression,
-                                const Partition& partition, Time startTime,
-                                Time duration, uint32_t usage,
+                                Time duration, const IndicatorT usageIndicator,
+                                const PartitionUsageT usageVariable,
                                 std::optional<Time> granularity);
 
   /// Translate the CapacityConstraintMap by moving its constraints

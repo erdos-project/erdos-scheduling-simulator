@@ -167,6 +167,9 @@ class XOrVariableT {
     return std::get<T>(value);
   }
 };
+using TimeOrVariableT = XOrVariableT<Time>;
+using IndicatorT = XOrVariableT<uint32_t>;
+using PartitionUsageT = XOrVariableT<uint32_t>;
 
 /// A `ConstraintType` enumeration represents the types of constraints that we
 /// allow the user to construct. These map to the types of constraints that the
