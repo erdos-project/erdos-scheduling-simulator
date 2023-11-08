@@ -420,7 +420,7 @@ void CapacityConstraintMapPurgingOptimizationPass::computeCliques(
                                         << ") to the clique for "
                                         << currentExpression->getId())
         }
-        cliques.push_back(clique);
+        cliques[currentExpression->getId()] = clique;
       }
     }
 
@@ -439,7 +439,7 @@ void CapacityConstraintMapPurgingOptimizationPass::
   // Construct a vector of the size of the number of cliques.
   // This vector will keep track of if the clique was used in a constraint, and
   // if so, its maximum usage.
-  std::vector<std::pair<bool, uint32_t>> cliqueUsage(cliques.size());
+  // std::vector<std::pair<bool, uint32_t>> cliqueUsage(cliques.size());
   TETRISCHED_DEBUG("Running deactivation of constraints from a map of size "
                    << capacityConstraints.size())
   size_t deactivatedConstraints = 0;
@@ -448,40 +448,48 @@ void CapacityConstraintMapPurgingOptimizationPass::
   for (auto& [key, capacityConstraint] :
        capacityConstraints.capacityConstraints) {
     // Reset the clique usage vector.
-    cliqueUsage.assign(cliqueUsage.size(), std::make_pair(false, 0));
+    // cliqueUsage.assign(cliqueUsage.size(), std::make_pair(false, 0));
+    std::unordered_map<std::string, uint32_t> expressionUsageMap;
 
     // Iterate over all the Expressions that contribute to a usage in
     // this CapacityConstraint, and turn on their clique usage.
     for (auto& [expression, usage] : capacityConstraint->usageVector) {
-      // Check if the Expression is in a clique.
-      for (size_t i = 0; i < cliques.size(); ++i) {
-        if (cliques[i].find(expression->getId()) != cliques[i].end()) {
-          // The Expression is in the clique, so we turn on the usage.
-          cliqueUsage[i].first = true;
+      if (expression->getNumParents() != 1) {
+        throw tetrisched::exceptions::RuntimeException(
+            "Expression " + expression->getId() + " (" + expression->getName() +
+            ") of type " + expression->getTypeString() +
+            " has more than one parent. This is not supported.");
+      }
+      auto expressionKey = expression->getParents()[0]->getId();
+      if (cliques.find(expressionKey) == cliques.end()) {
+        expressionKey = expression->getId();
+      }
 
-          // We make note of the maximum usage that this clique can
-          // contribute to the CapacityConstraint.
-          uint32_t constraintUsage = std::numeric_limits<uint32_t>::max();
-          if (usage.isVariable()) {
-            auto usageUpperBound = usage.get<VariablePtr>()->getUpperBound();
-            if (usageUpperBound.has_value()) {
-              constraintUsage = static_cast<uint32_t>(usageUpperBound.value());
-            }
-          } else {
-            constraintUsage = usage.get<uint32_t>();
-          }
-          cliqueUsage[i].second =
-              std::max(cliqueUsage[i].second, constraintUsage);
+      // We make note of the maximum usage that this clique can
+      // contribute to the CapacityConstraint.
+      uint32_t constraintUsage = std::numeric_limits<uint32_t>::max();
+      if (usage.isVariable()) {
+        auto usageUpperBound = usage.get<VariablePtr>()->getUpperBound();
+        if (usageUpperBound.has_value()) {
+          constraintUsage = static_cast<uint32_t>(usageUpperBound.value());
         }
+      } else {
+        constraintUsage = usage.get<uint32_t>();
+      }
+
+      // We now insert the usage of this expression into the map.
+      if (expressionUsageMap.find(expressionKey) == expressionUsageMap.end()) {
+        expressionUsageMap[expressionKey] = constraintUsage;
+      } else {
+        expressionUsageMap[expressionKey] =
+            std::max(expressionUsageMap[expressionKey], constraintUsage);
       }
     }
 
     // If the clique usage is <= RHS, then we can deactivate this constraint.
     uint32_t totalUsage = 0;
-    for (auto& [used, usage] : cliqueUsage) {
-      if (used) {
-        totalUsage += usage;
-      }
+    for (auto& [clique, usage] : expressionUsageMap) {
+      totalUsage += usage;
     }
     if (totalUsage <= capacityConstraint->getQuantity()) {
       deactivatedConstraints++;
