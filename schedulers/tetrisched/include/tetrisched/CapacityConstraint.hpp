@@ -17,6 +17,9 @@ struct PartitionTimePairHasher {
 /// for a Partition at a particular time.
 class CapacityConstraint {
  private:
+  /// If True, we generate overlap constraints.
+  /// If False, we fall back to using general capacity constraints.
+  bool useOverlapConstraints;
   /// The name of this CapacityConstraint.
   std::string name;
   /// The RHS of this constraint i.e., the quantity of this Partition
@@ -50,7 +53,7 @@ class CapacityConstraint {
   /// Constructs a new CapacityConstraint for the given Partition
   /// at the given Time.
   CapacityConstraint(const Partition& partition, Time constraintTime,
-                     Time granularity);
+                     Time granularity, bool useOverlapConstraints);
 
   /// Registers the given usage in this CapacityConstraint.
   void registerUsage(const ExpressionPtr expression,
@@ -74,6 +77,10 @@ using CapacityConstraintPtr = std::shared_ptr<CapacityConstraint>;
 /// potential intent to use the Partition at a particular time.
 class CapacityConstraintMap {
  private:
+  /// If True, the constraintMap will expend extra effort in ensuring
+  /// overlaps are efficiently used. While this may increase scheduling
+  /// performance, it may also increase the time it takes to solve the model.
+  bool useOverlapConstraints;
   /// A map from the Partition ID and the time to the
   /// CapacityConstraint that enforces the resource usage for that time.
   std::unordered_map<std::pair<uint32_t, Time>, CapacityConstraintPtr,
@@ -85,8 +92,8 @@ class CapacityConstraintMap {
   friend class CapacityConstraintMapPurgingOptimizationPass;
 
  public:
-  /// Initialize a CapacityConstraintMap with the given granularity.
-  CapacityConstraintMap(Time granularity);
+  /// Initialize a CapacityConstraintMap with the given granularitqy.
+  CapacityConstraintMap(Time granularity, bool useOverlapConstraints = false);
 
   /// Initialize a CapacityConstraintMap with the granularity of 1.
   CapacityConstraintMap();
