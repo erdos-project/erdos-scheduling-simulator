@@ -451,11 +451,24 @@ void CapacityConstraintMapPurgingOptimizationPass::
                    << capacityConstraints.size())
   size_t deactivatedConstraints = 0;
 
+  std::unordered_map<ExpressionPtr, uint32_t> expressionUsageMap;
+
   // Iterate over each of the individual CapacityConstraints in the map.
   for (auto& [key, capacityConstraint] :
        capacityConstraints.capacityConstraints) {
-    // Reset the clique usage vector.
-    std::unordered_map<ExpressionPtr, uint32_t> expressionUsageMap;
+    // If the capacity check is trivially satisfiable, don't even bother checking
+    // the cliques.
+    if (capacityConstraint->capacityConstraint->isTriviallySatisfiable()) {
+      TETRISCHED_DEBUG("Deactivating " << capacityConstraint->getName()
+                                       << " since it is trivially satisfied.")
+      deactivatedConstraints++;
+      capacityConstraint->deactivate();
+      continue;
+    }
+
+    auto maxCliqueStartTime = std::chrono::high_resolution_clock::now();
+    // Reset the clique usage map.
+    expressionUsageMap.clear();
 
     // Iterate over all the Expressions that contribute to a usage in
     // this CapacityConstraint, and turn on their clique usage.
@@ -467,9 +480,12 @@ void CapacityConstraintMapPurgingOptimizationPass::
             " has more than one parent. This is not supported.");
       }
       auto expressionKey = expression->getParents()[0];
-      if (cliques.find(expressionKey) == cliques.end()) {
+      if (expressionKey->getType() != ExpressionType::EXPR_MAX) {
         expressionKey = expression;
       }
+      // if (cliques.find(expressionKey) == cliques.end()) {
+      //   expressionKey = expression;
+      // }
 
       // We make note of the maximum usage that this clique can
       // contribute to the CapacityConstraint.
@@ -491,6 +507,7 @@ void CapacityConstraintMapPurgingOptimizationPass::
             std::max(expressionUsageMap[expressionKey], constraintUsage);
       }
     }
+    auto maxCliqueEndTime = std::chrono::high_resolution_clock::now();
 
     // All the MAX cliques have been identified, if they are immediately
     // ordered by a < expression, then we can keep bubbling up the checks
@@ -520,6 +537,15 @@ void CapacityConstraintMapPurgingOptimizationPass::
         expressionUsageMap.erase(key);
       }
     } while (keysToDelete.size() > 0);
+    auto lessThanCliqueEndTime = std::chrono::high_resolution_clock::now();
+    auto maxCliqueDuration =
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            maxCliqueEndTime - maxCliqueStartTime)
+            .count();
+    auto lessThanCliqueDuration =
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            lessThanCliqueEndTime - maxCliqueEndTime)
+            .count();
 
     // If the clique usage is <= RHS, then we can deactivate this constraint.
     uint32_t totalUsage = 0;
@@ -550,23 +576,22 @@ void CapacityConstraintMapPurgingOptimizationPass::
   TETRISCHED_DEBUG("Deactivated " << deactivatedConstraints << " out of "
                                   << capacityConstraints.size()
                                   << " constraints.")
-  std::cout << "Deactivated " << deactivatedConstraints << " out of "
-                                  << capacityConstraints.size()
-                                  << " constraints." << std::endl;
 }
 
 void CapacityConstraintMapPurgingOptimizationPass::runPass(
     ExpressionPtr strlExpression, CapacityConstraintMap& capacityConstraints,
     std::optional<std::string> debugFile) {
   /* Phase 1: We compute the cliques from  the Expressions in the DAG. */
-  auto cliqueStartTime = std::chrono::high_resolution_clock::now();
-  computeCliques(strlExpression);
-  auto cliqueEndTime = std::chrono::high_resolution_clock::now();
-  auto cliqueDuration = std::chrono::duration_cast<std::chrono::microseconds>(
-                            cliqueEndTime - cliqueStartTime)
-                            .count();
-  TETRISCHED_DEBUG("Computing cliques took: " << cliqueDuration
-                                              << " microseconds.")
+  // auto cliqueStartTime = std::chrono::high_resolution_clock::now();
+  // computeCliques(strlExpression);
+  // auto cliqueEndTime = std::chrono::high_resolution_clock::now();
+  // auto cliqueDuration = std::chrono::duration_cast<std::chrono::microseconds>(
+  //                           cliqueEndTime - cliqueStartTime)
+  //                           .count();
+  // TETRISCHED_DEBUG("Computing cliques took: " << cliqueDuration
+  //                                             << " microseconds.")
+  // std::cout << "Computing cliques took: " << cliqueDuration << " microseconds."
+  //           << std::endl;
 
   /* Phase 2: We go over each of the CapacityConstraint in the map, and
   deactivate the constraint that is trivially satisfied. */
