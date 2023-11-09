@@ -6,7 +6,7 @@ from functools import total_ordering
 from operator import attrgetter, itemgetter
 from typing import Mapping, Optional, Sequence
 
-import absl # noqa: F401
+import absl  # noqa: F401
 
 from data import WorkloadLoaderDynamic
 from schedulers import BaseScheduler
@@ -34,6 +34,7 @@ class EventType(Enum):
     LOG_UTILIZATION = (
         12  # Ask the simulator to log the utilization of the worker pools.
     )
+    LOAD_NEXT_WORKLOAD = 13  # Ask the simulator to load the next workload.
 
     def __lt__(self, other) -> bool:
         # This method is used to order events in the event queue. We prioritize
@@ -387,10 +388,15 @@ class Simulator(object):
                     "[%s] The TaskGraph %s will be released with deadline %s",
                     task_graph.release_time,
                     task_graph.name,
-                    task_graph.deadline
+                    task_graph.deadline,
                 )
+        
+    def simulate(self) -> None:
+        """Run the simulator loop.
 
-    def __execute_simulator_loop(self) -> None:
+        This loop requires the `Workload` to be populated with the `TaskGraph`s whose
+        execution is to be simulated using the Scheduler.
+        """
         # Run the simulator loop.
         while True:
             time_until_next_event = self._event_queue.peek().time - self._simulator_time
@@ -432,25 +438,17 @@ class Simulator(object):
                 if self.__handle_event(self._event_queue.next()):
                     break
 
-    def simulate(self) -> None:
-        """Run the simulator loop.
 
-        This loop requires the `Workload` to be populated with the `TaskGraph`s whose
-        execution is to be simulated using the Scheduler.
-        """
+    def __get_initial_releasable_tasks(self) -> None:
         if self._workload_loader is not None:
-            self._workload = next(self._workload_loader.get_workloads())
-            self._workload.populate_task_graphs(self._loop_timeout)
-
-        while True:
-            releasable_tasks: Sequence[Task] = self._workload.get_releasable_tasks()
-            if len(releasable_tasks) == 0:
-                break
+            # Load initial batch of workload
+            self.__get_next_workload()
+        else:
             # Retrieve the set of released tasks from the graph.
             # At the beginning, this should consist of all the sensor tasks
             # that we expect to run during the execution of the workload,
             # along with their expected release times.
-            for task in releasable_tasks:
+            for task in self._workload.get_releasable_tasks():
                 event = Event(
                     event_type=EventType.TASK_RELEASE,
                     time=task.release_time,
@@ -464,21 +462,7 @@ class Simulator(object):
                     task,
                     task.task_graph,
                 )
-
-            # Run the simulator loop.
-            self.__execute_simulator_loop()
-
-            if self._workload_loader is not None:
-                # Load new chunk of workload and update self._workload
-                try:
-                    self._workload = next(self._workload_loader.get_workloads())
-                    self._workload.populate_task_graphs(self._loop_timeout)
-                except StopIteration:
-                    self._workload = Workload.empty()
-            else:
-                self._workload = Workload.empty()
-
-
+    
     def __handle_scheduler_start(self, event: Event) -> None:
         """Handle the SCHEDULER_START event. The method invokes the scheduler, and adds
         a SCHEDULER_FINISHED event to the event queue.
@@ -1399,6 +1383,42 @@ class Simulator(object):
                 worker_pool,
             )
 
+    def __get_next_workload(self) -> None:
+        try:
+            self._workload = next(self._workload_loader.get_workloads())
+            self._workload.populate_task_graphs(self._loop_timeout)
+        except StopIteration:
+            self._workload = Workload.empty()
+            return
+
+        releasable_tasks: Sequence[Task] = self._workload.get_releasable_tasks()
+        for task in releasable_tasks:
+            # This is a hack to prevent the simulator from stepping backwards
+            # TODO: Is there a better way to do this?
+            task._release_time += self._simulator_time
+            event = Event(
+                event_type=EventType.TASK_RELEASE,
+                time=task.release_time,
+                task=task,
+            )
+            self._event_queue.add_event(event)
+            self._logger.info(
+                "[%s] Added %s for %s from %s to the event queue.",
+                self._simulator_time.time,
+                event,
+                task,
+                task.task_graph,
+            )
+        
+        if self._workload_loader is not None:
+            max_release_time = max([task.release_time for task in releasable_tasks], key = lambda x: x.time)
+            self._event_queue.add_event(
+                Event(
+                    event_type=EventType.LOAD_NEXT_WORKLOAD,
+                    time=max_release_time,
+                )
+            )
+
     def __handle_event(self, event: Event) -> bool:
         """Handles the next event from the EventQueue.
 
@@ -1416,6 +1436,8 @@ class Simulator(object):
         )
 
         if event.event_type == EventType.SIMULATOR_START:
+            self.__get_initial_releasable_tasks()
+
             # Start of the simulator loop.
             self._csv_logger.debug(
                 f"{event.time.time},SIMULATOR_START,{len(self._workload)}"
@@ -1481,6 +1503,8 @@ class Simulator(object):
             return True
         elif event.event_type == EventType.LOG_UTILIZATION:
             self.__log_utilization(event.time)
+        elif event.event_type == EventType.LOAD_NEXT_WORKLOAD:
+            self.__get_next_workload(event)
         else:
             raise ValueError(f"[{event.time}] Retrieved event of unknown type: {event}")
         return False
