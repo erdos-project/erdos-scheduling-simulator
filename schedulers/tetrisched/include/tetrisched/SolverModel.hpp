@@ -88,6 +88,12 @@ class VariableT {
   /// (yet).
   std::optional<T> getValue() const;
 
+  /// Set the lower bound of the Variable.
+  void setLowerBound(T lowerBound);
+
+  /// Set the upper bound of the Variable.
+  void setUpperBound(T upperBound);
+
   /// Retrieve the lower bound of the value, if available.
   std::optional<T> getLowerBound() const;
 
@@ -167,6 +173,9 @@ class XOrVariableT {
     return std::get<T>(value);
   }
 };
+using TimeOrVariableT = XOrVariableT<Time>;
+using IndicatorT = XOrVariableT<uint32_t>;
+using PartitionUsageT = XOrVariableT<uint32_t>;
 
 /// A `ConstraintType` enumeration represents the types of constraints that we
 /// allow the user to construct. These map to the types of constraints that the

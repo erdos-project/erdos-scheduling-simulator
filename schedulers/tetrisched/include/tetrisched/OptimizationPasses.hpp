@@ -30,9 +30,15 @@ class OptimizationPass {
   /// Get the type of the optimization pass.
   OptimizationPassType getType() const;
 
-  /// Run the pass on the given STRL expression.
+  /// Get the name of the optimization pass.
+  std::string getName() const;
+
+  /// Run the pass on the given STRL expression and the CapacityConstraintMap.
+  /// If an output log file is provided, the pass may choose to log useful
+  /// information to the file.
   virtual void runPass(ExpressionPtr strlExpression,
-                       CapacityConstraintMap& capacityConstraints) = 0;
+                       CapacityConstraintMap& capacityConstraints,
+                       std::optional<std::string> debugFile) = 0;
 
   // Clean the pass after a run.
   virtual void clean() = 0;
@@ -59,7 +65,8 @@ class CriticalPathOptimizationPass : public OptimizationPass {
 
   /// Run the Critical Path optimization pass on the given STRL expression.
   void runPass(ExpressionPtr strlExpression,
-               CapacityConstraintMap& capacityConstraints) override;
+               CapacityConstraintMap& capacityConstraints,
+               std::optional<std::string> debugFile) override;
 
   /// Clean the pass data structures.
   void clean() override;
@@ -70,15 +77,15 @@ class CriticalPathOptimizationPass : public OptimizationPass {
 /// they are trivially satisfied by the Expression tree.
 class CapacityConstraintMapPurgingOptimizationPass : public OptimizationPass {
  private:
-  /// A Vector of the cliques in the Expression tree.
-  std::vector<std::unordered_set<std::string>> cliques;
+  /// A HashMap of the Expression ID to the cliques in the Expression tree.
+  std::unordered_map<ExpressionPtr, std::unordered_set<ExpressionPtr>> cliques;
 
   /// Computes the cliques from a bottom-up traversal of the STRL.
   void computeCliques(ExpressionPtr expression);
 
   /// Deactivates the CapacityConstraints that are trivially satisfied.
-  void deactivateCapacityConstraints(
-      CapacityConstraintMap& capacityConstraints);
+  void deactivateCapacityConstraints(CapacityConstraintMap& capacityConstraints,
+                                     std::optional<std::string> debugFile);
 
  public:
   /// Instantiate the CapacityConstraintMapPurgingOptimizationPass.
@@ -87,7 +94,8 @@ class CapacityConstraintMapPurgingOptimizationPass : public OptimizationPass {
   /// Run the CapacityConstraintMapPurgingOptimizationPass on the given STRL
   /// expression.
   void runPass(ExpressionPtr strlExpression,
-               CapacityConstraintMap& capacityConstraints) override;
+               CapacityConstraintMap& capacityConstraints,
+               std::optional<std::string> debugFile) override;
 
   /// Clean the pass data structures.
   void clean() override;
@@ -95,19 +103,21 @@ class CapacityConstraintMapPurgingOptimizationPass : public OptimizationPass {
 
 class OptimizationPassRunner {
  private:
+  /// If True, the optimization passes may output logs.
+  bool debug;
   /// A list of optimization passes to run.
   std::vector<OptimizationPassPtr> registeredPasses;
 
  public:
   /// Initialize the OptimizationPassRunner.
-  OptimizationPassRunner();
+  OptimizationPassRunner(bool debug = false);
 
   /// Run the pre-translation optimization passes on the given STRL expression.
-  void runPreTranslationPasses(ExpressionPtr strlExpression,
+  void runPreTranslationPasses(Time currentTime, ExpressionPtr strlExpression,
                                CapacityConstraintMap& capacityConstraints);
 
   /// Run the post-translation optimization passes on the given STRL expression.
-  void runPostTranslationPasses(ExpressionPtr strlExpression,
+  void runPostTranslationPasses(Time currentTime, ExpressionPtr strlExpression,
                                 CapacityConstraintMap& capacityConstraints);
 };
 }  // namespace tetrisched

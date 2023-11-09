@@ -188,8 +188,8 @@ class TetriSchedScheduler(BaseScheduler):
                     partitions=partitions,
                     tasks_to_be_scheduled=tasks_to_be_scheduled
                     + previously_placed_tasks,
-                    placement_rewards=placement_rewards,
-                    # placement_rewards=None,
+                    # placement_rewards=placement_rewards,
+                    placement_rewards=None,
                 )
                 if task_graph_strl is not None:
                     constructed_task_graphs.add(task_graph_name)
@@ -209,7 +209,7 @@ class TetriSchedScheduler(BaseScheduler):
             # Register the STRL expression with the scheduler and solve it.
             try:
                 self._scheduler.registerSTRL(
-                    objective_strl, partitions, sim_time.time, False
+                    objective_strl, partitions, sim_time.time, True
                 )
                 solver_start_time = time.time()
                 self._scheduler.schedule(sim_time.time)
@@ -263,7 +263,11 @@ class TetriSchedScheduler(BaseScheduler):
                     # The task was placed, retrieve the Partition where the task
                     # was placed.
                     partitionAllocations = task_placement.getPartitionAllocations()
-                    partitionId = list(partitionAllocations.keys())[0]
+                    try:
+                        partitionId = list(partitionAllocations.keys())[0]
+                    except IndexError as e:
+                        print(f"Trying to access: {partitionAllocations}")
+                        raise e
                     partition = partitions.partitionMap[partitionId]
                     task_placement = Placement.create_task_placement(
                         task=task,
@@ -300,7 +304,7 @@ class TetriSchedScheduler(BaseScheduler):
                     )
                 self._logger.warning(f"[{sim_time.time}] Failed to place any tasks.")
 
-        # if sim_time == EventTime(2, EventTime.Unit.US):
+        # if sim_time == EventTime(16, EventTime.Unit.US):
         #     raise RuntimeError("Stopping the Simulation.")
 
         scheduler_end_time = time.time()

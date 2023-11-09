@@ -28,8 +28,6 @@ using SolutionResultType = enum ParseResultType;
 
 /// A `ParseResult` class represents the result of parsing an expression.
 struct ParseResult {
-  using TimeOrVariableT = XOrVariableT<Time>;
-  using IndicatorT = XOrVariableT<uint32_t>;
   /// The type of the result.
   ParseResultType type;
   /// The start time associated with the parsed result.

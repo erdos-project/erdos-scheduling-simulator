@@ -1034,15 +1034,17 @@ def log_basic_task_statistics(
     )
 
 
-def plot_goodput(csv_reader, csv_files, scheduler_labels, output, figure_size=(14, 10), title=""):
-    x,y = [],[]
+def plot_goodput(
+    csv_reader, csv_files, scheduler_labels, output, figure_size=(14, 10), title=""
+):
+    x, y = [], []
     for csv_file, scheduler_label in zip(csv_files, scheduler_labels):
         goodput = csv_reader.get_goodput(csv_file)
         x.append(scheduler_label)
         y.append(goodput)
         logger.info(f"Scheduler: {scheduler_label} goodput: {goodput}")
     plt.figure(figsize=figure_size)
-    plt.bar(x,y)
+    plt.bar(x, y)
     plt.xlabel("Schedulers")
     plt.ylabel("Goodput")
     xlocs, _ = plt.xticks()
@@ -1050,7 +1052,8 @@ def plot_goodput(csv_reader, csv_files, scheduler_labels, output, figure_size=(1
         plt.text(xlocs[i] - 0.25, v + 0.01, str(v))
     plt.title(title)
     plt.savefig(output, bbox_inches="tight")
-    
+
+
 def log_aggregate_stats(
     csv_reader, csv_files, conf_files, scheduler_labels, task_name_regex, stat="p50"
 ):
@@ -1325,10 +1328,16 @@ def main(argv):
                 stats=statistics,
             )
         if FLAGS.plot_goodput_graph or FLAGS.all:
-            plot_goodput(csv_reader, FLAGS.csv_files, scheduler_labels, os.path.join(
+            plot_goodput(
+                csv_reader,
+                FLAGS.csv_files,
+                scheduler_labels,
+                os.path.join(
                     FLAGS.output_dir,
                     f"{FLAGS.goodput_plot_name}",
-                ), title=FLAGS.goodput_plot_title)
+                ),
+                title=FLAGS.goodput_plot_title,
+            )
         if FLAGS.end_to_end_response_time or FLAGS.all:
             analyze_end_to_end_response_time(
                 csv_reader,
