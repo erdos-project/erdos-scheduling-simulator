@@ -88,6 +88,12 @@ class VariableT {
   /// (yet).
   std::optional<T> getValue() const;
 
+  /// Set the lower bound of the Variable.
+  void setLowerBound(T lowerBound);
+
+  /// Set the upper bound of the Variable.
+  void setUpperBound(T upperBound);
+
   /// Retrieve the lower bound of the value, if available.
   std::optional<T> getLowerBound() const;
 
