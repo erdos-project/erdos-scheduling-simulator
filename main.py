@@ -592,6 +592,7 @@ def main(args):
             time_discretization=EventTime(
                 FLAGS.scheduler_time_discretization, EventTime.Unit.US
             ),
+            plan_ahead=EventTime(FLAGS.scheduler_plan_ahead, EventTime.Unit.US),
             log_to_file=FLAGS.scheduler_log_to_file,
             _flags=FLAGS,
         )

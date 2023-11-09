@@ -6,7 +6,7 @@ import numpy as np
 import tetrisched_py as tetrisched
 
 from schedulers import BaseScheduler
-from utils import EventTime
+from utils import EventTime, generate_monotonically_increasing_intervals
 from workers import WorkerPools
 from workload import (
     Placement,
@@ -49,6 +49,8 @@ class TetriSchedScheduler(BaseScheduler):
     ):
         if preemptive:
             raise ValueError("TetrischedScheduler does not support preemption.")
+        if enforce_deadlines == False and plan_ahead.is_invalid():
+            raise ValueError("Specify Plan-Ahead if deadline is not enforced.")
         super(TetriSchedScheduler, self).__init__(
             preemptive=preemptive,
             runtime=runtime,
@@ -63,6 +65,8 @@ class TetriSchedScheduler(BaseScheduler):
         self._scheduler = tetrisched.Scheduler(
             self._time_discretization.time, tetrisched.backends.SolverBackendType.GUROBI
         )
+        self._adaptive_discretization = False
+        self._max_discretization = 5
         self._log_to_file = log_to_file
         self._log_times = set(map(int, _flags.scheduler_log_times)) if _flags else set()
 
@@ -171,6 +175,7 @@ class TetriSchedScheduler(BaseScheduler):
                     tasks_to_be_scheduled=tasks_to_be_scheduled
                     + previously_placed_tasks,
                     placement_rewards=placement_rewards,
+                    # placement_rewards=None,
                 )
                 if task_graph_strl is not None:
                     constructed_task_graphs.add(task_graph_name)
@@ -367,8 +372,34 @@ class TetriSchedScheduler(BaseScheduler):
         end_time = end_time.to(EventTime.Unit.US).time
 
         discretizations = []
-        for discretization_time in range(start_time, end_time + 1, time_discretization):
-            discretizations.append(EventTime(discretization_time, EventTime.Unit.US))
+        if not self._adaptive_discretization:
+            for discretization_time in range(
+                start_time, end_time + 1, time_discretization
+            ):
+                discretizations.append(
+                    EventTime(discretization_time, EventTime.Unit.US)
+                )
+        else:
+            min_discretization = 1
+            max_discretization = self._max_discretization
+            num_interval = self._max_discretization
+            initial_repetitions = (end_time - start_time) // 4
+
+            intervals = generate_monotonically_increasing_intervals(
+                min_discretization,
+                max_discretization,
+                num_interval,
+                initial_repetitions,
+            )
+            total_intervals = len(interval)
+            interval_index = 0
+            current_time = start_time
+            while current_time < (end_time + 1):
+                interval = intervals[min(interval_index, total_intervals - 1)]
+                discretizations.append(EventTime(current_time, EventTime.Unit.US))
+                current_time += interval
+                interval_index += 1
+
         return discretizations
 
     def construct_task_strl(
@@ -417,9 +448,13 @@ class TetriSchedScheduler(BaseScheduler):
             else execution_strategy.runtime
         )
 
+        end_discretization_time = self._plan_ahead
+        if self.enforce_deadlines:
+            end_discretization_time = task.deadline
+
         # Compute the time discretizations for this Task.
         time_discretizations = self._get_time_discretizations_until(
-            current_time, task.deadline - task_remaining_time
+            current_time, end_discretization_time - task_remaining_time
         )
         if len(time_discretizations) == 0:
             self._logger.warn(
