@@ -98,6 +98,7 @@ void CapacityConstraint::translate(SolverModelPtr solverModel) {
     capacityConstraint->addTerm(-1 * usageUpperBound);
     capacityConstraint->addTerm(usageUpperBound, overlapVariable);
   }
+  capacityConstraint->addAttribute(ConstraintAttribute::LAZY_CONSTRAINT);
   solverModel->addConstraint(capacityConstraint);
   // if (!capacityConstraint->isTriviallySatisfiable()) {
   //   // COMMENT (Sukrit): We can try to see if adding Lazy constraints
