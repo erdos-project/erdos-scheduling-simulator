@@ -369,7 +369,7 @@ class Simulator(object):
         while True:
             if self._workload_loader is not None:
                 try:
-                    self._workload = next(self._workload_loader.get_workloads())
+                    self._workload = self._workload_loader.get_next_workload(self._simulator_time.time)
                     self._workload.populate_task_graphs(self._loop_timeout)
                 except StopIteration:
                     break
@@ -1384,13 +1384,11 @@ class Simulator(object):
             )
 
     def __get_next_workload(self) -> None:
-        try:
-            self._workload = next(self._workload_loader.get_workloads())
-            self._workload.populate_task_graphs(self._loop_timeout)
-        except StopIteration:
-            return
-
+        print(f"__get_next_workload called")
+        self._workload = self._workload_loader.get_next_workload(self._simulator_time.time)
+        self._workload.populate_task_graphs(self._loop_timeout)
         releasable_tasks: Sequence[Task] = self._workload.get_releasable_tasks()
+        print(f"{len(releasable_tasks)=}")
         if len(releasable_tasks) == 0:
             self._logger.warning(
                 "[%s] The workload %s has no releasable tasks when simulator executes __get_next_workload.",
@@ -1400,10 +1398,6 @@ class Simulator(object):
             return
 
         for task in releasable_tasks:
-            # This is a hack to prevent the simulator from stepping backwards
-            # TODO: Maybe refactor AlibabaLoader.get_workloads to accept a start time
-            #       offset?
-            task._release_time += self._simulator_time
             event = Event(
                 event_type=EventType.TASK_RELEASE,
                 time=task.release_time,

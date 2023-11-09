@@ -21,7 +21,6 @@ from workload import (
     WorkProfile,
 )
 
-
 class AlibabaLoader(WorkloadLoaderDynamic):
     """Loads the Alibaba trace from the provided file.
 
@@ -37,9 +36,9 @@ class AlibabaLoader(WorkloadLoaderDynamic):
         self._batch_size = batch_size
         self._path = path
         self._flags = _flags
-        self._job_generator = None
+        self._job_data_generator = None
 
-    def _initialize_job_generator(self):
+    def _initialize_job_data_generator(self):
         """
         Initialize the job generator from the Alibaba trace file.
         """
@@ -53,16 +52,16 @@ class AlibabaLoader(WorkloadLoaderDynamic):
         else:
             raise FileNotFoundError(f"No such file or directory: {self._path}")
 
-        def job_generator():
+        def job_data_generator():
             for file_path in file_paths:
                 with open(file_path, "rb") as pickled_file:
                     data: Mapping[str, List[str]] = pickle.load(pickled_file)
                     for job_graph_name, job_tasks in data.items():
-                        yield self._convert_job_data_to_job(job_graph_name, job_tasks)
+                        yield job_graph_name, job_tasks
 
-        self._job_generator = job_generator()
+        self._job_data_generator = job_data_generator()
 
-    def _convert_job_data_to_job(self, job_graph_name: str, job_tasks: List[str]) -> JobGraph:
+    def _convert_job_data_to_job(self, job_graph_name: str, job_tasks: List[str], start_time_offset: int) -> JobGraph:
         """
         Convert the raw job data to a Job object.
 
@@ -72,7 +71,7 @@ class AlibabaLoader(WorkloadLoaderDynamic):
         # Create the ReleasePolicy.
         release_policy = None
         start_time = EventTime(
-            time=random.randint(
+            time=start_time_offset + random.randint(
                 self._flags.randomize_start_time_min, self._flags.randomize_start_time_max
             ),
             unit=EventTime.Unit.US,
@@ -175,24 +174,25 @@ class AlibabaLoader(WorkloadLoaderDynamic):
             ),
         )
 
-    def get_workloads(self) -> Generator[Workload, None, None]:
-        if self._job_generator is None:
-            self._initialize_job_generator()
-        
+    def get_next_workload(self, start_time_offset: int = 0) -> Workload:
+        if self._job_data_generator is None:
+            self._initialize_job_data_generator()
+
         if self._batch_size <= 0:
             # Yield all jobs at once
-            job_graphs = {job.name: job for job in self._job_generator}
-            yield Workload.from_job_graphs(job_graphs=job_graphs, _flags=self._flags)
-            return # The generator is exhausted
+            job_graphs = {job_graph_name: self._convert_job_data_to_job(job_graph_name, job_tasks, start_time_offset) \
+                           for job_graph_name, job_tasks in self._job_data_generator}
+            return Workload.from_job_graphs(job_graphs=job_graphs, _flags=self._flags)
         else:
             batch: List[JobGraph] = []
             try:
                 for _ in range(self._batch_size):
-                    job = next(self._job_generator)
-                    batch.append(job)
-                yield Workload.from_job_graphs(job_graphs={job.name: job for job in batch}, _flags=self._flags)
+                    job_graph_name, job_tasks = next(self._job_data_generator)
+                    job_graph = self._convert_job_data_to_job(job_graph_name, job_tasks, start_time_offset)
+                    batch.append(job_graph)
+                return Workload.from_job_graphs(job_graphs={job.name: job for job in batch}, _flags=self._flags)
             except StopIteration:
-                if batch:
+                if len(batch) > 0:
                     # Yield any remaining jobs in the last batch
-                    yield Workload.from_job_graphs(job_graphs={job.name: job for job in batch}, _flags=self._flags)
-                return  # The generator is exhausted
+                    return Workload.from_job_graphs(job_graphs={job.name: job for job in batch}, _flags=self._flags)
+                return  Workload.empty()

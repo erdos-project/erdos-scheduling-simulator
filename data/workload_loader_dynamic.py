@@ -11,7 +11,7 @@ class WorkloadLoaderDynamic(abc.ABC):
     """
 
     @abc.abstractmethod
-    def get_workloads(self) -> Generator[Workload, None, None]:
+    def get_next_workload(self, start_time_offset: int = 0) -> Workload:
         """
         A generator function to load Workload.
         """
