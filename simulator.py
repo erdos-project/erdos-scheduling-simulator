@@ -384,12 +384,10 @@ class Simulator(object):
 
             for task_graph in task_graphs:
                 self._logger.info(
-                    "[%s] The TaskGraph %s will be released with deadline "
-                    "%s and completion time %s.",
+                    "[%s] The TaskGraph %s will be released with deadline %s",
                     task_graph.release_time,
                     task_graph.name,
-                    task_graph.deadline,
-                    task_graph.completion_time,
+                    task_graph.deadline
                 )
 
     def __execute_simulator_loop(self) -> None:
