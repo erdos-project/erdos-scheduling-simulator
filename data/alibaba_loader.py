@@ -34,7 +34,7 @@ class AlibabaLoader(WorkloadLoaderV2):
     """
 
     def __init__(self, path: str, batch_size: int = 0, _flags: Optional["absl.flags"] = None):
-        super().__init__(batch_size)
+        self._batch_size = batch_size
         self._path = path
         self._flags = _flags
         self._job_generator = None
