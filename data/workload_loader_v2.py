@@ -10,7 +10,7 @@ class WorkloadLoaderV2(abc.ABC):
     """
 
     @abc.abstractmethod
-    def workloads(self) -> Generator[Workload, None, None]:
+    def get_workloads(self) -> Generator[Workload, None, None]:
         """
         A generator function to load Workload.
         """

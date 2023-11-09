@@ -175,7 +175,7 @@ class AlibabaLoader(WorkloadLoaderV2):
             ),
         )
 
-    def workloads(self) -> Generator[Workload, None, None]:
+    def get_workloads(self) -> Generator[Workload, None, None]:
         if self._job_generator is None:
             self._initialize_job_generator()
         

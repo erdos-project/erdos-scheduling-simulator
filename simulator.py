@@ -368,7 +368,7 @@ class Simulator(object):
         while True:
             if self._workload_loader is not None:
                 try:
-                    self._workload = next(self._workload_loader.workloads())
+                    self._workload = next(self._workload_loader.get_workloads())
                     self._workload.populate_task_graphs(self._loop_timeout)
                 except StopIteration:
                     break
@@ -439,7 +439,7 @@ class Simulator(object):
         execution is to be simulated using the Scheduler.
         """
         if self._workload_loader is not None:
-            self._workload = next(self._workload_loader.workloads())
+            self._workload = next(self._workload_loader.get_workloads())
             self._workload.populate_task_graphs(self._loop_timeout)
 
         while True:
@@ -471,7 +471,7 @@ class Simulator(object):
             if self._workload_loader is not None:
                 # Load new chunk of workload and update self._workload
                 try:
-                    self._workload = next(self._workload_loader.workloads())
+                    self._workload = next(self._workload_loader.get_workloads())
                     self._workload.populate_task_graphs(self._loop_timeout)
                 except StopIteration:
                     self._workload = Workload.empty()
