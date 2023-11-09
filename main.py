@@ -6,7 +6,7 @@ from collections import namedtuple
 from absl import app, flags
 
 from data import (
-    AlibabaLoaderV2,
+    AlibabaLoader,
     TaskLoaderBenchmark,
     TaskLoaderPylot,
     TaskLoaderSynthetic,
@@ -420,7 +420,7 @@ def main(args):
             workload_loader = WorkloadLoaderClockworkBursty()
             workload = workload_loader.workload
         elif FLAGS.replay_trace == "alibaba":
-            workload_loader = AlibabaLoaderV2(
+            workload_loader = AlibabaLoader(
                 batch_size=FLAGS.workload_batch_size,
                 path=FLAGS.workload_profile_path, 
                 _flags=FLAGS
