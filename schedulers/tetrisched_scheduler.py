@@ -46,6 +46,8 @@ class TetriSchedScheduler(BaseScheduler):
         plan_ahead: EventTime = EventTime.invalid(),
         log_to_file: bool = False,
         _flags: Optional["absl.flags"] = None,
+        adaptive_discretization: bool = False,
+        max_time_discretization: EventTime = EventTime(5, EventTime.Unit.US),
     ):
         if preemptive:
             raise ValueError("TetrischedScheduler does not support preemption.")
@@ -65,8 +67,8 @@ class TetriSchedScheduler(BaseScheduler):
         self._scheduler = tetrisched.Scheduler(
             self._time_discretization.time, tetrisched.backends.SolverBackendType.GUROBI
         )
-        self._adaptive_discretization = False
-        self._max_discretization = 5
+        self._adaptive_discretization = adaptive_discretization
+        self._max_discretization = max_time_discretization.to(EventTime.Unit.US)
         self._log_to_file = log_to_file
         self._log_times = set(map(int, _flags.scheduler_log_times)) if _flags else set()
 
@@ -381,8 +383,8 @@ class TetriSchedScheduler(BaseScheduler):
                 )
         else:
             min_discretization = 1
-            max_discretization = self._max_discretization
-            num_interval = self._max_discretization
+            max_discretization = self._max_discretization.to(EventTime.Unit.US).time
+            num_interval = self._max_discretization.to(EventTime.Unit.US).time
             initial_repetitions = (end_time - start_time) // 4
 
             intervals = generate_monotonically_increasing_intervals(
