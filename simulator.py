@@ -8,7 +8,7 @@ from typing import Mapping, Optional, Sequence
 
 import absl  # noqa: F401
 
-from data import WorkloadLoaderDynamic
+from data import JobGraphLoader
 from schedulers import BaseScheduler
 from utils import EventTime, setup_csv_logging, setup_logging
 from workers import WorkerPools
@@ -230,7 +230,7 @@ class Simulator(object):
         worker_pools: WorkerPools,
         scheduler: BaseScheduler,
         workload: Workload,
-        workload_loader: Optional[WorkloadLoaderDynamic] = None,
+        job_graph_loader: Optional[JobGraphLoader] = None,
         loop_timeout: EventTime = EventTime(time=sys.maxsize, unit=EventTime.Unit.US),
         scheduler_frequency: EventTime = EventTime(time=-1, unit=EventTime.Unit.US),
         _flags: Optional["absl.flags"] = None,
@@ -288,7 +288,7 @@ class Simulator(object):
         self._simulator_time = EventTime(time=0, unit=EventTime.Unit.US)
         self._scheduler_frequency = scheduler_frequency
         self._loop_timeout = loop_timeout
-        self._workload_loader = workload_loader
+        self._job_graph_loader = job_graph_loader
 
         self._worker_pools = worker_pools
         self._logger.info("The Worker Pools are: ")
@@ -367,9 +367,9 @@ class Simulator(object):
         # If we are using a WorkloadLoader, we need to load the first chunk of
         # workload.
         while True:
-            if self._workload_loader is not None:
+            if self._job_graph_loader is not None:
                 try:
-                    self._workload = self._workload_loader.get_next_workload(self._simulator_time.time)
+                    self._workload = self._job_graph_loader.get_next_jobs(self._simulator_time.time)
                     self._workload.populate_task_graphs(self._loop_timeout)
                 except StopIteration:
                     break
@@ -440,7 +440,7 @@ class Simulator(object):
 
 
     def __get_initial_releasable_tasks(self) -> None:
-        if self._workload_loader is not None:
+        if self._job_graph_loader is not None:
             # Load initial batch of workload
             self.__get_next_workload()
         else:
@@ -1384,11 +1384,16 @@ class Simulator(object):
             )
 
     def __get_next_workload(self) -> None:
-        print(f"__get_next_workload called")
-        self._workload = self._workload_loader.get_next_workload(self._simulator_time.time)
-        self._workload.populate_task_graphs(self._loop_timeout)
+        new_jobs = self._job_graph_loader.get_next_jobs(self._simulator_time.time)
+        
+        if self._workload is None:
+            self._workload = Workload.from_job_graphs({job.name: job for job in new_jobs}) 
+            self._workload.populate_task_graphs(self._loop_timeout)
+        else:
+            self._workload.add_job_graphs(new_jobs, self._loop_timeout)
+        
         releasable_tasks: Sequence[Task] = self._workload.get_releasable_tasks()
-        print(f"{len(releasable_tasks)=}")
+        
         if len(releasable_tasks) == 0:
             self._logger.warning(
                 "[%s] The workload %s has no releasable tasks when simulator executes __get_next_workload.",

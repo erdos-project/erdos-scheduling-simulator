@@ -14,7 +14,7 @@ from data import (
     WorkerLoaderBenchmark,
     WorkloadLoader,
     WorkloadLoaderClockworkBursty,
-    WorkloadLoaderDynamic,
+    JobGraphLoader,
 )
 from schedulers import (
     BranchPredictionScheduler,
@@ -629,7 +629,7 @@ def main(args):
         # Ray: I think we may want to have a more generalize WorkloadLoader implementation and
         # have it be used in all scenarios instead of passing a fixed workload into Simulator.
         # Pass the workload_loader into Simulator allows more flexibility.
-        workload_loader=workload_loader if isinstance(workload_loader, WorkloadLoaderDynamic) else None,
+        job_graph_loader=workload_loader if isinstance(workload_loader, JobGraphLoader) else None,
         loop_timeout=EventTime(FLAGS.loop_timeout, EventTime.Unit.US),
         scheduler_frequency=EventTime(FLAGS.scheduler_frequency, EventTime.Unit.US),
         _flags=FLAGS,

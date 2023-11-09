@@ -1,17 +1,18 @@
 import abc
-from typing import Generator
+from typing import Generator, Sequence
+from workload.jobs import JobGraph
 
 from workload.workload import Workload
 
 
-class WorkloadLoaderDynamic(abc.ABC):
+class JobGraphLoader(abc.ABC):
     """
     Abstract base class for workload loaders that can load workload dynamically
     instead of all at once.
     """
 
     @abc.abstractmethod
-    def get_next_workload(self, start_time_offset: int = 0) -> Workload:
+    def get_next_jobs(self, start_time_offset: int = 0) -> Sequence[JobGraph]:
         """
         A generator function to load Workload.
         """

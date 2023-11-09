@@ -4,10 +4,10 @@ import pathlib
 import pickle
 import random
 from collections import defaultdict
-from typing import Generator, List, Mapping, Optional
+from typing import List, Mapping, Optional, Sequence
 
 import absl
-from data.workload_loader_dynamic import WorkloadLoaderDynamic  # noqa: F401
+from data.job_graph_loader import JobGraphLoader  # noqa: F401
 
 from utils import EventTime
 from workload import (
@@ -21,7 +21,7 @@ from workload import (
     WorkProfile,
 )
 
-class AlibabaLoader(WorkloadLoaderDynamic):
+class AlibabaLoader(JobGraphLoader):
     """Loads the Alibaba trace from the provided file.
 
     Args:
@@ -61,7 +61,7 @@ class AlibabaLoader(WorkloadLoaderDynamic):
 
         self._job_data_generator = job_data_generator()
 
-    def _convert_job_data_to_job(self, job_graph_name: str, job_tasks: List[str], start_time_offset: int) -> JobGraph:
+    def _convert_job_data_to_job_graph(self, job_graph_name: str, job_tasks: List[str], start_time_offset: int) -> JobGraph:
         """
         Convert the raw job data to a Job object.
 
@@ -174,25 +174,29 @@ class AlibabaLoader(WorkloadLoaderDynamic):
             ),
         )
 
-    def get_next_workload(self, start_time_offset: int = 0) -> Workload:
+    def get_next_jobs(self, start_time_offset: int = 0) -> Sequence[JobGraph]:
         if self._job_data_generator is None:
             self._initialize_job_data_generator()
 
         if self._batch_size <= 0:
             # Yield all jobs at once
-            job_graphs = {job_graph_name: self._convert_job_data_to_job(job_graph_name, job_tasks, start_time_offset) \
-                           for job_graph_name, job_tasks in self._job_data_generator}
-            return Workload.from_job_graphs(job_graphs=job_graphs, _flags=self._flags)
+            # job_graphs = {job_graph_name: self._convert_job_data_to_job(job_graph_name, job_tasks, start_time_offset) \
+            #                for job_graph_name, job_tasks in self._job_data_generator}
+            # return Workload.from_job_graphs(job_graphs=job_graphs, _flags=self._flags)
+            return [self._convert_job_data_to_job_graph(job_graph_name, job_tasks, start_time_offset) \
+                           for job_graph_name, job_tasks in self._job_data_generator]
         else:
             batch: List[JobGraph] = []
             try:
                 for _ in range(self._batch_size):
                     job_graph_name, job_tasks = next(self._job_data_generator)
-                    job_graph = self._convert_job_data_to_job(job_graph_name, job_tasks, start_time_offset)
+                    job_graph = self._convert_job_data_to_job_graph(job_graph_name, job_tasks, start_time_offset)
                     batch.append(job_graph)
-                return Workload.from_job_graphs(job_graphs={job.name: job for job in batch}, _flags=self._flags)
+                # return Workload.from_job_graphs(job_graphs={job.name: job for job in batch}, _flags=self._flags)
             except StopIteration:
-                if len(batch) > 0:
+                pass
+                # if len(batch) > 0:
                     # Yield any remaining jobs in the last batch
-                    return Workload.from_job_graphs(job_graphs={job.name: job for job in batch}, _flags=self._flags)
-                return  Workload.empty()
+                    # return Workload.from_job_graphs(job_graphs={job.name: job for job in batch}, _flags=self._flags)
+                # return  Workload.empty()
+            return batch

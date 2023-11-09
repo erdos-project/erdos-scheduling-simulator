@@ -128,6 +128,18 @@ class Workload(object):
                 )
             self._initialized = True
 
+    def add_job_graphs(self, new_job_graphs: Sequence[JobGraph], completion_time: EventTime) -> None:
+        """Adds the given JobGraphs to the Workload.
+
+        Args:
+            job_graphs: A mapping from the name of the application to its JobGraph.
+        """
+        self._job_graphs |= {job.name: job for job in new_job_graphs}
+        for job_graph in new_job_graphs:
+            self._task_graphs |= job_graph.generate_task_graphs(
+                completion_time, _flags=self._flags
+            )
+
     def get_job_graph(self, name: str) -> Optional[JobGraph]:
         """Retrieves the JobGraph for the given application, if present.
 
