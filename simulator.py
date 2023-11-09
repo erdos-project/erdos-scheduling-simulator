@@ -1393,7 +1393,8 @@ class Simulator(object):
         releasable_tasks: Sequence[Task] = self._workload.get_releasable_tasks()
         for task in releasable_tasks:
             # This is a hack to prevent the simulator from stepping backwards
-            # TODO: Is there a better way to do this?
+            # TODO: Maybe refactor AlibabaLoader.get_workloads to accept a start time
+            #       offset?
             task._release_time += self._simulator_time
             event = Event(
                 event_type=EventType.TASK_RELEASE,
