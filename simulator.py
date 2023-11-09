@@ -1504,7 +1504,7 @@ class Simulator(object):
         elif event.event_type == EventType.LOG_UTILIZATION:
             self.__log_utilization(event.time)
         elif event.event_type == EventType.LOAD_NEXT_WORKLOAD:
-            self.__get_next_workload(event)
+            self.__get_next_workload()
         else:
             raise ValueError(f"[{event.time}] Retrieved event of unknown type: {event}")
         return False
