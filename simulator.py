@@ -1391,6 +1391,14 @@ class Simulator(object):
             return
 
         releasable_tasks: Sequence[Task] = self._workload.get_releasable_tasks()
+        if len(releasable_tasks) == 0:
+            self._logger.warning(
+                "[%s] The workload %s has no releasable tasks when simulator executes __get_next_workload.",
+                self._simulator_time.time,
+                self._workload,
+            )
+            return
+
         for task in releasable_tasks:
             # This is a hack to prevent the simulator from stepping backwards
             # TODO: Maybe refactor AlibabaLoader.get_workloads to accept a start time
@@ -1410,14 +1418,13 @@ class Simulator(object):
                 task.task_graph,
             )
         
-        if self._workload_loader is not None:
-            max_release_time = max([task.release_time for task in releasable_tasks], key = lambda x: x.time)
-            self._event_queue.add_event(
-                Event(
-                    event_type=EventType.LOAD_NEXT_WORKLOAD,
-                    time=max_release_time,
-                )
+        max_release_time = max([task.release_time for task in releasable_tasks], key = lambda x: x.time)
+        self._event_queue.add_event(
+            Event(
+                event_type=EventType.LOAD_NEXT_WORKLOAD,
+                time=max_release_time,
             )
+        )
 
     def __handle_event(self, event: Event) -> bool:
         """Handles the next event from the EventQueue.
