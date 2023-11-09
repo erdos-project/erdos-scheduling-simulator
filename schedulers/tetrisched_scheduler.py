@@ -64,11 +64,21 @@ class TetriSchedScheduler(BaseScheduler):
         )
         self._time_discretization = time_discretization.to(EventTime.Unit.US)
         self._plan_ahead = plan_ahead.to(EventTime.Unit.US)
+        self._max_deadline_plan_ahead = False
+        if self._plan_ahead.is_invalid():
+            self._max_deadline_plan_ahead = True
         self._scheduler = tetrisched.Scheduler(
             self._time_discretization.time, tetrisched.backends.SolverBackendType.GUROBI
         )
         self._adaptive_discretization = adaptive_discretization
         self._max_discretization = max_time_discretization.to(EventTime.Unit.US)
+        if (
+            self._adaptive_discretization
+            and self._max_discretization.time < self._time_discretization.time
+        ):
+            raise ValueError(
+                f"Max dicretization should be greater than or equal to time discretization but currently it is not"
+            )
         self._log_to_file = log_to_file
         self._log_times = set(map(int, _flags.scheduler_log_times)) if _flags else set()
 
@@ -139,15 +149,17 @@ class TetriSchedScheduler(BaseScheduler):
 
             # Construct the rewards for placement of the tasks.
             # Find the plan-ahead window to normalize the rewards for the tasks.
-            plan_ahead = self._plan_ahead
-            if plan_ahead.is_invalid():
+            # plan_ahead = self._plan_ahead
+            plan_ahead = EventTime(0, EventTime.Unit.US)
+            if self._max_deadline_plan_ahead:
                 for task in tasks_to_be_scheduled:
                     if task.deadline > plan_ahead:
                         plan_ahead = task.deadline
+                self._plan_ahead = plan_ahead
             placement_reward_discretizations = [
                 t.to(EventTime.Unit.US).time
                 for t in self._get_time_discretizations_until(
-                    current_time=sim_time, end_time=plan_ahead
+                    current_time=sim_time, end_time=self._plan_ahead
                 )
             ]
             placement_rewards = dict(
@@ -382,10 +394,13 @@ class TetriSchedScheduler(BaseScheduler):
                     EventTime(discretization_time, EventTime.Unit.US)
                 )
         else:
-            min_discretization = 1
+            min_discretization = self._time_discretization.to(EventTime.Unit.US).time
             max_discretization = self._max_discretization.to(EventTime.Unit.US).time
             num_interval = self._max_discretization.to(EventTime.Unit.US).time
-            initial_repetitions = (end_time - start_time) // 4
+            initial_repetitions = (
+                self._plan_ahead.to(EventTime.Unit.US).time - start_time
+            ) // 4  # 1/4th of the time min discretization should be repeated
+            initial_repetitions = max(initial_repetitions, 1)
 
             intervals = generate_monotonically_increasing_intervals(
                 min_discretization,
@@ -393,7 +408,7 @@ class TetriSchedScheduler(BaseScheduler):
                 num_interval,
                 initial_repetitions,
             )
-            total_intervals = len(interval)
+            total_intervals = len(intervals)
             interval_index = 0
             current_time = start_time
             while current_time < (end_time + 1):
