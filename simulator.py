@@ -1388,7 +1388,6 @@ class Simulator(object):
             self._workload = next(self._workload_loader.get_workloads())
             self._workload.populate_task_graphs(self._loop_timeout)
         except StopIteration:
-            self._workload = Workload.empty()
             return
 
         releasable_tasks: Sequence[Task] = self._workload.get_releasable_tasks()
