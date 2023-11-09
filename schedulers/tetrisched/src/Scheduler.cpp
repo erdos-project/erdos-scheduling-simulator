@@ -30,7 +30,7 @@ Scheduler::Scheduler(Time discretization, SolverBackendType solverBackend)
           "The solver backend type is not supported.");
   }
   solverModel = solver->getModel();
-  optimizationPasses = OptimizationPassRunner();
+  optimizationPasses = OptimizationPassRunner(true);
 }
 
 void Scheduler::registerSTRL(ExpressionPtr expression,
@@ -56,7 +56,7 @@ void Scheduler::registerSTRL(ExpressionPtr expression,
   // Run the Pre-Translation OptimizationPasses on this expression.
   if (optimize) {
     auto optimizerStartTime = std::chrono::high_resolution_clock::now();
-    optimizationPasses.runPreTranslationPasses(expression,
+    optimizationPasses.runPreTranslationPasses(currentTime, expression,
                                                capacityConstraintMap);
     auto optimizerEndTime = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
@@ -73,7 +73,7 @@ void Scheduler::registerSTRL(ExpressionPtr expression,
   // Run the Post-Translation OptimizationPasses on this expression.
   if (optimize) {
     auto optimizerStartTime = std::chrono::high_resolution_clock::now();
-    optimizationPasses.runPostTranslationPasses(expression,
+    optimizationPasses.runPostTranslationPasses(currentTime, expression,
                                                 capacityConstraintMap);
     auto optimizerEndTime = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
