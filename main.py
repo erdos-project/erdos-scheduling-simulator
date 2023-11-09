@@ -6,7 +6,7 @@ from collections import namedtuple
 from absl import app, flags
 
 from data import (
-    AlibabaLoader,
+    AlibabaLoaderV2,
     TaskLoaderBenchmark,
     TaskLoaderPylot,
     TaskLoaderSynthetic,
@@ -14,6 +14,7 @@ from data import (
     WorkerLoaderBenchmark,
     WorkloadLoader,
     WorkloadLoaderClockworkBursty,
+    WorkloadLoaderV2,
 )
 from schedulers import (
     BranchPredictionScheduler,
@@ -96,6 +97,7 @@ flags.DEFINE_string(
 )
 flags.DEFINE_bool("stats", False, "Print the statistics from the tasks loaded.")
 flags.DEFINE_bool("dry_run", False, "If True, the simulator does not run.")
+flags.DEFINE_integer("workload_batch_size", 0, "The number of jobs to load per batch. Currently only used for replaying Alibaba Trace.")
 
 # Simulator related flags.
 flags.DEFINE_integer(
@@ -418,10 +420,12 @@ def main(args):
             workload_loader = WorkloadLoaderClockworkBursty()
             workload = workload_loader.workload
         elif FLAGS.replay_trace == "alibaba":
-            workload_loader = AlibabaLoader(
-                path=FLAGS.workload_profile_path, _flags=FLAGS
+            workload_loader = AlibabaLoaderV2(
+                batch_size=FLAGS.workload_batch_size,
+                path=FLAGS.workload_profile_path, 
+                _flags=FLAGS
             )
-            workload = workload_loader.workload
+            workload = None
         else:
             raise NotImplementedError(
                 f"Replay trace {FLAGS.replay_trace} is not implemented yet."
@@ -620,6 +624,12 @@ def main(args):
         worker_pools=worker_loader.get_worker_pools(),
         scheduler=scheduler,
         workload=workload,
+        # For now we only support loading workload in simulator class 
+        # using classes that implement WorkloadLoaderV2.
+        # Ray: I think we may want to have a more generalize WorkloadLoader implementation and
+        # have it be used in all scenarios instead of passing a fixed workload into Simulator.
+        # Pass the workload_loader into Simulator allows more flexibility.
+        workload_loader=workload_loader if isinstance(workload_loader, WorkloadLoaderV2) else None,
         loop_timeout=EventTime(FLAGS.loop_timeout, EventTime.Unit.US),
         scheduler_frequency=EventTime(FLAGS.scheduler_frequency, EventTime.Unit.US),
         _flags=FLAGS,

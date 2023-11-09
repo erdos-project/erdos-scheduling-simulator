@@ -6,8 +6,9 @@ from functools import total_ordering
 from operator import attrgetter, itemgetter
 from typing import Mapping, Optional, Sequence
 
-import absl  # noqa: F401
+import absl # noqa: F401
 
+from data import WorkloadLoaderV2
 from schedulers import BaseScheduler
 from utils import EventTime, setup_csv_logging, setup_logging
 from workers import WorkerPools
@@ -228,6 +229,7 @@ class Simulator(object):
         worker_pools: WorkerPools,
         scheduler: BaseScheduler,
         workload: Workload,
+        workload_loader: Optional[WorkloadLoaderV2] = None,
         loop_timeout: EventTime = EventTime(time=sys.maxsize, unit=EventTime.Unit.US),
         scheduler_frequency: EventTime = EventTime(time=-1, unit=EventTime.Unit.US),
         _flags: Optional["absl.flags"] = None,
@@ -280,10 +282,12 @@ class Simulator(object):
         # Simulator variables.
         self._scheduler = scheduler
         self._workload = workload
-        self._workload.populate_task_graphs(loop_timeout)
+        if self._workload is not None:
+            self._workload.populate_task_graphs(loop_timeout)
         self._simulator_time = EventTime(time=0, unit=EventTime.Unit.US)
         self._scheduler_frequency = scheduler_frequency
         self._loop_timeout = loop_timeout
+        self._workload_loader = workload_loader
 
         self._worker_pools = worker_pools
         self._logger.info("The Worker Pools are: ")
@@ -359,49 +363,36 @@ class Simulator(object):
 
     def dry_run(self) -> None:
         """Displays the order in which the TaskGraphs will be released."""
-        task_graphs = sorted(
-            self._workload.task_graphs.values(),
-            key=lambda task_graph: task_graph.release_time,
-        )
-        if len(task_graphs) == 0:
-            self._logger.info("No TaskGraphs found in the workload.")
-            return
+        # If we are using a WorkloadLoader, we need to load the first chunk of
+        # workload.
+        while True:
+            if self._workload_loader is not None:
+                try:
+                    self._workload = next(self._workload_loader.workloads())
+                    self._workload.populate_task_graphs(self._loop_timeout)
+                except StopIteration:
+                    break
 
-        for task_graph in task_graphs:
-            self._logger.info(
-                "[%s] The TaskGraph %s will be released with deadline "
-                "%s and completion time %s.",
-                task_graph.release_time,
-                task_graph.name,
-                task_graph.deadline,
-                task_graph.completion_time,
+            task_graphs = sorted(
+                self._workload.task_graphs.values(),
+                key=lambda task_graph: task_graph.release_time,
             )
 
-    def simulate(self) -> None:
-        """Run the simulator loop.
+            if len(task_graphs) == 0:
+                self._logger.info("No TaskGraphs found in the workload.")
+                break
 
-        This loop requires the `Workload` to be populated with the `TaskGraph`s whose
-        execution is to be simulated using the Scheduler.
-        """
-        # Retrieve the set of released tasks from the graph.
-        # At the beginning, this should consist of all the sensor tasks
-        # that we expect to run during the execution of the workload,
-        # along with their expected release times.
-        for task in self._workload.get_releasable_tasks():
-            event = Event(
-                event_type=EventType.TASK_RELEASE,
-                time=task.release_time,
-                task=task,
-            )
-            self._event_queue.add_event(event)
-            self._logger.info(
-                "[%s] Added %s for %s from %s to the event queue.",
-                self._simulator_time.time,
-                event,
-                task,
-                task.task_graph,
-            )
+            for task_graph in task_graphs:
+                self._logger.info(
+                    "[%s] The TaskGraph %s will be released with deadline "
+                    "%s and completion time %s.",
+                    task_graph.release_time,
+                    task_graph.name,
+                    task_graph.deadline,
+                    task_graph.completion_time,
+                )
 
+    def __execute_simulator_loop(self) -> None:
         # Run the simulator loop.
         while True:
             time_until_next_event = self._event_queue.peek().time - self._simulator_time
@@ -442,6 +433,53 @@ class Simulator(object):
                 self.__step(step_size=time_until_next_event)
                 if self.__handle_event(self._event_queue.next()):
                     break
+
+    def simulate(self) -> None:
+        """Run the simulator loop.
+
+        This loop requires the `Workload` to be populated with the `TaskGraph`s whose
+        execution is to be simulated using the Scheduler.
+        """
+        if self._workload_loader is not None:
+            self._workload = next(self._workload_loader.workloads())
+            self._workload.populate_task_graphs(self._loop_timeout)
+
+        while True:
+            releasable_tasks: Sequence[Task] = self._workload.get_releasable_tasks()
+            if len(releasable_tasks) == 0:
+                break
+            # Retrieve the set of released tasks from the graph.
+            # At the beginning, this should consist of all the sensor tasks
+            # that we expect to run during the execution of the workload,
+            # along with their expected release times.
+            for task in releasable_tasks:
+                event = Event(
+                    event_type=EventType.TASK_RELEASE,
+                    time=task.release_time,
+                    task=task,
+                )
+                self._event_queue.add_event(event)
+                self._logger.info(
+                    "[%s] Added %s for %s from %s to the event queue.",
+                    self._simulator_time.time,
+                    event,
+                    task,
+                    task.task_graph,
+                )
+
+            # Run the simulator loop.
+            self.__execute_simulator_loop()
+
+            if self._workload_loader is not None:
+                # Load new chunk of workload and update self._workload
+                try:
+                    self._workload = next(self._workload_loader.workloads())
+                    self._workload.populate_task_graphs(self._loop_timeout)
+                except StopIteration:
+                    self._workload = Workload.empty()
+            else:
+                self._workload = Workload.empty()
+
 
     def __handle_scheduler_start(self, event: Event) -> None:
         """Handle the SCHEDULER_START event. The method invokes the scheduler, and adds
