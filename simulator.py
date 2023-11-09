@@ -8,7 +8,7 @@ from typing import Mapping, Optional, Sequence
 
 import absl # noqa: F401
 
-from data import WorkloadLoaderV2
+from data import WorkloadLoaderDynamic
 from schedulers import BaseScheduler
 from utils import EventTime, setup_csv_logging, setup_logging
 from workers import WorkerPools
@@ -229,7 +229,7 @@ class Simulator(object):
         worker_pools: WorkerPools,
         scheduler: BaseScheduler,
         workload: Workload,
-        workload_loader: Optional[WorkloadLoaderV2] = None,
+        workload_loader: Optional[WorkloadLoaderDynamic] = None,
         loop_timeout: EventTime = EventTime(time=sys.maxsize, unit=EventTime.Unit.US),
         scheduler_frequency: EventTime = EventTime(time=-1, unit=EventTime.Unit.US),
         _flags: Optional["absl.flags"] = None,

@@ -11,4 +11,4 @@ from .worker_loader import WorkerLoader
 from .worker_loader_benchmark import WorkerLoaderBenchmark
 from .workload_loader import WorkloadLoader
 from .workload_loader_clockwork_bursty import WorkloadLoaderClockworkBursty
-from .workload_loader_v2 import WorkloadLoaderV2
+from .workload_loader_dynamic import WorkloadLoaderDynamic

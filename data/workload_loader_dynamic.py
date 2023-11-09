@@ -4,9 +4,10 @@ from typing import Generator
 from workload.workload import Workload
 
 
-class WorkloadLoaderV2(abc.ABC):
+class WorkloadLoaderDynamic(abc.ABC):
     """
-    Abstract base class for loading Workload.
+    Abstract base class for workload loaders that can load workload dynamically
+    instead of all at once.
     """
 
     @abc.abstractmethod

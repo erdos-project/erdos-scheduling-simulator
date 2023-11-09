@@ -7,7 +7,7 @@ from collections import defaultdict
 from typing import Generator, List, Mapping, Optional
 
 import absl
-from data.workload_loader_v2 import WorkloadLoaderV2  # noqa: F401
+from data.workload_loader_dynamic import WorkloadLoaderDynamic  # noqa: F401
 
 from utils import EventTime
 from workload import (
@@ -22,7 +22,7 @@ from workload import (
 )
 
 
-class AlibabaLoader(WorkloadLoaderV2):
+class AlibabaLoader(WorkloadLoaderDynamic):
     """Loads the Alibaba trace from the provided file.
 
     Args:
