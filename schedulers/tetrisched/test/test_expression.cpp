@@ -245,6 +245,7 @@ TEST(Expression, TestMaxExpressionEnforcesSingleChoice) {
 
   // Translate and solve the model.
   cplexSolver.translateModel();
+  cplexSolver.exportModel("testMaxExpressionEnforcesSingleChoice_2.lp");
   cplexSolver.solveModel();
 
   auto result = objectiveExpression->populateResults(solverModelPtr);
@@ -511,7 +512,7 @@ TEST(Expression, TestMalleableChooseExpressionConstructsVariableRectangles) {
   auto solverModelPtr = gurobiSolver.getModel();
 
   // Construct a CapacityConstraintMap and parse the expression tree.
-  tetrisched::CapacityConstraintMap capacityConstraintMap;
+  tetrisched::CapacityConstraintMap capacityConstraintMap(2);
   auto _ = objectiveExpression->parse(solverModelPtr, partitions,
                                       capacityConstraintMap, 0);
   solverModelPtr->exportModel("testMalleableChooseVariableRectangle.lp");
@@ -534,5 +535,57 @@ TEST(Expression, TestMalleableChooseExpressionConstructsVariableRectangles) {
   }
   EXPECT_EQ(totalAllocationSum, 10)
       << "The total allocation on partition 1 should be 10.";
+}
+
+TEST(Expression, TestNonOverlappingChooseIsAllowed) {
+  // Construct the Partition.
+  tetrisched::PartitionPtr partition1 =
+      std::make_shared<tetrisched::Partition>(1, "partition1", 5);
+  tetrisched::Partitions partitions = tetrisched::Partitions({partition1});
+
+  // Construct choices for two task.
+  tetrisched::ExpressionPtr chooseTask1 =
+      std::make_shared<tetrisched::ChooseExpression>("task1", partitions, 5, 0,
+                                                     40, 1);
+  tetrisched::ExpressionPtr chooseTask2 =
+      std::make_shared<tetrisched::ChooseExpression>("task2", partitions, 5, 0,
+                                                     40, 1);
+
+  // Construct a MinExpression.
+  tetrisched::ExpressionPtr minExpression =
+      std::make_shared<tetrisched::MinExpression>("minChooseBothTasks");
+  minExpression->addChild(chooseTask1);
+  minExpression->addChild(chooseTask2);
+
+  // Construct an ObjectiveExpression.
+  tetrisched::ExpressionPtr objectiveExpression =
+      std::make_shared<tetrisched::ObjectiveExpression>("TestObjective");
+  objectiveExpression->addChild(minExpression);
+
+  // Construct a Solver.
+  tetrisched::GurobiSolver gurobiSolver = tetrisched::GurobiSolver();
+  auto solverModelPtr = gurobiSolver.getModel();
+
+  // Construct a CapacityConstraintMap and parse the expression tree.
+  tetrisched::CapacityConstraintMap capacityConstraintMap(100, true);
+  auto _ = objectiveExpression->parse(solverModelPtr, partitions,
+                                      capacityConstraintMap, 0);
+  solverModelPtr->exportModel("testNonOverlappingChooseIsAllowed.lp");
+
+  // Translate and Solve the model.
+  gurobiSolver.translateModel();
+  gurobiSolver.solveModel();
+
+  auto result = objectiveExpression->populateResults(solverModelPtr);
+  EXPECT_TRUE(result->utility) << "Result should have some utility.";
+  EXPECT_EQ(2, result->utility.value()) << "The utility should be 2.";
+  auto task1Placement = result->placements["task1"];
+  EXPECT_TRUE(task1Placement->isPlaced()) << "task1 should be placed.";
+  auto task2Placement = result->placements["task2"];
+  EXPECT_TRUE(task2Placement->isPlaced()) << "task2 should be placed.";
+  EXPECT_EQ(task1Placement->getStartTime().value(), 0)
+      << "task1 should start at 0.";
+  EXPECT_EQ(task2Placement->getStartTime().value(), 0)
+      << "task2 should start at 0.";
 }
 #endif

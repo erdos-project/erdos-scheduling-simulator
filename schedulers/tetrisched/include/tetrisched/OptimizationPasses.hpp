@@ -70,8 +70,8 @@ class CriticalPathOptimizationPass : public OptimizationPass {
 /// they are trivially satisfied by the Expression tree.
 class CapacityConstraintMapPurgingOptimizationPass : public OptimizationPass {
  private:
-  /// A Vector of the cliques in the Expression tree.
-  std::vector<std::unordered_set<std::string>> cliques;
+  /// A HashMap of the Expression ID to the cliques in the Expression tree.
+  std::unordered_map<std::string, std::unordered_set<std::string>> cliques;
 
   /// Computes the cliques from a bottom-up traversal of the STRL.
   void computeCliques(ExpressionPtr expression);
