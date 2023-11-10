@@ -27,11 +27,30 @@ class TetriSchedScheduler(BaseScheduler):
             that are currently running.
         runtime (`EventTime`): The runtime to return to the Simulator (in us).
             If -1, the scheduler returns the actual runtime.
+        lookahead (`EventTime`): The scheduler will try to place tasks that are within
+            the scheduling lookahead (in us) using estimated task release times.
         enforce_deadlines (`bool`): If True then deadlines must be met or else the
             `schedule()` will return None.
         retract_schedules (`bool`): If the scheduler schedules future tasks, then
             setting this to `True` enables the scheduler to retract prior scheduling
             decisions before they are actually placed on the WorkerPools.
+        release_taskgraphs (`bool`): If `True`, the scheduler releases the TaskGraphs
+            that are ready for scheduling. Turning this to `False` turns the scheduler
+            to a task-by-task scheduler that only schedules the available frontier of
+            tasks.
+        goal (`str`): The goal to use as the optimization objective.
+        time_discretization (`EventTime`): The time discretization at which the
+            scheduling decisions are made.
+        plan_ahead (`EventTime`): The time in the future up to which the time
+            discretizations are to be generated for possible placements. The default
+            value sets it to the maximum deadline from the available tasks. If the
+            plan_ahead is set to low values, and `drop_skipped_tasks` is set in the
+            Simulator, then tasks may be dropped that could have otherwise been
+            scheduled leading to lower goodput.
+        log_to_file (`bool`): If `True`, the scheduler writes the Gurobi search
+            log to files with the format "gurobi_{sim_time}.log".
+        _flags (`Optional[absl.flags]`): The runtime flags that are used to initialize
+            a logger instance.
     """
 
     def __init__(
@@ -42,6 +61,7 @@ class TetriSchedScheduler(BaseScheduler):
         enforce_deadlines: bool = False,
         retract_schedules: bool = False,
         release_taskgraphs: bool = False,
+        goal: str = "max_goodput",
         time_discretization: EventTime = EventTime(1, EventTime.Unit.US),
         plan_ahead: EventTime = EventTime.invalid(),
         log_to_file: bool = False,
@@ -62,6 +82,7 @@ class TetriSchedScheduler(BaseScheduler):
             release_taskgraphs=release_taskgraphs,
             _flags=_flags,
         )
+        self._goal = goal
         self._time_discretization = time_discretization.to(EventTime.Unit.US)
         self._plan_ahead = plan_ahead.to(EventTime.Unit.US)
         self._max_deadline_plan_ahead = False
@@ -162,19 +183,26 @@ class TetriSchedScheduler(BaseScheduler):
                     current_time=sim_time, end_time=self._plan_ahead
                 )
             ]
-            placement_rewards = dict(
-                zip(
-                    placement_reward_discretizations,
-                    np.interp(
+
+            # If the goal of the scheduler is to minimize the placement delay, we
+            # value earlier placement choices for each task higher. Note that this
+            # usually leads to a higher scheduler runtime since the solver has to close
+            # the gap between the best bound and the objective.
+            placement_rewards = None
+            if self._goal == "min_placement_delay":
+                placement_rewards = dict(
+                    zip(
                         placement_reward_discretizations,
-                        (
-                            min(placement_reward_discretizations),
-                            max(placement_reward_discretizations),
+                        np.interp(
+                            placement_reward_discretizations,
+                            (
+                                min(placement_reward_discretizations),
+                                max(placement_reward_discretizations),
+                            ),
+                            (2, 1),
                         ),
-                        (2, 1),
-                    ),
+                    )
                 )
-            )
 
             # Construct the STRL expressions for each TaskGraph and add them together
             # in a single objective expression.
@@ -188,8 +216,7 @@ class TetriSchedScheduler(BaseScheduler):
                     partitions=partitions,
                     tasks_to_be_scheduled=tasks_to_be_scheduled
                     + previously_placed_tasks,
-                    # placement_rewards=placement_rewards,
-                    placement_rewards=None,
+                    placement_rewards=placement_rewards,
                 )
                 if task_graph_strl is not None:
                     constructed_task_graphs.add(task_graph_name)
@@ -679,7 +706,9 @@ class TetriSchedScheduler(BaseScheduler):
             return task_strls[task.id]
 
         # Construct the STRL expression for this Task.
-        if tasks_to_be_scheduled is not None and task in tasks_to_be_scheduled:
+        if tasks_to_be_scheduled is None or (
+            tasks_to_be_scheduled is not None and task in tasks_to_be_scheduled
+        ):
             self._logger.debug(
                 f"[{current_time.time}] Constructing the TaskGraph STRL for the "
                 f"graph {task_graph.name} rooted at {task.unique_name}."
@@ -837,4 +866,5 @@ class TetriSchedScheduler(BaseScheduler):
             )
             for root_task_strl in root_task_strls.values():
                 min_expression_task_graph.addChild(root_task_strl)
+            return min_expression_task_graph
             return min_expression_task_graph
