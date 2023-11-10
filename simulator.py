@@ -288,9 +288,13 @@ class Simulator(object):
         self._scheduler = scheduler
         self._workload = workload
         self._job_graph_loader = job_graph_loader
+        self._job_graph_batch = 1
+        self._randomize_start_time_max = _flags.randomize_start_time_max
         self._simulator_time = EventTime(time=0, unit=EventTime.Unit.US)
         self._scheduler_frequency = scheduler_frequency
         self._loop_timeout = loop_timeout
+        # TODO: Remove this
+        self._task_id_added_to_event_queue = set()
 
         self._worker_pools = worker_pools
         self._logger.info("The Worker Pools are: ")
@@ -363,8 +367,6 @@ class Simulator(object):
             self._simulator_time.time,
             sched_start_event,
         )
-
-        self.task_id_added_to_event_queue = {}
 
     def dry_run(self) -> None:
         """Displays the order in which the TaskGraphs will be released."""
@@ -1391,20 +1393,6 @@ class Simulator(object):
                 worker_pool,
             )
 
-    def __assert_task_has_not_been_added_to_event_queue_before(self, task: Task) -> None:
-        """
-        This function is makes debugging easier. It asserts that the task has not been added to the event queue before.
-        """
-        if task.name in self.task_id_added_to_event_queue:
-            self._logger.error(
-                "[%s] Task %s has already been added to the event queue before at %s. Why adding it again?",
-                self._simulator_time.time,
-                task,
-                self.task_id_added_to_event_queue[task.name]
-            )
-        else:
-            self.task_id_added_to_event_queue[task.name] = self._simulator_time.time
-
     def __get_next_jobs(self) -> None:
         self._logger.info(
                 "[%s] Loading next batch of jobs ...",
@@ -1442,7 +1430,10 @@ class Simulator(object):
             return
         
         for task in releasable_tasks:
-            self.__assert_task_has_not_been_added_to_event_queue_before(task)
+            if task.id in self._task_id_added_to_event_queue:
+                continue
+            else:
+                self._task_id_added_to_event_queue.add(task.id)
             event = Event(
                 event_type=EventType.TASK_RELEASE,
                 time=task.release_time,
@@ -1458,12 +1449,22 @@ class Simulator(object):
             )
         
         max_release_time = max([task.release_time for task in releasable_tasks], key = lambda x: x.time)
+        self._logger.info(f"[{self._simulator_time.time}] Added LOAD_NEW_JOBS event to the event queue at time {self._randomize_start_time_max * self._job_graph_batch}.")
         self._event_queue.add_event(
             Event(
                 event_type=EventType.LOAD_NEW_JOBS,
-                time=max_release_time,
+                # time=max_release_time,
+                time=EventTime(self._randomize_start_time_max * self._job_graph_batch, EventTime.Unit.US) 
             )
         )
+        self._logger.info(
+                "[%s] Added %s for %s from %s to the event queue.",
+                self._simulator_time.time,
+                event,
+                task,
+                task.task_graph,
+            )
+        self._job_graph_batch += 1
 
     def __handle_event(self, event: Event) -> bool:
         """Handles the next event from the EventQueue.

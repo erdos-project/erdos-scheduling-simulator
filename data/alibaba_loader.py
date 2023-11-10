@@ -37,6 +37,8 @@ class AlibabaLoader(JobGraphLoader):
         self._path = path
         self._flags = _flags
         self._job_data_generator = None
+        self._random_instance = random.Random(_flags.random_seed)
+        
 
     def _initialize_job_data_generator(self):
         """
@@ -71,7 +73,7 @@ class AlibabaLoader(JobGraphLoader):
         # Create the ReleasePolicy.
         release_policy = None
         start_time = EventTime(
-            time=start_time_offset + random.randint(
+            time=start_time_offset + self._random_instance.randint(
                 self._flags.randomize_start_time_min, self._flags.randomize_start_time_max
             ),
             unit=EventTime.Unit.US,
@@ -177,7 +179,7 @@ class AlibabaLoader(JobGraphLoader):
     def get_next_jobs(self, start_time_offset: int = 0) -> Sequence[JobGraph]:
         if self._job_data_generator is None:
             self._initialize_job_data_generator()
-
+        print(f"{start_time_offset=}")
         if self._batch_size <= 0:
             return [self._convert_job_data_to_job_graph(job_graph_name, job_tasks, start_time_offset) \
                            for job_graph_name, job_tasks in self._job_data_generator]
