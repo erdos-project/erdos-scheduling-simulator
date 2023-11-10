@@ -1399,7 +1399,7 @@ class Simulator(object):
                 self._simulator_time.time,
             )
         
-        new_jobs = self._job_graph_loader.get_next_jobs(self._simulator_time.time)
+        new_jobs = self._job_graph_loader.get_next_jobs(self._randomize_start_time_max * (self._job_graph_batch - 1))
         if len(new_jobs) == 0:
             self._logger.info(
                 "[%s] No more jobs to load.",
@@ -1448,7 +1448,7 @@ class Simulator(object):
                 task.task_graph,
             )
         
-        max_release_time = max([task.release_time for task in releasable_tasks], key = lambda x: x.time)
+        # max_release_time = max([task.release_time for task in releasable_tasks], key = lambda x: x.time)
         self._logger.info(f"[{self._simulator_time.time}] Added LOAD_NEW_JOBS event to the event queue at time {self._randomize_start_time_max * self._job_graph_batch}.")
         self._event_queue.add_event(
             Event(
