@@ -420,7 +420,7 @@ def main(args):
             workload_loader = WorkloadLoaderClockworkBursty()
             workload = workload_loader.workload
         elif FLAGS.replay_trace == "alibaba":
-            workload_loader = AlibabaLoader(
+            job_graph_loader = AlibabaLoader(
                 batch_size=FLAGS.batch_size_job_loading,
                 path=FLAGS.workload_profile_path, 
                 _flags=FLAGS
@@ -629,7 +629,7 @@ def main(args):
         # Ray: I think we may want to have a more generalize WorkloadLoader implementation and
         # have it be used in all scenarios instead of passing a fixed workload into Simulator.
         # Pass the workload_loader into Simulator allows more flexibility.
-        job_graph_loader=workload_loader if isinstance(workload_loader, JobGraphLoader) else None,
+        job_graph_loader=job_graph_loader,
         loop_timeout=EventTime(FLAGS.loop_timeout, EventTime.Unit.US),
         scheduler_frequency=EventTime(FLAGS.scheduler_frequency, EventTime.Unit.US),
         _flags=FLAGS,
