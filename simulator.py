@@ -292,8 +292,7 @@ class Simulator(object):
         self._randomize_start_time_max = _flags.randomize_start_time_max
         self._simulator_time = EventTime(time=0, unit=EventTime.Unit.US)
         self._scheduler_frequency = scheduler_frequency
-        self._loop_timeout = loop_timeout
-        # TODO: Remove this
+        self._loop_timeout = loop_timeout        
         self._task_id_added_to_event_queue = set()
 
         self._worker_pools = worker_pools
