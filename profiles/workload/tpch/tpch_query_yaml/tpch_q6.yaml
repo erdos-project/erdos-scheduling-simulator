@@ -23,10 +23,10 @@ profiles:
           - batch_size: 1
             runtime: 1150
             resource_requirements:
-                GPU:any: 24
+                Slot:any: 24
     - name: Stage2_Profile
       execution_strategies:
           - batch_size: 1
             runtime: 140
             resource_requirements:
-                GPU:any: 1
+                Slot:any: 1

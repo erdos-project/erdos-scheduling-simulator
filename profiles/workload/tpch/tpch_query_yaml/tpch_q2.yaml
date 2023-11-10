@@ -58,82 +58,82 @@ profiles:
           - batch_size: 1
             runtime: 1100
             resource_requirements:
-                GPU:any: 24
+                Slot:any: 24
     - name: Stage1_Profile
       execution_strategies:
           - batch_size: 1
             runtime: 250
             resource_requirements:
-                GPU:any: 6
+                Slot:any: 6
     - name: Stage2_Profile
       execution_strategies:
           - batch_size: 1
             runtime: 40
             resource_requirements:
-                GPU:any: 1
+                Slot:any: 1
     - name: Stage3_Profile
       execution_strategies:
           - batch_size: 1
             runtime: 250
             resource_requirements:
-                GPU:any: 6
+                Slot:any: 6
     - name: Stage4_Profile
       execution_strategies:
           - batch_size: 1
             runtime: 40
             resource_requirements:
-                GPU:any: 1
+                Slot:any: 1
     - name: Stage5_Profile
       execution_strategies:
           - batch_size: 1
             runtime: 140
             resource_requirements:
-                GPU:any: 1
+                Slot:any: 1
     - name: Stage6_Profile
       execution_strategies:
           - batch_size: 1
             runtime: 70
             resource_requirements:
-                GPU:any: 1
+                Slot:any: 1
     - name: Stage7_Profile
       execution_strategies:
           - batch_size: 1
             runtime: 50
             resource_requirements:
-                GPU:any: 1
+                Slot:any: 1
     - name: Stage9_Profile
       execution_strategies:
           - batch_size: 1
             runtime: 60
             resource_requirements:
-                GPU:any: 1
+                Slot:any: 1
     - name: Stage11_Profile
       execution_strategies:
           - batch_size: 1
             runtime: 50
             resource_requirements:
-                GPU:any: 1
+                Slot:any: 1
     - name: Stage13_Profile
       execution_strategies:
           - batch_size: 1
             runtime: 300
             resource_requirements:
-                GPU:any: 11
+                Slot:any: 11
     - name: Stage14_Profile
       execution_strategies:
           - batch_size: 1
             runtime: 420
             resource_requirements:
-                GPU:any: 11
+                Slot:any: 11
     - name: Stage16_Profile
       execution_strategies:
           - batch_size: 1
             runtime: 40
             resource_requirements:
-                GPU:any: 1
+                Slot:any: 1
     - name: Stage19_Profile
       execution_strategies:
           - batch_size: 1
             runtime: 30
             resource_requirements:
-                GPU:any: 1
+                Slot:any: 1

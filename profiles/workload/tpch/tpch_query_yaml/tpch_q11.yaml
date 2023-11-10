@@ -45,64 +45,64 @@ profiles:
           - batch_size: 1
             runtime: 1100
             resource_requirements:
-                GPU:any: 24
+                Slot:any: 24
     - name: Stage1_Profile
       execution_strategies:
           - batch_size: 1
             runtime: 110
             resource_requirements:
-                GPU:any: 1
+                Slot:any: 1
     - name: Stage2_Profile
       execution_strategies:
           - batch_size: 1
             runtime: 300
             resource_requirements:
-                GPU:any: 24
+                Slot:any: 24
     - name: Stage3_Profile
       execution_strategies:
           - batch_size: 1
             runtime: 60
             resource_requirements:
-                GPU:any: 1
+                Slot:any: 1
     - name: Stage5_Profile
       execution_strategies:
           - batch_size: 1
             runtime: 60
             resource_requirements:
-                GPU:any: 1
+                Slot:any: 1
     - name: Stage7_Profile
       execution_strategies:
           - batch_size: 1
             runtime: 350
             resource_requirements:
-                GPU:any: 15
+                Slot:any: 15
     - name: Stage9_Profile
       execution_strategies:
           - batch_size: 1
             runtime: 230
             resource_requirements:
-                GPU:any: 11
+                Slot:any: 11
     - name: Stage12_Profile
       execution_strategies:
           - batch_size: 1
             runtime: 25
             resource_requirements:
-                GPU:any: 1
+                Slot:any: 1
     - name: Stage15_Profile
       execution_strategies:
           - batch_size: 1
             runtime: 100
             resource_requirements:
-                GPU:any: 1
+                Slot:any: 1
     - name: Stage18_Profile
       execution_strategies:
           - batch_size: 1
             runtime: 75
             resource_requirements:
-                GPU:any: 1
+                Slot:any: 1
     - name: Stage22_Profile
       execution_strategies:
           - batch_size: 1
             runtime: 180
             resource_requirements:
-                GPU:any: 1
+                Slot:any: 1
