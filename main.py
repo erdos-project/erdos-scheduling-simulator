@@ -236,7 +236,8 @@ flags.DEFINE_bool(
 flags.DEFINE_integer(
     "scheduler_max_time_discretization",
     5,
-    "This is only used when  scheduler_adaptive_discretization flag is enabled. It specified the max discretization that the scheduler can have (default: 5)",
+    "The maximum discretization that the scheduler can have (in µs). "
+    "Only used when scheduler_adaptive_discretization flag is enabled. (default: 5)",
 )
 flags.DEFINE_integer(
     "scheduler_delay",
@@ -608,7 +609,9 @@ def main(args):
             log_to_file=FLAGS.scheduler_log_to_file,
             adaptive_discretization=FLAGS.scheduler_adaptive_discretization,
             _flags=FLAGS,
-            max_time_discretization=EventTime(FLAGS.scheduler_max_time_discretization, EventTime.Unit.US)
+            max_time_discretization=EventTime(
+                FLAGS.scheduler_max_time_discretization, EventTime.Unit.US
+            ),
         )
     else:
         raise ValueError(
