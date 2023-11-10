@@ -88,12 +88,18 @@ class CapacityConstraintMap {
       capacityConstraints;
   /// The default granularity for the capacity constraints.
   Time granularity;
+  /// for dynamic granularities
+  std::vector<std::tuple<TimeRange,Time>> time_based_granularties;
+  /// if True, dynamic discretization is enabled
+  bool useDynamicDiscretization;
 
   friend class CapacityConstraintMapPurgingOptimizationPass;
 
  public:
   /// Initialize a CapacityConstraintMap with the given granularitqy.
   CapacityConstraintMap(Time granularity, bool useOverlapConstraints = false);
+  /// Initialize a CapacityConstraintMap with the given granularitqy.
+  CapacityConstraintMap(std::vector<std::tuple<TimeRange, Time>> time_based_granularties, bool useOverlapConstraints = false);
 
   /// Initialize a CapacityConstraintMap with the granularity of 1.
   CapacityConstraintMap();

@@ -122,10 +122,12 @@ std::string CapacityConstraint::getName() const { return name; }
 
 CapacityConstraintMap::CapacityConstraintMap(Time granularity,
                                              bool useOverlapConstraints)
-    : granularity(granularity), useOverlapConstraints(useOverlapConstraints) {}
+    : granularity(granularity), useOverlapConstraints(useOverlapConstraints), useDynamicDiscretization(false) {}
+
+CapacityConstraintMap::CapacityConstraintMap(std::vector<std::tuple<TimeRange, Time>> time_based_granularties, bool useOverlapConstraints) : time_based_granularties(time_based_granularties), useOverlapConstraints(useOverlapConstraints), useDynamicDiscretization(true) {}
 
 CapacityConstraintMap::CapacityConstraintMap()
-    : granularity(1), useOverlapConstraints(false) {}
+    : granularity(1), useOverlapConstraints(false), useDynamicDiscretization(false) {}
 
 void CapacityConstraintMap::registerUsageAtTime(
     const ExpressionPtr expression, const Partition& partition, Time time,
@@ -156,18 +158,61 @@ void CapacityConstraintMap::registerUsageForDuration(
     const ExpressionPtr expression, const Partition& partition, Time startTime,
     Time duration, const IndicatorT usageIndicator,
     const PartitionUsageT variable, std::optional<Time> granularity) {
-  Time _granularity = granularity.value_or(this->granularity);
-  Time remainderTime = duration;
-  for (Time time = startTime; time < startTime + duration;
-       time += _granularity) {
-    if (remainderTime > _granularity) {
-      registerUsageAtTime(expression, partition, time, usageIndicator, variable,
-                          _granularity);
-      remainderTime -= _granularity;
-    } else {
-      registerUsageAtTime(expression, partition, time, usageIndicator, variable,
-                          remainderTime);
-      remainderTime = 0;
+  
+  if(! useDynamicDiscretization){
+    Time _granularity = granularity.value_or(this->granularity);
+    Time remainderTime = duration;
+    for (Time time = startTime; time < startTime + duration;
+        time += _granularity) {
+      if (remainderTime > _granularity) {
+        registerUsageAtTime(expression, partition, time, usageIndicator, variable,
+                            _granularity);
+        remainderTime -= _granularity;
+      } else {
+        registerUsageAtTime(expression, partition, time, usageIndicator, variable,
+                            remainderTime);
+        remainderTime = 0;
+      }
+    }
+  } else{
+    // find the right interval for this start time
+    Time remainderTime = duration;
+    Time time = startTime;
+    int spaceTimeIndex = 0;
+    while (time < (startTime + duration)) {
+      // find the starting slot
+      std::tuple<TimeRange, Time> slot;
+      
+      Time slotStartTime, slotEndTime;
+      for (; spaceTimeIndex < time_based_granularties.size(); spaceTimeIndex++)
+      {
+        slot = time_based_granularties[spaceTimeIndex];
+        slotEndTime = std::get<1>(std::get<0>(slot));
+        slotStartTime = std::get<0>(std::get<0>(slot));
+        if (time < slotEndTime){
+          break;
+        }
+      }
+      if (spaceTimeIndex == time_based_granularties.size()){
+        throw tetrisched::exceptions::ExpressionConstructionException("Wrong start time specified: " + startTime);
+      }
+      Time localGranularity = std::get<1>(slot);
+      for (; time < std::min(startTime + duration, slotEndTime);
+           time += localGranularity)
+      {
+        if (remainderTime > localGranularity)
+        {
+          registerUsageAtTime(expression, partition, time, usageIndicator, variable,
+                              localGranularity);
+          remainderTime -= localGranularity;
+        }
+        else
+        {
+          registerUsageAtTime(expression, partition, time, usageIndicator, variable,
+                              remainderTime);
+          remainderTime = 0;
+        }
+      }
     }
   }
 }
