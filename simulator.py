@@ -229,7 +229,7 @@ class Simulator(object):
         self,
         worker_pools: WorkerPools,
         scheduler: BaseScheduler,
-        workload: Workload,
+        workload: Optional[Workload] = None ,
         job_graph_loader: Optional[JobGraphLoader] = None,
         loop_timeout: EventTime = EventTime(time=sys.maxsize, unit=EventTime.Unit.US),
         scheduler_frequency: EventTime = EventTime(time=-1, unit=EventTime.Unit.US),
@@ -244,6 +244,10 @@ class Simulator(object):
         if type(scheduler_frequency) != EventTime:
             raise ValueError(
                 f"Unexpected type of scheduler_frequency: {type(scheduler_frequency)}"
+            )
+        if workload is None and job_graph_loader is None:
+            raise ValueError(
+                "Either a Workload or a JobGraphLoader must be provided."
             )
 
         # Set up the logger.
@@ -283,12 +287,10 @@ class Simulator(object):
         # Simulator variables.
         self._scheduler = scheduler
         self._workload = workload
-        if self._workload is not None:
-            self._workload.populate_task_graphs(loop_timeout)
+        self._job_graph_loader = job_graph_loader
         self._simulator_time = EventTime(time=0, unit=EventTime.Unit.US)
         self._scheduler_frequency = scheduler_frequency
         self._loop_timeout = loop_timeout
-        self._job_graph_loader = job_graph_loader
 
         self._worker_pools = worker_pools
         self._logger.info("The Worker Pools are: ")
@@ -449,6 +451,7 @@ class Simulator(object):
             # Load initial batch of workload
             self.__get_next_jobs()
         else:
+            self._workload.populate_task_graphs(self._loop_timeout)
             # Retrieve the set of released tasks from the graph.
             # At the beginning, this should consist of all the sensor tasks
             # that we expect to run during the execution of the workload,
