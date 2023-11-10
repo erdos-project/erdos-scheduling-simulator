@@ -1,0 +1,117 @@
+graphs:
+    - name: TPCH_Q20
+      graph:
+          - name: Stage0
+            work_profile: Stage0_Profile 
+            children: ["Stage3"]
+          - name: Stage1
+            work_profile: Stage1_Profile
+            children: ["Stage5"]
+          - name: Stage2
+            work_profile: Stage2_Profile
+            children: ["Stage12"]
+          - name: Stage3
+            work_profile: Stage3_Profile
+            children: ["Stage10"]
+          - name: Stage5
+            work_profile: Stage5_Profile
+            children: ["Stage8"]
+          - name: Stage7
+            work_profile: Stage7_Profile
+            children: ["Stage12"]
+          - name: Stage8
+            work_profile: Stage8_Profile
+            children: ["Stage7"]
+          - name: Stage10
+            work_profile: Stage10_Profile
+            children: ["Stage15","Stage18"]
+          - name: Stage12
+            work_profile: Stage12_Profile
+            children: ["Stage15","Stage18"]
+          - name: Stage15
+            work_profile: Stage15_Profile
+            children: ["Stage22"]
+          - name: Stage18
+            work_profile: Stage18_Profile
+            children: ["Stage22"]
+          - name: Stage22
+            work_profile: Stage22_Profile
+            children: []
+      release_policy: fixed
+      period: 0
+      invocations: 1
+      deadline_variance: [2000, 2000]
+
+profiles:
+    - name: Stage0_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 460
+            resource_requirements:
+                GPU:any: 1
+    - name: Stage1_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 1220
+            resource_requirements:
+                GPU:any: 6
+    - name: Stage2_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 1970
+            resource_requirements:
+                GPU:any: 24
+    - name: Stage3_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 170
+            resource_requirements:
+                GPU:any: 1
+    - name: Stage5_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 150
+            resource_requirements:
+                GPU:any: 1
+    - name: Stage7_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 15
+            resource_requirements:
+                GPU:any: 1
+    - name: Stage8_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 300
+            resource_requirements:
+                GPU:any: 24
+    - name: Stage10_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 40
+            resource_requirements:
+                GPU:any: 1
+    - name: Stage12_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 400
+            resource_requirements:
+                GPU:any: 11
+    - name: Stage15_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 50
+            resource_requirements:
+                GPU:any: 1
+    - name: Stage18_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 40
+            resource_requirements:
+                GPU:any: 1
+    - name: Stage22_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 120
+            resource_requirements:
+                GPU:any: 1

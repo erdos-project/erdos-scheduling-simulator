@@ -1,0 +1,36 @@
+graphs:
+    - name: TPCH_Q19
+      graph:
+          - name: Stage0
+            work_profile: Stage0_Profile 
+            children: ["Stage1"]
+          - name: Stage1
+            work_profile: Stage1_Profile
+            children: ["Stage3"]
+          - name: Stage3
+            work_profile: Stage3_Profile
+            children: []
+      release_policy: fixed
+      period: 0
+      invocations: 1
+      deadline_variance: [2000, 2000]
+
+profiles:
+    - name: Stage0_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 550
+            resource_requirements:
+                GPU:any: 6
+    - name: Stage1_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 900
+            resource_requirements:
+                GPU:any: 24
+    - name: Stage3_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 135
+            resource_requirements:
+                GPU:any: 1

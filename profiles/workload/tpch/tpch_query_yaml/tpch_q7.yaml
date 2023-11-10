@@ -1,0 +1,140 @@
+graphs:
+    - name: TPCH_Q7
+      graph:
+          - name: Stage0
+            work_profile: Stage0_Profile 
+            children: ["Stage12"]
+          - name: Stage1
+            work_profile: Stage1_Profile
+            children: ["Stage3","Stage4"]
+          - name: Stage2
+            work_profile: Stage2_Profile
+            children: ["Stage10"]
+          - name: Stage3
+            work_profile: Stage3_Profile
+            children: ["Stage8"]
+          - name: Stage4
+            work_profile: Stage4_Profile
+            children: ["Stage15"]
+          - name: Stage6
+            work_profile: Stage6_Profile
+            children: ["Stage18"]
+          - name: Stage8
+            work_profile: Stage8_Profile
+            children: ["Stage12"]
+          - name: Stage10
+            work_profile: Stage10_Profile
+            children: ["Stage18"]
+          - name: Stage12
+            work_profile: Stage12_Profile
+            children: ["Stage6"]
+          - name: Stage15
+            work_profile: Stage15_Profile
+            children: ["Stage10"]
+          - name: Stage18
+            work_profile: Stage18_Profile
+            children: ["Stage22","Stage26"]
+          - name: Stage22
+            work_profile: Stage22_Profile
+            children: ["Stage31"]
+          - name: Stage26
+            work_profile: Stage26_Profile
+            children: ["Stage31"]
+          - name: Stage31
+            work_profile: Stage31_Profile
+            children: []
+
+
+
+      release_policy: fixed
+      period: 0
+      invocations: 1
+      deadline_variance: [2000, 2000]
+
+
+
+profiles:
+    - name: Stage0_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 1180
+            resource_requirements:
+                GPU:any: 24
+    - name: Stage1_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 60
+            resource_requirements:
+                GPU:any: 1
+    - name: Stage2_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 1300
+            resource_requirements:
+                GPU:any: 24
+    - name: Stage3_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 1000
+            resource_requirements:
+                GPU:any: 6
+    - name: Stage4_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 95
+            resource_requirements:
+                GPU:any: 1
+    - name: Stage6_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 60
+            resource_requirements:
+                GPU:any: 1
+    - name: Stage8_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 60
+            resource_requirements:
+                GPU:any: 1
+    - name: Stage10_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 350
+            resource_requirements:
+                GPU:any: 24
+    - name: Stage12_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 120
+            resource_requirements:
+                GPU:any: 16
+    - name: Stage15_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 130
+            resource_requirements:
+                GPU:any: 1
+    - name: Stage18_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 190
+            resource_requirements:
+                GPU:any: 4
+    - name: Stage22_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 50
+            resource_requirements:
+                GPU:any: 1
+    - name: Stage26_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 30
+            resource_requirements:
+                GPU:any: 1
+    - name: Stage31_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 120
+            resource_requirements:
+                GPU:any: 1

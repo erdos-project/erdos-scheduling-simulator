@@ -1,0 +1,72 @@
+graphs:
+    - name: TPCH_Q18
+      graph:
+          - name: Stage0
+            work_profile: Stage0_Profile 
+            children: ["Stage9"]
+          - name: Stage1
+            work_profile: Stage1_Profile
+            children: ["Stage9"]
+          - name: Stage2
+            work_profile: Stage2_Profile
+            children: ["Stage9"]
+          - name: Stage3
+            work_profile: Stage3_Profile
+            children: ["Stage5"]
+          - name: Stage5
+            work_profile: Stage5_Profile
+            children: ["Stage9"]
+          - name: Stage9
+            work_profile: Stage9_Profile
+            children: ["Stage10"]
+          - name: Stage10
+            work_profile: Stage10_Profile
+            children: []
+      release_policy: fixed
+      period: 0
+      invocations: 1
+      deadline_variance: [2000, 2000]
+
+profiles:
+    - name: Stage0_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 1850
+            resource_requirements:
+                GPU:any: 24
+    - name: Stage1_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 600
+            resource_requirements:
+                GPU:any: 24
+    - name: Stage2_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 780
+            resource_requirements:
+                GPU:any: 24
+    - name: Stage3_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 250
+            resource_requirements:
+                GPU:any: 6
+    - name: Stage5_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 200
+            resource_requirements:
+                GPU:any: 1
+    - name: Stage9_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 1425
+            resource_requirements:
+                GPU:any: 25
+    - name: Stage10_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 100
+            resource_requirements:
+                GPU:any: 1

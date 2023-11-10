@@ -1,0 +1,77 @@
+graphs:
+    - name: TPCH_Q4
+      graph:
+          - name: Stage0
+            work_profile: Stage0_Profile
+            children: ["Stage5"]
+          - name: Stage1
+            work_profile: Stage1_Profile
+            children: ["Stage3"]
+          - name: Stage3
+            work_profile: Stage3_Profile
+            children: ["Stage5"]
+          - name: Stage5
+            work_profile: Stage5_Profile
+            children: ["Stage8","Stage11"]
+          - name: Stage8
+            work_profile: Stage8_Profile
+            children: ["Stage15"]
+          - name: Stage11
+            work_profile: Stage11_Profile
+            children: ["Stage15"]
+          - name: Stage15
+            work_profile: Stage15_Profile
+            children: []
+
+
+      release_policy: fixed
+      period: 0
+      invocations: 1
+      deadline_variance: [2000, 2000]
+
+
+
+profiles:
+    - name: Stage0_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 1850
+            resource_requirements:
+                GPU:any: 24
+    - name: Stage1_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 450
+            resource_requirements:
+                GPU:any: 24
+    - name: Stage3_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 120
+            resource_requirements:
+                GPU:any: 1
+    - name: Stage5_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 440
+            resource_requirements:
+                GPU:any: 7
+    - name: Stage8_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 25
+            resource_requirements:
+                GPU:any: 1
+    - name: Stage11_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 25
+            resource_requirements:
+                GPU:any: 1
+    - name: Stage15_Profile
+      execution_strategies:
+          - batch_size: 1
+            runtime: 130
+            resource_requirements:
+                GPU:any: 1
+ 
