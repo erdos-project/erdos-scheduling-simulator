@@ -655,7 +655,9 @@ class TetriSchedScheduler(BaseScheduler):
             return task_strls[task.id]
 
         # Construct the STRL expression for this Task.
-        if tasks_to_be_scheduled is not None and task in tasks_to_be_scheduled:
+        if tasks_to_be_scheduled is None or (
+            tasks_to_be_scheduled is not None and task in tasks_to_be_scheduled
+        ):
             self._logger.debug(
                 f"[{current_time.time}] Constructing the TaskGraph STRL for the "
                 f"graph {task_graph.name} rooted at {task.unique_name}."
