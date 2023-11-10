@@ -71,8 +71,10 @@ class TetriSchedScheduler(BaseScheduler):
     ):
         if preemptive:
             raise ValueError("TetrischedScheduler does not support preemption.")
-        if enforce_deadlines == False and plan_ahead.is_invalid():
-            raise ValueError("Specify Plan-Ahead if deadline is not enforced.")
+        if not enforce_deadlines and plan_ahead.is_invalid():
+            raise ValueError(
+                "Plan-Ahead must be specified if deadlines are not enforced."
+            )
         super(TetriSchedScheduler, self).__init__(
             preemptive=preemptive,
             runtime=runtime,
@@ -85,9 +87,6 @@ class TetriSchedScheduler(BaseScheduler):
         self._goal = goal
         self._time_discretization = time_discretization.to(EventTime.Unit.US)
         self._plan_ahead = plan_ahead.to(EventTime.Unit.US)
-        self._max_deadline_plan_ahead = False
-        if self._plan_ahead.is_invalid():
-            self._max_deadline_plan_ahead = True
         self._scheduler = tetrisched.Scheduler(
             self._time_discretization.time, tetrisched.backends.SolverBackendType.GUROBI
         )
@@ -98,7 +97,8 @@ class TetriSchedScheduler(BaseScheduler):
             and self._max_discretization.time < self._time_discretization.time
         ):
             raise ValueError(
-                f"Max dicretization should be greater than or equal to time discretization but currently it is not"
+                "Max dicretization should be greater than or equal to "
+                "time discretization but currently it is not"
             )
         self._log_to_file = log_to_file
         self._log_times = set(map(int, _flags.scheduler_log_times)) if _flags else set()
@@ -170,17 +170,25 @@ class TetriSchedScheduler(BaseScheduler):
 
             # Construct the rewards for placement of the tasks.
             # Find the plan-ahead window to normalize the rewards for the tasks.
-            # plan_ahead = self._plan_ahead
-            plan_ahead = EventTime(0, EventTime.Unit.US)
-            if self._max_deadline_plan_ahead:
-                for task in tasks_to_be_scheduled:
-                    if task.deadline > plan_ahead:
-                        plan_ahead = task.deadline
-                self._plan_ahead = plan_ahead
+            # If enforce_deadlines is set to true, then we use the maximum deadline
+            # across all the jobs in this scheduling cycle to decide the plan-ahead.
+            plan_ahead_this_cycle = None
+            if self.enforce_deadlines:
+                plan_ahead_this_cycle = max(
+                    task.deadline for task in tasks_to_be_scheduled
+                )
+            else:
+                if self._plan_ahead.is_invalid():
+                    raise RuntimeError(
+                        "A Plan-Ahead value must be specified "
+                        "if deadlines are not being enforced."
+                    )
+                plan_ahead_this_cycle = self._plan_ahead
+
             placement_reward_discretizations = [
                 t.to(EventTime.Unit.US).time
                 for t in self._get_time_discretizations_until(
-                    current_time=sim_time, end_time=self._plan_ahead
+                    current_time=sim_time, end_time=plan_ahead_this_cycle
                 )
             ]
 
@@ -214,6 +222,7 @@ class TetriSchedScheduler(BaseScheduler):
                     current_time=sim_time,
                     task_graph=task_graph,
                     partitions=partitions,
+                    plan_ahead=plan_ahead_this_cycle,
                     tasks_to_be_scheduled=tasks_to_be_scheduled
                     + previously_placed_tasks,
                     placement_rewards=placement_rewards,
@@ -229,7 +238,9 @@ class TetriSchedScheduler(BaseScheduler):
                 # If this child is not in the TaskGraphs to be scheduled, then we
                 # add it to the root expression.
                 if task.task_graph not in constructed_task_graphs:
-                    task_strl = self.construct_task_strl(sim_time, task, partitions)
+                    task_strl = self.construct_task_strl(
+                        sim_time, task, partitions, plan_ahead_this_cycle
+                    )
                     if task_strl is not None:
                         objective_strl.addChild(task_strl)
 
@@ -429,7 +440,7 @@ class TetriSchedScheduler(BaseScheduler):
             max_discretization = self._max_discretization.to(EventTime.Unit.US).time
             num_interval = self._max_discretization.to(EventTime.Unit.US).time
             initial_repetitions = (
-                self._plan_ahead.to(EventTime.Unit.US).time - start_time
+                end_time - start_time
             ) // 4  # 1/4th of the time min discretization should be repeated
             initial_repetitions = max(initial_repetitions, 1)
 
@@ -455,6 +466,7 @@ class TetriSchedScheduler(BaseScheduler):
         current_time: EventTime,
         task: Task,
         partitions: tetrisched.Partitions,
+        plan_ahead: EventTime,
         placement_rewards: Optional[Mapping[int, float]] = None,
     ) -> tetrisched.strl.Expression:
         """Constructs the STRL expression subtree for a given Task.
@@ -496,14 +508,30 @@ class TetriSchedScheduler(BaseScheduler):
             else execution_strategy.runtime
         )
 
-        end_discretization_time = self._plan_ahead
+        time_discretizations = []
         if self.enforce_deadlines:
-            end_discretization_time = task.deadline
-
-        # Compute the time discretizations for this Task.
-        time_discretizations = self._get_time_discretizations_until(
-            current_time, end_discretization_time - task_remaining_time
-        )
+            # If the deadlines are being enforced, then we choose the minimum of the
+            # provided plan-ahead time and the time by which this task must start to
+            # meet its deadline.
+            time_discretizations.extend(
+                self._get_time_discretizations_until(
+                    current_time,
+                    min(task.deadline - task_remaining_time, current_time + plan_ahead),
+                )
+            )
+        else:
+            # If the deadlines are not being enforced, we check that the plan-ahead is
+            # not invalid and use that to generate the time discretizations.
+            if plan_ahead.is_invalid():
+                raise RuntimeError(
+                    "A non-invalid Plan-Ahead value must be specified "
+                    "if deadlines are not being enforced."
+                )
+            time_discretizations.extend(
+                self._get_time_discretizations_until(
+                    current_time, current_time + plan_ahead
+                )
+            )
         if len(time_discretizations) == 0:
             self._logger.warn(
                 f"[{current_time.time}] No time discretizations were feasible for "
@@ -679,6 +707,7 @@ class TetriSchedScheduler(BaseScheduler):
         task_graph: TaskGraph,
         partitions: tetrisched.Partitions,
         task_strls: Mapping[str, tetrisched.strl.Expression],
+        plan_ahead: EventTime,
         tasks_to_be_scheduled: Optional[List[Task]] = None,
         placement_rewards: Optional[Mapping[int, float]] = None,
     ) -> tetrisched.strl.Expression:
@@ -714,7 +743,7 @@ class TetriSchedScheduler(BaseScheduler):
                 f"graph {task_graph.name} rooted at {task.unique_name}."
             )
             task_expression = self.construct_task_strl(
-                current_time, task, partitions, placement_rewards
+                current_time, task, partitions, plan_ahead, placement_rewards
             )
         else:
             # If this Task is not in the set of Tasks that we are required to schedule,
@@ -734,6 +763,7 @@ class TetriSchedScheduler(BaseScheduler):
                 task_graph,
                 partitions,
                 task_strls,
+                plan_ahead,
                 tasks_to_be_scheduled,
                 placement_rewards,
             )
@@ -801,6 +831,7 @@ class TetriSchedScheduler(BaseScheduler):
         current_time: EventTime,
         task_graph: TaskGraph,
         partitions: tetrisched.Partitions,
+        plan_ahead: EventTime,
         tasks_to_be_scheduled: Optional[List[Task]] = None,
         placement_rewards: Optional[Mapping[int, float]] = None,
     ) -> tetrisched.strl.Expression:
@@ -836,6 +867,7 @@ class TetriSchedScheduler(BaseScheduler):
                 task_graph,
                 partitions,
                 task_strls,
+                plan_ahead,
                 tasks_to_be_scheduled,
                 placement_rewards,
             )
@@ -866,5 +898,4 @@ class TetriSchedScheduler(BaseScheduler):
             )
             for root_task_strl in root_task_strls.values():
                 min_expression_task_graph.addChild(root_task_strl)
-            return min_expression_task_graph
             return min_expression_task_graph
