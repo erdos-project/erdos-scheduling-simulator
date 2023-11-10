@@ -34,7 +34,7 @@ class EventType(Enum):
     LOG_UTILIZATION = (
         12  # Ask the simulator to log the utilization of the worker pools.
     )
-    LOAD_NEXT_WORKLOAD = 13  # Ask the simulator to load the next workload.
+    LOAD_NEW_JOBS = 13  # Ask the simulator to load a new batch of jobs.
 
     def __lt__(self, other) -> bool:
         # This method is used to order events in the event queue. We prioritize
@@ -362,6 +362,8 @@ class Simulator(object):
             sched_start_event,
         )
 
+        self.task_id_added_to_event_queue = {}
+
     def dry_run(self) -> None:
         """Displays the order in which the TaskGraphs will be released."""
         # If we are using a WorkloadLoader, we need to load the first chunk of
@@ -442,7 +444,7 @@ class Simulator(object):
     def __get_initial_releasable_tasks(self) -> None:
         if self._job_graph_loader is not None:
             # Load initial batch of workload
-            self.__get_next_workload()
+            self.__get_next_jobs()
         else:
             # Retrieve the set of released tasks from the graph.
             # At the beginning, this should consist of all the sensor tasks
@@ -1383,8 +1385,39 @@ class Simulator(object):
                 worker_pool,
             )
 
-    def __get_next_workload(self) -> None:
+    def __assert_task_has_not_been_added_to_event_queue_before(self, task: Task) -> None:
+        """
+        This function is makes debugging easier. It asserts that the task has not been added to the event queue before.
+        """
+        if task.name in self.task_id_added_to_event_queue:
+            self._logger.error(
+                "[%s] Task %s has already been added to the event queue before at %s. Why adding it again?",
+                self._simulator_time.time,
+                task,
+                self.task_id_added_to_event_queue[task.name]
+            )
+        else:
+            self.task_id_added_to_event_queue[task.name] = self._simulator_time.time
+
+    def __get_next_jobs(self) -> None:
+        self._logger.info(
+                "[%s] Loading next batch of jobs ...",
+                self._simulator_time.time,
+            )
+        
         new_jobs = self._job_graph_loader.get_next_jobs(self._simulator_time.time)
+        if len(new_jobs) == 0:
+            self._logger.info(
+                "[%s] No more jobs to load.",
+                self._simulator_time.time,
+            )
+            return
+
+        self._logger.info(
+                "[%s] Loaded %s new jobs.",
+                self._simulator_time.time,
+                len(new_jobs)
+            )
         
         if self._workload is None:
             self._workload = Workload.from_job_graphs({job.name: job for job in new_jobs}) 
@@ -1396,13 +1429,14 @@ class Simulator(object):
         
         if len(releasable_tasks) == 0:
             self._logger.warning(
-                "[%s] The workload %s has no releasable tasks when simulator executes __get_next_workload.",
+                "[%s] The workload %s has no releasable tasks when simulator executes __get_next_jobs.",
                 self._simulator_time.time,
                 self._workload,
             )
             return
-
+        
         for task in releasable_tasks:
+            self.__assert_task_has_not_been_added_to_event_queue_before(task)
             event = Event(
                 event_type=EventType.TASK_RELEASE,
                 time=task.release_time,
@@ -1420,7 +1454,7 @@ class Simulator(object):
         max_release_time = max([task.release_time for task in releasable_tasks], key = lambda x: x.time)
         self._event_queue.add_event(
             Event(
-                event_type=EventType.LOAD_NEXT_WORKLOAD,
+                event_type=EventType.LOAD_NEW_JOBS,
                 time=max_release_time,
             )
         )
@@ -1509,8 +1543,8 @@ class Simulator(object):
             return True
         elif event.event_type == EventType.LOG_UTILIZATION:
             self.__log_utilization(event.time)
-        elif event.event_type == EventType.LOAD_NEXT_WORKLOAD:
-            self.__get_next_workload()
+        elif event.event_type == EventType.LOAD_NEW_JOBS:
+            self.__get_next_jobs()
         else:
             raise ValueError(f"[{event.time}] Retrieved event of unknown type: {event}")
         return False
