@@ -370,11 +370,14 @@ class Simulator(object):
         # workload.
         while True:
             if self._job_graph_loader is not None:
-                try:
-                    self._workload = self._job_graph_loader.get_next_jobs(self._simulator_time.time)
-                    self._workload.populate_task_graphs(self._loop_timeout)
-                except StopIteration:
+                new_jobs = self._job_graph_loader.get_next_jobs(self._simulator_time.time)
+                if len(new_jobs) == 0:
                     break
+                if self._workload is None:
+                    self._workload = Workload.from_job_graphs({job.name: job for job in new_jobs}) 
+                    self._workload.populate_task_graphs(self._loop_timeout)
+                else:
+                    self._workload.add_job_graphs(new_jobs, self._loop_timeout)
 
             task_graphs = sorted(
                 self._workload.task_graphs.values(),
