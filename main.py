@@ -624,11 +624,6 @@ def main(args):
         worker_pools=worker_loader.get_worker_pools(),
         scheduler=scheduler,
         workload=workload,
-        # For now we only support loading workload in simulator class 
-        # using classes that implement WorkloadLoaderV2.
-        # Ray: I think we may want to have a more generalize WorkloadLoader implementation and
-        # have it be used in all scenarios instead of passing a fixed workload into Simulator.
-        # Pass the workload_loader into Simulator allows more flexibility.
         job_graph_loader=job_graph_loader,
         loop_timeout=EventTime(FLAGS.loop_timeout, EventTime.Unit.US),
         scheduler_frequency=EventTime(FLAGS.scheduler_frequency, EventTime.Unit.US),
