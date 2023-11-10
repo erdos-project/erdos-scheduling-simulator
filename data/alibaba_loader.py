@@ -179,10 +179,6 @@ class AlibabaLoader(JobGraphLoader):
             self._initialize_job_data_generator()
 
         if self._batch_size <= 0:
-            # Yield all jobs at once
-            # job_graphs = {job_graph_name: self._convert_job_data_to_job(job_graph_name, job_tasks, start_time_offset) \
-            #                for job_graph_name, job_tasks in self._job_data_generator}
-            # return Workload.from_job_graphs(job_graphs=job_graphs, _flags=self._flags)
             return [self._convert_job_data_to_job_graph(job_graph_name, job_tasks, start_time_offset) \
                            for job_graph_name, job_tasks in self._job_data_generator]
         else:
@@ -192,11 +188,6 @@ class AlibabaLoader(JobGraphLoader):
                     job_graph_name, job_tasks = next(self._job_data_generator)
                     job_graph = self._convert_job_data_to_job_graph(job_graph_name, job_tasks, start_time_offset)
                     batch.append(job_graph)
-                # return Workload.from_job_graphs(job_graphs={job.name: job for job in batch}, _flags=self._flags)
             except StopIteration:
                 pass
-                # if len(batch) > 0:
-                    # Yield any remaining jobs in the last batch
-                    # return Workload.from_job_graphs(job_graphs={job.name: job for job in batch}, _flags=self._flags)
-                # return  Workload.empty()
             return batch
