@@ -589,6 +589,7 @@ def main(args):
             enforce_deadlines=FLAGS.enforce_deadlines,
             retract_schedules=FLAGS.retract_schedules,
             release_taskgraphs=FLAGS.release_taskgraphs,
+            goal=FLAGS.ilp_goal,
             time_discretization=EventTime(
                 FLAGS.scheduler_time_discretization, EventTime.Unit.US
             ),

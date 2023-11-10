@@ -374,7 +374,7 @@ class Simulator(object):
                 task_graph.release_time,
                 task_graph.name,
                 task_graph.deadline,
-                task_graph.completion_time,
+                task_graph.job_graph.completion_time,
             )
 
     def simulate(self) -> None:
