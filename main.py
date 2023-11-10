@@ -97,7 +97,7 @@ flags.DEFINE_string(
 )
 flags.DEFINE_bool("stats", False, "Print the statistics from the tasks loaded.")
 flags.DEFINE_bool("dry_run", False, "If True, the simulator does not run.")
-flags.DEFINE_integer("workload_batch_size", 0, "The number of jobs to load per batch. Currently only used for replaying Alibaba Trace.")
+flags.DEFINE_integer("batch_size_job_loading", 0, "The number of jobs to load per batch. Currently only used for replaying Alibaba Trace.")
 
 # Simulator related flags.
 flags.DEFINE_integer(
@@ -421,7 +421,7 @@ def main(args):
             workload = workload_loader.workload
         elif FLAGS.replay_trace == "alibaba":
             workload_loader = AlibabaLoader(
-                batch_size=FLAGS.workload_batch_size,
+                batch_size=FLAGS.batch_size_job_loading,
                 path=FLAGS.workload_profile_path, 
                 _flags=FLAGS
             )
