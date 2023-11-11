@@ -194,7 +194,9 @@ void CapacityConstraintMap::registerUsageForDuration(
         }
       }
       if (spaceTimeIndex == time_based_granularties.size()){
-        throw tetrisched::exceptions::ExpressionConstructionException("Wrong start time specified: " + startTime);
+        if (slotEndTime < startTime + duration){
+          throw tetrisched::exceptions::ExpressionConstructionException("Wrong start time specified: " + startTime);
+        }
       }
       Time localGranularity = std::get<1>(slot);
       for (; time < std::min(startTime + duration, slotEndTime);
@@ -213,6 +215,7 @@ void CapacityConstraintMap::registerUsageForDuration(
           remainderTime = 0;
         }
       }
+      time = std::min(startTime + duration, slotEndTime);
     }
   }
 }

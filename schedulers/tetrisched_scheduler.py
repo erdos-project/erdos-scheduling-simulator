@@ -185,9 +185,20 @@ class TetriSchedScheduler(BaseScheduler):
                     )
                 plan_ahead_this_cycle = sim_time + self._plan_ahead
 
-            placement_reward_discretizations = self._get_time_discretizations_until(
-                current_time=sim_time, end_time=plan_ahead_this_cycle
-            )
+            if not self._adaptive_discretization:
+                placement_reward_discretizations = self._get_time_discretizations_until(
+                    current_time=sim_time, end_time=plan_ahead_this_cycle
+                )
+                start_end_time_list = []
+            else:
+                (
+                    placement_reward_discretizations,
+                    start_end_time_list,
+                ) = self._get_time_discretizations_until(
+                    current_time=sim_time,
+                    end_time=plan_ahead_this_cycle,
+                    return_start_end_times=True,
+                )
 
             # If the goal of the scheduler is to minimize the placement delay, we
             # value earlier placement choices for each task higher. Note that this
@@ -252,7 +263,7 @@ class TetriSchedScheduler(BaseScheduler):
             # Register the STRL expression with the scheduler and solve it.
             try:
                 self._scheduler.registerSTRL(
-                    objective_strl, partitions, sim_time.time, True
+                    objective_strl, partitions, sim_time.time, True, start_end_time_list
                 )
                 solver_start_time = time.time()
                 self._scheduler.schedule(sim_time.time)
@@ -410,7 +421,7 @@ class TetriSchedScheduler(BaseScheduler):
         return partitions
 
     def _get_time_discretizations_until(
-        self, current_time: EventTime, end_time: EventTime
+        self, current_time: EventTime, end_time: EventTime, return_start_end_times=False
     ) -> List[EventTime]:
         """Constructs the time discretizations from current_time to end_time in the
         granularity provided by the scheduler.
@@ -422,9 +433,11 @@ class TetriSchedScheduler(BaseScheduler):
         Args:
             current_time (`EventTime`): The time at which the scheduling is occurring.
             end_time (`EventTime`): The time at which the scheduling is to end.
+            return_start_end_times(bool): Returns the list of start and end time with granularities
 
         Returns:
-            A list of EventTimes that represent the time discretizations.
+            A list of EventTimes that represent the time discretizations.,
+            optionally start end times List[Tuple[Tuple[EventTime, EventTime], EventTime]]
         """
         time_discretization = self._time_discretization.to(EventTime.Unit.US).time
         start_time = (
@@ -433,12 +446,17 @@ class TetriSchedScheduler(BaseScheduler):
         end_time = end_time.to(EventTime.Unit.US).time
 
         discretizations = []
+        start_end_times = []
         if not self._adaptive_discretization:
             for discretization_time in range(
                 start_time, end_time + 1, time_discretization
             ):
                 discretizations.append(
                     EventTime(discretization_time, EventTime.Unit.US)
+                )
+            if return_start_end_times:
+                start_end_times.append(
+                    ((start_time, end_time + 1), time_discretization)
                 )
         else:
             min_discretization = self._time_discretization.to(EventTime.Unit.US).time
@@ -461,10 +479,21 @@ class TetriSchedScheduler(BaseScheduler):
             while current_time < (end_time + 1):
                 interval = intervals[min(interval_index, total_intervals - 1)]
                 discretizations.append(EventTime(current_time, EventTime.Unit.US))
-                current_time += interval
-                interval_index += 1
+                if (current_time + interval) < (end_time + 1):
+                    if return_start_end_times:
+                        start_end_times.append(
+                            ((current_time, current_time + interval), interval)
+                        )
+                else:
+                    if return_start_end_times:
+                        start_end_times.append(((current_time, end_time + 1), interval))
 
-        return discretizations
+                current_time += interval
+
+                interval_index += 1
+        if not return_start_end_times:
+            return discretizations
+        return discretizations, start_end_times
 
     def construct_task_strl(
         self,

@@ -35,7 +35,8 @@ Scheduler::Scheduler(Time discretization, SolverBackendType solverBackend)
 
 void Scheduler::registerSTRL(ExpressionPtr expression,
                              Partitions availablePartitions, Time currentTime,
-                             bool optimize) {
+                             bool optimize, std::vector<std::tuple<TimeRange, Time>> time_based_granularties)
+{
   // Clear the previously saved expressions in the SolverModel.
   solverModel->clear();
 
@@ -49,9 +50,14 @@ void Scheduler::registerSTRL(ExpressionPtr expression,
 
   // Save the expression.
   this->expression = expression;
+  CapacityConstraintMap capacityConstraintMap;
 
   // Create the CapacityConstraintMap for the STRL tree to add constraints to.
-  CapacityConstraintMap capacityConstraintMap(discretization);
+  if (time_based_granularties.size() == 0) {
+    capacityConstraintMap = CapacityConstraintMap(discretization);
+  } else {
+    capacityConstraintMap = CapacityConstraintMap(time_based_granularties);
+  }
 
   // Run the Pre-Translation OptimizationPasses on this expression.
   if (optimize) {
