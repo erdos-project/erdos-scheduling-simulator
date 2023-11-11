@@ -366,7 +366,7 @@ class Simulator(object):
         if len(task_graphs) == 0:
             self._logger.info("No TaskGraphs found in the workload.")
             return
-        
+
         for task_graph in task_graphs:
             self._logger.info(
                 "[%s] The TaskGraph %s will be released with deadline "
@@ -401,7 +401,6 @@ class Simulator(object):
                 task,
                 task.task_graph,
             )
-
 
         # Run the simulator loop.
         while True:
