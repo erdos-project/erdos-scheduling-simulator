@@ -402,6 +402,7 @@ class Simulator(object):
                 task.task_graph,
             )
 
+
         # Run the simulator loop.
         while True:
             time_until_next_event = self._event_queue.peek().time - self._simulator_time
