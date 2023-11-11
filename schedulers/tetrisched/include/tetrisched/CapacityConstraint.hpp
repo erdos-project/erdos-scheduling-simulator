@@ -88,30 +88,37 @@ class CapacityConstraintMap {
       capacityConstraints;
   /// The default granularity for the capacity constraints.
   Time granularity;
-  /// for dynamic granularities
-  std::vector<std::tuple<TimeRange,Time>> time_based_granularties;
-  /// if True, dynamic discretization is enabled
+  /// if True, dynamic discretization is enabled. In this mode, the
+  /// CapacityConstraintMap has different CapacityConstraints that cover
+  /// different times.
   bool useDynamicDiscretization;
+  /// A sorted list of TimeRange to the granularity at which that time
+  /// range needs to be discretized.
+  std::vector<std::pair<TimeRange, Time>> timeRangeToGranularities;
 
   friend class CapacityConstraintMapPurgingOptimizationPass;
 
  public:
-  /// Initialize a CapacityConstraintMap with the given granularitqy.
-  CapacityConstraintMap(Time granularity, bool useOverlapConstraints = false);
-  /// Initialize a CapacityConstraintMap with the given granularitqy.
-  CapacityConstraintMap(std::vector<std::tuple<TimeRange, Time>> time_based_granularties, bool useOverlapConstraints = false);
-
   /// Initialize a CapacityConstraintMap with the granularity of 1.
   CapacityConstraintMap();
+
+  /// Initialize a CapacityConstraintMap with the given granularitqy.
+  CapacityConstraintMap(Time granularity, bool useOverlapConstraints = false);
+
+  /// Initialize a CapacityConstraintMap with the given range-based granularity.
+  CapacityConstraintMap(
+      std::vector<std::pair<TimeRange, Time>> timeRangeToGranularities,
+      bool useOverlapConstraints = false);
 
   /// Registers the usage by the Expression for the Partition at the
   /// specified time for the specified duration, which is to be
   /// decided by the solver. The variable is expected to take on a
   /// value >= 0 only if the indicator is 1.
   void registerUsageAtTime(const ExpressionPtr expression,
-                           const Partition& partition, Time time,
+                           const Partition& partition, const Time time,
+                           const Time granularity,
                            const IndicatorT usageIndicator,
-                           const PartitionUsageT usageVariable, Time duration);
+                           const PartitionUsageT usageVariable, const Time duration);
 
   /// Registers the usage by the Expression for the Partition in the
   /// time range starting from startTime and lasting for duration as
@@ -119,8 +126,8 @@ class CapacityConstraintMap {
   /// Optionally, a step granularity can be provided. The default granularity
   /// is the one that the CapacityConstraintMap was initialized with.
   void registerUsageForDuration(const ExpressionPtr expression,
-                                const Partition& partition, Time startTime,
-                                Time duration, const IndicatorT usageIndicator,
+                                const Partition& partition, const Time startTime,
+                                const Time duration, const IndicatorT usageIndicator,
                                 const PartitionUsageT usageVariable,
                                 std::optional<Time> granularity);
 

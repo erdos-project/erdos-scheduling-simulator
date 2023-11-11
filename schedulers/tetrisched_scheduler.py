@@ -320,7 +320,10 @@ class TetriSchedScheduler(BaseScheduler):
                     try:
                         partitionId = list(partitionAllocations.keys())[0]
                     except IndexError as e:
-                        print(f"Trying to access: {partitionAllocations}")
+                        self._logger.error(
+                            f"[{sim_time.time}] Received error {e} while trying "
+                            f"to access {partitionAllocations}."
+                        )
                         raise e
                     partition = partitions.partitionMap[partitionId]
                     task_placement = Placement.create_task_placement(
@@ -433,11 +436,12 @@ class TetriSchedScheduler(BaseScheduler):
         Args:
             current_time (`EventTime`): The time at which the scheduling is occurring.
             end_time (`EventTime`): The time at which the scheduling is to end.
-            return_start_end_times(bool): Returns the list of start and end time with granularities
+            return_start_end_times(bool): Returns the list of start and end time
+                with granularities
 
         Returns:
-            A list of EventTimes that represent the time discretizations.,
-            optionally start end times List[Tuple[Tuple[EventTime, EventTime], EventTime]]
+            A list of EventTimes that represent the time discretizations, and
+            optionally start end times.
         """
         time_discretization = self._time_discretization.to(EventTime.Unit.US).time
         start_time = (
@@ -482,11 +486,19 @@ class TetriSchedScheduler(BaseScheduler):
                 if (current_time + interval) < (end_time + 1):
                     if return_start_end_times:
                         start_end_times.append(
-                            ((current_time, current_time + interval), interval)
+                            (
+                                (current_time, current_time + interval),
+                                min(end_time - current_time + 1, interval),
+                            )
                         )
                 else:
                     if return_start_end_times:
-                        start_end_times.append(((current_time, end_time + 1), interval))
+                        start_end_times.append(
+                            (
+                                (current_time, end_time + 1),
+                                min(end_time - current_time + 1, interval),
+                            )
+                        )
 
                 current_time += interval
 
