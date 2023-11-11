@@ -37,6 +37,8 @@ class AlibabaLoader(JobGraphLoader):
         self._path = path
         self._flags = _flags
         self._job_data_generator = None
+        # Set a dedicated random.Random instance to ensure reproducibility 
+        # regardless of batch_size. 
         self._random_instance = random.Random(_flags.random_seed)
         
 
