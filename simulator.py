@@ -1397,7 +1397,9 @@ class Simulator(object):
                 "[%s] Loading next batch of jobs ...",
                 self._simulator_time.time,
             )
-        
+        # When loading a batch of jobs, we release them randomly from time t to t',
+        # where t = randomize_start_time_max * (job_graph_batch - 1) and
+        # t' = randomize_start_time_max * job_graph_batch
         new_jobs = self._job_graph_loader.get_next_jobs(self._randomize_start_time_max * (self._job_graph_batch - 1))
         if len(new_jobs) == 0:
             self._logger.info(
