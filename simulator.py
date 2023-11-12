@@ -410,13 +410,15 @@ class Simulator(object):
                 f"a Workload with {len(task_graphs)} TaskGraphs."
             )
 
-            for task_graph in task_graphs:
-                self._logger.info(
-                    "[%s] The TaskGraph %s will be released with deadline %s",
-                    task_graph.release_time.to(EventTime.Unit.US).time,
-                    task_graph.name,
-                    task_graph.deadline,
-                )
+        for task_graph in task_graphs:
+            self._logger.info(
+                "[%s] The TaskGraph %s will be released with deadline "
+                "%s and completion time %s.",
+                task_graph.release_time.to(EventTime.Unit.US).time,
+                task_graph.name,
+                task_graph.deadline,
+                task_graph.job_graph.completion_time,
+            )
 
     def simulate(self) -> None:
         """Run the simulator loop.

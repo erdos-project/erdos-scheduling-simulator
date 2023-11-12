@@ -234,6 +234,18 @@ flags.DEFINE_bool(
     "Worker becomes free. This is a way of specifying a coarse-grained scheduler "
     "frequency that is not tied to the release of Tasks in the system.",
 )
+flags.DEFINE_bool(
+    "scheduler_adaptive_discretization",
+    False,
+    "If `True`, the scheduler creates space-time matrix non-uniformly. "
+    "The discretization is finer initially, and coarser at the end. (default: False)",
+)
+flags.DEFINE_integer(
+    "scheduler_max_time_discretization",
+    5,
+    "The maximum discretization that the scheduler can have (in µs). "
+    "Only used when scheduler_adaptive_discretization flag is enabled. (default: 5)",
+)
 flags.DEFINE_integer(
     "scheduler_delay",
     0,
@@ -605,11 +617,17 @@ def main(args):
             enforce_deadlines=FLAGS.enforce_deadlines,
             retract_schedules=FLAGS.retract_schedules,
             release_taskgraphs=FLAGS.release_taskgraphs,
+            goal=FLAGS.ilp_goal,
             time_discretization=EventTime(
                 FLAGS.scheduler_time_discretization, EventTime.Unit.US
             ),
+            plan_ahead=EventTime(FLAGS.scheduler_plan_ahead, EventTime.Unit.US),
             log_to_file=FLAGS.scheduler_log_to_file,
+            adaptive_discretization=FLAGS.scheduler_adaptive_discretization,
             _flags=FLAGS,
+            max_time_discretization=EventTime(
+                FLAGS.scheduler_max_time_discretization, EventTime.Unit.US
+            ),
         )
     else:
         raise ValueError(

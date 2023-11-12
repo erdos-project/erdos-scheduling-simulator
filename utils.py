@@ -300,3 +300,17 @@ def log_statistics(
         for stat in requested_stats:
             method, helper = STATS_FUNCTIONS[stat]
             logger.debug(f"{offset}{helper}: {method(data)}")
+
+
+def generate_monotonically_increasing_intervals(
+    min_interval, max_interval, num_intervals, initial_repetitions
+):
+    intervals = []
+    repetitions = initial_repetitions
+    for i in range(num_intervals):
+        next_interval = round(
+            min_interval + (i / (num_intervals - 1)) * (max_interval - min_interval)
+        )
+        intervals.extend([next_interval] * repetitions)
+        repetitions = max(1, repetitions // 2)  # Decrease repetitions by half
+    return intervals

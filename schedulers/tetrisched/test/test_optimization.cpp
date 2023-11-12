@@ -45,6 +45,6 @@ TEST(OptimizationTest, TestBasicCriticalPathOptimizationPass) {
   lessThanExpression->exportToDot("PreOptimizationPass.dot");
 
   tetrisched::CapacityConstraintMap capacityConstraintMap(1);
-  optimizationPass.runPass(lessThanExpression, capacityConstraintMap);
+  optimizationPass.runPass(lessThanExpression, capacityConstraintMap, std::nullopt);
   lessThanExpression->exportToDot("PostOptimizationPass.dot");
 }

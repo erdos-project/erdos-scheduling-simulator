@@ -1266,6 +1266,12 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
   auto minUtility =
       std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
 
+  // Keep track of the bounds of start and end time.
+  // std::pair<double, double> startTimeRange =
+  //     std::make_pair(std::numeric_limits<Time>::max(), 0);
+  // std::pair<double, double> endTimeRange =
+  //     std::make_pair(std::numeric_limits<Time>::max(), 0);
+
   for (int i = 0; i < numChildren; i++) {
     // Parse the Child.
     auto childParsedResult = children[i]->parse(
@@ -1311,9 +1317,29 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
     if (childParsedResult->startTime.has_value()) {
       auto childStartTime = childParsedResult->startTime.value();
       if (childStartTime.isVariable()) {
-        minStartTimeConstraint->addTerm(1, childStartTime.get<VariablePtr>());
+        auto childStartTimeVariable = childStartTime.get<VariablePtr>();
+        minStartTimeConstraint->addTerm(1, childStartTimeVariable);
+        if (auto lowerBound = childStartTimeVariable->getLowerBound();
+            lowerBound.has_value()) {
+          auto lowerBoundValue = lowerBound.value();
+          // std::cout << "Lower bound for " << childStartTimeVariable->getName()
+          //           << " is " << lowerBoundValue << std::endl;
+          // if (lowerBoundValue < startTimeRange.first) {
+          //   startTimeRange.first = lowerBoundValue;
+          // }
+          // if (lowerBoundValue > startTimeRange.second) {
+          //   startTimeRange.second = lowerBoundValue;
+          // }
+        }
       } else {
-        minStartTimeConstraint->addTerm(childStartTime.get<Time>());
+        auto childStartTimeValue = childStartTime.get<Time>();
+        minStartTimeConstraint->addTerm(childStartTimeValue);
+        // if (childStartTimeValue < startTimeRange.first) {
+        //   startTimeRange.first = childStartTimeValue;
+        // }
+        // if (childStartTimeValue > startTimeRange.second) {
+        //   startTimeRange.second = childStartTimeValue;
+        // }
       }
       minStartTimeConstraint->addTerm(-1, minStartTime);
 
@@ -1332,9 +1358,29 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
     if (childParsedResult->endTime.has_value()) {
       auto childEndTime = childParsedResult->endTime.value();
       if (childEndTime.isVariable()) {
-        minEndTimeConstraint->addTerm(1, childEndTime.get<VariablePtr>());
+        auto childEndTimeVariable = childEndTime.get<VariablePtr>();
+        minEndTimeConstraint->addTerm(1, childEndTimeVariable);
+        // if (auto lowerBound = childEndTimeVariable->getLowerBound();
+        //     lowerBound.has_value()) {
+        //   std::cout << "Lower bound for " << childEndTimeVariable->getName()
+        //             << " is " << lowerBound.value() << std::endl;
+        //   auto lowerBoundValue = lowerBound.value();
+        //   if (lowerBoundValue < endTimeRange.first) {
+        //     endTimeRange.first = lowerBoundValue;
+        //   }
+        //   if (lowerBoundValue > endTimeRange.second) {
+        //     endTimeRange.second = lowerBoundValue;
+        //   }
+        // }
       } else {
-        minEndTimeConstraint->addTerm(childEndTime.get<Time>());
+        auto childEndTimeValue = childEndTime.get<Time>();
+        minEndTimeConstraint->addTerm(childEndTimeValue);
+        // if (childEndTimeValue < endTimeRange.first) {
+        //   endTimeRange.first = childEndTimeValue;
+        // }
+        // if (childEndTimeValue > endTimeRange.second) {
+        //   endTimeRange.second = childEndTimeValue;
+        // }
       }
       minEndTimeConstraint->addTerm(-1, minEndTime);
       // Add the constraint to solver
@@ -1362,6 +1408,22 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
     minIndicatorConstraint->addTerm(-1 * numEnforceableChildren, minIndicator);
     solverModel->addConstraint(std::move(minIndicatorConstraint));
     parsedResult->indicator = minIndicator;
+
+    // Set the lower and upper bounds for times.
+    // std::cout << "Setting bounds for " << name << " to " << startTimeRange.first
+    //           << " " << startTimeRange.second << " " << endTimeRange.first
+    //           << " " << endTimeRange.second << std::endl;
+    // if (startTimeRange.first != std::numeric_limits<Time>::max() &&
+    //     startTimeRange.second != 0) {
+    //   minStartTime->setLowerBound(startTimeRange.first);
+    //   minStartTime->setUpperBound(startTimeRange.second);
+    // }
+
+    // if (endTimeRange.first != std::numeric_limits<Time>::max() &&
+    //     endTimeRange.second != 0) {
+    //   minEndTime->setLowerBound(endTimeRange.first);
+    //   minEndTime->setUpperBound(endTimeRange.second);
+    // }
   }
 
   // Construct and return the ParsedResult.
@@ -1441,7 +1503,9 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
   // Parse each of the children and constrain the MaxExpression's start time,
   // end time and utility as a function of the children's start time, end time
   // and utility.
-  Time maxEndTimeOfChildren = 0;
+  TimeRange startTimeBounds =
+      std::make_pair(std::numeric_limits<Time>::max(), 0);
+  TimeRange endTimeBounds = std::make_pair(std::numeric_limits<Time>::max(), 0);
   bool anyChildrenWithUtilities = false;
   for (int i = 0; i < numChildren; i++) {
     auto childParsedResult = children[i]->parse(
@@ -1490,13 +1554,24 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
     maxStartTimeConstraint->addTerm(childStartTime, childIndicator);
 
     // Add the end time of the child to the MaxExpression's end time.
-    if (childEndTime > maxEndTimeOfChildren) {
-      maxEndTimeOfChildren = childEndTime;
-    }
     maxEndTimeConstraint->addTerm(childEndTime, childIndicator);
 
     // Add the utility of the child to the MaxExpression's utility.
     (*maxObjectiveFunction) += (*childUtility);
+
+    // Set the bounds of the start time of the MaxExpression.
+    if (childStartTime < startTimeBounds.first) {
+      startTimeBounds.first = childStartTime;
+    }
+    if (childStartTime > startTimeBounds.second) {
+      startTimeBounds.second = childStartTime;
+    }
+    if (childEndTime < endTimeBounds.first) {
+      endTimeBounds.first = childEndTime;
+    }
+    if (childEndTime > endTimeBounds.second) {
+      endTimeBounds.second = childEndTime;
+    }
   }
 
   if (!anyChildrenWithUtilities) {
@@ -1507,14 +1582,23 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
   // Constrain the MaxExpression's start time to be less than or equal to the
   // start time of the chosen child. However, if the MaxExpression is not
   // placed i.e., the sum of its childrens indicator is 0, then we have to let
-  // the start time be free. We do this by adding the maximum end time of the
+  // the start time be free. We do this by adding the maximum start time of the
   // children as a constant that is activated if the children cannot be
   // placed.
-  maxStartTimeConstraint->addTerm(maxEndTimeOfChildren);
+  maxStartTimeConstraint->addTerm(startTimeBounds.first);
   maxStartTimeConstraint->addTerm(
-      -1 * static_cast<TETRISCHED_ILP_TYPE>(maxEndTimeOfChildren),
+      -1 * static_cast<TETRISCHED_ILP_TYPE>(startTimeBounds.first),
       maxIndicator);
   maxStartTimeConstraint->addTerm(-1, maxStartTime);
+
+  // Set the bounds on the start and end time.
+  maxStartTime->setLowerBound(
+      -1 * static_cast<TETRISCHED_ILP_TYPE>(startTimeBounds.first));
+  maxStartTime->setUpperBound(
+      static_cast<TETRISCHED_ILP_TYPE>(startTimeBounds.second));
+  maxEndTime->setLowerBound(0);
+  maxEndTime->setUpperBound(
+      static_cast<TETRISCHED_ILP_TYPE>(endTimeBounds.second));
 
   // Constrain the MaxExpression's end time to be greater than or equal to the
   // end time of the chosen child.

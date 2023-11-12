@@ -28,8 +28,10 @@ class Scheduler {
 
   /// Registers the STRL expression for the scheduler to schedule from
   /// and parses it to populate the SolverModel.
-  void registerSTRL(ExpressionPtr expression, Partitions availablePartitions,
-                    Time currentTime, bool optimize = false);
+  void registerSTRL(
+      ExpressionPtr expression, Partitions availablePartitions,
+      Time currentTime, bool optimize = false,
+      std::vector<std::pair<TimeRange, Time>> timeRangeToGranularities = {});
 
   /// Invokes the solver to schedule the registered STRL expression
   /// on the given partitions at the given time.

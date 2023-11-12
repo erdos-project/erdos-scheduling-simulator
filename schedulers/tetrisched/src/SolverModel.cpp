@@ -89,6 +89,16 @@ std::optional<T> VariableT<T>::getValue() const {
 }
 
 template <typename T>
+void VariableT<T>::setLowerBound(T lowerBound) {
+  this->lowerBound = lowerBound;
+}
+
+template <typename T>
+void VariableT<T>::setUpperBound(T upperBound) {
+  this->upperBound = upperBound;
+}
+
+template <typename T>
 std::optional<T> VariableT<T>::getLowerBound() const {
   return lowerBound;
 }
