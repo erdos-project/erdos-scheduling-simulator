@@ -526,7 +526,7 @@ class JobGraph(Graph[Job]):
             )
         )
         self._deadline_variance = deadline_variance
-        self._remaining_task_graphs = 0
+        self._remaining_task_graphs = sys.maxsize
         self._task_graph_index = 0
 
     def add_job(self, job: Job, children: Optional[Sequence[Job]] = []):
@@ -545,14 +545,14 @@ class JobGraph(Graph[Job]):
 
     def get_next_task_graph(
         self,
-        completion_time: EventTime,
+        start_time: EventTime,
         _flags: Optional["absl.flags"] = None,
     ) -> Optional[TaskGraph]:
         if self._remaining_task_graphs > 0:
             self._remaining_task_graphs -= 1
             self._task_graph_index += 1
             return self._generate_task_graph(
-                release_time=completion_time + EventTime(1, EventTime.Unit.US),
+                release_time=start_time,
                 task_graph_name=f"{self.name}@{self._task_graph_index}",
                 timestamp=self._task_graph_index,
                 _flags=_flags,

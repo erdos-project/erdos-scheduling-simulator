@@ -440,7 +440,7 @@ class WorkloadLoader(BaseWorkloadLoader):
     def workload(self) -> Workload:
         return self._workload
 
-    def get_next_workload(self) -> Optional[Workload]:
+    def get_next_workload(self, current_time: EventTime) -> Optional[Workload]:
         if self._released_workload:
             return None
         else:

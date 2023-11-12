@@ -236,7 +236,7 @@ flags.DEFINE_bool(
 )
 flags.DEFINE_integer(
     "scheduler_delay",
-    1,
+    0,
     "The delay (in µs) associated with invoking a scheduler after the "
     "release of a Task in the system.",
 )
@@ -432,7 +432,10 @@ def main(args):
         elif FLAGS.replay_trace == "alibaba":
             workload_loader = AlibabaLoader(
                 path=FLAGS.workload_profile_path,
-                _flags=FLAGS,
+                workload_interval=EventTime(
+                    FLAGS.workload_update_interval, EventTime.Unit.US
+                ),
+                flags=FLAGS,
             )
         else:
             raise NotImplementedError(

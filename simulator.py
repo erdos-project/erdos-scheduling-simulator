@@ -291,7 +291,7 @@ class Simulator(object):
 
         # Workload variables.
         self._workload_loader = workload_loader
-        self._workload = None
+        self._workload = Workload.empty(_flags)
 
         self._worker_pools = worker_pools
         self._logger.info("The Worker Pools are: ")
@@ -322,7 +322,7 @@ class Simulator(object):
 
         # Flag values.
         self._scheduler_delay = EventTime(
-            _flags.scheduler_delay if _flags else 1, EventTime.Unit.US
+            _flags.scheduler_delay if _flags else 0, EventTime.Unit.US
         )
         self._runtime_variance = _flags.runtime_variance if _flags else 0
         self._drop_skipped_tasks = _flags.drop_skipped_tasks if _flags else False
@@ -1395,7 +1395,9 @@ class Simulator(object):
             raise ValueError(
                 f"__handle_update_workload called with event of type {event.type}."
             )
-        updated_workload = self._workload_loader.get_next_workload()
+        updated_workload = self._workload_loader.get_next_workload(
+            current_time=self._simulator_time
+        )
         if updated_workload is None:
             self._logger.info(
                 "[%s] The WorkloadLoader %s has no more updates to release "
@@ -1481,8 +1483,8 @@ class Simulator(object):
             #         != Placement.PlacementType.LOAD_WORK_PROFILE
             #     ):
             #         raise RuntimeError(
-            #             f"A Placement of type {placement.placement_type} was returned "
-            #             f"by the scheduler. Only "
+            #             f"A Placement of type {placement.placement_type} was "
+            #             f"returned by the scheduler. Only "
             #             f"{Placement.PlacementType.LOAD_WORK_PROFILE} is supported."
             #         )
             #     profile_load_event = Event(
@@ -1491,7 +1493,7 @@ class Simulator(object):
             #         placement=placement,
             #     )
             #     self._logger.debug(
-            #         "[%s] Adding %s to the event queue as part of the scheduler start.",
+            #         "[%s] Adding %s to the event queue as part of scheduler start.",
             #         event.time.time,
             #         profile_load_event,
             #     )
@@ -1687,7 +1689,10 @@ class Simulator(object):
             ],
         )
         minimum_running_task_completion_time = (
-            min(map(itemgetter(2), remaining_times), default=EventTime.zero())
+            min(
+                map(itemgetter(2), remaining_times),
+                default=EventTime(sys.maxsize, EventTime.Unit.US),
+            )
             + self._scheduler_delay
         )
 
@@ -1710,13 +1715,17 @@ class Simulator(object):
         next_task_release_event = self._event_queue.get_next_event_of_type(
             EventType.TASK_RELEASE
         )
+        next_workload_update_event = self._event_queue.get_next_event_of_type(
+            EventType.UPDATE_WORKLOAD
+        )
         next_event = self._event_queue.peek()
         self._logger.debug(
-            "[%s] The next event in the queue is %s, and "
-            "the next TASK_RELEASE event is %s.",
+            "[%s] The next event in the queue is %s, the next TASK_RELEASE event is "
+            "%s, and the next UPDATE_WORKLOAD event is %s.",
             event.time.time,
             next_event,
             next_task_release_event,
+            next_workload_update_event,
         )
 
         # If there is either existing work in the form of events in the queue or tasks
@@ -1780,32 +1789,43 @@ class Simulator(object):
                 next_task_release_event.time.to(EventTime.Unit.US)
                 + self._scheduler_delay.to(EventTime.Unit.US)
                 if next_task_release_event is not None
-                else EventTime.zero()
+                else EventTime(sys.maxsize, EventTime.Unit.US)
+            )
+            next_workload_update_event_time = (
+                next_workload_update_event.time.to(EventTime.Unit.US)
+                if next_workload_update_event is not None
+                else EventTime(sys.maxsize, EventTime.Unit.US)
             )
 
-            next_event_time = None
-            if len(running_tasks) == 0:
-                next_event_time = next_task_release_event_invocation_time
-            elif next_task_release_event is None:
-                next_event_time = minimum_running_task_completion_time
-            else:
-                next_event_time = min(
-                    minimum_running_task_completion_time,
-                    next_task_release_event_invocation_time,
-                )
+            next_event_time = min(
+                minimum_running_task_completion_time,
+                next_task_release_event_invocation_time,
+                next_workload_update_event_time,
+            )
             self._logger.debug(
                 "[%s] The next event time was %s because the minimum running task "
-                "completion time was %s and the next TASK_RELEASE event in the queue "
-                "was at %s.",
+                "completion time was %s, the next TASK_RELEASE event in the queue "
+                "was at %s, and the next workload update event was at %s.",
                 event.time.to(EventTime.Unit.US).time,
                 next_event_time,
                 minimum_running_task_completion_time,
                 next_task_release_event_invocation_time,
+                next_workload_update_event_time,
             )
 
             adjusted_scheduler_start_time = max(scheduler_start_time, next_event_time)
 
             if scheduler_start_time != adjusted_scheduler_start_time:
+                if adjusted_scheduler_start_time >= loop_timeout:
+                    self._logger.info(
+                        "[%s] The adjusted scheduler start was scheduled at %s, but "
+                        "the loop timeout is %s. Ending the loop.",
+                        event.time.time,
+                        adjusted_scheduler_start_time,
+                        loop_timeout,
+                    )
+                    return Event(event_type=EventType.SIMULATOR_END, time=loop_timeout)
+
                 self._logger.info(
                     "[%s] The scheduler start time was pushed from %s to %s since "
                     "either the next running task finishes at %s or the next "
