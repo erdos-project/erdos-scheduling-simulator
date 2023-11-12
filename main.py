@@ -5,7 +5,8 @@ from collections import namedtuple
 
 from absl import app, flags
 
-from data import (  # AlibabaLoader,
+from data import (
+    AlibabaLoader,
     TaskLoaderBenchmark,
     TaskLoaderPylot,
     TaskLoaderSynthetic,
@@ -420,16 +421,19 @@ def main(args):
                 {"pylot_dataflow": task_loader.get_task_graph()},
                 _flags=FLAGS,
             )
+            raise NotImplementedError(
+                "Pylot loader does not yet support dynamic workloads."
+            )
         elif FLAGS.replay_trace == "clockwork_bursty":
             workload_loader = WorkloadLoaderClockworkBursty()
-            workload = workload_loader.workload
+            raise NotImplementedError(
+                "Clockwork loader does not yet support dynamic workloads."
+            )
         elif FLAGS.replay_trace == "alibaba":
-            job_graph_loader = AlibabaLoader(
-                batch_size=FLAGS.batch_size_job_loading,
+            workload_loader = AlibabaLoader(
                 path=FLAGS.workload_profile_path,
                 _flags=FLAGS,
             )
-            workload = None
         else:
             raise NotImplementedError(
                 f"Replay trace {FLAGS.replay_trace} is not implemented yet."

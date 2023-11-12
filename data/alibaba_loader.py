@@ -8,7 +8,6 @@ from typing import List, Mapping, Optional, Sequence
 
 import absl
 
-from data.base_workload_loader import JobGraphLoader  # noqa: F401
 from utils import EventTime
 from workload import (
     ExecutionStrategies,
@@ -17,12 +16,13 @@ from workload import (
     JobGraph,
     Resource,
     Resources,
-    Workload,
     WorkProfile,
 )
 
+from .base_workload_loader import BaseWorkloadLoader
 
-class AlibabaLoader(JobGraphLoader):
+
+class AlibabaLoader(BaseWorkloadLoader):
     """Loads the Alibaba trace from the provided file.
 
     Args:
@@ -33,10 +33,7 @@ class AlibabaLoader(JobGraphLoader):
         _flags (`absl.flags`): The flags used to initialize the app, if any.
     """
 
-    def __init__(
-        self, path: str, batch_size: int = 0, _flags: Optional["absl.flags"] = None
-    ):
-        self._batch_size = batch_size
+    def __init__(self, path: str, _flags: Optional["absl.flags"] = None):
         self._path = path
         self._flags = _flags
         self._job_data_generator = None

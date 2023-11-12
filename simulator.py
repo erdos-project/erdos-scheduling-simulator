@@ -465,31 +465,6 @@ class Simulator(object):
                 if self.__handle_event(self._event_queue.next()):
                     break
 
-    # def __get_initial_releasable_tasks(self) -> None:
-    #     if self._job_graph_loader is not None:
-    #         # Load initial batch of workload
-    #         self.__get_next_jobs()
-    #     else:
-    #         self._workload.populate_task_graphs(self._loop_timeout)
-    #         # Retrieve the set of released tasks from the graph.
-    #         # At the beginning, this should consist of all the sensor tasks
-    #         # that we expect to run during the execution of the workload,
-    #         # along with their expected release times.
-    #         for task in self._workload.get_releasable_tasks():
-    #             event = Event(
-    #                 event_type=EventType.TASK_RELEASE,
-    #                 time=task.release_time,
-    #                 task=task,
-    #             )
-    #             self._event_queue.add_event(event)
-    #             self._logger.info(
-    #                 "[%s] Added %s for %s from %s to the event queue.",
-    #                 self._simulator_time.time,
-    #                 event,
-    #                 task,
-    #                 task.task_graph,
-    #             )
-
     def __handle_scheduler_start(self, event: Event) -> None:
         """Handle the SCHEDULER_START event. The method invokes the scheduler, and adds
         a SCHEDULER_FINISHED event to the event queue.
@@ -1465,7 +1440,7 @@ class Simulator(object):
                 event_type=EventType.UPDATE_WORKLOAD,
                 time=max_release_time + EventTime(1, EventTime.Unit.US)
                 if self._workload_update_interval.is_invalid()
-                else self._workload_update_interval,
+                else self._simulator_time + self._workload_update_interval,
             )
             self._event_queue.add_event(next_update_event)
             self._logger.info(
