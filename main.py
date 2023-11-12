@@ -5,8 +5,7 @@ from collections import namedtuple
 
 from absl import app, flags
 
-from data import (
-    AlibabaLoader,
+from data import (  # AlibabaLoader,
     TaskLoaderBenchmark,
     TaskLoaderPylot,
     TaskLoaderSynthetic,
@@ -14,7 +13,6 @@ from data import (
     WorkerLoaderBenchmark,
     WorkloadLoader,
     WorkloadLoaderClockworkBursty,
-    JobGraphLoader,
 )
 from schedulers import (
     BranchPredictionScheduler,
@@ -97,7 +95,11 @@ flags.DEFINE_string(
 )
 flags.DEFINE_bool("stats", False, "Print the statistics from the tasks loaded.")
 flags.DEFINE_bool("dry_run", False, "If True, the simulator does not run.")
-flags.DEFINE_integer("batch_size_job_loading", 0, "The number of jobs to load per batch. Currently only used for replaying Alibaba Trace.")
+flags.DEFINE_integer(
+    "batch_size_job_loading",
+    0,
+    "The number of jobs to load per batch. Currently only used for replaying Alibaba Trace.",
+)
 
 # Simulator related flags.
 flags.DEFINE_integer(
@@ -422,8 +424,8 @@ def main(args):
         elif FLAGS.replay_trace == "alibaba":
             job_graph_loader = AlibabaLoader(
                 batch_size=FLAGS.batch_size_job_loading,
-                path=FLAGS.workload_profile_path, 
-                _flags=FLAGS
+                path=FLAGS.workload_profile_path,
+                _flags=FLAGS,
             )
             workload = None
         else:
@@ -447,7 +449,6 @@ def main(args):
         raise NotImplementedError("Workload has not been specified yet.")
     elif FLAGS.execution_mode == "json" or FLAGS.execution_mode == "yaml":
         workload_loader = WorkloadLoader(path=FLAGS.workload_profile_path, _flags=FLAGS)
-        workload = workload_loader.workload
 
     # Dilate the time if needed.
     if FLAGS.timestamp_difference != -1:
@@ -466,6 +467,8 @@ def main(args):
             pass
         return
 
+    # TODO (Sukrit): Move this to the Simulator dry run method since we'll remove the
+    # workload entirely from main.
     if FLAGS.graph_file_prefix:
         # Log a DOT representation of each of the JobGraph to the required file.
         for job_graph_name, job_graph in workload.job_graphs.items():
@@ -623,8 +626,7 @@ def main(args):
     simulator = Simulator(
         worker_pools=worker_loader.get_worker_pools(),
         scheduler=scheduler,
-        workload=workload,
-        job_graph_loader=job_graph_loader,
+        workload_loader=workload_loader,
         loop_timeout=EventTime(FLAGS.loop_timeout, EventTime.Unit.US),
         scheduler_frequency=EventTime(FLAGS.scheduler_frequency, EventTime.Unit.US),
         _flags=FLAGS,

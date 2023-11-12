@@ -8,7 +8,7 @@ from typing import Mapping, Optional, Sequence
 
 import absl  # noqa: F401
 
-from data import JobGraphLoader
+from data import BaseWorkloadLoader
 from schedulers import BaseScheduler
 from utils import EventTime, setup_csv_logging, setup_logging
 from workers import WorkerPools
@@ -24,17 +24,15 @@ class EventType(Enum):
     EVICT_PROFILE = 2  # Ask the simulator to evict the profile from the WorkerPool.
     TASK_FINISHED = 3  # Notify the simulator of the end of a task.
     TASK_RELEASE = 4  # Ask the simulator to release the task.
-    TASK_PREEMPT = 5  # Ask the simulator to preempt a task.
-    TASK_MIGRATION = 6  # Ask the simulator to migrate a task.
-    LOAD_PROFILE = 7  # Ask the simulator to load a profile into the WorkerPool.
-    TASK_PLACEMENT = 8  # Ask the simulator to place a task.
-    SCHEDULER_START = 9  # Requires the simulator to invoke the scheduler.
-    SCHEDULER_FINISHED = 10  # Signifies the end of the scheduler loop.
-    SIMULATOR_END = 11  # Signify the end of the simulator loop.
-    LOG_UTILIZATION = (
-        12  # Ask the simulator to log the utilization of the worker pools.
-    )
-    LOAD_NEW_JOBS = 13  # Ask the simulator to load a new batch of jobs.
+    UPDATE_WORKLOAD = 5  # Ask the simulator to update the workload.
+    TASK_PREEMPT = 6  # Ask the simulator to preempt a task.
+    TASK_MIGRATION = 7  # Ask the simulator to migrate a task.
+    LOAD_PROFILE = 8  # Ask the simulator to load a profile into the WorkerPool.
+    TASK_PLACEMENT = 9  # Ask the simulator to place a task.
+    SCHEDULER_START = 10  # Requires the simulator to invoke the scheduler.
+    SCHEDULER_FINISHED = 11  # Signifies the end of the scheduler loop.
+    SIMULATOR_END = 12  # Signify the end of the simulator loop.
+    LOG_UTILIZATION = 13  # Ask the simulator to log worker pool utilization.
 
     def __lt__(self, other) -> bool:
         # This method is used to order events in the event queue. We prioritize
@@ -229,8 +227,7 @@ class Simulator(object):
         self,
         worker_pools: WorkerPools,
         scheduler: BaseScheduler,
-        workload: Optional[Workload] = None ,
-        job_graph_loader: Optional[JobGraphLoader] = None,
+        workload_loader: BaseWorkloadLoader,
         loop_timeout: EventTime = EventTime(time=sys.maxsize, unit=EventTime.Unit.US),
         scheduler_frequency: EventTime = EventTime(time=-1, unit=EventTime.Unit.US),
         _flags: Optional["absl.flags"] = None,
@@ -238,16 +235,17 @@ class Simulator(object):
         if not isinstance(scheduler, BaseScheduler):
             raise ValueError("Scheduler must implement the BaseScheduler interface.")
 
+        if not isinstance(workload_loader, BaseWorkloadLoader):
+            raise ValueError(
+                "WorkloadLoader must implement the BaseWorkloadLoader interface."
+            )
+
         if type(loop_timeout) != EventTime:
             raise ValueError(f"Unexpected type of loop_timeout: {type(loop_timeout)}")
 
         if type(scheduler_frequency) != EventTime:
             raise ValueError(
                 f"Unexpected type of scheduler_frequency: {type(scheduler_frequency)}"
-            )
-        if workload is None and job_graph_loader is None:
-            raise ValueError(
-                "Either a Workload or a JobGraphLoader must be provided."
             )
 
         # Set up the logger.
@@ -286,14 +284,14 @@ class Simulator(object):
 
         # Simulator variables.
         self._scheduler = scheduler
-        self._workload = workload
-        self._job_graph_loader = job_graph_loader
-        self._job_graph_batch = 1
-        self._randomize_start_time_max = _flags.randomize_start_time_max
-        self._simulator_time = EventTime(time=0, unit=EventTime.Unit.US)
+        self._simulator_time = EventTime.zero()
         self._scheduler_frequency = scheduler_frequency
-        self._loop_timeout = loop_timeout        
+        self._loop_timeout = loop_timeout
         self._task_id_added_to_event_queue = set()
+
+        # Workload variables.
+        self._workload_loader = workload_loader
+        self._workload = None
 
         self._worker_pools = worker_pools
         self._logger.info("The Worker Pools are: ")
@@ -342,11 +340,15 @@ class Simulator(object):
         self._finished_task_graphs = 0
         self._missed_task_graph_deadlines = 0
 
-        # Initialize the event queue, and add a SIMULATOR_START task to
-        # signify the beginning of the simulator loop. Also add a
-        # SCHEDULER_START event to invoke the scheduling loop.
+        # Initialize the event queue.
+        # To make the system continue working the loop, we add three events:
+        # - SIMULATOR_START: A notional event start the simulator and log into the CSV.
+        # - UPDATE_WORKLOAD: An event to reach out to the WorkloadLoader and get the
+        #   next batch of TaskGraphs.
+        # - SCHEDULER_START: An event to invoke the scheduler.
         self._event_queue = EventQueue()
 
+        # First, create the SIMULATOR_START event to signify the start of the Simulator.
         sim_start_event = Event(
             event_type=EventType.SIMULATOR_START, time=self._simulator_time
         )
@@ -357,6 +359,18 @@ class Simulator(object):
             sim_start_event,
         )
 
+        # Second, create the UPDATE_WORKLOAD event to retrieve the latest Workload.
+        upate_workload_event = Event(
+            event_type=EventType.UPDATE_WORKLOAD, time=self._simulator_time
+        )
+        self._event_queue.add_event(upate_workload_event)
+        self._logger.info(
+            "[%s] Added %s to the event queue.",
+            self._simulator_time.time,
+            upate_workload_event,
+        )
+
+        # Third, create the SCHEDULER_START event to invoke the scheduler.
         sched_start_event = Event(
             event_type=EventType.SCHEDULER_START, time=self._simulator_time
         )
@@ -369,36 +383,36 @@ class Simulator(object):
 
     def dry_run(self) -> None:
         """Displays the order in which the TaskGraphs will be released."""
-        # If we are using a WorkloadLoader, we need to load the first chunk of
-        # workload.
         while True:
-            if self._job_graph_loader is not None:
-                new_jobs = self._job_graph_loader.get_next_jobs(self._simulator_time.time)
-                if len(new_jobs) == 0:
-                    break
-                if self._workload is None:
-                    self._workload = Workload.from_job_graphs({job.name: job for job in new_jobs}) 
-                    self._workload.populate_task_graphs(self._loop_timeout)
-                else:
-                    self._workload.add_job_graphs(new_jobs, self._loop_timeout)
+            # Get the next Workload from the WorkloadLoader.
+            next_workload = self._workload_loader.get_next_workload()
+            if next_workload is None:
+                self._logger.info(
+                    f"The WorkloadLoader '{type(self._workload_loader).__name__}' "
+                    f"released no more Workloads."
+                )
+                break
 
+            # A new Workload has been released, we log the release times of the
+            # TaskGraphs from this instance of the Workload.
+            self._workload = next_workload
             task_graphs = sorted(
                 self._workload.task_graphs.values(),
                 key=lambda task_graph: task_graph.release_time,
             )
-
-            if len(task_graphs) == 0:
-                self._logger.info("No TaskGraphs found in the workload.")
-                break
+            self._logger.info(
+                f"The WorkloadLoader '{type(self._workload_loader).__name__}' released "
+                f"a Workload with {len(task_graphs)} TaskGraphs."
+            )
 
             for task_graph in task_graphs:
                 self._logger.info(
                     "[%s] The TaskGraph %s will be released with deadline %s",
-                    task_graph.release_time,
+                    task_graph.release_time.to(EventTime.Unit.US).time,
                     task_graph.name,
                     task_graph.deadline,
                 )
-        
+
     def simulate(self) -> None:
         """Run the simulator loop.
 
@@ -446,32 +460,31 @@ class Simulator(object):
                 if self.__handle_event(self._event_queue.next()):
                     break
 
+    # def __get_initial_releasable_tasks(self) -> None:
+    #     if self._job_graph_loader is not None:
+    #         # Load initial batch of workload
+    #         self.__get_next_jobs()
+    #     else:
+    #         self._workload.populate_task_graphs(self._loop_timeout)
+    #         # Retrieve the set of released tasks from the graph.
+    #         # At the beginning, this should consist of all the sensor tasks
+    #         # that we expect to run during the execution of the workload,
+    #         # along with their expected release times.
+    #         for task in self._workload.get_releasable_tasks():
+    #             event = Event(
+    #                 event_type=EventType.TASK_RELEASE,
+    #                 time=task.release_time,
+    #                 task=task,
+    #             )
+    #             self._event_queue.add_event(event)
+    #             self._logger.info(
+    #                 "[%s] Added %s for %s from %s to the event queue.",
+    #                 self._simulator_time.time,
+    #                 event,
+    #                 task,
+    #                 task.task_graph,
+    #             )
 
-    def __get_initial_releasable_tasks(self) -> None:
-        if self._job_graph_loader is not None:
-            # Load initial batch of workload
-            self.__get_next_jobs()
-        else:
-            self._workload.populate_task_graphs(self._loop_timeout)
-            # Retrieve the set of released tasks from the graph.
-            # At the beginning, this should consist of all the sensor tasks
-            # that we expect to run during the execution of the workload,
-            # along with their expected release times.
-            for task in self._workload.get_releasable_tasks():
-                event = Event(
-                    event_type=EventType.TASK_RELEASE,
-                    time=task.release_time,
-                    task=task,
-                )
-                self._event_queue.add_event(event)
-                self._logger.info(
-                    "[%s] Added %s for %s from %s to the event queue.",
-                    self._simulator_time.time,
-                    event,
-                    task,
-                    task.task_graph,
-                )
-    
     def __handle_scheduler_start(self, event: Event) -> None:
         """Handle the SCHEDULER_START event. The method invokes the scheduler, and adds
         a SCHEDULER_FINISHED event to the event queue.
@@ -1392,80 +1405,90 @@ class Simulator(object):
                 worker_pool,
             )
 
-    def __get_next_jobs(self) -> None:
-        self._logger.info(
-                "[%s] Loading next batch of jobs ...",
-                self._simulator_time.time,
-            )
-        # When loading a batch of jobs, we release them randomly from time t to t',
-        # where t = randomize_start_time_max * (job_graph_batch - 1) and
-        # t' = randomize_start_time_max * job_graph_batch
-        new_jobs = self._job_graph_loader.get_next_jobs(self._randomize_start_time_max * (self._job_graph_batch - 1))
-        if len(new_jobs) == 0:
-            self._logger.info(
-                "[%s] No more jobs to load.",
-                self._simulator_time.time,
-            )
-            return
+    # def __get_next_jobs(self) -> None:
+    #     self._logger.info(
+    #         "[%s] Loading next batch of jobs ...",
+    #         self._simulator_time.time,
+    #     )
+    #     # When loading a batch of jobs, we release them randomly from time t to t',
+    #     # where t = randomize_start_time_max * (job_graph_batch - 1) and
+    #     # t' = randomize_start_time_max * job_graph_batch
+    #     new_jobs = self._job_graph_loader.get_next_jobs(
+    #         self._randomize_start_time_max * (self._job_graph_batch - 1)
+    #     )
+    #     if len(new_jobs) == 0:
+    #         self._logger.info(
+    #             "[%s] No more jobs to load.",
+    #             self._simulator_time.time,
+    #         )
+    #         return
 
-        self._logger.info(
-                "[%s] Loaded %s new jobs.",
-                self._simulator_time.time,
-                len(new_jobs)
-            )
-        
-        if self._workload is None:
-            self._workload = Workload.from_job_graphs({job.name: job for job in new_jobs}) 
-            self._workload.populate_task_graphs(self._loop_timeout)
-        else:
-            self._workload.add_job_graphs(new_jobs, self._loop_timeout)
-        
-        releasable_tasks: Sequence[Task] = self._workload.get_releasable_tasks()
-        
-        if len(releasable_tasks) == 0:
-            self._logger.warning(
-                "[%s] The workload %s has no releasable tasks when simulator executes __get_next_jobs.",
-                self._simulator_time.time,
-                self._workload,
-            )
-            return
-        
-        for task in releasable_tasks:
-            if task.id in self._task_id_added_to_event_queue:
-                continue
-            else:
-                self._task_id_added_to_event_queue.add(task.id)
-            event = Event(
-                event_type=EventType.TASK_RELEASE,
-                time=task.release_time,
-                task=task,
-            )
-            self._event_queue.add_event(event)
-            self._logger.info(
-                "[%s] Added %s for %s from %s to the event queue.",
-                self._simulator_time.time,
-                event,
-                task,
-                task.task_graph,
-            )
-        
-        # max_release_time = max([task.release_time for task in releasable_tasks], key = lambda x: x.time)
-        self._logger.info(f"[{self._simulator_time.time}] Added LOAD_NEW_JOBS event to the event queue at time {self._randomize_start_time_max * self._job_graph_batch}.")
-        self._event_queue.add_event(
-            Event(
-                event_type=EventType.LOAD_NEW_JOBS,
-                # time=max_release_time,
-                time=EventTime(self._randomize_start_time_max * self._job_graph_batch, EventTime.Unit.US) 
-            )
-        )
-        self._logger.info(
-                "[%s] Added %s for %s from %s to the event queue.",
-                self._simulator_time.time,
-                event,
-                task,
-                task.task_graph,
-            )
-        self._job_graph_batch += 1
+    #     self._logger.info(
+    #         "[%s] Loaded %s new jobs.", self._simulator_time.time, len(new_jobs)
+    #     )
+
+    #     if self._workload is None:
+    #         self._workload = Workload.from_job_graphs(
+    #             {job.name: job for job in new_jobs}
+    #         )
+    #         self._workload.populate_task_graphs(self._loop_timeout)
+    #     else:
+    #         self._workload.add_job_graphs(new_jobs, self._loop_timeout)
+
+    #     releasable_tasks: Sequence[Task] = self._workload.get_releasable_tasks()
+
+    #     if len(releasable_tasks) == 0:
+    #         self._logger.warning(
+    #             "[%s] The workload %s has no releasable tasks when simulator executes __get_next_jobs.",
+    #             self._simulator_time.time,
+    #             self._workload,
+    #         )
+    #         return
+
+    #     for task in releasable_tasks:
+    #         if task.id in self._task_id_added_to_event_queue:
+    #             continue
+    #         else:
+    #             self._task_id_added_to_event_queue.add(task.id)
+    #         event = Event(
+    #             event_type=EventType.TASK_RELEASE,
+    #             time=task.release_time,
+    #             task=task,
+    #         )
+    #         self._event_queue.add_event(event)
+    #         self._logger.info(
+    #             "[%s] Added %s for %s from %s to the event queue.",
+    #             self._simulator_time.time,
+    #             event,
+    #             task,
+    #             task.task_graph,
+    #         )
+
+    #     # max_release_time = max([task.release_time for task in releasable_tasks], key = lambda x: x.time)
+    #     self._logger.info(
+    #         f"[{self._simulator_time.time}] Added LOAD_NEW_JOBS event to the event queue at time {self._randomize_start_time_max * self._job_graph_batch}."
+    #     )
+    #     self._event_queue.add_event(
+    #         Event(
+    #             event_type=EventType.LOAD_NEW_JOBS,
+    #             # time=max_release_time,
+    #             time=EventTime(
+    #                 self._randomize_start_time_max * self._job_graph_batch,
+    #                 EventTime.Unit.US,
+    #             ),
+    #         )
+    #     )
+    #     self._logger.info(
+    #         "[%s] Added %s for %s from %s to the event queue.",
+    #         self._simulator_time.time,
+    #         event,
+    #         task,
+    #         task.task_graph,
+    #     )
+    #     self._job_graph_batch += 1
+
+    def __handle_update_workload(self, event: Event) -> None:
+        raise NotImplementedError(f"__handle_update_workload has not been implemented.")
 
     def __handle_event(self, event: Event) -> bool:
         """Handles the next event from the EventQueue.
@@ -1484,40 +1507,36 @@ class Simulator(object):
         )
 
         if event.event_type == EventType.SIMULATOR_START:
-            self.__get_initial_releasable_tasks()
-
             # Start of the simulator loop.
-            self._csv_logger.debug(
-                f"{event.time.time},SIMULATOR_START,{len(self._workload)}"
-            )
+            self._csv_logger.debug(f"{event.time.time},SIMULATOR_START")
             self._logger.info(
                 "[%s] Starting the simulator loop.",
                 event.time.to(EventTime.Unit.US).time,
             )
-            placements = self._scheduler.start(
-                event.time, self._workload.work_profiles, self._worker_pools
-            )
-            for placement in placements:
-                if (
-                    placement.placement_type
-                    != Placement.PlacementType.LOAD_WORK_PROFILE
-                ):
-                    raise RuntimeError(
-                        f"A Placement of type {placement.placement_type} was returned "
-                        f"by the scheduler. Only "
-                        f"{Placement.PlacementType.LOAD_WORK_PROFILE} is supported."
-                    )
-                profile_load_event = Event(
-                    event_type=EventType.LOAD_PROFILE,
-                    time=placement.placement_time,
-                    placement=placement,
-                )
-                self._logger.debug(
-                    "[%s] Adding %s to the event queue as part of the scheduler start.",
-                    event.time.time,
-                    profile_load_event,
-                )
-                self._event_queue.add_event(profile_load_event)
+            # placements = self._scheduler.start(
+            #     event.time, self._workload.work_profiles, self._worker_pools
+            # )
+            # for placement in placements:
+            #     if (
+            #         placement.placement_type
+            #         != Placement.PlacementType.LOAD_WORK_PROFILE
+            #     ):
+            #         raise RuntimeError(
+            #             f"A Placement of type {placement.placement_type} was returned "
+            #             f"by the scheduler. Only "
+            #             f"{Placement.PlacementType.LOAD_WORK_PROFILE} is supported."
+            #         )
+            #     profile_load_event = Event(
+            #         event_type=EventType.LOAD_PROFILE,
+            #         time=placement.placement_time,
+            #         placement=placement,
+            #     )
+            #     self._logger.debug(
+            #         "[%s] Adding %s to the event queue as part of the scheduler start.",
+            #         event.time.time,
+            #         profile_load_event,
+            #     )
+            #     self._event_queue.add_event(profile_load_event)
         elif event.event_type == EventType.TASK_CANCEL:
             self.__handle_task_cancellation(event)
         elif event.event_type == EventType.EVICT_PROFILE:
@@ -1526,6 +1545,8 @@ class Simulator(object):
             self.__handle_task_finished(event)
         elif event.event_type == EventType.TASK_RELEASE:
             self.__handle_task_release(event)
+        elif event.event_type == EventType.UPDATE_WORKLOAD:
+            self.__handle_update_workload(event)
         elif event.event_type == EventType.TASK_PREEMPT:
             self.__handle_task_preempt(event)
         elif event.event_type == EventType.TASK_MIGRATION:
@@ -1551,8 +1572,6 @@ class Simulator(object):
             return True
         elif event.event_type == EventType.LOG_UTILIZATION:
             self.__log_utilization(event.time)
-        elif event.event_type == EventType.LOAD_NEW_JOBS:
-            self.__get_next_jobs()
         else:
             raise ValueError(f"[{event.time}] Retrieved event of unknown type: {event}")
         return False

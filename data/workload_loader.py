@@ -20,8 +20,10 @@ from workload import (
     WorkProfile,
 )
 
+from .base_workload_loader import BaseWorkloadLoader
 
-class WorkloadLoader(object):
+
+class WorkloadLoader(BaseWorkloadLoader):
     """Loads a set of applications from a provided JSON or YAML file.
 
     Args:
@@ -59,6 +61,11 @@ class WorkloadLoader(object):
                 if _flags.override_arrival_period > 0
                 else None
             )
+            self._num_invocations = (
+                _flags.override_num_invocations
+                if _flags.override_num_invocations > 0
+                else None
+            )
             self._unique_work_profiles = _flags.unique_work_profiles
             self._replication_factor = _flags.replication_factor
             self._slo = (
@@ -66,15 +73,18 @@ class WorkloadLoader(object):
                 if _flags.override_slo > 0
                 else EventTime.invalid()
             )
+            self._loop_timeout = _flags.loop_timeout
         else:
             self._logger = setup_logging(name=self.__class__.__name__)
             self._resource_logger = setup_logging(name="Resources")
             self._poisson_arrival_rate = None
             self._gamma_coefficient = None
             self._arrival_period = None
+            self._num_invocations = None
             self._unique_work_profiles = False
             self._replication_factor = 1
             self._slo = EventTime.invalid()
+            self._loop_timeout = EventTime(time=sys.maxsize, unit=EventTime.Unit.US)
 
         # Read the file for applications and create a JobGraph for each application.
         extension = pathlib.Path(path).suffix.lower()
@@ -116,6 +126,7 @@ class WorkloadLoader(object):
             release_policy = WorkloadLoader.__create_release_policy(
                 job,
                 self._arrival_period,
+                self._num_invocations,
                 self._poisson_arrival_rate,
                 self._gamma_coefficient,
             )
@@ -159,6 +170,8 @@ class WorkloadLoader(object):
                 )
 
         self._workload = Workload.from_job_graphs(job_graph_mapping, _flags=_flags)
+        self._workload.populate_task_graphs(completion_time=self._loop_timeout)
+        self._released_workload = False
 
     @staticmethod
     def load_job_graph(
@@ -227,6 +240,7 @@ class WorkloadLoader(object):
     def __create_release_policy(
         job: Mapping[str, str],
         override_arrival_period: Optional[int] = None,
+        override_num_invocations: Optional[int] = None,
         override_poisson_arrival_rate: Optional[float] = None,
         override_gamma_coefficient: Optional[float] = None,
     ) -> JobGraph.ReleasePolicy:
@@ -252,12 +266,15 @@ class WorkloadLoader(object):
                 start=start_time,
             )
         elif job["release_policy"] == "fixed":
-            if (
-                "period" not in job or "invocations" not in job
-            ) and override_arrival_period is None:
+            if "period" not in job and override_arrival_period is None:
                 raise ValueError(
-                    'A "fixed" release policy was requested, but either a '
-                    "`period` or `invocations` was not defined for the JobGraph."
+                    'A "fixed" release policy was requested, but a '
+                    "`period` was not defined for the JobGraph."
+                )
+            if "invocations" not in job and override_num_invocations is None:
+                raise ValueError(
+                    'A "fixed" release policy was requested, but the number of '
+                    "`invocations` was not defined for the JobGraph."
                 )
             return JobGraph.ReleasePolicy.fixed(
                 period=EventTime(
@@ -266,7 +283,9 @@ class WorkloadLoader(object):
                     else override_arrival_period,
                     EventTime.Unit.US,
                 ),
-                num_invocations=job["invocations"],
+                num_invocations=job["invocations"]
+                if override_num_invocations is None
+                else override_num_invocations,
                 start=start_time,
             )
         elif job["release_policy"] == "poisson":
@@ -420,3 +439,10 @@ class WorkloadLoader(object):
     @property
     def workload(self) -> Workload:
         return self._workload
+
+    def get_next_workload(self) -> Optional[Workload]:
+        if self._released_workload:
+            return None
+        else:
+            self._released_workload = True
+            return self._workload

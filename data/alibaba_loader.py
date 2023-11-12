@@ -7,8 +7,8 @@ from collections import defaultdict
 from typing import List, Mapping, Optional, Sequence
 
 import absl
-from data.job_graph_loader import JobGraphLoader  # noqa: F401
 
+from data.base_workload_loader import JobGraphLoader  # noqa: F401
 from utils import EventTime
 from workload import (
     ExecutionStrategies,
@@ -21,33 +21,39 @@ from workload import (
     WorkProfile,
 )
 
+
 class AlibabaLoader(JobGraphLoader):
     """Loads the Alibaba trace from the provided file.
 
     Args:
-        path (`str`): The path to a Pickle file containing the Alibaba trace, 
+        path (`str`): The path to a Pickle file containing the Alibaba trace,
             or a folder containing multiple Pickle files.
-        batch_size (`int`): The batch size to use when loading jobs. If 0, 
+        batch_size (`int`): The batch size to use when loading jobs. If 0,
             all jobs will be loaded at once.
         _flags (`absl.flags`): The flags used to initialize the app, if any.
     """
 
-    def __init__(self, path: str, batch_size: int = 0, _flags: Optional["absl.flags"] = None):
+    def __init__(
+        self, path: str, batch_size: int = 0, _flags: Optional["absl.flags"] = None
+    ):
         self._batch_size = batch_size
         self._path = path
         self._flags = _flags
         self._job_data_generator = None
-        # Set a dedicated random.Random instance to ensure reproducibility 
-        # regardless of batch_size. 
+        # Set a dedicated random.Random instance to ensure reproducibility
+        # regardless of batch_size.
         self._random_instance = random.Random(_flags.random_seed)
-        
 
     def _initialize_job_data_generator(self):
         """
         Initialize the job generator from the Alibaba trace file.
         """
         if os.path.isdir(self._path):
-            file_paths = [os.path.join(self._path, filename) for filename in os.listdir(self._path) if filename.endswith('.pkl')]
+            file_paths = [
+                os.path.join(self._path, filename)
+                for filename in os.listdir(self._path)
+                if filename.endswith(".pkl")
+            ]
         elif os.path.isfile(self._path):
             extension = pathlib.Path(self._path).suffix.lower()
             if extension != ".pkl":
@@ -65,7 +71,9 @@ class AlibabaLoader(JobGraphLoader):
 
         self._job_data_generator = job_data_generator()
 
-    def _convert_job_data_to_job_graph(self, job_graph_name: str, job_tasks: List[str], start_time_offset: int) -> JobGraph:
+    def _convert_job_data_to_job_graph(
+        self, job_graph_name: str, job_tasks: List[str], start_time_offset: int
+    ) -> JobGraph:
         """
         Convert the raw job data to a Job object.
 
@@ -75,8 +83,10 @@ class AlibabaLoader(JobGraphLoader):
         # Create the ReleasePolicy.
         release_policy = None
         start_time = EventTime(
-            time=start_time_offset + self._random_instance.randint(
-                self._flags.randomize_start_time_min, self._flags.randomize_start_time_max
+            time=start_time_offset
+            + self._random_instance.randint(
+                self._flags.randomize_start_time_min,
+                self._flags.randomize_start_time_max,
             ),
             unit=EventTime.Unit.US,
         )
@@ -86,7 +96,9 @@ class AlibabaLoader(JobGraphLoader):
                     "Arrival period must be specified for periodic release policy."
                 )
             release_policy = JobGraph.ReleasePolicy.periodic(
-                period=EventTime(self._flags.override_arrival_period, EventTime.Unit.US),
+                period=EventTime(
+                    self._flags.override_arrival_period, EventTime.Unit.US
+                ),
                 start=start_time,
             )
         elif self._flags.override_release_policy == "fixed":
@@ -95,7 +107,9 @@ class AlibabaLoader(JobGraphLoader):
                     "Arrival period must be specified for fixed release policy."
                 )
             release_policy = JobGraph.ReleasePolicy.fixed(
-                period=EventTime(self._flags.override_arrival_period, EventTime.Unit.US),
+                period=EventTime(
+                    self._flags.override_arrival_period, EventTime.Unit.US
+                ),
                 num_invocations=self._flags.override_num_invocations,
                 start=start_time,
             )
@@ -121,15 +135,11 @@ class AlibabaLoader(JobGraphLoader):
         for task in job_tasks:
             job_resources = Resources(
                 resource_vector={
-                    Resource(name="Slot", _id="any"): int(
-                        math.ceil(task.cpu / 100)
-                    ),
+                    Resource(name="Slot", _id="any"): int(math.ceil(task.cpu / 100)),
                 }
             )
             job_name = task.name.split("_")[0]
-            job_runtime = EventTime(
-                int(math.ceil(task.duration)), EventTime.Unit.US
-            )
+            job_runtime = EventTime(int(math.ceil(task.duration)), EventTime.Unit.US)
             task_name_to_simulator_job_mapping[job_name] = Job(
                 name=job_name,
                 profile=WorkProfile(
@@ -183,14 +193,20 @@ class AlibabaLoader(JobGraphLoader):
             self._initialize_job_data_generator()
         print(f"{start_time_offset=}")
         if self._batch_size <= 0:
-            return [self._convert_job_data_to_job_graph(job_graph_name, job_tasks, start_time_offset) \
-                           for job_graph_name, job_tasks in self._job_data_generator]
+            return [
+                self._convert_job_data_to_job_graph(
+                    job_graph_name, job_tasks, start_time_offset
+                )
+                for job_graph_name, job_tasks in self._job_data_generator
+            ]
         else:
             batch: List[JobGraph] = []
             try:
                 for _ in range(self._batch_size):
                     job_graph_name, job_tasks = next(self._job_data_generator)
-                    job_graph = self._convert_job_data_to_job_graph(job_graph_name, job_tasks, start_time_offset)
+                    job_graph = self._convert_job_data_to_job_graph(
+                        job_graph_name, job_tasks, start_time_offset
+                    )
                     batch.append(job_graph)
             except StopIteration:
                 pass
