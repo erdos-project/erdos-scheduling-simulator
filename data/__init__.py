@@ -1,6 +1,7 @@
 # Export the loaders.
 # Export the CSV Reader.
 from .alibaba_loader import AlibabaLoader
+from .base_workload_loader import BaseWorkloadLoader
 from .csv_reader import CSVReader
 from .task_loader import TaskLoader
 from .task_loader_benchmark import TaskLoaderBenchmark

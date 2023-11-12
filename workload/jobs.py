@@ -2,7 +2,7 @@ import random
 import sys
 import uuid
 from enum import Enum
-from typing import Mapping, Optional, Sequence, Tuple
+from typing import List, Mapping, Optional, Sequence, Tuple
 
 import absl
 import numpy as np
@@ -223,6 +223,7 @@ class JobGraph(Graph[Job]):
             coefficient: float,
             concurrency: int,
             start: EventTime,
+            rng_seed: Optional[int] = None,
         ) -> None:
             self._policy_type = policy_type
             self._period = period
@@ -231,6 +232,85 @@ class JobGraph(Graph[Job]):
             self._coefficient = coefficient
             self._concurrency = concurrency
             self._start = start
+            self._rng = (
+                np.random.default_rng()
+                if rng_seed is None
+                else np.random.default_rng(seed=rng_seed)
+            )
+
+        def get_release_times(self, completion_time: EventTime) -> List[EventTime]:
+            """Calculate the release times for this policy up-till the completion time.
+
+            Args:
+                completion_time (`EventTime`): The time upto which the release policy
+                    needs to be extrapolated.
+            """
+            releases = []
+            if self._policy_type == JobGraph.ReleasePolicyType.PERIODIC:
+                releases.extend(
+                    map(
+                        lambda time: EventTime(int(time), EventTime.Unit.US),
+                        np.arange(
+                            self._start.to(EventTime.Unit.US).time,
+                            completion_time.to(EventTime.Unit.US).time,
+                            self._period.to(EventTime.Unit.US).time,
+                        ),
+                    )
+                )
+            elif self._policy_type == JobGraph.ReleasePolicyType.FIXED:
+                releases.extend(
+                    map(
+                        lambda time: EventTime(int(time), EventTime.Unit.US),
+                        np.linspace(
+                            self._start.to(EventTime.Unit.US).time,
+                            self._start.to(EventTime.Unit.US).time
+                            + (
+                                self._period.to(EventTime.Unit.US).time
+                                * self._fixed_invocation_nums
+                            ),
+                            num=self._fixed_invocation_nums,
+                            endpoint=False,
+                        ),
+                    )
+                )
+            elif self._policy_type == JobGraph.ReleasePolicyType.POISSON:
+                # TODO (Sukrit): Create a numpy version of this.
+                current_release = self._start
+                for _ in range(self._fixed_invocation_nums):
+                    inter_arrival_time = int(
+                        self._rng.exponential(1 / self._arrival_rate)
+                    )
+                    current_release += EventTime(inter_arrival_time, EventTime.Unit.US)
+                    releases.append(current_release)
+            elif self._policy_type == JobGraph.ReleasePolicyType.GAMMA:
+                inter_arrival_times = np.clip(
+                    self._rng.gamma(
+                        (1 / self._coefficient),
+                        self._coefficient / self._arrival_rate,
+                        size=self._fixed_invocation_nums - 1,
+                    ),
+                    a_min=2500,  # Maintain a minimum rate of 2500µs between releases.
+                    a_max=None,
+                )
+                current_release = self._start
+                for inter_arrival_time in inter_arrival_times:
+                    current_release += EventTime(
+                        int(inter_arrival_time), EventTime.Unit.US
+                    )
+                    releases.append(current_release)
+            elif self._policy_type == JobGraph.ReleasePolicyType.CLOSED_LOOP:
+                # Release the first set of Tasks at the start time.
+                num_releases = (
+                    self._concurrency
+                    if self._fixed_invocation_nums >= self._concurrency
+                    else self._fixed_invocation_nums
+                )
+                releases.extend([self._start] * num_releases)
+            else:
+                raise NotImplementedError(
+                    f"The policy {self._policy_type} has not been implemented yet."
+                )
+            return releases
 
         @staticmethod
         def periodic(
@@ -446,7 +526,7 @@ class JobGraph(Graph[Job]):
             )
         )
         self._deadline_variance = deadline_variance
-        self._remaining_task_graphs = 0
+        self._remaining_task_graphs = sys.maxsize
         self._task_graph_index = 0
 
     def add_job(self, job: Job, children: Optional[Sequence[Job]] = []):
@@ -465,14 +545,14 @@ class JobGraph(Graph[Job]):
 
     def get_next_task_graph(
         self,
-        completion_time: EventTime,
+        start_time: EventTime,
         _flags: Optional["absl.flags"] = None,
     ) -> Optional[TaskGraph]:
         if self._remaining_task_graphs > 0:
             self._remaining_task_graphs -= 1
             self._task_graph_index += 1
             return self._generate_task_graph(
-                release_time=completion_time + EventTime(1, EventTime.Unit.US),
+                release_time=start_time,
                 task_graph_name=f"{self.name}@{self._task_graph_index}",
                 timestamp=self._task_graph_index,
                 _flags=_flags,
@@ -494,75 +574,10 @@ class JobGraph(Graph[Job]):
         Returns:
             A mapping from the name of the `TaskGraph` to the `TaskGraph`.
         """
-        releases = []
-        if self.release_policy.policy_type == self.ReleasePolicyType.PERIODIC:
-            releases.extend(
-                map(
-                    lambda time: EventTime(int(time), EventTime.Unit.US),
-                    np.arange(
-                        self.release_policy.start_time.to(EventTime.Unit.US).time,
-                        completion_time.to(EventTime.Unit.US).time,
-                        self.release_policy.period.to(EventTime.Unit.US).time,
-                    ),
-                )
-            )
-        elif self.release_policy.policy_type == self.ReleasePolicyType.FIXED:
-            releases.extend(
-                map(
-                    lambda time: EventTime(int(time), EventTime.Unit.US),
-                    np.linspace(
-                        self.release_policy.start_time.to(EventTime.Unit.US).time,
-                        self.release_policy.start_time.to(EventTime.Unit.US).time
-                        + (
-                            self.release_policy.period.to(EventTime.Unit.US).time
-                            * self.release_policy.num_invocations
-                        ),
-                        num=self.release_policy.num_invocations,
-                        endpoint=False,
-                    ),
-                )
-            )
-        elif self.release_policy.policy_type == self.ReleasePolicyType.POISSON:
-            # TODO (Sukrit): Create a numpy version of this.
-            current_release = self.release_policy.start_time
-            for _ in range(self.release_policy.num_invocations):
-                inter_arrival_time = int(random.expovariate(self.release_policy.rate))
-                current_release += EventTime(inter_arrival_time, EventTime.Unit.US)
-                releases.append(current_release)
-        elif self.release_policy.policy_type == self.ReleasePolicyType.GAMMA:
-            release_policy_rng = (
-                np.random.default_rng()
-                if _flags is None
-                else np.random.default_rng(seed=_flags.random_seed)
-            )
-            inter_arrival_times = np.clip(
-                release_policy_rng.gamma(
-                    (1 / self.release_policy.coefficient),
-                    self.release_policy.coefficient / self.release_policy.rate,
-                    size=self.release_policy.num_invocations - 1,
-                ),
-                a_min=2500,  # Maintain a minimum rate of 2500µs between releases.
-                a_max=None,
-            )
-            current_release = self.release_policy.start_time
-            for inter_arrival_time in inter_arrival_times:
-                current_release += EventTime(int(inter_arrival_time), EventTime.Unit.US)
-                releases.append(current_release)
-        elif self.release_policy.policy_type == self.ReleasePolicyType.CLOSED_LOOP:
-            # Release the first set of Tasks at the start time.
-            num_releases = (
-                self.release_policy.concurrency
-                if self.release_policy.num_invocations
-                >= self.release_policy.concurrency
-                else self.release_policy.num_invocations
-            )
-            self._remaining_task_graphs = (
-                self.release_policy.num_invocations - num_releases
-            )
-            releases.extend([self.release_policy.start_time] * num_releases)
-        else:
-            raise NotImplementedError(
-                f"The policy {self.release_policy} has not been implemented yet."
+        releases = self._release_policy.get_release_times(completion_time)
+        if self.release_policy.policy_type == self.ReleasePolicyType.CLOSED_LOOP:
+            self._remaining_task_graphs = self.release_policy.num_invocations - len(
+                releases
             )
 
         # Generate the task graphs for all the releases.

@@ -36,6 +36,10 @@ class TaskState(Enum):
         return self.value == other.value
 
 
+# Only PREEMPTED, SCHEDULED and VIRTUAL tasks can be released.
+RELEASABLE_TASK_STATES = (TaskState.VIRTUAL, TaskState.SCHEDULED, TaskState.PREEMPTED)
+
+
 @total_ordering
 class Task(object):
     """A `Task` represents the invocation of a computation of a particular
@@ -156,12 +160,7 @@ class Task(object):
                 "Release time should be specified either while "
                 "creating the Task or when releasing it."
             )
-        if self.state not in (
-            TaskState.VIRTUAL,
-            TaskState.SCHEDULED,
-            TaskState.PREEMPTED,
-        ):
-            # Only PREEMPTED, SCHEDULED and VIRTUAL tasks can be released.
+        if self.state not in RELEASABLE_TASK_STATES:
             raise ValueError(
                 f"The task {self.unique_name} cannot be released from "
                 f"state {self.state}."
@@ -1192,6 +1191,8 @@ class TaskGraph(Graph[Task]):
         """
         tasks_to_be_released = []
         for task in self.get_nodes():
+            if task.state not in RELEASABLE_TASK_STATES:
+                continue
             parents = self.get_parents(task)
             if all(map(lambda task: task.is_complete(), parents)):
                 tasks_to_be_released.append(task)
