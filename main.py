@@ -95,11 +95,6 @@ flags.DEFINE_string(
 )
 flags.DEFINE_bool("stats", False, "Print the statistics from the tasks loaded.")
 flags.DEFINE_bool("dry_run", False, "If True, the simulator does not run.")
-flags.DEFINE_integer(
-    "batch_size_job_loading",
-    0,
-    "The number of jobs to load per batch. Currently only used for replaying Alibaba Trace.",
-)
 
 # Simulator related flags.
 flags.DEFINE_integer(
@@ -120,6 +115,13 @@ flags.DEFINE_bool(
     "True if the simulator is allowed to drop tasks that cannot be scheduled."
     "This option can be used with SAT/ILP based schedulers to stop wastefully"
     "reconsidering tasks that will never meet their deadlines.",
+)
+flags.DEFINE_integer(
+    "workload_update_interval",
+    -1,
+    "The interval (in µs) to update the workload. "
+    "If set to default (-1), then the Simulator will automatically choose an interval "
+    "based on the set of released tasks in the previous iteration.",
 )
 
 # Benchmark related flags.

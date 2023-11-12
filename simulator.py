@@ -330,6 +330,11 @@ class Simulator(object):
         self._run_scheduler_at_worker_free = (
             _flags.scheduler_run_at_worker_free if _flags else False
         )
+        self._workload_update_interval = (
+            EventTime(_flags.workload_update_interval, EventTime.Unit.US)
+            if _flags
+            else EventTime.invalid()
+        )
 
         # Statistics about the Task.
         self._finished_tasks = 0
@@ -1458,7 +1463,9 @@ class Simulator(object):
 
             next_update_event = Event(
                 event_type=EventType.UPDATE_WORKLOAD,
-                time=max_release_time + EventTime(1, EventTime.Unit.US),
+                time=max_release_time + EventTime(1, EventTime.Unit.US)
+                if self._workload_update_interval.is_invalid()
+                else self._workload_update_interval,
             )
             self._event_queue.add_event(next_update_event)
             self._logger.info(
