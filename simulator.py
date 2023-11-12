@@ -1405,90 +1405,67 @@ class Simulator(object):
                 worker_pool,
             )
 
-    # def __get_next_jobs(self) -> None:
-    #     self._logger.info(
-    #         "[%s] Loading next batch of jobs ...",
-    #         self._simulator_time.time,
-    #     )
-    #     # When loading a batch of jobs, we release them randomly from time t to t',
-    #     # where t = randomize_start_time_max * (job_graph_batch - 1) and
-    #     # t' = randomize_start_time_max * job_graph_batch
-    #     new_jobs = self._job_graph_loader.get_next_jobs(
-    #         self._randomize_start_time_max * (self._job_graph_batch - 1)
-    #     )
-    #     if len(new_jobs) == 0:
-    #         self._logger.info(
-    #             "[%s] No more jobs to load.",
-    #             self._simulator_time.time,
-    #         )
-    #         return
-
-    #     self._logger.info(
-    #         "[%s] Loaded %s new jobs.", self._simulator_time.time, len(new_jobs)
-    #     )
-
-    #     if self._workload is None:
-    #         self._workload = Workload.from_job_graphs(
-    #             {job.name: job for job in new_jobs}
-    #         )
-    #         self._workload.populate_task_graphs(self._loop_timeout)
-    #     else:
-    #         self._workload.add_job_graphs(new_jobs, self._loop_timeout)
-
-    #     releasable_tasks: Sequence[Task] = self._workload.get_releasable_tasks()
-
-    #     if len(releasable_tasks) == 0:
-    #         self._logger.warning(
-    #             "[%s] The workload %s has no releasable tasks when simulator executes __get_next_jobs.",
-    #             self._simulator_time.time,
-    #             self._workload,
-    #         )
-    #         return
-
-    #     for task in releasable_tasks:
-    #         if task.id in self._task_id_added_to_event_queue:
-    #             continue
-    #         else:
-    #             self._task_id_added_to_event_queue.add(task.id)
-    #         event = Event(
-    #             event_type=EventType.TASK_RELEASE,
-    #             time=task.release_time,
-    #             task=task,
-    #         )
-    #         self._event_queue.add_event(event)
-    #         self._logger.info(
-    #             "[%s] Added %s for %s from %s to the event queue.",
-    #             self._simulator_time.time,
-    #             event,
-    #             task,
-    #             task.task_graph,
-    #         )
-
-    #     # max_release_time = max([task.release_time for task in releasable_tasks], key = lambda x: x.time)
-    #     self._logger.info(
-    #         f"[{self._simulator_time.time}] Added LOAD_NEW_JOBS event to the event queue at time {self._randomize_start_time_max * self._job_graph_batch}."
-    #     )
-    #     self._event_queue.add_event(
-    #         Event(
-    #             event_type=EventType.LOAD_NEW_JOBS,
-    #             # time=max_release_time,
-    #             time=EventTime(
-    #                 self._randomize_start_time_max * self._job_graph_batch,
-    #                 EventTime.Unit.US,
-    #             ),
-    #         )
-    #     )
-    #     self._logger.info(
-    #         "[%s] Added %s for %s from %s to the event queue.",
-    #         self._simulator_time.time,
-    #         event,
-    #         task,
-    #         task.task_graph,
-    #     )
-    #     self._job_graph_batch += 1
-
     def __handle_update_workload(self, event: Event) -> None:
-        raise NotImplementedError(f"__handle_update_workload has not been implemented.")
+        """Handles an Event of type `UPDATE_WORKLOAD`.
+
+        This method reaches out to the WorkloadLoader to load the next batch of
+        TaskGraphs into the Workload. It then releases the releasable Tasks from the
+        Workload into the Simulator."""
+        if event.event_type != EventType.UPDATE_WORKLOAD:
+            raise ValueError(
+                f"__handle_update_workload called with event of type {event.type}."
+            )
+        updated_workload = self._workload_loader.get_next_workload()
+        if updated_workload is None:
+            self._logger.info(
+                "[%s] The WorkloadLoader %s has no more updates to release "
+                "into the Workload.",
+                self._simulator_time.to(EventTime.Unit.US).time,
+                type(self._workload_loader).__name__,
+            )
+            self._csv_logger.info("%s,UPDATE_WORKLOAD,0,0", self._simulator_time.time)
+        else:
+            self._workload = updated_workload
+            releasable_tasks = self._workload.get_releasable_tasks()
+            self._logger.info(
+                "[%s] The WorkloadLoader %s has %s TaskGraphs that released %s tasks.",
+                self._simulator_time.to(EventTime.Unit.US).time,
+                type(self._workload_loader).__name__,
+                len(self._workload.task_graphs),
+                len(releasable_tasks),
+            )
+            self._csv_logger.info(
+                "%s,UPDATE_WORKLOAD,%s,%s",
+                self._simulator_time.time,
+                len(self._workload.task_graphs),
+                len(releasable_tasks),
+            )
+            max_release_time = self._simulator_time
+            for task in releasable_tasks:
+                event = Event(
+                    event_type=EventType.TASK_RELEASE, time=task.release_time, task=task
+                )
+                self._event_queue.add_event(event)
+                self._logger.info(
+                    "[%s] Added %s for %s from %s to the event queue.",
+                    self._simulator_time.time,
+                    event,
+                    task,
+                    task.task_graph,
+                )
+                if task.release_time > max_release_time:
+                    max_release_time = task.release_time
+
+            next_update_event = Event(
+                event_type=EventType.UPDATE_WORKLOAD,
+                time=max_release_time + EventTime(1, EventTime.Unit.US),
+            )
+            self._event_queue.add_event(next_update_event)
+            self._logger.info(
+                "[%s] Added %s to the event queue.",
+                self._simulator_time.time,
+                next_update_event,
+            )
 
     def __handle_event(self, event: Event) -> bool:
         """Handles the next event from the EventQueue.
