@@ -35,8 +35,10 @@ class TaskState(Enum):
     def __eq__(self, other) -> bool:
         return self.value == other.value
 
+
 # Only PREEMPTED, SCHEDULED and VIRTUAL tasks can be released.
 RELEASABLE_TASK_STATES = (TaskState.VIRTUAL, TaskState.SCHEDULED, TaskState.PREEMPTED)
+
 
 @total_ordering
 class Task(object):
