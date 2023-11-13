@@ -388,9 +388,10 @@ class Simulator(object):
 
     def dry_run(self) -> None:
         """Displays the order in which the TaskGraphs will be released."""
+        start_time = EventTime.zero()
         while True:
             # Get the next Workload from the WorkloadLoader.
-            next_workload = self._workload_loader.get_next_workload()
+            next_workload = self._workload_loader.get_next_workload(start_time)
             if next_workload is None:
                 self._logger.info(
                     f"The WorkloadLoader '{type(self._workload_loader).__name__}' "
@@ -401,24 +402,27 @@ class Simulator(object):
             # A new Workload has been released, we log the release times of the
             # TaskGraphs from this instance of the Workload.
             self._workload = next_workload
-            task_graphs = sorted(
-                self._workload.task_graphs.values(),
-                key=lambda task_graph: task_graph.release_time,
+            task_graphs = list(
+                sorted(
+                    self._workload.task_graphs.values(),
+                    key=lambda task_graph: task_graph.release_time,
+                )
             )
             self._logger.info(
                 f"The WorkloadLoader '{type(self._workload_loader).__name__}' released "
                 f"a Workload with {len(task_graphs)} TaskGraphs."
             )
+            start_time = task_graphs[-1].release_time
 
-        for task_graph in task_graphs:
-            self._logger.info(
-                "[%s] The TaskGraph %s will be released with deadline "
-                "%s and completion time %s.",
-                task_graph.release_time.to(EventTime.Unit.US).time,
-                task_graph.name,
-                task_graph.deadline,
-                task_graph.job_graph.completion_time,
-            )
+            for task_graph in task_graphs:
+                self._logger.info(
+                    "[%s] The TaskGraph %s will be released with deadline "
+                    "%s and completion time %s.",
+                    task_graph.release_time.to(EventTime.Unit.US).time,
+                    task_graph.name,
+                    task_graph.deadline,
+                    task_graph.job_graph.completion_time,
+                )
 
     def simulate(self) -> None:
         """Run the simulator loop.

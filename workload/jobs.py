@@ -274,13 +274,15 @@ class JobGraph(Graph[Job]):
                     )
                 )
             elif self._policy_type == JobGraph.ReleasePolicyType.POISSON:
-                # TODO (Sukrit): Create a numpy version of this.
+                inter_arrival_times = self._rng.poisson(
+                    self._arrival_rate, self._fixed_invocation_nums - 1
+                )
                 current_release = self._start
-                for _ in range(self._fixed_invocation_nums):
-                    inter_arrival_time = int(
-                        self._rng.exponential(1 / self._arrival_rate)
+                releases.append(current_release)
+                for inter_arrival_time in inter_arrival_times:
+                    current_release += EventTime(
+                        int(inter_arrival_time), EventTime.Unit.US
                     )
-                    current_release += EventTime(inter_arrival_time, EventTime.Unit.US)
                     releases.append(current_release)
             elif self._policy_type == JobGraph.ReleasePolicyType.GAMMA:
                 inter_arrival_times = np.clip(
@@ -293,6 +295,7 @@ class JobGraph(Graph[Job]):
                     a_max=None,
                 )
                 current_release = self._start
+                releases.append(current_release)
                 for inter_arrival_time in inter_arrival_times:
                     current_release += EventTime(
                         int(inter_arrival_time), EventTime.Unit.US
@@ -314,7 +317,9 @@ class JobGraph(Graph[Job]):
 
         @staticmethod
         def periodic(
-            period: EventTime, start: EventTime = EventTime.zero()
+            period: EventTime,
+            start: EventTime = EventTime.zero(),
+            rng_seed: Optional[int] = None,
         ) -> "ReleasePolicy":  # noqa: F821
             """Creates the parameters corresponding to the `PERIODIC` release policy.
 
@@ -323,6 +328,8 @@ class JobGraph(Graph[Job]):
                     invocations of the `TaskGraph`.
                 start (`EventTime`): The time at which the periodic release of the
                     `TaskGraph`s should begin.
+                rng_seed (`Optional[int]`): The seed to use for the random number
+                    generation.
 
             Returns:
                 A `ReleasePolicy` instance with the required parameters.
@@ -335,6 +342,7 @@ class JobGraph(Graph[Job]):
                 coefficient=-1.0,
                 concurrency=0,
                 start=start,
+                rng_seed=rng_seed,
             )
 
         @staticmethod
@@ -342,6 +350,7 @@ class JobGraph(Graph[Job]):
             period: EventTime,
             num_invocations: int,
             start: EventTime = EventTime.zero(),
+            rng_seed: Optional[int] = None,
         ) -> "ReleasePolicy":  # noqa: F821
             """Creates the parameters corresponding to the `FIXED` release policy.
 
@@ -351,6 +360,8 @@ class JobGraph(Graph[Job]):
                 num_invocations (`int`): The number of invocations of the `TaskGraph`.
                 start (`EventTime`): The time at which the periodic release of the
                     `TaskGraph`s should begin.
+                rng_seed (`Optional[int]`): The seed to use for the random number
+                    generation.
 
             Returns:
                 A `ReleasePolicy` instance with the required parameters.
@@ -363,6 +374,7 @@ class JobGraph(Graph[Job]):
                 coefficient=-1.0,
                 concurrency=0,
                 start=start,
+                rng_seed=rng_seed,
             )
 
         @staticmethod
@@ -370,6 +382,7 @@ class JobGraph(Graph[Job]):
             rate: float,
             num_invocations: int,
             start: EventTime = EventTime.zero(),
+            rng_seed: Optional[int] = None,
         ) -> "ReleasePolicy":  # noqa: F821
             """Creates the parameters corresponding to the `POISSON` release policy.
 
@@ -379,6 +392,8 @@ class JobGraph(Graph[Job]):
                 num_invocations (`int`): The number of invocations of the `TaskGraph`.
                 start (`EventTime`): The time at which the poisson arrival of the
                     `TaskGraph`s should begin.
+                rng_seed (`Optional[int]`): The seed to use for the random number
+                    generation.
 
             Returns:
                 A `ReleasePolicy` instance with the required parameters.
@@ -391,6 +406,7 @@ class JobGraph(Graph[Job]):
                 coefficient=-1.0,
                 concurrency=0,
                 start=start,
+                rng_seed=rng_seed,
             )
 
         @staticmethod
@@ -399,7 +415,24 @@ class JobGraph(Graph[Job]):
             coefficient: float,
             num_invocations: int,
             start: EventTime = EventTime.zero(),
+            rng_seed: Optional[int] = None,
         ) -> "ReleasePolicy":  # noqa: F821
+            """Creates the parameters corresponding to the `GAMMA` release policy.
+
+            Args:
+                rate (`float`): The lambda (rate) parameter defining the Gamma
+                    arrival distribution.
+                coefficient (`float`): The coefficient parameter defining the Gamma
+                    arrival distribution.
+                num_invocations (`int`): The number of invocations of the `TaskGraph`.
+                start (`EventTime`): The time at which the poisson arrival of the
+                    `TaskGraph`s should begin.
+                rng_seed (`Optional[int]`): The seed to use for the random number
+                    generation.
+
+            Returns:
+                A `ReleasePolicy` instance with the required parameters.
+            """
             return JobGraph.ReleasePolicy(
                 policy_type=JobGraph.ReleasePolicyType.GAMMA,
                 period=EventTime.invalid(),
@@ -408,6 +441,7 @@ class JobGraph(Graph[Job]):
                 coefficient=coefficient,
                 concurrency=0,
                 start=start,
+                rng_seed=rng_seed,
             )
 
         @staticmethod
@@ -415,6 +449,7 @@ class JobGraph(Graph[Job]):
             concurrency: int,
             num_invocations: int,
             start: EventTime = EventTime.zero(),
+            rng_seed: Optional[int] = None,
         ) -> "ReleasePolicy":  # noqa: F821
             """Creates the parameters corresponding to the `CLOSED_LOOP` release policy.
 
@@ -424,6 +459,8 @@ class JobGraph(Graph[Job]):
                     `TaskGraph`.
                 start (`EventTime`): The time at which the closed loop execution of the
                     `TaskGraph`s should begin.
+                rng_seed (`Optional[int]`): The seed to use for the random number
+                    generation.
 
             Returns:
                 A `ReleasePolicy` instance with the required parameters.

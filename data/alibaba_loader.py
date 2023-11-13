@@ -45,7 +45,8 @@ class AlibabaLoader(BaseWorkloadLoader):
         self._flags = flags
         self._job_data_generator = self._initialize_job_data_generator()
         self._job_graphs: Mapping[str, JobGraph] = {}
-        self._rng = random.Random(flags.random_seed)
+        self._rng_seed = flags.random_seed
+        self._rng = random.Random(self._rng_seed)
         self._release_times = self._construct_release_times()
         self._current_release_pointer = 0
         self._workload_update_interval = (
@@ -80,6 +81,7 @@ class AlibabaLoader(BaseWorkloadLoader):
                     self._flags.override_arrival_period, EventTime.Unit.US
                 ),
                 start=start_time,
+                rng_seed=self._rng_seed,
             )
         elif self._flags.override_release_policy == "fixed":
             if self._flags.override_arrival_period == 0:
@@ -92,12 +94,14 @@ class AlibabaLoader(BaseWorkloadLoader):
                 ),
                 num_invocations=self._flags.override_num_invocations,
                 start=start_time,
+                rng_seed=self._rng_seed,
             )
         elif self._flags.override_release_policy == "poisson":
             release_policy = JobGraph.ReleasePolicy.poisson(
                 rate=self._flags.override_poisson_arrival_rate,
                 num_invocations=self._flags.override_num_invocations,
                 start=start_time,
+                rng_seed=self._rng_seed,
             )
         elif self._flags.override_release_policy == "gamma":
             release_policy = JobGraph.ReleasePolicy.gamma(
@@ -105,6 +109,7 @@ class AlibabaLoader(BaseWorkloadLoader):
                 num_invocations=self._flags.override_num_invocations,
                 coefficient=self._flags.override_gamma_coefficient,
                 start=start_time,
+                rng_seed=self._rng_seed,
             )
         else:
             raise NotImplementedError(
