@@ -1,3 +1,4 @@
+import os
 import time
 from typing import List, Mapping, Optional, Set, Tuple
 
@@ -84,11 +85,18 @@ class TetriSchedScheduler(BaseScheduler):
             release_taskgraphs=release_taskgraphs,
             _flags=_flags,
         )
+        # Values for output.
+        self._log_to_file = log_to_file
+        self._log_dir = _flags.log_dir if _flags else "./"
+        self._log_times = set(map(int, _flags.scheduler_log_times)) if _flags else set()
+
         self._goal = goal
         self._time_discretization = time_discretization.to(EventTime.Unit.US)
         self._plan_ahead = plan_ahead.to(EventTime.Unit.US)
         self._scheduler = tetrisched.Scheduler(
-            self._time_discretization.time, tetrisched.backends.SolverBackendType.GUROBI
+            self._time_discretization.time,
+            tetrisched.backends.SolverBackendType.GUROBI,
+            self._log_dir,
         )
         self._adaptive_discretization = adaptive_discretization
         self._max_discretization = max_time_discretization.to(EventTime.Unit.US)
@@ -100,8 +108,6 @@ class TetriSchedScheduler(BaseScheduler):
                 "Max dicretization should be greater than or equal to "
                 "time discretization but currently it is not"
             )
-        self._log_to_file = log_to_file
-        self._log_times = set(map(int, _flags.scheduler_log_times)) if _flags else set()
 
     def schedule(
         self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools
@@ -278,16 +284,22 @@ class TetriSchedScheduler(BaseScheduler):
                     f"tetrisched_error_{sim_time.time}.lp and STRL expression to "
                     f"tetrisched_error_{sim_time.time}.dot."
                 )
-                objective_strl.exportToDot(f"tetrisched_error_{sim_time.time}.dot")
+                objective_strl.exportToDot(
+                    os.path.join(self._log_dir, f"tetrisched_error_{sim_time.time}.dot")
+                )
                 self._scheduler.exportLastSolverModel(
-                    f"tetrisched_error_{sim_time.time}.lp"
+                    os.path.join(self._log_dir, f"tetrisched_error_{sim_time.time}.lp")
                 )
                 raise e
 
             # If requested, log the model to a file.
             if self._log_to_file or sim_time.time in self._log_times:
-                self._scheduler.exportLastSolverModel(f"tetrisched_{sim_time.time}.lp")
-                objective_strl.exportToDot(f"tetrisched_{sim_time.time}.dot")
+                self._scheduler.exportLastSolverModel(
+                    os.path.join(self._log_dir, f"tetrisched_{sim_time.time}.lp")
+                )
+                objective_strl.exportToDot(
+                    os.path.join(self._log_dir, f"tetrisched_{sim_time.time}.dot")
+                )
                 self._logger.debug(
                     f"[{sim_time.to(EventTime.Unit.US).time}] Exported model to "
                     f"tetrisched_{sim_time.time}.lp and STRL to "
@@ -468,7 +480,7 @@ class TetriSchedScheduler(BaseScheduler):
             num_interval = self._max_discretization.to(EventTime.Unit.US).time
             initial_repetitions = (
                 end_time - start_time
-            ) // 4  # 1/4th of the time min discretization should be repeated
+            ) // 10  # 1/4th of the time min discretization should be repeated
             initial_repetitions = max(initial_repetitions, 1)
 
             intervals = generate_monotonically_increasing_intervals(
