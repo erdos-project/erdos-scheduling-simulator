@@ -1014,7 +1014,7 @@ class TaskGraph(Graph[Task]):
                 estimated_completion_time[task] = time + task.remaining_time
             elif task.state == TaskState.RELEASED:
                 estimated_completion_time[task] = (
-                    task.release_time + task.remaining_time
+                    max(task.release_time, time) + task.remaining_time
                 )
             elif task.state == TaskState.SCHEDULED:
                 if retract_schedules:
