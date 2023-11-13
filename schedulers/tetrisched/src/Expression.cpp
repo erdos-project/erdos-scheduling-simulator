@@ -888,6 +888,9 @@ ParseResultPtr AllocationExpression::parse(
   }
 
   // Create and save the ParseResult.
+  TETRISCHED_DEBUG("Parsing AllocationExpression for "
+                   << name << " to be placed starting at time " << startTime
+                   << " and ending at " << endTime << ".")
   parsedResult = std::make_shared<ParseResult>();
   parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
   parsedResult->startTime = startTime;
@@ -901,6 +904,9 @@ ParseResultPtr AllocationExpression::parse(
                                                  startTime, duration, 1,
                                                  allocation, std::nullopt);
   }
+  TETRISCHED_DEBUG("Finished parsing AllocationExpression for "
+                   << name << " to be placed starting at time " << startTime
+                   << " and ending at " << endTime << ".")
   return parsedResult;
 }
 
@@ -940,6 +946,9 @@ ParseResultPtr ObjectiveExpression::parse(
     // STRL DAG structures
     return parsedResult;
   }
+  TETRISCHED_DEBUG("Parsing ObjectiveExpression with name " << name << ".")
+
+  // Create and save the ParseResult.
   parsedResult = std::make_shared<ParseResult>();
   parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
 
@@ -955,9 +964,16 @@ ParseResultPtr ObjectiveExpression::parse(
       (*utility) += *(result->utility.value());
     }
   }
+  TETRISCHED_DEBUG("Finished parsing the children for ObjectiveExpression with "
+                   << name << ".")
 
   // All the children have been parsed. Finalize the CapacityConstraintMap.
+  TETRISCHED_DEBUG(
+      "Finalizing the CapacityConstraintMap for ObjectiveExpression " << name
+                                                                      << ".")
   capacityConstraints.translate(solverModel);
+  TETRISCHED_DEBUG("Finished finalizing the CapacityConstraintMap for " << name
+                                                                        << ".")
 
   // Construct the parsed result.
   parsedResult->utility = std::make_shared<ObjectiveFunction>(*utility);
@@ -966,6 +982,9 @@ ParseResultPtr ObjectiveExpression::parse(
 
   // Add the utility to the SolverModel.
   solverModel->setObjectiveFunction(std::move(utility));
+
+  TETRISCHED_DEBUG("Finished parsing ObjectiveExpression with name " << name
+                                                                     << ".")
 
   return parsedResult;
 }
@@ -1322,7 +1341,8 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
         if (auto lowerBound = childStartTimeVariable->getLowerBound();
             lowerBound.has_value()) {
           auto lowerBoundValue = lowerBound.value();
-          // std::cout << "Lower bound for " << childStartTimeVariable->getName()
+          // std::cout << "Lower bound for " <<
+          // childStartTimeVariable->getName()
           //           << " is " << lowerBoundValue << std::endl;
           // if (lowerBoundValue < startTimeRange.first) {
           //   startTimeRange.first = lowerBoundValue;
@@ -1410,7 +1430,8 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
     parsedResult->indicator = minIndicator;
 
     // Set the lower and upper bounds for times.
-    // std::cout << "Setting bounds for " << name << " to " << startTimeRange.first
+    // std::cout << "Setting bounds for " << name << " to " <<
+    // startTimeRange.first
     //           << " " << startTimeRange.second << " " << endTimeRange.first
     //           << " " << endTimeRange.second << std::endl;
     // if (startTimeRange.first != std::numeric_limits<Time>::max() &&
@@ -1458,6 +1479,7 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
     // STRL DAG structures
     return parsedResult;
   }
+  TETRISCHED_DEBUG("Parsing MaxExpression with name " << name << ".")
   // Create and save the ParseResult.
   parsedResult = std::make_shared<ParseResult>();
 
@@ -1619,6 +1641,7 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
   parsedResult->endTime = std::move(maxEndTime);
   parsedResult->utility = std::move(maxObjectiveFunction);
   parsedResult->indicator = std::move(maxIndicator);
+  TETRISCHED_DEBUG("Finished parsing MaxExpression with name " << name << ".")
   return parsedResult;
 }
 
