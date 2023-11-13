@@ -522,6 +522,7 @@ def main(args):
         scheduler = EDFScheduler(
             preemptive=FLAGS.preemption,
             runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
+            enforce_deadlines=FLAGS.enforce_deadlines,
             _flags=FLAGS,
         )
     elif FLAGS.scheduler == "LSF":
