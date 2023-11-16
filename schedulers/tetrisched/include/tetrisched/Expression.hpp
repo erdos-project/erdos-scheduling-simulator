@@ -183,6 +183,8 @@ class Expression : public std::enable_shared_from_this<Expression> {
   ExpressionType type;
   /// The Solution result from this Expression.
   SolutionResultPtr solution;
+  /// Mutex for thread-safe parsing
+  std::mutex parseMutex;
 
   /// Adds a parent to this expression.
   void addParent(ExpressionPtr parent);

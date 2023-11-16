@@ -1,10 +1,12 @@
 #include "tetrisched/Expression.hpp"
 
 #include <algorithm>
+#include <future>
 #include <limits>
 #include <random>
 #include <sstream>
 #include <stack>
+#include <vector>
 
 namespace tetrisched {
 
@@ -373,6 +375,9 @@ ExpressionTimeBounds ChooseExpression::getTimeBounds() const {
 ParseResultPtr ChooseExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMap& capacityConstraints, Time currentTime) {
+  // Lock for thread safety
+  std::lock_guard<std::mutex> guard(parseMutex);  
+
   // Check that the Expression was parsed before
   if (parsedResult != nullptr) {
     // return the already parsed sub-tree from another parent
@@ -527,6 +532,9 @@ void WindowedChooseExpression::addChild(ExpressionPtr child) {
 ParseResultPtr WindowedChooseExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMap& capacityConstraints, Time currentTime) {
+  // Lock for thread safety
+  std::lock_guard<std::mutex> guard(parseMutex);
+
   // Check that the Expression was parsed before.
   if (parsedResult != nullptr) {
     // Return the already parsed STRL-tree from another parent.
@@ -813,6 +821,9 @@ void MalleableChooseExpression::addChild(ExpressionPtr child) {
 ParseResultPtr MalleableChooseExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMap& capacityConstraints, Time currentTime) {
+  // Lock for thread safety
+  std::lock_guard<std::mutex> guard(parseMutex);
+
   // Check that the Expression was parsed before
   if (parsedResult != nullptr) {
     // Return the alread parsed sub-tree.
@@ -1170,6 +1181,9 @@ void AllocationExpression::addChild(ExpressionPtr child) {
 ParseResultPtr AllocationExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMap& capacityConstraints, Time currentTime) {
+  // Lock for thread safety
+  std::lock_guard<std::mutex> guard(parseMutex);
+
   // Check that the Expression was parsed before.
   if (parsedResult != nullptr) {
     // Return the already parsed sub-tree.
@@ -1228,6 +1242,9 @@ ObjectiveExpression::ObjectiveExpression(std::string name)
 ParseResultPtr ObjectiveExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMap& capacityConstraints, Time currentTime) {
+  // Lock for thread safety
+  std::lock_guard<std::mutex> guard(parseMutex);
+  
   // Check that the Expression was parsed before
   if (parsedResult != nullptr) {
     // return the already parsed sub-tree from another parent
@@ -1356,6 +1373,9 @@ void LessThanExpression::addChild(ExpressionPtr child) {
 ParseResultPtr LessThanExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMap& capacityConstraints, Time currentTime) {
+  // Lock for thread safety
+  std::lock_guard<std::mutex> guard(parseMutex);
+
   // Sanity check the children.
   if (children.size() != 2) {
     throw tetrisched::exceptions::ExpressionConstructionException(
@@ -1537,6 +1557,9 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
                                     Partitions availablePartitions,
                                     CapacityConstraintMap& capacityConstraints,
                                     Time currentTime) {
+  // Lock for thread safety
+  std::lock_guard<std::mutex> guard(parseMutex);
+
   // Check that the Expression was parsed before
   if (parsedResult != nullptr) {
     // Return the already parsed sub-tree from another parent
@@ -1766,6 +1789,9 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
                                     Partitions availablePartitions,
                                     CapacityConstraintMap& capacityConstraints,
                                     Time currentTime) {
+  // Lock for thread safety
+  std::lock_guard<std::mutex> guard(parseMutex);
+
   // Check that the Expression was parsed before
   if (parsedResult != nullptr) {
     // return the already parsed sub-tree from another parent
@@ -1822,10 +1848,25 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
   TimeRange startTimeBounds =
       std::make_pair(std::numeric_limits<Time>::max(), 0);
   TimeRange endTimeBounds = std::make_pair(std::numeric_limits<Time>::max(), 0);
+
+  // Vector to hold futures
+  std::vector<std::future<ParseResultPtr>> futures;
+
+  // Launch parsing tasks for each child
+  for (auto& child : children) {
+    futures.push_back(std::async(std::launch::async, 
+                                 &Expression::parse, 
+                                 child.get(), // Pass the raw pointer of the shared_ptr
+                                 solverModel, 
+                                 availablePartitions, 
+                                 std::ref(capacityConstraints), 
+                                 currentTime));
+  }
+
   bool anyChildrenWithUtilities = false;
+
   for (int i = 0; i < numChildren; i++) {
-    auto childParsedResult = children[i]->parse(
-        solverModel, availablePartitions, capacityConstraints, currentTime);
+    auto childParsedResult = futures[i].get();
 
     if (childParsedResult->type != ParseResultType::EXPRESSION_UTILITY) {
       TETRISCHED_DEBUG(name + " child-" + std::to_string(i) +
@@ -1956,6 +1997,9 @@ void ScaleExpression::addChild(ExpressionPtr child) {
 ParseResultPtr ScaleExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMap& capacityConstraints, Time currentTime) {
+  // Lock for thread safety
+  std::lock_guard<std::mutex> guard(parseMutex);
+
   // Sanity check the children.
   if (children.size() != 1) {
     throw tetrisched::exceptions::ExpressionConstructionException(
