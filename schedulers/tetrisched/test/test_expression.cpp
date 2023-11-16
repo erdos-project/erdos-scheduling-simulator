@@ -488,7 +488,7 @@ TEST(Expression, TestMalleableChooseExpressionConstruction) {
   auto solverModelPtr = gurobiSolver.getModel();
 
   // Construct a CapacityConstraintMap and parse the expression tree.
-  tetrisched::CapacityConstraintMap capacityConstraintMap;
+  tetrisched::CapacityConstraintMapPtr capacityConstraintMap = std::make_shared<tetrisched::CapacityConstraintMap>();
   auto _ = objectiveExpression->parse(solverModelPtr, partitions,
                                       capacityConstraintMap, 0);
   solverModelPtr->exportModel("testMalleableChooseExpression.lp");
@@ -527,7 +527,7 @@ TEST(Expression, TestMalleableChooseExpressionConstructsVariableRectangles) {
   auto solverModelPtr = gurobiSolver.getModel();
 
   // Construct a CapacityConstraintMap and parse the expression tree.
-  tetrisched::CapacityConstraintMap capacityConstraintMap(2);
+  tetrisched::CapacityConstraintMapPtr capacityConstraintMap = std::make_shared<tetrisched::CapacityConstraintMap>(2);
   auto _ = objectiveExpression->parse(solverModelPtr, partitions,
                                       capacityConstraintMap, 0);
   solverModelPtr->exportModel("testMalleableChooseVariableRectangle.lp");
@@ -582,7 +582,7 @@ TEST(Expression, TestNonOverlappingChooseIsAllowed) {
   auto solverModelPtr = gurobiSolver.getModel();
 
   // Construct a CapacityConstraintMap and parse the expression tree.
-  tetrisched::CapacityConstraintMap capacityConstraintMap(100, true);
+  tetrisched::CapacityConstraintMapPtr capacityConstraintMap = std::make_shared<tetrisched::CapacityConstraintMap>(100, true);
   auto _ = objectiveExpression->parse(solverModelPtr, partitions,
                                       capacityConstraintMap, 0);
   solverModelPtr->exportModel("testNonOverlappingChooseIsAllowed.lp");
@@ -627,7 +627,7 @@ TEST(Expression, TestWindowedChoosedExpressionCorrect) {
   auto solverModelPtr = gurobiSolver.getModel();
 
   // Construct a CapacityConstraintMap and parse the expression tree.
-  tetrisched::CapacityConstraintMap capacityConstraintMap;
+  tetrisched::CapacityConstraintMapPtr capacityConstraintMap = std::make_shared<tetrisched::CapacityConstraintMap>();
   auto _ = objectiveExpression->parse(solverModelPtr, partitions,
                                       capacityConstraintMap, 0);
 

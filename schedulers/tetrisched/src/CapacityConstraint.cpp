@@ -166,6 +166,9 @@ void CapacityConstraintMap::registerUsageForDuration(
     const ExpressionPtr expression, const Partition& partition,
     const Time startTime, const Time duration, const IndicatorT usageIndicator,
     const PartitionUsageT variable, std::optional<Time> granularity) {
+  // Lock for thread safety
+  std::lock_guard<std::mutex> guard(mutex);
+
   if (!useDynamicDiscretization) {
     // If we are not using dynamic discretization, then we can just
     // register the usage at the provided granularity.
@@ -243,6 +246,9 @@ void CapacityConstraintMap::registerUsageForDuration(
 }
 
 void CapacityConstraintMap::translate(SolverModelPtr solverModel) {
+  // Lock for thread safety
+  std::lock_guard<std::mutex> guard(mutex);
+
   // Add the constraints to the SolverModel.
   for (auto& [mapKey, constraint] : capacityConstraints) {
     constraint->translate(solverModel);

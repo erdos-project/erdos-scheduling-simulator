@@ -53,13 +53,14 @@ void Scheduler::registerSTRL(
 
   // Save the expression.
   this->expression = expression;
-  CapacityConstraintMap capacityConstraintMap;
+
+  CapacityConstraintMapPtr capacityConstraintMap;
 
   // Create the CapacityConstraintMap for the STRL tree to add constraints to.
   if (timeRangeToGranularities.size() == 0) {
-    capacityConstraintMap = CapacityConstraintMap(discretization);
+    capacityConstraintMap = std::make_shared<CapacityConstraintMap>(discretization);
   } else {
-    capacityConstraintMap = CapacityConstraintMap(timeRangeToGranularities);
+    capacityConstraintMap = std::make_shared<CapacityConstraintMap>(timeRangeToGranularities);
   }
 
   // Run the Pre-Translation OptimizationPasses on this expression.

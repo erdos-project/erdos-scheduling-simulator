@@ -37,7 +37,7 @@ class OptimizationPass {
   /// If an output log file is provided, the pass may choose to log useful
   /// information to the file.
   virtual void runPass(ExpressionPtr strlExpression,
-                       CapacityConstraintMap& capacityConstraints,
+                       CapacityConstraintMapPtr capacityConstraints,
                        std::optional<std::string> debugFile) = 0;
 
   // Clean the pass after a run.
@@ -65,7 +65,7 @@ class CriticalPathOptimizationPass : public OptimizationPass {
 
   /// Run the Critical Path optimization pass on the given STRL expression.
   void runPass(ExpressionPtr strlExpression,
-               CapacityConstraintMap& capacityConstraints,
+               CapacityConstraintMapPtr capacityConstraints,
                std::optional<std::string> debugFile) override;
 
   /// Clean the pass data structures.
@@ -84,7 +84,7 @@ class CapacityConstraintMapPurgingOptimizationPass : public OptimizationPass {
   void computeCliques(ExpressionPtr expression);
 
   /// Deactivates the CapacityConstraints that are trivially satisfied.
-  void deactivateCapacityConstraints(CapacityConstraintMap& capacityConstraints,
+  void deactivateCapacityConstraints(CapacityConstraintMapPtr capacityConstraints,
                                      std::optional<std::string> debugFile);
 
  public:
@@ -94,7 +94,7 @@ class CapacityConstraintMapPurgingOptimizationPass : public OptimizationPass {
   /// Run the CapacityConstraintMapPurgingOptimizationPass on the given STRL
   /// expression.
   void runPass(ExpressionPtr strlExpression,
-               CapacityConstraintMap& capacityConstraints,
+               CapacityConstraintMapPtr capacityConstraints,
                std::optional<std::string> debugFile) override;
 
   /// Clean the pass data structures.
@@ -114,11 +114,11 @@ class OptimizationPassRunner {
 
   /// Run the pre-translation optimization passes on the given STRL expression.
   void runPreTranslationPasses(Time currentTime, ExpressionPtr strlExpression,
-                               CapacityConstraintMap& capacityConstraints);
+                               CapacityConstraintMapPtr capacityConstraints);
 
   /// Run the post-translation optimization passes on the given STRL expression.
   void runPostTranslationPasses(Time currentTime, ExpressionPtr strlExpression,
-                                CapacityConstraintMap& capacityConstraints);
+                                CapacityConstraintMapPtr capacityConstraints);
 };
 }  // namespace tetrisched
 #endif  // _TETRISCHED_OPTIMIZATION_PASSES_HPP_

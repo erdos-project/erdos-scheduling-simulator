@@ -352,7 +352,7 @@ void CriticalPathOptimizationPass::purgeNodes(ExpressionPtr expression) {
 }
 
 void CriticalPathOptimizationPass::runPass(
-    ExpressionPtr strlExpression, CapacityConstraintMap& capacityConstraints,
+    ExpressionPtr strlExpression, CapacityConstraintMapPtr capacityConstraints,
     std::optional<std::string> debugFile) {
   /* Phase 1: We first do a bottom-up traversal of the tree to compute
   a tight bound for each node in the STRL tree. */
@@ -438,7 +438,7 @@ void CapacityConstraintMapPurgingOptimizationPass::computeCliques(
 }
 
 void CapacityConstraintMapPurgingOptimizationPass::
-    deactivateCapacityConstraints(CapacityConstraintMap& capacityConstraints,
+    deactivateCapacityConstraints(CapacityConstraintMapPtr capacityConstraints,
                                   std::optional<std::string> debugFile) {
   std::ofstream debugFileStream;
   if (debugFile.has_value()) {
@@ -448,14 +448,14 @@ void CapacityConstraintMapPurgingOptimizationPass::
   // This vector will keep track of if the clique was used in a constraint, and
   // if so, its maximum usage.
   TETRISCHED_DEBUG("Running deactivation of constraints from a map of size "
-                   << capacityConstraints.size())
+                   << capacityConstraints->size())
   size_t deactivatedConstraints = 0;
 
   std::unordered_map<ExpressionPtr, uint32_t> expressionUsageMap;
 
   // Iterate over each of the individual CapacityConstraints in the map.
   for (auto& [key, capacityConstraint] :
-       capacityConstraints.capacityConstraints) {
+       capacityConstraints->capacityConstraints) {
     // If the capacity check is trivially satisfiable, don't even bother checking
     // the cliques.
     if (capacityConstraint->capacityConstraint->isTriviallySatisfiable()) {
@@ -574,12 +574,12 @@ void CapacityConstraintMapPurgingOptimizationPass::
     }
   }
   TETRISCHED_DEBUG("Deactivated " << deactivatedConstraints << " out of "
-                                  << capacityConstraints.size()
+                                  << capacityConstraints->size()
                                   << " constraints.")
 }
 
 void CapacityConstraintMapPurgingOptimizationPass::runPass(
-    ExpressionPtr strlExpression, CapacityConstraintMap& capacityConstraints,
+    ExpressionPtr strlExpression, CapacityConstraintMapPtr capacityConstraints,
     std::optional<std::string> debugFile) {
   /* Phase 1: We compute the cliques from  the Expressions in the DAG. */
   // auto cliqueStartTime = std::chrono::high_resolution_clock::now();
@@ -619,7 +619,7 @@ OptimizationPassRunner::OptimizationPassRunner(bool debug) : debug(debug) {
 
 void OptimizationPassRunner::runPreTranslationPasses(
     Time currentTime, ExpressionPtr strlExpression,
-    CapacityConstraintMap& capacityConstraints) {
+    CapacityConstraintMapPtr capacityConstraints) {
   // Run the registered optimization passes on the given STRL expression.
   for (auto& pass : registeredPasses) {
     if (pass->getType() == OptimizationPassType::PRE_TRANSLATION_PASS) {
@@ -636,7 +636,7 @@ void OptimizationPassRunner::runPreTranslationPasses(
 
 void OptimizationPassRunner::runPostTranslationPasses(
     Time currentTime, ExpressionPtr strlExpression,
-    CapacityConstraintMap& capacityConstraints) {
+    CapacityConstraintMapPtr capacityConstraints) {
   // Run the registered optimization passes on the given STRL expression.
   for (auto& pass : registeredPasses) {
     if (pass->getType() == OptimizationPassType::POST_TRANSLATION_PASS) {

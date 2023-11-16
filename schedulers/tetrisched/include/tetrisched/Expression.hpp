@@ -199,7 +199,7 @@ class Expression : public std::enable_shared_from_this<Expression> {
   /// provide a start and end time bound on this Expression.
   virtual ParseResultPtr parse(SolverModelPtr solverModel,
                                Partitions availablePartitions,
-                               CapacityConstraintMap& capacityConstraints,
+                               CapacityConstraintMapPtr capacityConstraints,
                                Time currentTime) = 0;
 
   /// Adds a child to this epxression.
@@ -285,7 +285,7 @@ class ChooseExpression : public Expression {
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
-                       CapacityConstraintMap& capacityConstraints,
+                       CapacityConstraintMapPtr capacityConstraints,
                        Time currentTime) override;
   SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
   std::string getDescriptiveName() const override;
@@ -328,7 +328,7 @@ class WindowedChooseExpression : public Expression {
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
-                       CapacityConstraintMap& capacityConstraints,
+                       CapacityConstraintMapPtr capacityConstraints,
                        Time currentTime) override;
   SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
   std::string getDescriptiveName() const override;
@@ -369,7 +369,7 @@ class MalleableChooseExpression : public Expression {
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
-                       CapacityConstraintMap& capacityConstraints,
+                       CapacityConstraintMapPtr capacityConstraints,
                        Time currentTime) override;
   SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
   std::string getDescriptiveName() const override;
@@ -398,7 +398,7 @@ class AllocationExpression : public Expression {
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
-                       CapacityConstraintMap& capacityConstraints,
+                       CapacityConstraintMapPtr capacityConstraints,
                        Time currentTime) override;
   SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
   std::string getDescriptiveName() const override;
@@ -412,7 +412,7 @@ class ObjectiveExpression : public Expression {
   ObjectiveExpression(std::string name);
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
-                       CapacityConstraintMap& capacityConstraints,
+                       CapacityConstraintMapPtr capacityConstraints,
                        Time currentTime) override;
   SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
 };
@@ -426,7 +426,7 @@ class MinExpression : public Expression {
   MinExpression(std::string name);
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
-                       CapacityConstraintMap& capacityConstraints,
+                       CapacityConstraintMapPtr capacityConstraints,
                        Time currentTime) override;
 };
 
@@ -438,7 +438,7 @@ class MaxExpression : public Expression {
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
-                       CapacityConstraintMap& capacityConstraints,
+                       CapacityConstraintMapPtr capacityConstraints,
                        Time currentTime) override;
 };
 
@@ -453,7 +453,7 @@ class ScaleExpression : public Expression {
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
-                       CapacityConstraintMap& capacityConstraints,
+                       CapacityConstraintMapPtr capacityConstraints,
                        Time currentTime) override;
 };
 
@@ -466,7 +466,7 @@ class LessThanExpression : public Expression {
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
-                       CapacityConstraintMap& capacityConstraints,
+                       CapacityConstraintMapPtr capacityConstraints,
                        Time currentTime) override;
   ExpressionTimeBounds getTimeBounds() const override;
 };

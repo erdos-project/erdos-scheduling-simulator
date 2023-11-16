@@ -95,6 +95,8 @@ class CapacityConstraintMap {
   /// A sorted list of TimeRange to the granularity at which that time
   /// range needs to be discretized.
   std::vector<std::pair<TimeRange, Time>> timeRangeToGranularities;
+  /// Mutex for thread-safe parsing
+  std::mutex mutex;
 
   friend class CapacityConstraintMapPurgingOptimizationPass;
 
@@ -138,6 +140,7 @@ class CapacityConstraintMap {
   /// The number of constraints in this map.
   size_t size() const;
 };
+using CapacityConstraintMapPtr = std::shared_ptr<CapacityConstraintMap>;
 }  // namespace tetrisched
 
 #endif  // _TETRISCHED_CAPACITYCONSTRAINT_HPP_
