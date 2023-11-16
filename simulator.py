@@ -374,7 +374,7 @@ class Simulator(object):
                 task_graph.release_time,
                 task_graph.name,
                 task_graph.deadline,
-                task_graph.job_graph.completion_time,
+                task_graph.completion_time,
             )
 
     def simulate(self) -> None:
@@ -794,24 +794,16 @@ class Simulator(object):
                 "Rescheduling of PREEMPTED tasks hasn't been implemented yet."
             )
         else:
-            if not placement.is_placed():
-                self._logger.debug(
-                    "[%s] The Task %s was cancelled by an upstream task, "
-                    "skipping its re-cancellation.",
-                    event_time.to(EventTime.Unit.US).time,
-                    placement.task,
-                )
-            else:
-                # Task was either completed or cancelled before the Scheduler finished,
-                # we skip the application of this Placement decision.
-                self._logger.warning(
-                    "[%s] Skipping the application of Placement of Task %s at "
-                    "time %s because the Task was in %s state.",
-                    event_time.to(EventTime.Unit.US).time,
-                    placement.task,
-                    placement.placement_time,
-                    placement.task.state,
-                )
+            # Task was either completed or cancelled before the Scheduler finished,
+            # we skip the application of this Placement decision.
+            self._logger.warning(
+                "[%s] Skipping the application of Placement of Task %s at "
+                "time %s because the Task was in %s state.",
+                event_time.to(EventTime.Unit.US).time,
+                placement.task,
+                placement.placement_time,
+                placement.task.state,
+            )
 
         return simulator_events
 
@@ -1720,7 +1712,7 @@ class Simulator(object):
             adjusted_scheduler_start_time = max(scheduler_start_time, next_event_time)
 
             if scheduler_start_time != adjusted_scheduler_start_time:
-                self._logger.info(
+                self._logger.warning(
                     "[%s] The scheduler start time was pushed from %s to %s since "
                     "either the next running task finishes at %s or the next "
                     "TASK_RELEASE event is being invoked at %s.",
