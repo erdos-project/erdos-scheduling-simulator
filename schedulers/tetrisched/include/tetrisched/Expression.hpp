@@ -147,6 +147,14 @@ enum ExpressionType {
   /// specialization is extremely effective to lower, and whenever possible
   /// should be used insteado of the generalized choose expression.
   EXPR_MALLEABLE_CHOOSE = 7,
+  /// A `WindowedChoose` expression represents a choice of a required number of
+  /// machines from the set of resource partitions for the given duration
+  /// starting after the provided start time, and finishing before the required
+  /// endTime. Note that, a WindowedChooseExpression is equivalent to a set of
+  /// ChooseExpressions modulated by a MaxExpression. We define this
+  /// higher-level abstraction since it makes it easier for us to dynamically
+  /// discretize the start times of the ChooseExpressions.
+  EXPR_WINDOWED_CHOOSE = 8,
 };
 using ExpressionType = enum ExpressionType;
 
@@ -282,6 +290,52 @@ class ChooseExpression : public Expression {
   ExpressionTimeBounds getTimeBounds() const override;
 };
 
+/// A `WindowedChooseExpression` represents a choice of a required number of
+/// machines from the set of resource partitions for the given duration starting
+/// after the provided start time, and finishing before the required endTime.
+class WindowedChooseExpression : public Expression {
+  /// The Resource partitions that the WindowedChooseExpression is being asked
+  /// to choose resources from.
+  Partitions resourcePartitions;
+  /// The number of partitions that this WindowedChooseExpression needs to
+  /// choose.
+  uint32_t numRequiredMachines;
+  /// The start time after which the choice needs to be placed.
+  Time startTime;
+  /// The duration for which the choice needs to be placed.
+  Time duration;
+  /// The end time before which the choice needs to finish placement.
+  Time endTime;
+  /// The granularity at which the choices need to be generated.
+  Time granularity;
+  // The utility of the choice represented by this Expression.
+  TETRISCHED_ILP_TYPE utility;
+  // A map from the placement time to a Variable that represents if
+  // the placement is chosen or not.
+  std::unordered_map<Time, VariablePtr> placementTimeVariables;
+  // A map from the placement time to a vector of <PartitionId, Variable>
+  // signifying how many Placement variables are chosen from each Partition.
+  std::unordered_map<Time, std::vector<std::pair<uint32_t, VariablePtr>>>
+      placementPartitionVariables;
+
+ public:
+  WindowedChooseExpression(std::string taskName, Partitions resourcePartitions,
+                           uint32_t numRequiredMachines, Time startTime,
+                           Time duration, Time endTime, Time granularity,
+                           TETRISCHED_ILP_TYPE utility);
+  void addChild(ExpressionPtr child) override;
+  ParseResultPtr parse(SolverModelPtr solverModel,
+                       Partitions availablePartitions,
+                       CapacityConstraintMap& capacityConstraints,
+                       Time currentTime) override;
+  SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
+  std::string getDescriptiveName() const override;
+  ExpressionTimeBounds getTimeBounds() const override;
+};
+
+/// A MalleableChooseExpression represents a choice of a flexible set of
+/// requirements of resources at each time that sums up to the total required
+/// space-time allocations from the given start to the given end time.
 class MalleableChooseExpression : public Expression {
  private:
   /// The Resource partitions that the Expression is being asked to

@@ -401,6 +401,14 @@ class SolverModelT {
   /// Throws an error if the model was not solved first.
   T getObjectiveValue() const;
 
+  /// Retrieves the Variable with the given name, if available.
+  std::optional<std::shared_ptr<VariableT<T>>> getVariableByName(
+      std::string variableName) const;
+
+  /// Retrieves the Constraint with the given name, if available.
+  std::optional<std::shared_ptr<ConstraintT<T>>> getConstraintByName(
+      std::string constraintName) const;
+
   /// Clears all the Variables and Constraints from this Model.
   void clear();
 

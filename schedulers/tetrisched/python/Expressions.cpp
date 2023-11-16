@@ -16,6 +16,8 @@ void defineSTRLExpressions(py::module_& tetrisched_m) {
       .value("EXPR_ALLOCATION", tetrisched::ExpressionType::EXPR_ALLOCATION)
       .value("EXPR_MALLEABLE_CHOOSE",
              tetrisched::ExpressionType::EXPR_MALLEABLE_CHOOSE)
+      .value("EXPR_WINDOWED_CHOOSE",
+             tetrisched::ExpressionType::EXPR_WINDOWED_CHOOSE)
       .export_values();
 
   // Define the Placement object.
@@ -110,12 +112,30 @@ void defineSTRLExpressions(py::module_& tetrisched_m) {
                        uint32_t numRequiredMachines, tetrisched::Time startTime,
                        tetrisched::Time duration, TETRISCHED_ILP_TYPE utility) {
              return std::make_shared<tetrisched::ChooseExpression>(
-                 taskName, partitions, numRequiredMachines, startTime,
-                 duration, utility);
+                 taskName, partitions, numRequiredMachines, startTime, duration,
+                 utility);
            }),
            "Initializes a ChooseExpression for the given task to be placed on "
            "`numRequiredMachines` from the given partition at the given "
            "startTime, running for the given duration.");
+
+  // Define the WindowedChooseExpression.
+  py::class_<tetrisched::WindowedChooseExpression, tetrisched::Expression,
+             std::shared_ptr<tetrisched::WindowedChooseExpression>>(
+      tetrisched_m, "WindowedChooseExpression")
+      .def(py::init([](std::string taskName, tetrisched::Partitions partitions,
+                       uint32_t numRequiredMachines, tetrisched::Time startTime,
+                       tetrisched::Time duration, tetrisched::Time endTime,
+                       tetrisched::Time granularity,
+                       TETRISCHED_ILP_TYPE utility) {
+             return std::make_shared<tetrisched::WindowedChooseExpression>(
+                 taskName, partitions, numRequiredMachines, startTime, duration,
+                 endTime, granularity, utility);
+           }),
+           "Initializes a WindowedChooseExpression for the given task to be "
+           "placed on `numRequiredMachines` from the given partition at the "
+           "given startTime, ending before the given end time and "
+           "running for the given duration.");
 
   // Define the MalleableChooseExpression.
   py::class_<tetrisched::MalleableChooseExpression, tetrisched::Expression,
