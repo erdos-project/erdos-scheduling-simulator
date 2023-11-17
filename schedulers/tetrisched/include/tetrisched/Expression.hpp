@@ -170,12 +170,15 @@ struct ExpressionTimeBounds {
   TimeRange startTimeRange;
   /// The range of the end time of the Expression.
   TimeRange endTimeRange;
+  /// The duration for this Expression.
+  Time duration;
   /// A boolean indicating if the time bounds are specified.
   bool specified;
   /// Constructor for unspecified time bounds.
   ExpressionTimeBounds();
   /// Constructor for specified time bounds.
-  ExpressionTimeBounds(TimeRange startTimeRange, TimeRange endTimeRange);
+  ExpressionTimeBounds(TimeRange startTimeRange, TimeRange endTimeRange,
+                       Time duration);
   /// Checks if the time bounds are specified.
   bool isSpecified() const;
   /// A string representation of the bounds.
@@ -275,6 +278,9 @@ class Expression : public std::enable_shared_from_this<Expression> {
 
   /// Retrieves the descriptive name for the Expression.
   virtual std::string getDescriptiveName() const;
+
+  /// Returns the resource quantity required by the Expression.
+  virtual uint32_t getResourceQuantity() const;
 };
 
 /// A `ChooseExpression` represents a choice of a required number of machines
@@ -310,6 +316,7 @@ class ChooseExpression : public Expression {
                        Time currentTime) override;
   SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
   std::string getDescriptiveName() const override;
+  uint32_t getResourceQuantity() const override;
 };
 
 /// A `WindowedChooseExpression` represents a choice of a required number of
@@ -352,6 +359,7 @@ class WindowedChooseExpression : public Expression {
                        Time currentTime) override;
   SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
   std::string getDescriptiveName() const override;
+  uint32_t getResourceQuantity() const override;
 };
 
 /// A MalleableChooseExpression represents a choice of a flexible set of
@@ -392,6 +400,7 @@ class MalleableChooseExpression : public Expression {
                        Time currentTime) override;
   SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
   std::string getDescriptiveName() const override;
+  uint32_t getResourceQuantity() const override;
 };
 
 /// An `AllocationExpression` represents the allocation of the given number of

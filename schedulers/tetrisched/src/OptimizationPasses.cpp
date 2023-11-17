@@ -395,6 +395,116 @@ void CriticalPathOptimizationPass::runPass(
 
 void CriticalPathOptimizationPass::clean() { expressionTimeBoundMap.clear(); }
 
+/* Methods for DiscretizationSelectorOptimizationPass */
+DiscretizationSelectorOptimizationPass::DiscretizationSelectorOptimizationPass()
+    : OptimizationPass("DiscretizationSelectorOptimizationPass",
+                       OptimizationPassType::PRE_TRANSLATION_PASS) {}
+
+void DiscretizationSelectorOptimizationPass::runPass(
+    ExpressionPtr strlExpression, CapacityConstraintMap& capacityConstraints,
+    std::optional<std::string> debugFile) {
+  /* Do a Post-Order Traversal of the DAG. */
+  std::stack<ExpressionPtr> firstStack;
+  std::stack<ExpressionPtr> secondStack;
+  firstStack.push(strlExpression);
+
+  while (!firstStack.empty()) {
+    // Move the expression to the second stack.
+    auto currentExpression = firstStack.top();
+    firstStack.pop();
+    secondStack.push(currentExpression);
+
+    // Add the children to the first stack.
+    auto expressionChildren = currentExpression->getChildren();
+    for (auto child = expressionChildren.rbegin();
+         child != expressionChildren.rend(); ++child) {
+      firstStack.push(*child);
+    }
+  }
+
+  std::vector<std::pair<TimeRange, uint32_t>> occupancyRequestRanges;
+  Time minOccupancyTime = std::numeric_limits<Time>::max();
+  Time maxOccupancyTime = 0;
+
+  // A Post-Order Traversal will now be the order in which
+  // the expressions are popped from the second stack.
+  std::set<std::string> visitedExpressions;
+  std::set<std::string> purgedExpressions;
+  while (!secondStack.empty()) {
+    auto currentExpression = secondStack.top();
+    secondStack.pop();
+    if (visitedExpressions.find(currentExpression->getId()) ==
+        visitedExpressions.end()) {
+      visitedExpressions.insert(currentExpression->getId());
+    } else {
+      continue;
+    }
+    TETRISCHED_DEBUG(
+        "[DiscretizationSelectorOptimizationPass] Attending to nodes for "
+        << currentExpression->getId() << "(" << currentExpression->getName()
+        << ")")
+
+    if (currentExpression->getNumChildren() != 0) {
+      TETRISCHED_DEBUG("[DiscretizationSelectorOptimizationPass] Skipping "
+                       << currentExpression->getId() << "("
+                       << currentExpression->getName()
+                       << ") since it is not a leaf node.")
+      continue;
+    }
+
+    if (currentExpression->getType() == ExpressionType::EXPR_CHOOSE ||
+        currentExpression->getType() == ExpressionType::EXPR_WINDOWED_CHOOSE ||
+        currentExpression->getType() == ExpressionType::EXPR_MALLEABLE_CHOOSE) {
+      // Get the time bounds of the choose expression.
+      auto timeBounds = currentExpression->getTimeBounds();
+      TimeRange occupancyRequestRange = std::make_pair(
+          timeBounds.startTimeRange.first, timeBounds.endTimeRange.second);
+
+      // Update min and max occupancy times, if necessary.
+      if (occupancyRequestRange.first < minOccupancyTime) {
+        minOccupancyTime = occupancyRequestRange.first;
+      }
+      if (occupancyRequestRange.second > maxOccupancyTime) {
+        maxOccupancyTime = occupancyRequestRange.second;
+      }
+
+      // Push the occupancy request range into the vector.
+      occupancyRequestRanges.push_back(
+          {occupancyRequestRange, currentExpression->getResourceQuantity()});
+      TETRISCHED_DEBUG(
+          "[DiscretizationSelectorOptimizationPass] Adding "
+          << currentExpression->getId() << "(" << currentExpression->getName()
+          << ") to the occupancy request ranges with range: "
+          << "[" << occupancyRequestRange.first << ", "
+          << occupancyRequestRange.second << "]"
+          << " and quantity: " << currentExpression->getResourceQuantity())
+    }
+  }
+
+  // We now have the occupancy request ranges, we can now discretize them.
+  std::vector<uint32_t> occupancyRequests(
+      maxOccupancyTime - minOccupancyTime + 1, 0);
+  for (auto& [occupancyRequestTimeRange, occupancyRequest] :
+       occupancyRequestRanges) {
+    // Add the occupancy request throughout this time range.
+    for (Time time = occupancyRequestTimeRange.first;
+         time <= occupancyRequestTimeRange.second; time++) {
+      occupancyRequests[time - minOccupancyTime] += occupancyRequest;
+    }
+  }
+
+  // Log the occupancy requests and times.
+  TETRISCHED_DEBUG(
+      "[DiscretizationSelectorOptimizationPass] Occupancy requests between " << minOccupancyTime << " and " << maxOccupancyTime << ": ");
+  for (size_t i = 0; i < occupancyRequests.size(); i++) {
+    TETRISCHED_DEBUG("[DiscretizationSelectorOptimizationPass] "
+                     << i + minOccupancyTime << ": " << occupancyRequests[i]);
+  }
+
+}
+
+void DiscretizationSelectorOptimizationPass::clean() {}
+
 /* Methods for CapacityConstraintMapPurgingOptimizationPass */
 CapacityConstraintMapPurgingOptimizationPass::
     CapacityConstraintMapPurgingOptimizationPass()
@@ -471,8 +581,8 @@ void CapacityConstraintMapPurgingOptimizationPass::
     debugFileStream.open(debugFile.value());
   }
   // Construct a vector of the size of the number of cliques.
-  // This vector will keep track of if the clique was used in a constraint, and
-  // if so, its maximum usage.
+  // This vector will keep track of if the clique was used in a constraint,
+  // and if so, its maximum usage.
   TETRISCHED_DEBUG("Running deactivation of constraints from a map of size "
                    << capacityConstraints.size())
   size_t deactivatedConstraints = 0;
@@ -639,10 +749,13 @@ void CapacityConstraintMapPurgingOptimizationPass::clean() { cliques.clear(); }
 /* Methods for OptimizationPassRunner */
 OptimizationPassRunner::OptimizationPassRunner(bool debug) : debug(debug) {
   // Register the Critical Path optimization pass.
-  registeredPasses.push_back(std::make_shared<CriticalPathOptimizationPass>());
-  // Register the CapacityConstraintMapPurging optimization pass.
+  // registeredPasses.push_back(std::make_shared<CriticalPathOptimizationPass>());
+  // Register the DiscretizationGenerator pass.
   registeredPasses.push_back(
-      std::make_shared<CapacityConstraintMapPurgingOptimizationPass>());
+      std::make_shared<DiscretizationSelectorOptimizationPass>());
+  // Register the CapacityConstraintMapPurging optimization pass.
+  // registeredPasses.push_back(
+  //     std::make_shared<CapacityConstraintMapPurgingOptimizationPass>());
 }
 
 void OptimizationPassRunner::runPreTranslationPasses(

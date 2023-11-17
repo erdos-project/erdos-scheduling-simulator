@@ -72,6 +72,24 @@ class CriticalPathOptimizationPass : public OptimizationPass {
   void clean() override;
 };
 
+/// A `DiscretizationSelectorOptimizationPass` is an optimization pass that
+/// aims to select the best discretization for the capacity checks to be
+/// generated at.
+class DiscretizationSelectorOptimizationPass : public OptimizationPass {
+ public:
+  /// Instantiate the DiscretizationSelectorOptimizationPass.
+  DiscretizationSelectorOptimizationPass();
+
+  /// Run the DiscretizationSelectorOptimizationPass on the given STRL
+  /// expression.
+  void runPass(ExpressionPtr strlExpression,
+               CapacityConstraintMap& capacityConstraints,
+               std::optional<std::string> debugFile) override;
+
+  /// Clean the pass data structures.
+  void clean() override;
+};
+
 /// A `CapacityConstraintMapPurgingOptimizationPass` is an optimization pass
 /// that aims to remove the capacity constraints that are not needed because
 /// they are trivially satisfied by the Expression tree.
