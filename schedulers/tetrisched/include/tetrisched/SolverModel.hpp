@@ -367,6 +367,8 @@ class SolverModelT {
   std::unordered_map<std::string, T> solutionValueCache;
   /// The objective function in this model.
   std::shared_ptr<ObjectiveFunctionT<T>> objectiveFunction;
+  /// Mutex for thread-safe parsing
+  std::mutex mutex;
 
   /// Generate a new solver model.
   /// Construct a Solver to get an instance of the Model.

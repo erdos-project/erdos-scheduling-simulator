@@ -372,6 +372,8 @@ T ObjectiveFunctionT<T>::getValue() const {
 
 template <typename T>
 void SolverModelT<T>::addVariable(std::shared_ptr<VariableT<T>> variable) {
+  std::lock_guard<std::mutex> guard(mutex);
+
   // Check if variable name exists in the solutionValueCache
   auto it = solutionValueCache.find(variable->getName());
   if (it != solutionValueCache.end()) {
@@ -389,12 +391,14 @@ void SolverModelT<T>::addVariable(std::shared_ptr<VariableT<T>> variable) {
 template <typename T>
 void SolverModelT<T>::addConstraint(
     std::shared_ptr<ConstraintT<T>> constraint) {
+  std::lock_guard<std::mutex> guard(mutex);
   constraints[constraint->getId()] = constraint;
 }
 
 template <typename T>
 void SolverModelT<T>::setObjectiveFunction(
     std::shared_ptr<ObjectiveFunctionT<T>> objectiveFunction) {
+  std::lock_guard<std::mutex> guard(mutex);
   this->objectiveFunction = objectiveFunction;
 }
 
@@ -471,6 +475,8 @@ SolverModelT<T>::getConstraintByName(std::string constraintName) const {
 
 template <typename T>
 void SolverModelT<T>::clear() {
+  std::lock_guard<std::mutex> guard(mutex);
+  
   // Clear the solution value cache first.
   // As of now we only keep track of the solution value from the previous
   // invocation of the solver.
