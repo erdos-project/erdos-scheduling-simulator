@@ -54,7 +54,17 @@ Placement::Placement(std::string taskName, Time startTime, Time endTime)
 Placement::Placement(std::string taskName)
     : taskName(taskName), startTime(std::nullopt), placed(false) {}
 
-bool Placement::isPlaced() const { return placed; }
+bool Placement::isPlaced() const {
+  if (placed && (!startTime.has_value() || !endTime.has_value())) {
+    throw tetrisched::exceptions::ExpressionSolutionException("Placement " +
+                                                              taskName +
+                                                              " is placed, "
+                                                              "but does not "
+                                                              "have a start "
+                                                              "or end time.");
+  }
+  return placed;
+}
 
 void Placement::addPartitionAllocation(uint32_t partitionId, Time time,
                                        uint32_t allocation) {
@@ -68,6 +78,16 @@ void Placement::addPartitionAllocation(uint32_t partitionId, Time time,
 }
 
 std::string Placement::getName() const { return taskName; }
+
+void Placement::setStartTime(Time startTime) {
+  this->startTime = startTime;
+  this->placed = true;
+}
+
+void Placement::setEndTime(Time endTime) {
+  this->endTime = endTime;
+  this->placed = true;
+}
 
 std::optional<Time> Placement::getStartTime() const { return startTime; }
 
@@ -567,7 +587,7 @@ ParseResultPtr WindowedChooseExpression::parse(
   // We now emit choices for each of the possible start times that finish
   // before the end time of the expression, at the provided granularity.
   size_t numChoices = 0;
-  for (Time chooseTime = startTime; chooseTime <= (endTime - duration);
+  for (Time chooseTime = startTime; chooseTime <= endTime;
        chooseTime += granularity, numChoices++) {
     TETRISCHED_DEBUG("Generating a Choice for "
                      << name << " at time " << chooseTime
@@ -640,13 +660,13 @@ ParseResultPtr WindowedChooseExpression::parse(
       VariableType::VAR_INTEGER, name + "_start_time");
   solverModel->addVariable(windowStartTime);
   ConstraintPtr windowStartTimeConstraint = std::make_shared<Constraint>(
-      name + "_start_time_constraint", ConstraintType::CONSTR_EQ, 0);
+      name + "_start_time_constraint", ConstraintType::CONSTR_GE, 0);
 
   VariablePtr windowEndTime =
       std::make_shared<Variable>(VariableType::VAR_INTEGER, name + "_end_time");
   solverModel->addVariable(windowEndTime);
   ConstraintPtr windowEndTimeConstraint = std::make_shared<Constraint>(
-      name + "_end_time_constraint", ConstraintType::CONSTR_GE, 0);
+      name + "_end_time_constraint", ConstraintType::CONSTR_LE, 0);
 
   // Add a constraint that forces only one choice to be allowed.
   VariablePtr windowIndicator = std::make_shared<Variable>(
@@ -772,6 +792,8 @@ SolutionResultPtr WindowedChooseExpression::populateResults(
       placement->addPartitionAllocation(partitionId, chooseTime,
                                         allocationVariableValue.value());
     }
+    placement->setStartTime(chooseTime);
+    placement->setEndTime(chooseTime + duration);
   }
   solution->placements[name] = std::move(placement);
   return solution;

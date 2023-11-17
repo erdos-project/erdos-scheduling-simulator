@@ -635,8 +635,8 @@ TEST(Expression, TestWindowedChoosedExpressionCorrect) {
   auto windowConstraint =
       solverModelPtr->getConstraintByName("task1_choose_one_constraint");
   ASSERT_TRUE(windowConstraint.has_value());
-  EXPECT_EQ(windowConstraint.value()->size(), 7)
-      << "There should be 6 ChooseExpressions in the WindowedChooseExpression, "
+  EXPECT_EQ(windowConstraint.value()->size(), 12)
+      << "There should be 11 ChooseExpressions in the WindowedChooseExpression, "
          "but constraint was: "
       << windowConstraint.value()->toString();
   solverModelPtr->exportModel("testWindowedChooseExpressionCorrect.lp");
@@ -651,7 +651,7 @@ TEST(Expression, TestWindowedChoosedExpressionCorrect) {
   EXPECT_TRUE(task1Placement->isPlaced()) << "task1 should be placed.";
   EXPECT_GE(task1Placement->getStartTime().value(), 0)
       << "task1 should start at or after 0.";
-  EXPECT_LE(task1Placement->getStartTime().value(), 5)
+  EXPECT_LE(task1Placement->getStartTime().value(), 10)
       << "task1 should start at or before 5.";
 }
 #endif

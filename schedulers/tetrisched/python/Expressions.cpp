@@ -133,8 +133,8 @@ void defineSTRLExpressions(py::module_& tetrisched_m) {
                  endTime, granularity, utility);
            }),
            "Initializes a WindowedChooseExpression for the given task to be "
-           "placed on `numRequiredMachines` from the given partition at the "
-           "given startTime, ending before the given end time and "
+           "placed on `numRequiredMachines` from the given partition "
+           "between the given startTime and endTime, and "
            "running for the given duration.");
 
   // Define the MalleableChooseExpression.

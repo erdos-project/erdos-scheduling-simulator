@@ -82,6 +82,12 @@ class Placement {
   /// Retrieve the name of the Task.
   std::string getName() const;
 
+  /// Set the start time of the Placement.
+  void setStartTime(Time startTime);
+
+  /// Set the end time of the Placement.
+  void setEndTime(Time endTime);
+
   /// Retrieve the start time of the Placement, if available.
   std::optional<Time> getStartTime() const;
 

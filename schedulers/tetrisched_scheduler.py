@@ -98,6 +98,9 @@ class TetriSchedScheduler(BaseScheduler):
             tetrisched.backends.SolverBackendType.GUROBI,
             self._log_dir,
         )
+
+        # Values for STRL generation.
+        self._use_windowed_choose = True
         self._adaptive_discretization = adaptive_discretization
         self._max_discretization = max_time_discretization.to(EventTime.Unit.US)
         if (
@@ -107,6 +110,14 @@ class TetriSchedScheduler(BaseScheduler):
             raise ValueError(
                 "Max dicretization should be greater than or equal to "
                 "time discretization but currently it is not"
+            )
+        if self._adaptive_discretization and self._use_windowed_choose:
+            raise ValueError(
+                "Adaptive discretization and windowed choose cannot be used together."
+            )
+        if self._goal != "max_goodput" and self._use_windowed_choose:
+            raise NotImplementedError(
+                f"Windowed choose not implemented for the goal: {self._goal}."
             )
 
     def schedule(
@@ -269,7 +280,11 @@ class TetriSchedScheduler(BaseScheduler):
             # Register the STRL expression with the scheduler and solve it.
             try:
                 self._scheduler.registerSTRL(
-                    objective_strl, partitions, sim_time.time, True, start_end_time_list
+                    objective_strl,
+                    partitions,
+                    sim_time.time,
+                    False,
+                    start_end_time_list,
                 )
                 solver_start_time = time.time()
                 self._scheduler.schedule(sim_time.time)
@@ -480,7 +495,7 @@ class TetriSchedScheduler(BaseScheduler):
             num_interval = self._max_discretization.to(EventTime.Unit.US).time
             initial_repetitions = (
                 end_time - start_time
-            ) // 10  # 1/4th of the time min discretization should be repeated
+            ) // 4  # 1/4th of the time min discretization should be repeated
             initial_repetitions = max(initial_repetitions, 1)
 
             intervals = generate_monotonically_increasing_intervals(
@@ -654,81 +669,104 @@ class TetriSchedScheduler(BaseScheduler):
             )
             return task_allocation_expression
 
-        # We now construct the Choose expressions for each possible placement choice
-        # of this Task, and collate them under a MaxExpression.
-        task_choose_expressions = []
-        choice_placement_times_and_rewards = []
-        for placement_time, reward_for_this_placement in time_discretizations:
-            if placement_time < current_time and task.state != TaskState.RUNNING:
-                # If the placement time is in the past, then we cannot place the task
-                # unless it is already running.
-                continue
+        if not self._use_windowed_choose or len(time_discretizations) == 1:
+            # We now construct the Choose expressions for each possible placement choice
+            # of this Task, and collate them under a MaxExpression.
+            task_choose_expressions = []
+            choice_placement_times_and_rewards = []
+            for placement_time, reward_for_this_placement in time_discretizations:
+                if placement_time < current_time and task.state != TaskState.RUNNING:
+                    # If the placement time is in the past, then we cannot place the
+                    # task unless it is already running.
+                    continue
 
-            # Construct a ChooseExpression for placement at this time.
-            # TODO (Sukrit): We just assume for now that all Slots are the same and
-            # thus the task can be placed on any Slot. This is not true in general.
-            task_choose_expressions.append(
-                tetrisched.strl.ChooseExpression(
-                    task.unique_name,
-                    partitions,
-                    num_slots_required,
-                    placement_time.to(EventTime.Unit.US).time,
-                    execution_strategy.runtime.to(EventTime.Unit.US).time,
-                    reward_for_this_placement,
+                # Construct a ChooseExpression for placement at this time.
+                # TODO (Sukrit): We just assume for now that all Slots are the same and
+                # thus the task can be placed on any Slot. This is not true in general.
+                task_choose_expressions.append(
+                    tetrisched.strl.ChooseExpression(
+                        task.unique_name,
+                        partitions,
+                        num_slots_required,
+                        placement_time.to(EventTime.Unit.US).time,
+                        execution_strategy.runtime.to(EventTime.Unit.US).time,
+                        reward_for_this_placement,
+                    )
                 )
-            )
-            choice_placement_times_and_rewards.append(
-                (placement_time.time, reward_for_this_placement)
-            )
+                choice_placement_times_and_rewards.append(
+                    (placement_time.time, reward_for_this_placement)
+                )
 
-        if len(task_choose_expressions) == 0:
-            self._logger.warn(
-                f"[{current_time.time}] No ChooseExpressions were generated for "
-                f"{task.unique_name} with deadline {task.deadline}."
-            )
-            return None
-        elif len(task_choose_expressions) == 1:
-            self._logger.debug(
-                f"[{current_time.time}] Generated a single ChooseExpression for "
-                f"{task.unique_name} starting at "
-                f"{choice_placement_times_and_rewards[0][0]} "
-                f"with deadline {task.deadline} and a reward "
-                f"{choice_placement_times_and_rewards[0][1]}."
-            )
-            return task_choose_expressions[0]
-        else:
-            if self._goal == "min_placement_delay":
+            if len(task_choose_expressions) == 0:
+                self._logger.warn(
+                    f"[{current_time.time}] No ChooseExpressions were generated for "
+                    f"{task.unique_name} with deadline {task.deadline}."
+                )
+                return None
+            elif len(task_choose_expressions) == 1:
                 self._logger.debug(
-                    f"[{current_time.time}] Generated "
-                    f"{len(choice_placement_times_and_rewards)} ChooseExpressions for "
-                    f"{task.unique_name} for times and rewards"
-                    f"{choice_placement_times_and_rewards} for {num_slots_required} "
-                    f"slots for {execution_strategy.runtime}."
+                    f"[{current_time.time}] Generated a single ChooseExpression for "
+                    f"{task.unique_name} starting at "
+                    f"{choice_placement_times_and_rewards[0][0]} "
+                    f"with deadline {task.deadline} and a reward "
+                    f"{choice_placement_times_and_rewards[0][1]}."
                 )
+                return task_choose_expressions[0]
             else:
+                if self._goal == "min_placement_delay":
+                    self._logger.debug(
+                        f"[{current_time.time}] Generated "
+                        f"{len(choice_placement_times_and_rewards)} ChooseExpressions "
+                        f"for {task.unique_name} for times and rewards"
+                        f"{choice_placement_times_and_rewards} for "
+                        f"{num_slots_required} slots for {execution_strategy.runtime}."
+                    )
+                else:
+                    self._logger.debug(
+                        f"[{current_time.time}] Generated "
+                        f"{len(choice_placement_times_and_rewards)} ChooseExpressions "
+                        f"for {task.unique_name} with deadline {task.deadline} and "
+                        f"remaining time {task_remaining_time} for times "
+                        f"{[t for t, _ in choice_placement_times_and_rewards]} for "
+                        f"{num_slots_required} slots for {execution_strategy.runtime}."
+                    )
+
+                # Construct the STRL MAX expression for this Task.
+                # This enforces the choice of only one placement for this Task.
                 self._logger.debug(
-                    f"[{current_time.time}] Generated "
-                    f"{len(choice_placement_times_and_rewards)} ChooseExpressions for "
-                    f"{task.unique_name} with deadline {task.deadline} and remaining "
-                    f"time {task_remaining_time} for times "
-                    f"{[t for t, _ in choice_placement_times_and_rewards]} for "
-                    f"{num_slots_required} slots for {execution_strategy.runtime}."
+                    f"[{current_time.time}] Constructing a STRL expression tree for "
+                    f"{task.name} (runtime={execution_strategy.runtime}, "
+                    f"deadline={task.deadline}) with name: "
+                    f"{task.unique_name}_placement."
                 )
+                chooseOneFromSet = tetrisched.strl.MaxExpression(
+                    f"{task.unique_name}_placement"
+                )
+                for choose_expression in task_choose_expressions:
+                    chooseOneFromSet.addChild(choose_expression)
 
-            # Construct the STRL MAX expression for this Task.
-            # This enforces the choice of only one placement for this Task.
+                return chooseOneFromSet
+        else:
+            # We need to use a WindowedChoose here instead of generating Choose
+            # expressions ourselves.
+            task_windowed_choose = tetrisched.strl.WindowedChooseExpression(
+                task.unique_name,
+                partitions,
+                num_slots_required,
+                time_discretizations[1][0].to(EventTime.Unit.US).time,
+                execution_strategy.runtime.to(EventTime.Unit.US).time,
+                time_discretizations[-1][0].to(EventTime.Unit.US).time,
+                self._time_discretization.to(EventTime.Unit.US).time,
+                1,
+            )
             self._logger.debug(
-                f"[{current_time.time}] Constructing a STRL expression tree for "
-                f"{task.name} (runtime={execution_strategy.runtime}, "
-                f"deadline={task.deadline}) with name: {task.unique_name}_placement."
+                f"[{current_time.time}] Generated a WindowedChooseExpression for "
+                f"{task.unique_name} with deadline {task.deadline} and remaining time "
+                f"{task_remaining_time} for times between {time_discretizations[1][0]} "
+                f"and {time_discretizations[-1][0]} for {num_slots_required} slots for "
+                f"duration {execution_strategy.runtime}."
             )
-            chooseOneFromSet = tetrisched.strl.MaxExpression(
-                f"{task.unique_name}_placement"
-            )
-            for choose_expression in task_choose_expressions:
-                chooseOneFromSet.addChild(choose_expression)
-
-            return chooseOneFromSet
+            return task_windowed_choose
 
     def _construct_task_graph_strl(
         self,
