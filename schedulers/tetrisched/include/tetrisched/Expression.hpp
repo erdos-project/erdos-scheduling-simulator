@@ -166,8 +166,19 @@ using ExpressionType = enum ExpressionType;
 
 /// A representation of the ranges on start and finish time.
 struct ExpressionTimeBounds {
+  /// The range of the start time of the Expression.
   TimeRange startTimeRange;
+  /// The range of the end time of the Expression.
   TimeRange endTimeRange;
+  /// A boolean indicating if the time bounds are specified.
+  bool specified;
+  /// Constructor for unspecified time bounds.
+  ExpressionTimeBounds();
+  /// Constructor for specified time bounds.
+  ExpressionTimeBounds(TimeRange startTimeRange, TimeRange endTimeRange);
+  /// Checks if the time bounds are specified.
+  bool isSpecified() const;
+  /// A string representation of the bounds.
   std::string toString() const;
 };
 
@@ -189,6 +200,8 @@ class Expression : public std::enable_shared_from_this<Expression> {
   ExpressionType type;
   /// The Solution result from this Expression.
   SolutionResultPtr solution;
+  /// The time bounds for this Expression.
+  ExpressionTimeBounds timeBounds;
 
   /// Adds a parent to this expression.
   void addParent(ExpressionPtr parent);
@@ -239,7 +252,11 @@ class Expression : public std::enable_shared_from_this<Expression> {
   std::string getTypeString() const;
 
   /// Returns the time range that this Expression will be subject to.
-  virtual ExpressionTimeBounds getTimeBounds() const;
+  ExpressionTimeBounds getTimeBounds() const;
+
+  /// Sets the time range that this Expression will be subject to.
+  /// Note that only certain Expressions may choose to use this information.
+  void setTimeBounds(ExpressionTimeBounds timeBounds);
 
   /// Populates the solution of the subtree rooted at this Expression and
   /// returns the Solution for this Expression. It assumes that the
@@ -293,7 +310,6 @@ class ChooseExpression : public Expression {
                        Time currentTime) override;
   SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
   std::string getDescriptiveName() const override;
-  ExpressionTimeBounds getTimeBounds() const override;
 };
 
 /// A `WindowedChooseExpression` represents a choice of a required number of
@@ -336,7 +352,6 @@ class WindowedChooseExpression : public Expression {
                        Time currentTime) override;
   SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
   std::string getDescriptiveName() const override;
-  ExpressionTimeBounds getTimeBounds() const override;
 };
 
 /// A MalleableChooseExpression represents a choice of a flexible set of
@@ -377,7 +392,6 @@ class MalleableChooseExpression : public Expression {
                        Time currentTime) override;
   SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
   std::string getDescriptiveName() const override;
-  ExpressionTimeBounds getTimeBounds() const override;
 };
 
 /// An `AllocationExpression` represents the allocation of the given number of
@@ -406,7 +420,6 @@ class AllocationExpression : public Expression {
                        Time currentTime) override;
   SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
   std::string getDescriptiveName() const override;
-  ExpressionTimeBounds getTimeBounds() const override;
 };
 
 /// An `ObjectiveExpression` collates the objectives from its children and
@@ -472,7 +485,6 @@ class LessThanExpression : public Expression {
                        Partitions availablePartitions,
                        CapacityConstraintMap& capacityConstraints,
                        Time currentTime) override;
-  ExpressionTimeBounds getTimeBounds() const override;
 };
 }  // namespace tetrisched
 #endif  // _TETRISCHED_EXPRESSION_HPP_
