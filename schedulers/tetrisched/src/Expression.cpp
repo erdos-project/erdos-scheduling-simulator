@@ -110,7 +110,7 @@ void Expression::addChild(ExpressionPtr child) {
 }
 
 void Expression::removeChild(ExpressionPtr child) {
-  if (child == nullptr) {
+    if (child == nullptr) {
     throw tetrisched::exceptions::ExpressionConstructionException(
         "Cannot remove a null child from the Expression " + name + ".");
   }
@@ -375,8 +375,7 @@ ExpressionTimeBounds ChooseExpression::getTimeBounds() const {
 ParseResultPtr ChooseExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
-  // Lock for thread safety
-  std::lock_guard<std::mutex> guard(parseMutex);  
+  std::lock_guard<std::mutex> guard(mutex);  
 
   // Check that the Expression was parsed before
   if (parsedResult != nullptr) {
@@ -475,6 +474,7 @@ ParseResultPtr ChooseExpression::parse(
 
 SolutionResultPtr ChooseExpression::populateResults(
     SolverModelPtr solverModel) {
+  std::lock_guard<std::mutex> guard(mutex);  
   // Populate the results for the SolverModel's variables (i.e, this
   // Expression's utility, start time and end time) from the Base Expression
   // class.
@@ -532,8 +532,7 @@ void WindowedChooseExpression::addChild(ExpressionPtr child) {
 ParseResultPtr WindowedChooseExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
-  // Lock for thread safety
-  std::lock_guard<std::mutex> guard(parseMutex);
+  std::lock_guard<std::mutex> guard(mutex);
 
   // Check that the Expression was parsed before.
   if (parsedResult != nullptr) {
@@ -738,6 +737,7 @@ ParseResultPtr WindowedChooseExpression::parse(
 
 SolutionResultPtr WindowedChooseExpression::populateResults(
     SolverModelPtr solverModel) {
+  std::lock_guard<std::mutex> guard(mutex);
   // Populate the results for the SolverModel's variables (i.e, this
   // Expression's utility, start time and end time) from the Base Expression
   // class.
@@ -821,8 +821,7 @@ void MalleableChooseExpression::addChild(ExpressionPtr child) {
 ParseResultPtr MalleableChooseExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
-  // Lock for thread safety
-  std::lock_guard<std::mutex> guard(parseMutex);
+  std::lock_guard<std::mutex> guard(mutex);
 
   // Check that the Expression was parsed before
   if (parsedResult != nullptr) {
@@ -1121,6 +1120,7 @@ ParseResultPtr MalleableChooseExpression::parse(
 
 SolutionResultPtr MalleableChooseExpression::populateResults(
     SolverModelPtr solverModel) {
+  std::lock_guard<std::mutex> guard(mutex);
   // Populate the results for the SolverModel's variables (i.e, this
   // Expression's utility, start time and end time) from the Base Expression
   // class.
@@ -1181,8 +1181,7 @@ void AllocationExpression::addChild(ExpressionPtr child) {
 ParseResultPtr AllocationExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
-  // Lock for thread safety
-  std::lock_guard<std::mutex> guard(parseMutex);
+  std::lock_guard<std::mutex> guard(mutex);
 
   // Check that the Expression was parsed before.
   if (parsedResult != nullptr) {
@@ -1215,6 +1214,7 @@ ParseResultPtr AllocationExpression::parse(
 
 SolutionResultPtr AllocationExpression::populateResults(
     SolverModelPtr solverModel) {
+  std::lock_guard<std::mutex> guard(mutex);
   // Populate the results for the SolverModel's variables (i.e, this
   // Expression's utility, start time and end time) from the Base Expression
   // class.
@@ -1242,8 +1242,7 @@ ObjectiveExpression::ObjectiveExpression(std::string name)
 ParseResultPtr ObjectiveExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
-  // Lock for thread safety
-  std::lock_guard<std::mutex> guard(parseMutex);
+  std::lock_guard<std::mutex> guard(mutex);
   
   // Check that the Expression was parsed before
   if (parsedResult != nullptr) {
@@ -1302,6 +1301,7 @@ ParseResultPtr ObjectiveExpression::parse(
 
 SolutionResultPtr ObjectiveExpression::populateResults(
     SolverModelPtr solverModel) {
+  std::lock_guard<std::mutex> guard(mutex);
   // Use the Base definition for populating everything.
   Expression::populateResults(solverModel);
 
@@ -1363,7 +1363,7 @@ LessThanExpression::LessThanExpression(std::string name)
     : Expression(name, ExpressionType::EXPR_LESSTHAN) {}
 
 void LessThanExpression::addChild(ExpressionPtr child) {
-  if (children.size() == 2) {
+    if (children.size() == 2) {
     throw tetrisched::exceptions::ExpressionConstructionException(
         "LessThanExpression cannot have more than two children.");
   }
@@ -1373,8 +1373,7 @@ void LessThanExpression::addChild(ExpressionPtr child) {
 ParseResultPtr LessThanExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
-  // Lock for thread safety
-  std::lock_guard<std::mutex> guard(parseMutex);
+  std::lock_guard<std::mutex> guard(mutex);
 
   // Sanity check the children.
   if (children.size() != 2) {
@@ -1557,8 +1556,7 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
                                     Partitions availablePartitions,
                                     CapacityConstraintMapPtr capacityConstraints,
                                     Time currentTime) {
-  // Lock for thread safety
-  std::lock_guard<std::mutex> guard(parseMutex);
+  std::lock_guard<std::mutex> guard(mutex);
 
   // Check that the Expression was parsed before
   if (parsedResult != nullptr) {
@@ -1778,6 +1776,7 @@ MaxExpression::MaxExpression(std::string name)
     : Expression(name, ExpressionType::EXPR_MAX) {}
 
 void MaxExpression::addChild(ExpressionPtr child) {
+  std::lock_guard<std::mutex> guard(mutex);  
   if (child->getType() != ExpressionType::EXPR_CHOOSE) {
     throw tetrisched::exceptions::ExpressionConstructionException(
         "MaxExpression can only have ChooseExpression children.");
@@ -1789,8 +1788,7 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
                                     Partitions availablePartitions,
                                     CapacityConstraintMapPtr capacityConstraints,
                                     Time currentTime) {
-  // Lock for thread safety
-  std::lock_guard<std::mutex> guard(parseMutex);
+  std::lock_guard<std::mutex> guard(mutex);
 
   // Check that the Expression was parsed before
   if (parsedResult != nullptr) {
@@ -1989,6 +1987,7 @@ ScaleExpression::ScaleExpression(std::string name,
     : Expression(name, ExpressionType::EXPR_SCALE), scaleFactor(scaleFactor) {}
 
 void ScaleExpression::addChild(ExpressionPtr child) {
+  std::lock_guard<std::mutex> guard(mutex);  
   if (children.size() == 1) {
     throw tetrisched::exceptions::ExpressionConstructionException(
         "ScaleExpression can only have one child.");
@@ -1999,8 +1998,7 @@ void ScaleExpression::addChild(ExpressionPtr child) {
 ParseResultPtr ScaleExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
-  // Lock for thread safety
-  std::lock_guard<std::mutex> guard(parseMutex);
+  std::lock_guard<std::mutex> guard(mutex);
 
   // Sanity check the children.
   if (children.size() != 1) {
