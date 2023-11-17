@@ -138,7 +138,7 @@ class CapacityConstraintMap {
   void translate(SolverModelPtr solverModel);
 
   /// The number of constraints in this map.
-  size_t size() const;
+  size_t size();
 };
 using CapacityConstraintMapPtr = std::shared_ptr<CapacityConstraintMap>;
 }  // namespace tetrisched

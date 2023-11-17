@@ -166,7 +166,6 @@ void CapacityConstraintMap::registerUsageForDuration(
     const ExpressionPtr expression, const Partition& partition,
     const Time startTime, const Time duration, const IndicatorT usageIndicator,
     const PartitionUsageT variable, std::optional<Time> granularity) {
-  // Lock for thread safety
   std::lock_guard<std::mutex> guard(mutex);
 
   if (!useDynamicDiscretization) {
@@ -246,7 +245,6 @@ void CapacityConstraintMap::registerUsageForDuration(
 }
 
 void CapacityConstraintMap::translate(SolverModelPtr solverModel) {
-  // Lock for thread safety
   std::lock_guard<std::mutex> guard(mutex);
 
   // Add the constraints to the SolverModel.
@@ -258,7 +256,8 @@ void CapacityConstraintMap::translate(SolverModelPtr solverModel) {
   // capacityConstraints.clear();
 }
 
-size_t CapacityConstraintMap::size() const {
+size_t CapacityConstraintMap::size() {
+  std::lock_guard<std::mutex> guard(mutex);
   return capacityConstraints.size();
 }
 }  // namespace tetrisched
