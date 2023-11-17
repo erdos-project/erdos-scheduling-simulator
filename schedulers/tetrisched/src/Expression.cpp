@@ -1,6 +1,7 @@
 #include "tetrisched/Expression.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <random>
 #include <sstream>
@@ -185,12 +186,6 @@ std::string Expression::getTypeString() const {
 
 ExpressionTimeBounds Expression::getTimeBounds() const {
   if (getNumChildren() == 0) {
-    if (!timeBounds.isSpecified()) {
-      throw tetrisched::exceptions::ExpressionConstructionException(
-          "Expression " + name + " of type " + getTypeString() +
-          " does not have any children, and its time bounds were not "
-          "specified.");
-    }
     return timeBounds;
   } else if (getNumChildren() == 1) {
     return children[0]->getTimeBounds();
@@ -579,8 +574,14 @@ WindowedChooseExpression::WindowedChooseExpression(
       granularity(granularity),
       utility(utility) {
   // Set the time bounds for this Choice.
+  Time endTimeLowerBound = static_cast<Time>(
+      granularity *
+      ceil(static_cast<double>(startTime + duration) / granularity));
+  Time endTimeUpperBound = static_cast<Time>(
+      granularity *
+      ceil(static_cast<double>(endTime + duration) / granularity));
   timeBounds = ExpressionTimeBounds({startTime, endTime},
-                                    {startTime + duration, endTime + duration});
+                                    {endTimeLowerBound, endTimeUpperBound});
 }
 
 void WindowedChooseExpression::addChild(ExpressionPtr child) {
@@ -631,9 +632,30 @@ ParseResultPtr WindowedChooseExpression::parse(
   // We now emit choices for each of the possible start times that finish
   // before the end time of the expression, at the provided granularity.
   size_t numChoices = 0;
-  for (Time chooseTime = timeBounds.startTimeRange.first;
-       chooseTime <= timeBounds.startTimeRange.second;
-       chooseTime += granularity, numChoices++) {
+  Time chooseTimeLowerBound = static_cast<Time>(
+      granularity *
+      ceil(static_cast<double>(timeBounds.startTimeRange.first) / granularity));
+  Time chooseTimeUpperBound = static_cast<Time>(
+      granularity * ceil(static_cast<double>(timeBounds.startTimeRange.second) /
+                         granularity));
+  TETRISCHED_DEBUG("Generating choices for " << name << " between "
+                                             << chooseTimeLowerBound << " and "
+                                             << chooseTimeUpperBound << ".")
+  for (Time chooseTime = chooseTimeLowerBound;
+       chooseTime <= chooseTimeUpperBound; chooseTime += granularity) {
+    if (chooseTime + duration > timeBounds.endTimeRange.second) {
+      // This choice is not valid, skip it.
+      TETRISCHED_DEBUG("Skipping choice for "
+                       << name << " at time " << chooseTime
+                       << " as it does not fit within the finish time bounds: ("
+                       << timeBounds.endTimeRange.first << ", "
+                       << timeBounds.endTimeRange.second << ").")
+      continue;
+    }
+
+    // Keep track of the number of choices being made.
+    numChoices++;
+
     TETRISCHED_DEBUG("Generating a Choice for "
                      << name << " at time " << chooseTime
                      << " as part of the WindowedChooseExpression.")
@@ -691,9 +713,12 @@ ParseResultPtr WindowedChooseExpression::parse(
   }
 
   if (numChoices == 0) {
-    throw tetrisched::exceptions::ExpressionConstructionException(
-        "WindowedChooseExpression " + name +
-        " was instantiated with parameters that do not lead to any choices.");
+    TETRISCHED_DEBUG(
+        "WindowedChooseExpression "
+        << name
+        << " was instantiated with parameters that do not lead to any choices.")
+    parsedResult->type = ParseResultType::EXPRESSION_NO_UTILITY;
+    return parsedResult;
   }
   TETRISCHED_DEBUG("Generated " << numChoices << " choices for " << name
                                 << " as part of the "
@@ -720,6 +745,10 @@ ParseResultPtr WindowedChooseExpression::parse(
   ConstraintPtr chooseOneConstraint = std::make_shared<Constraint>(
       name + "_choose_one_constraint", ConstraintType::CONSTR_EQ, 0);
 
+  // Construct the Utility function for this ChooseExpression.
+  auto utilityFunction =
+      std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
+
   // Iterate over all the children and set the start, end times and
   // indicator accordingly.
   TimeRange startTimeBounds =
@@ -730,6 +759,7 @@ ParseResultPtr WindowedChooseExpression::parse(
     windowEndTimeConstraint->addTerm(placementTime + duration,
                                      placementVariable);
     chooseOneConstraint->addTerm(placementVariable);
+    utilityFunction->addTerm(utility, placementVariable);
 
     if (placementTime < startTimeBounds.first) {
       startTimeBounds.first = placementTime;
@@ -780,9 +810,9 @@ ParseResultPtr WindowedChooseExpression::parse(
                    << name << " to [0, " << endTimeBounds.second << "].")
 
   // Construct the Utility function for this ChooseExpression.
-  auto utilityFunction =
-      std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
-  utilityFunction->addTerm(utility, windowIndicator);
+  // auto utilityFunction =
+  //     std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
+  // utilityFunction->addTerm(utility, windowIndicator);
 
   // Construct and return the ParseResult.
   parsedResult->type = ParseResultType::EXPRESSION_UTILITY;

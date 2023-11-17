@@ -315,17 +315,41 @@ void CriticalPathOptimizationPass::purgeNodes(ExpressionPtr expression) {
                        << currentExpression->getId() << "("
                        << currentExpression->getName()
                        << "): " << newTimeBounds.toString())
-      if (originalTimeBounds.startTimeRange.first <
-              newTimeBounds.startTimeRange.first ||
-          originalTimeBounds.startTimeRange.second >
-              newTimeBounds.startTimeRange.second ||
-          originalTimeBounds.endTimeRange.first <
-              newTimeBounds.endTimeRange.first ||
-          originalTimeBounds.endTimeRange.second >
-              newTimeBounds.endTimeRange.second) {
-        purgedExpressions.insert(currentExpression->getId());
-        TETRISCHED_DEBUG("Purging node " << currentExpression->getId() << "("
-                                         << currentExpression->getName() << ")")
+
+      if (currentExpression->getType() == ExpressionType::EXPR_CHOOSE) {
+        // Choose expression leads to one choice and if that choice becomes
+        // invalid, we should purge the Choose expression.
+        if (originalTimeBounds.startTimeRange.first <
+                newTimeBounds.startTimeRange.first ||
+            originalTimeBounds.startTimeRange.second >
+                newTimeBounds.startTimeRange.second ||
+            originalTimeBounds.endTimeRange.first <
+                newTimeBounds.endTimeRange.first ||
+            originalTimeBounds.endTimeRange.second >
+                newTimeBounds.endTimeRange.second) {
+          purgedExpressions.insert(currentExpression->getId());
+          TETRISCHED_DEBUG("Purging node " << currentExpression->getId() << "("
+                                           << currentExpression->getName()
+                                           << ")")
+        }
+      } else if (currentExpression->getType() ==
+                     ExpressionType::EXPR_WINDOWED_CHOOSE ||
+                 currentExpression->getType() ==
+                     ExpressionType::EXPR_MALLEABLE_CHOOSE) {
+        // Both WindowedChoose and MalleableChoose can generate various options.
+        // We only purge them if all the options are invalid. Otherwise, we just
+        // tighten the bounds.
+        if (newTimeBounds.startTimeRange.first >
+            newTimeBounds.endTimeRange.second) {
+          // The expression is being asked to start after it can finish at the
+          // earliest. This can definitely be purged.
+          purgedExpressions.insert(currentExpression->getId());
+          TETRISCHED_DEBUG("Purging node " << currentExpression->getId() << "("
+                                           << currentExpression->getName()
+                                           << ")")
+        } else {
+          currentExpression->setTimeBounds(newTimeBounds);
+        }
       }
     } else {
       // This is not a leaf node, so we need to remove the children that
@@ -342,7 +366,9 @@ void CriticalPathOptimizationPass::purgeNodes(ExpressionPtr expression) {
 
       if (currentExpression->getNumChildren() == 0 ||
           (currentExpression->getNumChildren() == 1 &&
-           currentExpression->getType() == ExpressionType::EXPR_LESSTHAN)) {
+           currentExpression->getType() == ExpressionType::EXPR_LESSTHAN) ||
+          (purgedChildrens.size() > 0 &&
+           currentExpression->getType() == ExpressionType::EXPR_MIN)) {
         purgedExpressions.insert(currentExpression->getId());
         TETRISCHED_DEBUG("Purging node " << currentExpression->getId() << "("
                                          << currentExpression->getName() << ")")
@@ -456,8 +482,8 @@ void CapacityConstraintMapPurgingOptimizationPass::
   // Iterate over each of the individual CapacityConstraints in the map.
   for (auto& [key, capacityConstraint] :
        capacityConstraints.capacityConstraints) {
-    // If the capacity check is trivially satisfiable, don't even bother checking
-    // the cliques.
+    // If the capacity check is trivially satisfiable, don't even bother
+    // checking the cliques.
     if (capacityConstraint->capacityConstraint->isTriviallySatisfiable()) {
       TETRISCHED_DEBUG("Deactivating " << capacityConstraint->getName()
                                        << " since it is trivially satisfied.")
@@ -585,12 +611,14 @@ void CapacityConstraintMapPurgingOptimizationPass::runPass(
   // auto cliqueStartTime = std::chrono::high_resolution_clock::now();
   // computeCliques(strlExpression);
   // auto cliqueEndTime = std::chrono::high_resolution_clock::now();
-  // auto cliqueDuration = std::chrono::duration_cast<std::chrono::microseconds>(
+  // auto cliqueDuration =
+  // std::chrono::duration_cast<std::chrono::microseconds>(
   //                           cliqueEndTime - cliqueStartTime)
   //                           .count();
   // TETRISCHED_DEBUG("Computing cliques took: " << cliqueDuration
   //                                             << " microseconds.")
-  // std::cout << "Computing cliques took: " << cliqueDuration << " microseconds."
+  // std::cout << "Computing cliques took: " << cliqueDuration << "
+  // microseconds."
   //           << std::endl;
 
   /* Phase 2: We go over each of the CapacityConstraint in the map, and
