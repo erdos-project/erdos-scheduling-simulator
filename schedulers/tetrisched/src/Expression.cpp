@@ -1261,14 +1261,29 @@ ParseResultPtr ObjectiveExpression::parse(
   auto utility =
       std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
 
-  // Parse the children and collect the utiltiies.
+  std::vector<std::future<ParseResultPtr>> futures;
+
+  // Launch parsing tasks for each child
   for (auto& child : children) {
-    auto result = child->parse(solverModel, availablePartitions,
-                               capacityConstraints, currentTime);
+    futures.push_back(std::async(std::launch::async, 
+                                 &Expression::parse, 
+                                 child.get(), // Pass the raw pointer of the shared_ptr
+                                 solverModel, 
+                                 availablePartitions, 
+                                 capacityConstraints, 
+                                 currentTime));
+  }
+
+  // Parse the children and collect the utiltiies.
+  // for (auto& child : children) {
+  for (int i = 0; i < children.size(); ++i) {
+    // auto result = child->parse(solverModel, availablePartitions,
+    //                            capacityConstraints, currentTime);
+    auto result = futures[i].get();
     if (result->type == ParseResultType::EXPRESSION_UTILITY) {
       if (!result->utility.has_value()) {
         throw tetrisched::exceptions::ExpressionConstructionException(
-            "ObjectiveExpression " + name + "'s child " + child->getName() +
+            "ObjectiveExpression " + name + "'s child " + children[i]->getName() +
             " was supposed to provide utility, but doesn't.");
       }
       (*utility) += *(result->utility.value());
@@ -1392,10 +1407,26 @@ ParseResultPtr LessThanExpression::parse(
   TETRISCHED_DEBUG("Parsing LessThanExpression with name " << name << ".")
 
   // Parse both the children.
-  auto firstChildResult = children[0]->parse(solverModel, availablePartitions,
-                                             capacityConstraints, currentTime);
-  auto secondChildResult = children[1]->parse(solverModel, availablePartitions,
-                                              capacityConstraints, currentTime);
+  std::vector<std::future<ParseResultPtr>> futures;
+
+  // Launch parsing tasks for each child
+  for (auto& child : children) {
+    futures.push_back(std::async(std::launch::async, 
+                                 &Expression::parse, 
+                                 child.get(), // Pass the raw pointer of the shared_ptr
+                                 solverModel, 
+                                 availablePartitions, 
+                                 capacityConstraints, 
+                                 currentTime));
+  }
+
+  // auto firstChildResult = children[0]->parse(solverModel, availablePartitions,
+  //                                            capacityConstraints, currentTime);
+  // auto secondChildResult = children[1]->parse(solverModel, availablePartitions,
+  //                                             capacityConstraints, currentTime);
+  auto firstChildResult = futures[0].get();
+  auto secondChildResult = futures[1].get();
+
   TETRISCHED_DEBUG(
       "Finished parsing the children for LessThanExpression with name " << name
                                                                         << ".")
@@ -1606,10 +1637,25 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
   // std::pair<double, double> endTimeRange =
   //     std::make_pair(std::numeric_limits<Time>::max(), 0);
 
+  // Vector to hold futures
+  std::vector<std::future<ParseResultPtr>> futures;
+
+  // Launch parsing tasks for each child
+  for (auto& child : children) {
+    futures.push_back(std::async(std::launch::async, 
+                                 &Expression::parse, 
+                                 child.get(), // Pass the raw pointer of the shared_ptr
+                                 solverModel, 
+                                 availablePartitions, 
+                                 capacityConstraints, 
+                                 currentTime));
+  }
+  
   for (int i = 0; i < numChildren; i++) {
     // Parse the Child.
-    auto childParsedResult = children[i]->parse(
-        solverModel, availablePartitions, capacityConstraints, currentTime);
+    auto childParsedResult = futures[i].get();
+    // auto childParsedResult = children[i]->parse(
+    //     solverModel, availablePartitions, capacityConstraints, currentTime);
 
     if (childParsedResult->type != ParseResultType::EXPRESSION_UTILITY) {
       // If any of the children cannot provide a utility, the MIN expression
