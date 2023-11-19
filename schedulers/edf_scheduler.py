@@ -26,10 +26,14 @@ class EDFScheduler(BaseScheduler):
         self,
         preemptive: bool = False,
         runtime: EventTime = EventTime(time=-1, unit=EventTime.Unit.US),
+        enforce_deadlines: bool = False,
         _flags: Optional["absl.flags"] = None,
     ):
         super(EDFScheduler, self).__init__(
-            preemptive=preemptive, runtime=runtime, _flags=_flags
+            preemptive=preemptive,
+            runtime=runtime,
+            enforce_deadlines=enforce_deadlines,
+            _flags=_flags,
         )
 
     def schedule(
@@ -44,6 +48,14 @@ class EDFScheduler(BaseScheduler):
             time=sim_time,
             preemption=self.preemptive,
             worker_pools=worker_pools,
+        )
+        task_description_string = [
+            f"{t.unique_name} (" f"{t.deadline})" for t in tasks_to_be_scheduled
+        ]
+        self._logger.debug(
+            f"[{sim_time.time}] The scheduler received {len(tasks_to_be_scheduled)} "
+            f"tasks to be scheduled. These tasks along with their "
+            f"deadlines were: {task_description_string}."
         )
 
         if self.preemptive:
@@ -89,6 +101,25 @@ class EDFScheduler(BaseScheduler):
                 f"schedule {task} with the available execution strategies: "
                 f"{task.available_execution_strategies}."
             )
+
+            # If we are enforcing deadlines, and the Task is past its deadline, then
+            # we should create a cancellation for it.
+            if (
+                self.enforce_deadlines
+                and task.deadline
+                < sim_time
+                + task.available_execution_strategies.get_fastest_strategy().runtime
+            ):
+                placements.append(Placement.create_task_cancellation(task=task))
+                self._logger.debug(
+                    "[%s] Task %s has a deadline of %s, which has been missed. ",
+                    sim_time.to(EventTime.Unit.US).time,
+                    task,
+                    task.deadline.to(EventTime.Unit.US).time,
+                )
+                continue
+
+            # Try to place the task on the worker pools.
             is_task_placed = False
             for execution_strategy in task.available_execution_strategies:
                 for worker_pool in schedulable_worker_pools.worker_pools:

@@ -82,6 +82,12 @@ class Placement {
   /// Retrieve the name of the Task.
   std::string getName() const;
 
+  /// Set the start time of the Placement.
+  void setStartTime(Time startTime);
+
+  /// Set the end time of the Placement.
+  void setEndTime(Time endTime);
+
   /// Retrieve the start time of the Placement, if available.
   std::optional<Time> getStartTime() const;
 
@@ -147,13 +153,35 @@ enum ExpressionType {
   /// specialization is extremely effective to lower, and whenever possible
   /// should be used insteado of the generalized choose expression.
   EXPR_MALLEABLE_CHOOSE = 7,
+  /// A `WindowedChoose` expression represents a choice of a required number of
+  /// machines from the set of resource partitions for the given duration
+  /// starting after the provided start time, and finishing before the required
+  /// endTime. Note that, a WindowedChooseExpression is equivalent to a set of
+  /// ChooseExpressions modulated by a MaxExpression. We define this
+  /// higher-level abstraction since it makes it easier for us to dynamically
+  /// discretize the start times of the ChooseExpressions.
+  EXPR_WINDOWED_CHOOSE = 8,
 };
 using ExpressionType = enum ExpressionType;
 
 /// A representation of the ranges on start and finish time.
 struct ExpressionTimeBounds {
+  /// The range of the start time of the Expression.
   TimeRange startTimeRange;
+  /// The range of the end time of the Expression.
   TimeRange endTimeRange;
+  /// The duration for this Expression.
+  Time duration;
+  /// A boolean indicating if the time bounds are specified.
+  bool specified;
+  /// Constructor for unspecified time bounds.
+  ExpressionTimeBounds();
+  /// Constructor for specified time bounds.
+  ExpressionTimeBounds(TimeRange startTimeRange, TimeRange endTimeRange,
+                       Time duration);
+  /// Checks if the time bounds are specified.
+  bool isSpecified() const;
+  /// A string representation of the bounds.
   std::string toString() const;
 };
 
@@ -175,6 +203,8 @@ class Expression : public std::enable_shared_from_this<Expression> {
   ExpressionType type;
   /// The Solution result from this Expression.
   SolutionResultPtr solution;
+  /// The time bounds for this Expression.
+  ExpressionTimeBounds timeBounds;
 
   /// Adds a parent to this expression.
   void addParent(ExpressionPtr parent);
@@ -225,7 +255,11 @@ class Expression : public std::enable_shared_from_this<Expression> {
   std::string getTypeString() const;
 
   /// Returns the time range that this Expression will be subject to.
-  virtual ExpressionTimeBounds getTimeBounds() const;
+  ExpressionTimeBounds getTimeBounds() const;
+
+  /// Sets the time range that this Expression will be subject to.
+  /// Note that only certain Expressions may choose to use this information.
+  void setTimeBounds(ExpressionTimeBounds timeBounds);
 
   /// Populates the solution of the subtree rooted at this Expression and
   /// returns the Solution for this Expression. It assumes that the
@@ -244,6 +278,9 @@ class Expression : public std::enable_shared_from_this<Expression> {
 
   /// Retrieves the descriptive name for the Expression.
   virtual std::string getDescriptiveName() const;
+
+  /// Returns the resource quantity required by the Expression.
+  virtual uint32_t getResourceQuantity() const;
 };
 
 /// A `ChooseExpression` represents a choice of a required number of machines
@@ -279,9 +316,55 @@ class ChooseExpression : public Expression {
                        Time currentTime) override;
   SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
   std::string getDescriptiveName() const override;
-  ExpressionTimeBounds getTimeBounds() const override;
+  uint32_t getResourceQuantity() const override;
 };
 
+/// A `WindowedChooseExpression` represents a choice of a required number of
+/// machines from the set of resource partitions for the given duration starting
+/// after the provided start time, and finishing before the required endTime.
+class WindowedChooseExpression : public Expression {
+  /// The Resource partitions that the WindowedChooseExpression is being asked
+  /// to choose resources from.
+  Partitions resourcePartitions;
+  /// The number of partitions that this WindowedChooseExpression needs to
+  /// choose.
+  uint32_t numRequiredMachines;
+  /// The start time after which the choice needs to be placed.
+  Time startTime;
+  /// The duration for which the choice needs to be placed.
+  Time duration;
+  /// The end time before which the choice needs to finish placement.
+  Time endTime;
+  /// The granularity at which the choices need to be generated.
+  Time granularity;
+  // The utility of the choice represented by this Expression.
+  TETRISCHED_ILP_TYPE utility;
+  // A map from the placement time to a Variable that represents if
+  // the placement is chosen or not.
+  std::unordered_map<Time, VariablePtr> placementTimeVariables;
+  // A map from the placement time to a vector of <PartitionId, Variable>
+  // signifying how many Placement variables are chosen from each Partition.
+  std::unordered_map<Time, std::vector<std::pair<uint32_t, VariablePtr>>>
+      placementPartitionVariables;
+
+ public:
+  WindowedChooseExpression(std::string taskName, Partitions resourcePartitions,
+                           uint32_t numRequiredMachines, Time startTime,
+                           Time duration, Time endTime, Time granularity,
+                           TETRISCHED_ILP_TYPE utility);
+  void addChild(ExpressionPtr child) override;
+  ParseResultPtr parse(SolverModelPtr solverModel,
+                       Partitions availablePartitions,
+                       CapacityConstraintMap& capacityConstraints,
+                       Time currentTime) override;
+  SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
+  std::string getDescriptiveName() const override;
+  uint32_t getResourceQuantity() const override;
+};
+
+/// A MalleableChooseExpression represents a choice of a flexible set of
+/// requirements of resources at each time that sums up to the total required
+/// space-time allocations from the given start to the given end time.
 class MalleableChooseExpression : public Expression {
  private:
   /// The Resource partitions that the Expression is being asked to
@@ -317,7 +400,7 @@ class MalleableChooseExpression : public Expression {
                        Time currentTime) override;
   SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
   std::string getDescriptiveName() const override;
-  ExpressionTimeBounds getTimeBounds() const override;
+  uint32_t getResourceQuantity() const override;
 };
 
 /// An `AllocationExpression` represents the allocation of the given number of
@@ -346,7 +429,6 @@ class AllocationExpression : public Expression {
                        Time currentTime) override;
   SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
   std::string getDescriptiveName() const override;
-  ExpressionTimeBounds getTimeBounds() const override;
 };
 
 /// An `ObjectiveExpression` collates the objectives from its children and
@@ -412,7 +494,6 @@ class LessThanExpression : public Expression {
                        Partitions availablePartitions,
                        CapacityConstraintMap& capacityConstraints,
                        Time currentTime) override;
-  ExpressionTimeBounds getTimeBounds() const override;
 };
 }  // namespace tetrisched
 #endif  // _TETRISCHED_EXPRESSION_HPP_

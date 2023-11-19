@@ -1,6 +1,7 @@
 #include "tetrisched/Expression.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <random>
 #include <sstream>
@@ -54,7 +55,17 @@ Placement::Placement(std::string taskName, Time startTime, Time endTime)
 Placement::Placement(std::string taskName)
     : taskName(taskName), startTime(std::nullopt), placed(false) {}
 
-bool Placement::isPlaced() const { return placed; }
+bool Placement::isPlaced() const {
+  if (placed && (!startTime.has_value() || !endTime.has_value())) {
+    throw tetrisched::exceptions::ExpressionSolutionException("Placement " +
+                                                              taskName +
+                                                              " is placed, "
+                                                              "but does not "
+                                                              "have a start "
+                                                              "or end time.");
+  }
+  return placed;
+}
 
 void Placement::addPartitionAllocation(uint32_t partitionId, Time time,
                                        uint32_t allocation) {
@@ -69,6 +80,16 @@ void Placement::addPartitionAllocation(uint32_t partitionId, Time time,
 
 std::string Placement::getName() const { return taskName; }
 
+void Placement::setStartTime(Time startTime) {
+  this->startTime = startTime;
+  this->placed = true;
+}
+
+void Placement::setEndTime(Time endTime) {
+  this->endTime = endTime;
+  this->placed = true;
+}
+
 std::optional<Time> Placement::getStartTime() const { return startTime; }
 
 std::optional<Time> Placement::getEndTime() const { return endTime; }
@@ -78,17 +99,39 @@ Placement::getPartitionAllocations() const {
   return partitionToResourceAllocations;
 }
 
-/* Method definitions for Expression */
+/* Method definitions for ExpressionTimeBounds */
+ExpressionTimeBounds::ExpressionTimeBounds()
+    : specified(false),
+      startTimeRange(
+          {std::numeric_limits<Time>::min(), std::numeric_limits<Time>::max()}),
+      endTimeRange(
+          {std::numeric_limits<Time>::min(), std::numeric_limits<Time>::max()}),
+      duration(0) {}
+
+ExpressionTimeBounds::ExpressionTimeBounds(TimeRange startTimeRange,
+                                           TimeRange endTimeRange,
+                                           Time duration)
+    : specified(true),
+      startTimeRange(startTimeRange),
+      endTimeRange(endTimeRange),
+      duration(duration) {}
+
+bool ExpressionTimeBounds::isSpecified() const { return specified; }
 
 std::string ExpressionTimeBounds::toString() const {
-  return "Start: [" + std::to_string(startTimeRange.first) + ", " +
-         std::to_string(startTimeRange.second) + "], End: [" +
+  return "S: [" + std::to_string(startTimeRange.first) + ", " +
+         std::to_string(startTimeRange.second) + "], E: [" +
          std::to_string(endTimeRange.first) + ", " +
          std::to_string(endTimeRange.second) + "]";
 }
 
+/* Method definitions for Expression */
+
 Expression::Expression(std::string name, ExpressionType type)
-    : name(name), id(tetrisched::uuid::generate_uuid()), type(type) {}
+    : name(name),
+      id(tetrisched::uuid::generate_uuid()),
+      type(type),
+      timeBounds(ExpressionTimeBounds()) {}
 
 std::string Expression::getName() const { return name; }
 
@@ -137,6 +180,8 @@ std::string Expression::getTypeString() const {
       return "AllocationExpression";
     case ExpressionType::EXPR_MALLEABLE_CHOOSE:
       return "MalleableChooseExpression";
+    case ExpressionType::EXPR_WINDOWED_CHOOSE:
+      return "WindowedChooseExpression";
     default:
       return "UnknownExpression";
   }
@@ -144,44 +189,74 @@ std::string Expression::getTypeString() const {
 
 ExpressionTimeBounds Expression::getTimeBounds() const {
   if (getNumChildren() == 0) {
-    throw tetrisched::exceptions::ExpressionConstructionException(
-        "Expression " + name + " of type " + getTypeString() +
-        " does not have any children.");
+    return timeBounds;
   } else if (getNumChildren() == 1) {
     return children[0]->getTimeBounds();
   } else {
-    // For multiple children, we merge their time bounds.
-    TimeRange startTimeRange =
-        std::make_pair(std::numeric_limits<Time>::max(), 0);
-    TimeRange endTimeRange =
-        std::make_pair(std::numeric_limits<Time>::max(), 0);
+    if (type == ExpressionType::EXPR_LESSTHAN) {
+      // If this is a LessThanExpression, we take the time bounds of the
+      // first and second child.
 
-    for (auto& child : children) {
-      auto childTimeBounds = child->getTimeBounds();
-      // If this child starts earlier than any other previous start time bound,
-      // or starts later than any other previous child, use its bound.
-      if (childTimeBounds.startTimeRange.first < startTimeRange.first) {
-        startTimeRange.first = childTimeBounds.startTimeRange.first;
-      }
-      if (childTimeBounds.startTimeRange.second > startTimeRange.second) {
-        startTimeRange.second = childTimeBounds.startTimeRange.second;
+      if (getNumChildren() != 2) {
+        throw tetrisched::exceptions::ExpressionConstructionException(
+            "LessThanExpression must have two children.");
       }
 
-      // If this child ends later than any other previous end time bound, use
-      // it.
-      if (childTimeBounds.endTimeRange.first < endTimeRange.first) {
-        endTimeRange.first = childTimeBounds.endTimeRange.first;
+      // The start and end time ranges of a LessThanExpression are defined
+      // by the start of the first child and the end of the second.
+      return {
+          .startTimeRange = children[0]->getTimeBounds().startTimeRange,
+          .endTimeRange = children[1]->getTimeBounds().endTimeRange,
+          .duration = children[0]->getTimeBounds().duration +
+                      children[1]->getTimeBounds().duration,
+      };
+    } else {
+      // For multiple children, we merge their time bounds, and find the
+      // minimum duration.
+      TimeRange startTimeRange =
+          std::make_pair(std::numeric_limits<Time>::max(), 0);
+      TimeRange endTimeRange =
+          std::make_pair(std::numeric_limits<Time>::max(), 0);
+      Time minDuration = std::numeric_limits<Time>::max();
+
+      for (auto& child : children) {
+        auto childTimeBounds = child->getTimeBounds();
+        // If this child starts earlier than any other previous start time
+        // bound, or starts later than any other previous child, use its bound.
+        if (childTimeBounds.startTimeRange.first < startTimeRange.first) {
+          startTimeRange.first = childTimeBounds.startTimeRange.first;
+        }
+        if (childTimeBounds.startTimeRange.second > startTimeRange.second) {
+          startTimeRange.second = childTimeBounds.startTimeRange.second;
+        }
+
+        // If this child ends later than any other previous end time bound, use
+        // it.
+        if (childTimeBounds.endTimeRange.first < endTimeRange.first) {
+          endTimeRange.first = childTimeBounds.endTimeRange.first;
+        }
+        if (childTimeBounds.endTimeRange.second > endTimeRange.second) {
+          endTimeRange.second = childTimeBounds.endTimeRange.second;
+        }
+
+        // If this child has a smaller duration than any other previous
+        // duration, use it.
+        if (childTimeBounds.duration < minDuration) {
+          minDuration = childTimeBounds.duration;
+        }
       }
-      if (childTimeBounds.endTimeRange.second > endTimeRange.second) {
-        endTimeRange.second = childTimeBounds.endTimeRange.second;
-      }
+
+      return {
+          .startTimeRange = startTimeRange,
+          .endTimeRange = endTimeRange,
+          .duration = minDuration,
+      };
     }
-
-    return {
-        .startTimeRange = startTimeRange,
-        .endTimeRange = endTimeRange,
-    };
   }
+}
+
+void Expression::setTimeBounds(ExpressionTimeBounds timeBounds) {
+  this->timeBounds = timeBounds;
 }
 
 void Expression::addParent(ExpressionPtr parent) { parents.push_back(parent); }
@@ -189,11 +264,11 @@ void Expression::addParent(ExpressionPtr parent) { parents.push_back(parent); }
 size_t Expression::getNumParents() const { return parents.size(); }
 
 std::vector<ExpressionPtr> Expression::getParents() const {
-  std::vector<ExpressionPtr> return_parents;
+  std::vector<ExpressionPtr> returnParents;
   for (int i = 0; i < parents.size(); i++) {
-    return_parents.push_back(parents[i].lock());
+    returnParents.push_back(parents[i].lock());
   }
-  return return_parents;
+  return returnParents;
 }
 
 SolutionResultPtr Expression::populateResults(SolverModelPtr solverModel) {
@@ -342,6 +417,10 @@ std::string Expression::getDescriptiveName() const {
   return this->getTypeString() + "(" + name + ")";
 }
 
+uint32_t Expression::getResourceQuantity() const {
+  return 0;
+}
+
 /* Method definitions for ChooseExpression */
 
 ChooseExpression::ChooseExpression(std::string taskName,
@@ -354,18 +433,19 @@ ChooseExpression::ChooseExpression(std::string taskName,
       startTime(startTime),
       duration(duration),
       endTime(startTime + duration),
-      utility(utility) {}
+      utility(utility) {
+  // Set the time bounds for this Choice.
+  timeBounds = ExpressionTimeBounds({startTime, startTime}, {endTime, endTime},
+                                    duration);
+}
 
 void ChooseExpression::addChild(ExpressionPtr child) {
   throw tetrisched::exceptions::ExpressionConstructionException(
       "ChooseExpression cannot have a child.");
 }
 
-ExpressionTimeBounds ChooseExpression::getTimeBounds() const {
-  return {
-      .startTimeRange = std::make_pair(startTime, startTime),
-      .endTimeRange = std::make_pair(endTime, endTime),
-  };
+uint32_t ChooseExpression::getResourceQuantity() const {
+  return numRequiredMachines;
 }
 
 ParseResultPtr ChooseExpression::parse(
@@ -502,7 +582,332 @@ std::string ChooseExpression::getDescriptiveName() const {
          ", F=" + std::to_string(endTime) + ")";
 }
 
-/* Method definitions for GeneralizedChoose */
+/* Method definitions for WindowedChooseExpression */
+
+WindowedChooseExpression::WindowedChooseExpression(
+    std::string taskName, Partitions resourcePartitions,
+    uint32_t numRequiredMachines, Time startTime, Time duration, Time endTime,
+    Time granularity, TETRISCHED_ILP_TYPE utility)
+    : Expression(taskName, ExpressionType::EXPR_WINDOWED_CHOOSE),
+      resourcePartitions(resourcePartitions),
+      numRequiredMachines(numRequiredMachines),
+      startTime(startTime),
+      duration(duration),
+      endTime(endTime),
+      granularity(granularity),
+      utility(utility) {
+  // Set the time bounds for this Choice.
+  Time endTimeLowerBound = static_cast<Time>(
+      granularity *
+      ceil(static_cast<double>(startTime + duration) / granularity));
+  Time endTimeUpperBound = static_cast<Time>(
+      granularity *
+      ceil(static_cast<double>(endTime + duration) / granularity));
+  timeBounds = ExpressionTimeBounds(
+      {startTime, endTime}, {endTimeLowerBound, endTimeUpperBound}, duration);
+}
+
+void WindowedChooseExpression::addChild(ExpressionPtr child) {
+  throw tetrisched::exceptions::ExpressionConstructionException(
+      "WindowedChooseExpression " + name + " cannot have a child.");
+}
+
+uint32_t WindowedChooseExpression::getResourceQuantity() const {
+  return numRequiredMachines;
+}
+
+ParseResultPtr WindowedChooseExpression::parse(
+    SolverModelPtr solverModel, Partitions availablePartitions,
+    CapacityConstraintMap& capacityConstraints, Time currentTime) {
+  // Check that the Expression was parsed before.
+  if (parsedResult != nullptr) {
+    // Return the already parsed STRL-tree from another parent.
+    return parsedResult;
+  }
+
+  // Create and save the ParseResult.
+  parsedResult = std::make_shared<ParseResult>();
+
+  if (currentTime > endTime) {
+    TETRISCHED_DEBUG("WindowedChooseExpression for "
+                     << name << " to be finished by " << endTime
+                     << " does not provide utility because the current time is "
+                     << currentTime)
+    parsedResult->type = ParseResultType::EXPRESSION_NO_UTILITY;
+    return parsedResult;
+  }
+  TETRISCHED_DEBUG("Parsing WindowedChooseExpression for "
+                   << name << " to be placed after start time " << startTime
+                   << ", running for " << duration << " and finishing by "
+                   << endTime << ".")
+
+  // Find the partitions that this Choose expression can be placed in.
+  // This is the intersection of the Partitions that the Choose expression
+  // was instantiated with and the Partitions that are available at the
+  // time of the parsing.
+  Partitions schedulablePartitions = resourcePartitions | availablePartitions;
+  TETRISCHED_DEBUG("The Choose Expression for "
+                   << name << " will be limited to "
+                   << schedulablePartitions.size() << " partitions.");
+  if (schedulablePartitions.size() == 0) {
+    // There are no schedulable partitions, this expression cannot be
+    // satisfied. and should provide 0 utility.
+    parsedResult->type = ParseResultType::EXPRESSION_NO_UTILITY;
+    return parsedResult;
+  }
+
+  // We now emit choices for each of the possible start times that finish
+  // before the end time of the expression, at the provided granularity.
+  size_t numChoices = 0;
+  Time chooseTimeLowerBound = static_cast<Time>(
+      granularity *
+      ceil(static_cast<double>(timeBounds.startTimeRange.first) / granularity));
+  Time chooseTimeUpperBound = static_cast<Time>(
+      granularity * ceil(static_cast<double>(timeBounds.startTimeRange.second) /
+                         granularity));
+  TETRISCHED_DEBUG("Generating choices for " << name << " between "
+                                             << chooseTimeLowerBound << " and "
+                                             << chooseTimeUpperBound << ".")
+  for (Time chooseTime = chooseTimeLowerBound;
+       chooseTime <= chooseTimeUpperBound; chooseTime += granularity) {
+    if (chooseTime + duration > timeBounds.endTimeRange.second) {
+      // This choice is not valid, skip it.
+      TETRISCHED_DEBUG("Skipping choice for "
+                       << name << " at time " << chooseTime
+                       << " as it does not fit within the finish time bounds: ("
+                       << timeBounds.endTimeRange.first << ", "
+                       << timeBounds.endTimeRange.second << ").")
+      continue;
+    }
+
+    // Keep track of the number of choices being made.
+    numChoices++;
+
+    TETRISCHED_DEBUG("Generating a Choice for "
+                     << name << " at time " << chooseTime
+                     << " as part of the WindowedChooseExpression.")
+    // Generate an indicator variable to signify if this expression was
+    // placed at this particular chooseTime. Add the Variable to the
+    // SolverModel, and maintain a reference to it for later population
+    // of results.
+    VariablePtr placedAtChooseTime = std::make_shared<Variable>(
+        VariableType::VAR_INDICATOR,
+        name + "_placed_at_" + std::to_string(chooseTime));
+    solverModel->addVariable(placedAtChooseTime);
+    placementTimeVariables[chooseTime] = placedAtChooseTime;
+
+    // Keep track of the allocation variables for this time.
+    std::vector<std::pair<uint32_t, VariablePtr>> allocationVariables;
+
+    ConstraintPtr fulfillsDemandConstraint = std::make_shared<Constraint>(
+        name + "_fulfills_demand_at_" + std::to_string(chooseTime),
+        ConstraintType::CONSTR_EQ, 0);
+    for (PartitionPtr& partition : schedulablePartitions.getPartitions()) {
+      // For each partition, we generate an integer that represents how many
+      // resources were taken from this partition at this particular time.
+      VariablePtr allocationVar = std::make_shared<Variable>(
+          VariableType::VAR_INTEGER,
+          name + "_using_partition_" +
+              std::to_string(partition->getPartitionId()) + "_at_" +
+              std::to_string(chooseTime),
+          0,
+          std::min(static_cast<uint32_t>(partition->getQuantity()),
+                   numRequiredMachines));
+      solverModel->addVariable(allocationVar);
+
+      // Save the variable for this particular partition.
+      allocationVariables.push_back(
+          std::make_pair(partition->getPartitionId(), allocationVar));
+
+      // Add the variable to the demand constraint for this time.
+      fulfillsDemandConstraint->addTerm(allocationVar);
+
+      // Register the allocation variable with the capacity constraints.
+      capacityConstraints.registerUsageForDuration(
+          shared_from_this(), *partition, chooseTime, duration,
+          placedAtChooseTime, allocationVar, std::nullopt);
+    }
+
+    // Keep track of the allocation variables for this time.
+    placementPartitionVariables[chooseTime] = allocationVariables;
+
+    // Ensure that if the Choose expression is satisfied, it fulfills the
+    // demand for this expression. Pass the constraint to the model.
+    fulfillsDemandConstraint->addTerm(
+        -1 * static_cast<TETRISCHED_ILP_TYPE>(numRequiredMachines),
+        placedAtChooseTime);
+    solverModel->addConstraint(std::move(fulfillsDemandConstraint));
+  }
+
+  if (numChoices == 0) {
+    TETRISCHED_DEBUG(
+        "WindowedChooseExpression "
+        << name
+        << " was instantiated with parameters that do not lead to any choices.")
+    parsedResult->type = ParseResultType::EXPRESSION_NO_UTILITY;
+    return parsedResult;
+  }
+  TETRISCHED_DEBUG("Generated " << numChoices << " choices for " << name
+                                << " as part of the "
+                                << "WindowedChooseExpression.")
+
+  // All the choices have been enumerated now, we need to
+  // set the start and end times accordingly.
+  VariablePtr windowStartTime = std::make_shared<Variable>(
+      VariableType::VAR_INTEGER, name + "_start_time");
+  solverModel->addVariable(windowStartTime);
+  ConstraintPtr windowStartTimeConstraint = std::make_shared<Constraint>(
+      name + "_start_time_constraint", ConstraintType::CONSTR_GE, 0);
+
+  VariablePtr windowEndTime =
+      std::make_shared<Variable>(VariableType::VAR_INTEGER, name + "_end_time");
+  solverModel->addVariable(windowEndTime);
+  ConstraintPtr windowEndTimeConstraint = std::make_shared<Constraint>(
+      name + "_end_time_constraint", ConstraintType::CONSTR_LE, 0);
+
+  // Add a constraint that forces only one choice to be allowed.
+  VariablePtr windowIndicator = std::make_shared<Variable>(
+      VariableType::VAR_INDICATOR, name + "_window_indicator");
+  solverModel->addVariable(windowIndicator);
+  ConstraintPtr chooseOneConstraint = std::make_shared<Constraint>(
+      name + "_choose_one_constraint", ConstraintType::CONSTR_EQ, 0);
+
+  // Construct the Utility function for this ChooseExpression.
+  auto utilityFunction =
+      std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
+
+  // Iterate over all the children and set the start, end times and
+  // indicator accordingly.
+  TimeRange startTimeBounds =
+      std::make_pair(std::numeric_limits<Time>::max(), 0);
+  TimeRange endTimeBounds = std::make_pair(std::numeric_limits<Time>::max(), 0);
+  for (auto& [placementTime, placementVariable] : placementTimeVariables) {
+    windowStartTimeConstraint->addTerm(placementTime, placementVariable);
+    windowEndTimeConstraint->addTerm(placementTime + duration,
+                                     placementVariable);
+    chooseOneConstraint->addTerm(placementVariable);
+    utilityFunction->addTerm(utility, placementVariable);
+
+    if (placementTime < startTimeBounds.first) {
+      startTimeBounds.first = placementTime;
+    }
+    if (placementTime > startTimeBounds.second) {
+      startTimeBounds.second = placementTime;
+    }
+    if (placementTime + duration < endTimeBounds.first) {
+      endTimeBounds.first = placementTime + duration;
+    }
+    if (placementTime + duration > endTimeBounds.second) {
+      endTimeBounds.second = placementTime + duration;
+    }
+  }
+
+  // This Expression is satisfied only if one of its children
+  // are satisfied.
+  chooseOneConstraint->addTerm(-1, windowIndicator);
+  solverModel->addConstraint(std::move(chooseOneConstraint));
+
+  // Constrain the start time to be less than the or equal to
+  // start time of the placement choice that is satisfied.
+  // If none are satisfied, we set the start time to the lower bound.
+  windowStartTime->setLowerBound(
+      -1 * static_cast<TETRISCHED_ILP_TYPE>(startTimeBounds.first));
+  windowStartTime->setUpperBound(
+      static_cast<TETRISCHED_ILP_TYPE>(startTimeBounds.second));
+  windowStartTimeConstraint->addTerm(startTimeBounds.first);
+  windowStartTimeConstraint->addTerm(
+      -1 * static_cast<TETRISCHED_ILP_TYPE>(startTimeBounds.first),
+      windowIndicator);
+  windowStartTimeConstraint->addTerm(-1, windowStartTime);
+  solverModel->addConstraint(std::move(windowStartTimeConstraint));
+  TETRISCHED_DEBUG(
+      "Setting bounds for start time of WindowedChooseExpression "
+      << name << " to ["
+      << -1 * static_cast<TETRISCHED_ILP_TYPE>(startTimeBounds.first) << ", "
+      << startTimeBounds.second << "].")
+
+  // Constrain the end time to be greater than or equal to the
+  // end time of the placement choice that is satisfied.
+  windowEndTime->setLowerBound(0);
+  windowEndTime->setUpperBound(
+      static_cast<TETRISCHED_ILP_TYPE>(endTimeBounds.second));
+  windowEndTimeConstraint->addTerm(-1, windowEndTime);
+  solverModel->addConstraint(std::move(windowEndTimeConstraint));
+  TETRISCHED_DEBUG("Setting bounds for end time "
+                   << name << " to [0, " << endTimeBounds.second << "].")
+
+  // Construct the Utility function for this ChooseExpression.
+  // auto utilityFunction =
+  //     std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
+  // utilityFunction->addTerm(utility, windowIndicator);
+
+  // Construct and return the ParseResult.
+  parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
+  parsedResult->startTime = windowStartTime;
+  parsedResult->endTime = windowEndTime;
+  parsedResult->indicator = windowIndicator;
+  parsedResult->utility = std::move(utilityFunction);
+  return parsedResult;
+}
+
+SolutionResultPtr WindowedChooseExpression::populateResults(
+    SolverModelPtr solverModel) {
+  // Populate the results for the SolverModel's variables (i.e, this
+  // Expression's utility, start time and end time) from the Base Expression
+  // class.
+  Expression::populateResults(solverModel);
+
+  // Populate the Placements from the SolverModel.
+  if (!solution->utility || solution->utility.value() == 0) {
+    // This Choose expression was not satisfied.
+    // No placements to populate.
+    return solution;
+  }
+
+  // Find the ID of the Partition that was chosen.
+  PlacementPtr placement = std::make_shared<Placement>(
+      name, solution->startTime.value(), solution->endTime.value());
+  for (auto& [chooseTime, placementVariable] : placementTimeVariables) {
+    auto placementVariableValue = placementVariable->getValue();
+    if (placementVariableValue == 0) {
+      // This placement was not used.
+      continue;
+    }
+
+    if (placementPartitionVariables.find(chooseTime) ==
+        placementPartitionVariables.end()) {
+      throw tetrisched::exceptions::ExpressionSolutionException(
+          "WindowedChooseExpression " + name +
+          " was parsed without any allocation variables for choose time " +
+          std::to_string(chooseTime));
+    }
+
+    // This placement was used. Add it to the Placement.
+    for (auto& [partitionId, allocationVariable] :
+         placementPartitionVariables[chooseTime]) {
+      auto allocationVariableValue = allocationVariable->getValue();
+      if (allocationVariableValue == 0) {
+        // This partition was not used.
+        continue;
+      }
+      // This partition was used. Add it to the Placement.
+      placement->addPartitionAllocation(partitionId, chooseTime,
+                                        allocationVariableValue.value());
+    }
+    placement->setStartTime(chooseTime);
+    placement->setEndTime(chooseTime + duration);
+  }
+  solution->placements[name] = std::move(placement);
+  return solution;
+}
+
+std::string WindowedChooseExpression::getDescriptiveName() const {
+  return "WindowedChoose(" + name + ", " + timeBounds.toString() +
+         ", D=" + std::to_string(duration) + ")";
+}
+
+/* Method definitions for MalleableChooseExpression */
+
 MalleableChooseExpression::MalleableChooseExpression(
     std::string taskName, Partitions resourcePartitions,
     uint32_t resourceTimeSlots, Time startTime, Time endTime, Time granularity,
@@ -514,11 +919,25 @@ MalleableChooseExpression::MalleableChooseExpression(
       endTime(endTime),
       granularity(granularity),
       partitionVariables(),
-      utility(utility) {}
+      utility(utility) {
+  if (endTime < startTime) {
+    throw tetrisched::exceptions::ExpressionConstructionException(
+        "MalleableChooseExpression " + name +
+        " was instantiated with an end time " + std::to_string(endTime) +
+        " that is before its start time " + std::to_string(startTime) + ".");
+  }
+  // Set the time bounds for this Choice.
+  timeBounds = ExpressionTimeBounds({startTime, startTime}, {endTime, endTime},
+                                    endTime - startTime);
+}
 
 void MalleableChooseExpression::addChild(ExpressionPtr child) {
   throw tetrisched::exceptions::ExpressionConstructionException(
       "MalleableChooseExpression cannot have a child.");
+}
+
+uint32_t MalleableChooseExpression::getResourceQuantity() const {
+  return resourceTimeSlots;
 }
 
 ParseResultPtr MalleableChooseExpression::parse(
@@ -854,13 +1273,6 @@ std::string MalleableChooseExpression::getDescriptiveName() const {
          ", F=" + std::to_string(endTime) + ")";
 }
 
-ExpressionTimeBounds MalleableChooseExpression::getTimeBounds() const {
-  return {
-      .startTimeRange = std::make_pair(startTime, startTime),
-      .endTimeRange = std::make_pair(endTime, endTime),
-  };
-}
-
 /* Method definitions for AllocationExpression */
 
 AllocationExpression::AllocationExpression(
@@ -871,7 +1283,11 @@ AllocationExpression::AllocationExpression(
       allocatedResources(allocatedResources),
       startTime(startTime),
       duration(duration),
-      endTime(startTime + duration) {}
+      endTime(startTime + duration) {
+  // Set the time bounds for this Choice.
+  timeBounds = ExpressionTimeBounds({startTime, startTime}, {endTime, endTime},
+                                    duration);
+}
 
 void AllocationExpression::addChild(ExpressionPtr child) {
   throw tetrisched::exceptions::ExpressionConstructionException(
@@ -888,6 +1304,9 @@ ParseResultPtr AllocationExpression::parse(
   }
 
   // Create and save the ParseResult.
+  TETRISCHED_DEBUG("Parsing AllocationExpression for "
+                   << name << " to be placed starting at time " << startTime
+                   << " and ending at " << endTime << ".")
   parsedResult = std::make_shared<ParseResult>();
   parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
   parsedResult->startTime = startTime;
@@ -901,6 +1320,9 @@ ParseResultPtr AllocationExpression::parse(
                                                  startTime, duration, 1,
                                                  allocation, std::nullopt);
   }
+  TETRISCHED_DEBUG("Finished parsing AllocationExpression for "
+                   << name << " to be placed starting at time " << startTime
+                   << " and ending at " << endTime << ".")
   return parsedResult;
 }
 
@@ -918,13 +1340,6 @@ std::string AllocationExpression::getDescriptiveName() const {
          ", F=" + std::to_string(endTime) + ")";
 }
 
-ExpressionTimeBounds AllocationExpression::getTimeBounds() const {
-  return {
-      .startTimeRange = std::make_pair(startTime, startTime),
-      .endTimeRange = std::make_pair(endTime, endTime),
-  };
-}
-
 /* Method definitions for ObjectiveExpression */
 
 ObjectiveExpression::ObjectiveExpression(std::string name)
@@ -940,6 +1355,9 @@ ParseResultPtr ObjectiveExpression::parse(
     // STRL DAG structures
     return parsedResult;
   }
+  TETRISCHED_DEBUG("Parsing ObjectiveExpression with name " << name << ".")
+
+  // Create and save the ParseResult.
   parsedResult = std::make_shared<ParseResult>();
   parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
 
@@ -952,12 +1370,24 @@ ParseResultPtr ObjectiveExpression::parse(
     auto result = child->parse(solverModel, availablePartitions,
                                capacityConstraints, currentTime);
     if (result->type == ParseResultType::EXPRESSION_UTILITY) {
+      if (!result->utility.has_value()) {
+        throw tetrisched::exceptions::ExpressionConstructionException(
+            "ObjectiveExpression " + name + "'s child " + child->getName() +
+            " was supposed to provide utility, but doesn't.");
+      }
       (*utility) += *(result->utility.value());
     }
   }
+  TETRISCHED_DEBUG("Finished parsing the children for ObjectiveExpression with "
+                   << name << ".")
 
   // All the children have been parsed. Finalize the CapacityConstraintMap.
+  TETRISCHED_DEBUG(
+      "Finalizing the CapacityConstraintMap for ObjectiveExpression " << name
+                                                                      << ".")
   capacityConstraints.translate(solverModel);
+  TETRISCHED_DEBUG("Finished finalizing the CapacityConstraintMap for " << name
+                                                                        << ".")
 
   // Construct the parsed result.
   parsedResult->utility = std::make_shared<ObjectiveFunction>(*utility);
@@ -966,6 +1396,9 @@ ParseResultPtr ObjectiveExpression::parse(
 
   // Add the utility to the SolverModel.
   solverModel->setObjectiveFunction(std::move(utility));
+
+  TETRISCHED_DEBUG("Finished parsing ObjectiveExpression with name " << name
+                                                                     << ".")
 
   return parsedResult;
 }
@@ -1201,20 +1634,6 @@ ParseResultPtr LessThanExpression::parse(
   return parsedResult;
 }
 
-ExpressionTimeBounds LessThanExpression::getTimeBounds() const {
-  if (getNumChildren() != 2) {
-    throw tetrisched::exceptions::ExpressionConstructionException(
-        "LessThanExpression must have two children.");
-  }
-
-  // The start and end time ranges of a LessThanExpression are defined
-  // by the start of the first child and the end of the second.
-  return {
-      .startTimeRange = children[0]->getTimeBounds().startTimeRange,
-      .endTimeRange = children[1]->getTimeBounds().endTimeRange,
-  };
-}
-
 /* Method definitions for MinExpression */
 
 MinExpression::MinExpression(std::string name)
@@ -1322,7 +1741,8 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
         if (auto lowerBound = childStartTimeVariable->getLowerBound();
             lowerBound.has_value()) {
           auto lowerBoundValue = lowerBound.value();
-          // std::cout << "Lower bound for " << childStartTimeVariable->getName()
+          // std::cout << "Lower bound for " <<
+          // childStartTimeVariable->getName()
           //           << " is " << lowerBoundValue << std::endl;
           // if (lowerBoundValue < startTimeRange.first) {
           //   startTimeRange.first = lowerBoundValue;
@@ -1410,7 +1830,8 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
     parsedResult->indicator = minIndicator;
 
     // Set the lower and upper bounds for times.
-    // std::cout << "Setting bounds for " << name << " to " << startTimeRange.first
+    // std::cout << "Setting bounds for " << name << " to " <<
+    // startTimeRange.first
     //           << " " << startTimeRange.second << " " << endTimeRange.first
     //           << " " << endTimeRange.second << std::endl;
     // if (startTimeRange.first != std::numeric_limits<Time>::max() &&
@@ -1458,6 +1879,7 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
     // STRL DAG structures
     return parsedResult;
   }
+  TETRISCHED_DEBUG("Parsing MaxExpression with name " << name << ".")
   // Create and save the ParseResult.
   parsedResult = std::make_shared<ParseResult>();
 
@@ -1619,6 +2041,7 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
   parsedResult->endTime = std::move(maxEndTime);
   parsedResult->utility = std::move(maxObjectiveFunction);
   parsedResult->indicator = std::move(maxIndicator);
+  TETRISCHED_DEBUG("Finished parsing MaxExpression with name " << name << ".")
   return parsedResult;
 }
 

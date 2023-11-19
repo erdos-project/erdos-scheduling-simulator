@@ -21,10 +21,13 @@ class Scheduler {
   std::optional<ExpressionPtr> expression;
   /// The registered OptimizationPasses to run.
   OptimizationPassRunner optimizationPasses;
+  /// The directory where the logs are to be output.
+  std::string logDir;
 
  public:
   /// Initialize the scheduler with a solver backend.
-  Scheduler(Time discretization, SolverBackendType solverBackend);
+  Scheduler(Time discretization, SolverBackendType solverBackend,
+            std::string logDir = "./");
 
   /// Registers the STRL expression for the scheduler to schedule from
   /// and parses it to populate the SolverModel.

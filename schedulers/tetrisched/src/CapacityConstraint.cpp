@@ -204,8 +204,19 @@ void CapacityConstraintMap::registerUsageForDuration(
     while (remainderTime > 0) {
       auto& timeRange = timeRangeToGranularities[granularityIndex].first;
       auto& granularity = timeRangeToGranularities[granularityIndex].second;
+      TETRISCHED_DEBUG("Registering usage for expression starting at "
+                       << startTime << " with duration " << duration
+                       << " at time: " << currentTime
+                       << " within the time range [" << timeRange.first << ", "
+                       << timeRange.second
+                       << "] with granularity: " << granularity
+                       << " and remainder time: " << remainderTime << ".")
 
-      while (currentTime < std::min(startTime + duration, timeRange.second)) {
+      // Check if either we're in the interval, or if there's any remainder
+      // time if we're in the upmost interval.
+      while (currentTime < std::min(startTime + duration, timeRange.second) ||
+             (remainderTime > 0 &&
+              granularityIndex == timeRangeToGranularities.size() - 1)) {
         if (remainderTime > granularity) {
           registerUsageAtTime(expression, partition, currentTime, granularity,
                               usageIndicator, variable, granularity);

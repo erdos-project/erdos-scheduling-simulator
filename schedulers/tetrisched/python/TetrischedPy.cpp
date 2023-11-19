@@ -40,7 +40,8 @@ void defineBasicTypes(py::module_& tetrisched_m) {
 /// Define the Scheduler interface.
 void defineScheduler(py::module_& tetrisched_m) {
   py::class_<tetrisched::Scheduler>(tetrisched_m, "Scheduler")
-      .def(py::init<tetrisched::Time, tetrisched::SolverBackendType>(),
+      .def(py::init<tetrisched::Time, tetrisched::SolverBackendType,
+                    std::string>(),
            "Initializes the Scheduler with the given backend.")
       .def("registerSTRL", &tetrisched::Scheduler::registerSTRL,
            "Registers the STRL expression for the scheduler to schedule from.")

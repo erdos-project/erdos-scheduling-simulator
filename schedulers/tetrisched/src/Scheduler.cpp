@@ -11,8 +11,11 @@
 #endif
 
 namespace tetrisched {
-Scheduler::Scheduler(Time discretization, SolverBackendType solverBackend)
-    : discretization(discretization), solverBackend(solverBackend) {
+Scheduler::Scheduler(Time discretization, SolverBackendType solverBackend,
+                     std::string logDir)
+    : discretization(discretization),
+      solverBackend(solverBackend),
+      logDir(logDir) {
   // Initialize the solver backend.
   switch (solverBackend) {
 #ifdef _TETRISCHED_WITH_CPLEX_
@@ -73,8 +76,12 @@ void Scheduler::registerSTRL(
   }
 
   // Parse the ExpressionTree to populate the solver model.
+  TETRISCHED_DEBUG("Beginning the parsing of the ExpressionTree rooted at "
+                   << expression->getName() << ".")
   auto _ = expression->parse(solverModel, availablePartitions,
                              capacityConstraintMap, currentTime);
+  TETRISCHED_DEBUG("Finished parsing the ExpressionTree rooted at "
+                   << expression->getName() << ".")
 
   // Run the Post-Translation OptimizationPasses on this expression.
   if (optimize) {
@@ -100,7 +107,7 @@ void Scheduler::schedule(Time currentTime) {
   // Set the log file based on the current time.
   std::string logFileName =
       "tetrisched_" + std::to_string(currentTime) + ".log";
-  this->solver->setLogFile(logFileName);
+  this->solver->setLogFile(logDir + logFileName);
 
   // Translate the model to the solver backend.
   this->solver->translateModel();
