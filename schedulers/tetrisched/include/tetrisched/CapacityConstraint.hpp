@@ -1,6 +1,8 @@
 #ifndef _TETRISCHED_CAPACITYCONSTRAINT_HPP_
 #define _TETRISCHED_CAPACITYCONSTRAINT_HPP_
 
+#include <mutex>
+
 #include "tetrisched/Partition.hpp"
 #include "tetrisched/SolverModel.hpp"
 #include "tetrisched/Types.hpp"
@@ -120,7 +122,8 @@ class CapacityConstraintMap {
                            const Partition& partition, const Time time,
                            const Time granularity,
                            const IndicatorT usageIndicator,
-                           const PartitionUsageT usageVariable, const Time duration);
+                           const PartitionUsageT usageVariable,
+                           const Time duration);
 
   /// Registers the usage by the Expression for the Partition in the
   /// time range starting from startTime and lasting for duration as
@@ -128,8 +131,9 @@ class CapacityConstraintMap {
   /// Optionally, a step granularity can be provided. The default granularity
   /// is the one that the CapacityConstraintMap was initialized with.
   void registerUsageForDuration(const ExpressionPtr expression,
-                                const Partition& partition, const Time startTime,
-                                const Time duration, const IndicatorT usageIndicator,
+                                const Partition& partition,
+                                const Time startTime, const Time duration,
+                                const IndicatorT usageIndicator,
                                 const PartitionUsageT usageVariable,
                                 std::optional<Time> granularity);
 
