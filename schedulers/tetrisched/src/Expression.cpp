@@ -1275,10 +1275,7 @@ ParseResultPtr ObjectiveExpression::parse(
   }
 
   // Parse the children and collect the utiltiies.
-  // for (auto& child : children) {
   for (int i = 0; i < children.size(); ++i) {
-    // auto result = child->parse(solverModel, availablePartitions,
-    //                            capacityConstraints, currentTime);
     auto result = futures[i].get();
     if (result->type == ParseResultType::EXPRESSION_UTILITY) {
       if (!result->utility.has_value()) {
@@ -1419,11 +1416,6 @@ ParseResultPtr LessThanExpression::parse(
                                  capacityConstraints, 
                                  currentTime));
   }
-
-  // auto firstChildResult = children[0]->parse(solverModel, availablePartitions,
-  //                                            capacityConstraints, currentTime);
-  // auto secondChildResult = children[1]->parse(solverModel, availablePartitions,
-  //                                             capacityConstraints, currentTime);
   auto firstChildResult = futures[0].get();
   auto secondChildResult = futures[1].get();
 
@@ -1654,8 +1646,6 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
   for (int i = 0; i < numChildren; i++) {
     // Parse the Child.
     auto childParsedResult = futures[i].get();
-    // auto childParsedResult = children[i]->parse(
-    //     solverModel, availablePartitions, capacityConstraints, currentTime);
 
     if (childParsedResult->type != ParseResultType::EXPRESSION_UTILITY) {
       // If any of the children cannot provide a utility, the MIN expression
@@ -1911,8 +1901,6 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
 
   for (int i = 0; i < numChildren; i++) {
     auto childParsedResult = futures[i].get();
-    // auto childParsedResult = children[i]->parse(
-    //     solverModel, availablePartitions, capacityConstraints, currentTime);
 
     if (childParsedResult->type != ParseResultType::EXPRESSION_UTILITY) {
       TETRISCHED_DEBUG(name + " child-" + std::to_string(i) +
