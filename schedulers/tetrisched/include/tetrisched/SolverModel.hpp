@@ -380,9 +380,15 @@ class SolverModelT {
   /// Add a variable to the model.
   void addVariable(std::shared_ptr<VariableT<T>> variable);
 
+  /// Batch add variables to the model
+  void addVariables(const std::vector<std::shared_ptr<VariableT<T>>>& variablesToAdd);
+
   /// Add a constraint to the model.
   /// This method consumes the Constraint.
   void addConstraint(std::shared_ptr<ConstraintT<T>> constraint);
+
+  /// Batch add constraints to the model
+  void addConstraints(const std::vector<std::shared_ptr<ConstraintT<T>>>& constraintsToAdd);
 
   /// Set the objective function for the model.
   /// This method consumes the ObjectiveFunction.

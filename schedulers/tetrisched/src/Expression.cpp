@@ -414,13 +414,16 @@ ParseResultPtr ChooseExpression::parse(
     return parsedResult;
   }
 
+  std::vector<VariablePtr> variablesToAdd;
+
   // This Choose expression needs to be passed to the Solver.
   // We generate an Indicator variable for the Choose expression signifying
   // if this expression was satisfied.
   VariablePtr isSatisfiedVar = std::make_shared<Variable>(
       VariableType::VAR_INDICATOR,
       name + "_placed_at_" + std::to_string(startTime));
-  solverModel->addVariable(isSatisfiedVar);
+  // solverModel->addVariable(isSatisfiedVar);
+  variablesToAdd.push_back(isSatisfiedVar);
 
   ConstraintPtr fulfillsDemandConstraint = std::make_shared<Constraint>(
       name + "_fulfills_demand_at_" + std::to_string(startTime),
@@ -436,7 +439,8 @@ ParseResultPtr ChooseExpression::parse(
         0,
         std::min(static_cast<uint32_t>(partition->getQuantity()),
                  numRequiredMachines));
-    solverModel->addVariable(allocationVar);
+    // solverModel->addVariable(allocationVar);
+    variablesToAdd.push_back(allocationVar);
 
     // Save a reference to this Variable for this particular Partition.
     // We use this later to retrieve the placement.
@@ -451,6 +455,9 @@ ParseResultPtr ChooseExpression::parse(
         shared_from_this(), *partition, startTime, duration, isSatisfiedVar,
         allocationVar, std::nullopt);
   }
+
+  solverModel->addVariables(variablesToAdd);
+
   // Ensure that if the Choose expression is satisfied, it fulfills the
   // demand for this expression. Pass the constraint to the model.
   fulfillsDemandConstraint->addTerm(
@@ -571,6 +578,9 @@ ParseResultPtr WindowedChooseExpression::parse(
     return parsedResult;
   }
 
+  std::vector<VariablePtr> variablesToAdd;
+  std::vector<ConstraintPtr> constraintsToAdd;
+
   // We now emit choices for each of the possible start times that finish
   // before the end time of the expression, at the provided granularity.
   size_t numChoices = 0;
@@ -586,7 +596,8 @@ ParseResultPtr WindowedChooseExpression::parse(
     VariablePtr placedAtChooseTime = std::make_shared<Variable>(
         VariableType::VAR_INDICATOR,
         name + "_placed_at_" + std::to_string(chooseTime));
-    solverModel->addVariable(placedAtChooseTime);
+    // solverModel->addVariable(placedAtChooseTime);
+    variablesToAdd.push_back(placedAtChooseTime);
     placementTimeVariables[chooseTime] = placedAtChooseTime;
 
     // Keep track of the allocation variables for this time.
@@ -606,7 +617,8 @@ ParseResultPtr WindowedChooseExpression::parse(
           0,
           std::min(static_cast<uint32_t>(partition->getQuantity()),
                    numRequiredMachines));
-      solverModel->addVariable(allocationVar);
+      // solverModel->addVariable(allocationVar);
+      variablesToAdd.push_back(allocationVar);
 
       // Save the variable for this particular partition.
       allocationVariables.push_back(
@@ -629,7 +641,8 @@ ParseResultPtr WindowedChooseExpression::parse(
     fulfillsDemandConstraint->addTerm(
         -1 * static_cast<TETRISCHED_ILP_TYPE>(numRequiredMachines),
         placedAtChooseTime);
-    solverModel->addConstraint(std::move(fulfillsDemandConstraint));
+    // solverModel->addConstraint(std::move(fulfillsDemandConstraint));
+    constraintsToAdd.push_back(std::move(fulfillsDemandConstraint));
   }
 
   if (numChoices == 0) {
@@ -645,20 +658,23 @@ ParseResultPtr WindowedChooseExpression::parse(
   // set the start and end times accordingly.
   VariablePtr windowStartTime = std::make_shared<Variable>(
       VariableType::VAR_INTEGER, name + "_start_time");
-  solverModel->addVariable(windowStartTime);
+  // solverModel->addVariable(windowStartTime);
+  variablesToAdd.push_back(windowStartTime);
   ConstraintPtr windowStartTimeConstraint = std::make_shared<Constraint>(
       name + "_start_time_constraint", ConstraintType::CONSTR_EQ, 0);
 
   VariablePtr windowEndTime =
       std::make_shared<Variable>(VariableType::VAR_INTEGER, name + "_end_time");
-  solverModel->addVariable(windowEndTime);
+  // solverModel->addVariable(windowEndTime);
+  variablesToAdd.push_back(windowEndTime);
   ConstraintPtr windowEndTimeConstraint = std::make_shared<Constraint>(
       name + "_end_time_constraint", ConstraintType::CONSTR_GE, 0);
 
   // Add a constraint that forces only one choice to be allowed.
   VariablePtr windowIndicator = std::make_shared<Variable>(
       VariableType::VAR_INDICATOR, name + "_window_indicator");
-  solverModel->addVariable(windowIndicator);
+  // solverModel->addVariable(windowIndicator);
+  variablesToAdd.push_back(windowIndicator);
   ConstraintPtr chooseOneConstraint = std::make_shared<Constraint>(
       name + "_choose_one_constraint", ConstraintType::CONSTR_EQ, 0);
 
@@ -690,7 +706,8 @@ ParseResultPtr WindowedChooseExpression::parse(
   // This Expression is satisfied only if one of its children
   // are satisfied.
   chooseOneConstraint->addTerm(-1, windowIndicator);
-  solverModel->addConstraint(std::move(chooseOneConstraint));
+  // solverModel->addConstraint(std::move(chooseOneConstraint));
+  constraintsToAdd.push_back(std::move(chooseOneConstraint));
 
   // Constrain the start time to be less than the or equal to
   // start time of the placement choice that is satisfied.
@@ -704,7 +721,8 @@ ParseResultPtr WindowedChooseExpression::parse(
       -1 * static_cast<TETRISCHED_ILP_TYPE>(startTimeBounds.first),
       windowIndicator);
   windowStartTimeConstraint->addTerm(-1, windowStartTime);
-  solverModel->addConstraint(std::move(windowStartTimeConstraint));
+  // solverModel->addConstraint(std::move(windowStartTimeConstraint));
+  constraintsToAdd.push_back(std::move(windowStartTimeConstraint));
   TETRISCHED_DEBUG(
       "Setting bounds for start time of WindowedChooseExpression "
       << name << " to ["
@@ -717,9 +735,13 @@ ParseResultPtr WindowedChooseExpression::parse(
   windowEndTime->setUpperBound(
       static_cast<TETRISCHED_ILP_TYPE>(endTimeBounds.second));
   windowEndTimeConstraint->addTerm(-1, windowEndTime);
-  solverModel->addConstraint(std::move(windowEndTimeConstraint));
+  // solverModel->addConstraint(std::move(windowEndTimeConstraint));
+  constraintsToAdd.push_back(std::move(windowEndTimeConstraint));
   TETRISCHED_DEBUG("Setting bounds for end time "
                    << name << " to [0, " << endTimeBounds.second << "].")
+
+  solverModel->addVariables(variablesToAdd);
+  solverModel->addConstraints(constraintsToAdd);
 
   // Construct the Utility function for this ChooseExpression.
   auto utilityFunction =
@@ -844,6 +866,9 @@ ParseResultPtr MalleableChooseExpression::parse(
                    << name << " to be placed starting at time " << startTime
                    << " and ending at " << endTime << ".")
 
+  std::vector<VariablePtr> variablesToAdd;
+  std::vector<tetrisched::ConstraintPtr> constraintsToAdd;
+
   // Find the partitions that this Choose expression can be placed in.
   // This is the intersection of the Partitions that the Choose expression
   // was instantiated with and the Partitions that are available at the
@@ -860,7 +885,8 @@ ParseResultPtr MalleableChooseExpression::parse(
                                  std::to_string(endTime);
   VariablePtr isSatisfiedVar =
       std::make_shared<Variable>(VariableType::VAR_INDICATOR, satisfiedVarName);
-  solverModel->addVariable(isSatisfiedVar);
+  // solverModel->addVariable(isSatisfiedVar);
+  variablesToAdd.push_back(isSatisfiedVar);
   TETRISCHED_DEBUG(
       "The MalleableChooseExpression's satisfaction will be indicated by "
       << satisfiedVarName << ".");
@@ -887,7 +913,8 @@ ParseResultPtr MalleableChooseExpression::parse(
             0,
             std::min(static_cast<uint32_t>(partition->getQuantity()),
                      resourceTimeSlots));
-        solverModel->addVariable(allocationAtTime);
+        // solverModel->addVariable(allocationAtTime);
+        variablesToAdd.push_back(allocationAtTime);
         partitionVariables[mapKey] = allocationAtTime;
         fulfillsDemandConstraint->addTerm(allocationAtTime);
 
@@ -908,7 +935,8 @@ ParseResultPtr MalleableChooseExpression::parse(
   // demand for this expression. Pass the constraint to the model.
   fulfillsDemandConstraint->addTerm(
       -1 * static_cast<TETRISCHED_ILP_TYPE>(resourceTimeSlots), isSatisfiedVar);
-  solverModel->addConstraint(std::move(fulfillsDemandConstraint));
+  // solverModel->addConstraint(std::move(fulfillsDemandConstraint));
+  constraintsToAdd.push_back(std::move(fulfillsDemandConstraint));
 
   // We now need to ensure that for each time, there is an indicator variable
   // that signifies if there was *any* allocation to this Expression at that
@@ -935,7 +963,8 @@ ParseResultPtr MalleableChooseExpression::parse(
       VariablePtr occupationAtTime = std::make_shared<Variable>(
           VariableType::VAR_INDICATOR,
           name + "_occupied_at_" + std::to_string(time));
-      solverModel->addVariable(occupationAtTime);
+      // solverModel->addVariable(occupationAtTime);
+      variablesToAdd.push_back(occupationAtTime);
       timeToOccupationIndicator[time] = occupationAtTime;
     }
 
@@ -945,7 +974,8 @@ ParseResultPtr MalleableChooseExpression::parse(
       ConstraintPtr lowerBoundConstraint = std::make_shared<Constraint>(
           name + "_lower_bound_occupation_at_" + std::to_string(time),
           ConstraintType::CONSTR_LE, 0);
-      solverModel->addConstraint(lowerBoundConstraint);
+      // solverModel->addConstraint(lowerBoundConstraint);
+      constraintsToAdd.push_back(lowerBoundConstraint);
       lowerBoundConstraint->addTerm(1, timeToOccupationIndicator[time]);
       timeToLowerBoundConstraint[time] = lowerBoundConstraint;
     }
@@ -957,7 +987,8 @@ ParseResultPtr MalleableChooseExpression::parse(
       ConstraintPtr upperBoundConstraint = std::make_shared<Constraint>(
           name + "_upper_bound_occupation_at_" + std::to_string(time),
           ConstraintType::CONSTR_LE, 0);
-      solverModel->addConstraint(upperBoundConstraint);
+      // solverModel->addConstraint(upperBoundConstraint);
+      constraintsToAdd.push_back(upperBoundConstraint);
       upperBoundConstraint->addTerm(
           -1 * static_cast<TETRISCHED_ILP_TYPE>(resourceTimeSlots),
           timeToOccupationIndicator[time]);
@@ -977,7 +1008,8 @@ ParseResultPtr MalleableChooseExpression::parse(
     VariablePtr phaseShiftIndicator = std::make_shared<Variable>(
         VariableType::VAR_INDICATOR,
         name + "_phase_shift_start_time_at_" + std::to_string(time));
-    solverModel->addVariable(phaseShiftIndicator);
+    // solverModel->addVariable(phaseShiftIndicator);
+    variablesToAdd.push_back(phaseShiftIndicator);
     timeToPhaseShiftIndicatorForStartTime[time] = phaseShiftIndicator;
   }
 
@@ -988,7 +1020,8 @@ ParseResultPtr MalleableChooseExpression::parse(
   for (auto& [time, variable] : timeToPhaseShiftIndicatorForStartTime) {
     startTimePhaseShiftGUBConstraint->addTerm(variable);
   }
-  solverModel->addConstraint(std::move(startTimePhaseShiftGUBConstraint));
+  // solverModel->addConstraint(std::move(startTimePhaseShiftGUBConstraint));
+  constraintsToAdd.push_back(std::move(startTimePhaseShiftGUBConstraint));
 
   // Add constraints that ensures that the phase shift does not happen
   // when the resource allocation indicator is 0.
@@ -1000,7 +1033,8 @@ ParseResultPtr MalleableChooseExpression::parse(
     phaseShiftLowerBoundConstraint->addTerm(variable);
     phaseShiftLowerBoundConstraint->addTerm(-1,
                                             timeToOccupationIndicator[time]);
-    solverModel->addConstraint(std::move(phaseShiftLowerBoundConstraint));
+    // solverModel->addConstraint(std::move(phaseShiftLowerBoundConstraint));
+    constraintsToAdd.push_back(std::move(phaseShiftLowerBoundConstraint));
   }
 
   // Add constraints that ensure that each allocation indicator is
@@ -1022,13 +1056,15 @@ ParseResultPtr MalleableChooseExpression::parse(
       }
       phaseShiftConstraint->addTerm(-1, phaseShiftIndicator);
     }
-    solverModel->addConstraint(std::move(phaseShiftConstraint));
+    // solverModel->addConstraint(std::move(phaseShiftConstraint));
+    constraintsToAdd.push_back(std::move(phaseShiftConstraint));
   }
 
   // Emit the start-time of the Expression using the phase-shift indicators.
   VariablePtr startTimeVariable = std::make_shared<Variable>(
       VariableType::VAR_INTEGER, name + "_start_time", 0, endTime);
-  solverModel->addVariable(startTimeVariable);
+  // solverModel->addVariable(startTimeVariable);
+  variablesToAdd.push_back(startTimeVariable);
   ConstraintPtr startTimeConstraint = std::make_shared<Constraint>(
       name + "_start_time_constraint", ConstraintType::CONSTR_EQ, 0);
   for (auto& [time, phaseShiftIndicator] :
@@ -1036,7 +1072,8 @@ ParseResultPtr MalleableChooseExpression::parse(
     startTimeConstraint->addTerm(time, phaseShiftIndicator);
   }
   startTimeConstraint->addTerm(-1, startTimeVariable);
-  solverModel->addConstraint(std::move(startTimeConstraint));
+  // solverModel->addConstraint(std::move(startTimeConstraint));
+  constraintsToAdd.push_back(std::move(startTimeConstraint));
 
   // Similar to the start time, we generate indicator variables for
   // the end time of the Expression by reversing the phase-shift assignment.
@@ -1045,7 +1082,8 @@ ParseResultPtr MalleableChooseExpression::parse(
     VariablePtr phaseShiftIndicator = std::make_shared<Variable>(
         VariableType::VAR_INDICATOR,
         name + "_phase_shift_end_time_at_" + std::to_string(time));
-    solverModel->addVariable(phaseShiftIndicator);
+    // solverModel->addVariable(phaseShiftIndicator);
+    variablesToAdd.push_back(phaseShiftIndicator);
     timeToPhaseShiftIndicatorForEndTime[time] = phaseShiftIndicator;
   }
 
@@ -1056,7 +1094,8 @@ ParseResultPtr MalleableChooseExpression::parse(
   for (auto& [time, variable] : timeToPhaseShiftIndicatorForEndTime) {
     endTimePhaseShiftGUBConstraint->addTerm(variable);
   }
-  solverModel->addConstraint(std::move(endTimePhaseShiftGUBConstraint));
+  // solverModel->addConstraint(std::move(endTimePhaseShiftGUBConstraint));
+  constraintsToAdd.push_back(std::move(endTimePhaseShiftGUBConstraint));
 
   // Add constraints that ensure that the phase shift does not happen
   // when the resource allocation indicator is 0.
@@ -1068,7 +1107,8 @@ ParseResultPtr MalleableChooseExpression::parse(
     phaseShiftLowerBoundConstraint->addTerm(variable);
     phaseShiftLowerBoundConstraint->addTerm(-1,
                                             timeToOccupationIndicator[time]);
-    solverModel->addConstraint(std::move(phaseShiftLowerBoundConstraint));
+    // solverModel->addConstraint(std::move(phaseShiftLowerBoundConstraint));
+    constraintsToAdd.push_back(std::move(phaseShiftLowerBoundConstraint));
   }
 
   // Add constraints that ensure that each allocation indicator is
@@ -1088,13 +1128,15 @@ ParseResultPtr MalleableChooseExpression::parse(
       }
       phaseShiftConstraint->addTerm(-1, phaseShiftIndicator);
     }
-    solverModel->addConstraint(std::move(phaseShiftConstraint));
+    // solverModel->addConstraint(std::move(phaseShiftConstraint));
+    constraintsToAdd.push_back(std::move(phaseShiftConstraint));
   }
 
   // Emit the end-time of the Expression using the phase-shift indicators.
   VariablePtr endTimeVariable = std::make_shared<Variable>(
       VariableType::VAR_INTEGER, name + "_end_time", 0, endTime);
-  solverModel->addVariable(endTimeVariable);
+  // solverModel->addVariable(endTimeVariable);
+  variablesToAdd.push_back(endTimeVariable);
   ConstraintPtr endTimeConstraint = std::make_shared<Constraint>(
       name + "_end_time_constraint", ConstraintType::CONSTR_EQ, 0);
   for (auto& [time, phaseShiftIndicator] :
@@ -1102,7 +1144,11 @@ ParseResultPtr MalleableChooseExpression::parse(
     endTimeConstraint->addTerm(time, phaseShiftIndicator);
   }
   endTimeConstraint->addTerm(-1, endTimeVariable);
-  solverModel->addConstraint(std::move(endTimeConstraint));
+  // solverModel->addConstraint(std::move(endTimeConstraint));
+  constraintsToAdd.push_back(std::move(endTimeConstraint));
+
+  solverModel->addVariables(variablesToAdd);
+  solverModel->addConstraints(constraintsToAdd);
 
   // Construct the Utility function for this Choose expression.
   auto utilityFunction =
@@ -1483,6 +1529,8 @@ ParseResultPtr LessThanExpression::parse(
     // constraints into the model.
     parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
 
+    std::vector<tetrisched::ConstraintPtr> constraintsToAdd;
+
     // Bubble up the start time of the first expression and the end time of
     // the second expression as a bound on the
     if (!firstChildResult->endTime || !secondChildResult->startTime ||
@@ -1531,7 +1579,8 @@ ParseResultPtr LessThanExpression::parse(
     }
     lessThanIndicatorConstraint->addTerm(-1 * numEnforceableChildren,
                                          isSatisfiedVar);
-    solverModel->addConstraint(lessThanIndicatorConstraint);
+    // solverModel->addConstraint(std::move(lessThanIndicatorConstraint));
+    constraintsToAdd.push_back(std::move(lessThanIndicatorConstraint));
     parsedResult->indicator = isSatisfiedVar;
 
     // Add a constraint that the first child must occur before the second.
@@ -1540,12 +1589,16 @@ ParseResultPtr LessThanExpression::parse(
         happensBeforeConstraintName, ConstraintType::CONSTR_LE, 0);
     happensBeforeConstraint->addTerm(firstChildResult->endTime.value());
     happensBeforeConstraint->addTerm(-1, secondChildResult->startTime.value());
-    solverModel->addConstraint(std::move(happensBeforeConstraint));
+    // solverModel->addConstraint(std::move(happensBeforeConstraint));
+    constraintsToAdd.push_back(std::move(happensBeforeConstraint));
     TETRISCHED_DEBUG("Finished adding constraint "
                      << happensBeforeConstraintName
                      << " to enforce ordering in LessThanExpression with name "
                      << name << ".")
+    
+    solverModel->addConstraints(constraintsToAdd);
   }
+
 
   // Construct a utility function that is the sum of the two utilities.
   if (!firstChildResult->utility || !secondChildResult->utility) {
@@ -1607,20 +1660,25 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
         "Number of children should be >=1 for MIN");
   }
 
+  std::vector<tetrisched::VariablePtr> variablesToAdd;
+
   // Indicator for MIN.
   VariablePtr minIndicator = std::make_shared<Variable>(
       VariableType::VAR_INDICATOR, name + "_min_indicator");
-  solverModel->addVariable(minIndicator);
+  // solverModel->addVariable(minIndicator);
+  variablesToAdd.push_back(minIndicator);
 
   // Start Time of MIN
   VariablePtr minStartTime = std::make_shared<Variable>(
       VariableType::VAR_INTEGER, name + "_min_start_time");
-  solverModel->addVariable(minStartTime);
+  // solverModel->addVariable(minStartTime);
+  variablesToAdd.push_back(minStartTime);
 
   // End Time of MIN
   VariablePtr minEndTime = std::make_shared<Variable>(VariableType::VAR_INTEGER,
                                                       name + "_min_end_time");
-  solverModel->addVariable(minEndTime);
+  // solverModel->addVariable(minEndTime);
+  variablesToAdd.push_back(minEndTime);
 
   // Constraint to ensure that all children of the MIN operator are satisfied.
   ConstraintPtr minIndicatorConstraint = std::make_shared<Constraint>(
@@ -1650,6 +1708,8 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
                                  capacityConstraints, 
                                  currentTime));
   }
+
+  std::vector<tetrisched::ConstraintPtr> constraintsToAdd;
   
   for (int i = 0; i < numChildren; i++) {
     // Parse the Child.
@@ -1725,7 +1785,8 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
       minStartTimeConstraint->addTerm(-1, minStartTime);
 
       // Add the constraint to solver
-      solverModel->addConstraint(std::move(minStartTimeConstraint));
+      // solverModel->addConstraint(std::move(minStartTimeConstraint));
+      constraintsToAdd.push_back(std::move(minStartTimeConstraint));
     } else {
       throw tetrisched::exceptions::ExpressionConstructionException(
           "Start Time needed from child-" + std::to_string(i) +
@@ -1765,7 +1826,8 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
       }
       minEndTimeConstraint->addTerm(-1, minEndTime);
       // Add the constraint to solver
-      solverModel->addConstraint(std::move(minEndTimeConstraint));
+      // solverModel->addConstraint(std::move(minEndTimeConstraint));
+      constraintsToAdd.push_back(std::move(minEndTimeConstraint));
     } else {
       throw tetrisched::exceptions::ExpressionConstructionException(
           "End Time needed from child-" + std::to_string(i) +
@@ -1787,7 +1849,8 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
     minUtility->addTerm(1);
   } else {
     minIndicatorConstraint->addTerm(-1 * numEnforceableChildren, minIndicator);
-    solverModel->addConstraint(std::move(minIndicatorConstraint));
+    // solverModel->addConstraint(std::move(minIndicatorConstraint));
+    constraintsToAdd.push_back(std::move(minIndicatorConstraint));
     parsedResult->indicator = minIndicator;
 
     // Set the lower and upper bounds for times.
@@ -1807,6 +1870,9 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
     //   minEndTime->setUpperBound(endTimeRange.second);
     // }
   }
+
+  solverModel->addVariables(variablesToAdd);
+  solverModel->addConstraints(constraintsToAdd);
 
   // Construct and return the ParsedResult.
   parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
@@ -1853,15 +1919,20 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
         "Number of children should be >=1 for MAX");
   }
 
+  std::vector<tetrisched::VariablePtr> variablesToAdd;
+  std::vector<tetrisched::ConstraintPtr> constraintsToAdd;
+
   // Define the start time, end time and the utility bubbled up
   // by the MaxExpression.
   VariablePtr maxStartTime = std::make_shared<Variable>(
       VariableType::VAR_INTEGER, name + "_max_start_time");
-  solverModel->addVariable(maxStartTime);
+  // solverModel->addVariable(maxStartTime);
+  variablesToAdd.push_back(maxStartTime);
 
   VariablePtr maxEndTime = std::make_shared<Variable>(VariableType::VAR_INTEGER,
                                                       name + "_max_end_time");
-  solverModel->addVariable(maxEndTime);
+  // solverModel->addVariable(maxEndTime);
+  variablesToAdd.push_back(maxEndTime);
 
   ObjectiveFunctionPtr maxObjectiveFunction =
       std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
@@ -1869,7 +1940,8 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
   // Indicator of MAX operator
   VariablePtr maxIndicator = std::make_shared<Variable>(
       VariableType::VAR_INDICATOR, name + "_max_indicator");
-  solverModel->addVariable(maxIndicator);
+  // solverModel->addVariable(maxIndicator);
+  variablesToAdd.push_back(maxIndicator);
 
   // Constraint to allow only one sub-expression to have indicator = 1
   // Sum(child_indicator) - max_indicator <= 0
@@ -2010,11 +2082,17 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
   // Set the indicator for the MaxExpression to be equal to the sum of the
   // indicators for the children.
   maxChildSubexprConstraint->addTerm(-1, maxIndicator);
-
+  
   // Add the constraints for the start time, end time and the indicator.
-  solverModel->addConstraint(std::move(maxStartTimeConstraint));
-  solverModel->addConstraint(std::move(maxEndTimeConstraint));
-  solverModel->addConstraint(std::move(maxChildSubexprConstraint));
+  // solverModel->addConstraint(std::move(maxStartTimeConstraint));
+  // solverModel->addConstraint(std::move(maxEndTimeConstraint));
+  // solverModel->addConstraint(std::move(maxChildSubexprConstraint));
+  constraintsToAdd.push_back(std::move(maxStartTimeConstraint));
+  constraintsToAdd.push_back(std::move(maxEndTimeConstraint));
+  constraintsToAdd.push_back(std::move(maxChildSubexprConstraint));
+
+  solverModel->addVariables(variablesToAdd);
+  solverModel->addConstraints(constraintsToAdd);
 
   // Construct the ParsedResult for the MaxExpression.
   parsedResult->type = ParseResultType::EXPRESSION_UTILITY;

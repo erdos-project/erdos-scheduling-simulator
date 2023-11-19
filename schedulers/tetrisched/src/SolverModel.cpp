@@ -389,10 +389,37 @@ void SolverModelT<T>::addVariable(std::shared_ptr<VariableT<T>> variable) {
 }
 
 template <typename T>
+void SolverModelT<T>::addVariables(const std::vector<std::shared_ptr<VariableT<T>>>& variablesToAdd) {
+  std::lock_guard<std::mutex> guard(mutex);
+  for (const auto& variable : variablesToAdd) {
+    // Similar logic as in addVariable, but for each variable in the batch
+    auto it = solutionValueCache.find(variable->getName());
+    if (it != solutionValueCache.end()) {
+      TETRISCHED_DEBUG("Found "
+                     << variable->getName()
+                     << " in solution value cache. Giving it initial value "
+                     << it->second);
+      variable->hint(it->second);
+    }
+    variables[variable->getId()] = variable;
+  }
+}
+
+
+template <typename T>
 void SolverModelT<T>::addConstraint(
     std::shared_ptr<ConstraintT<T>> constraint) {
   std::lock_guard<std::mutex> guard(mutex);
   constraints[constraint->getId()] = constraint;
+}
+
+template <typename T>
+void SolverModelT<T>::addConstraints(const std::vector<std::shared_ptr<ConstraintT<T>>>& constraintsToAdd) {
+  std::lock_guard<std::mutex> guard(mutex);
+  for (const auto& constraint : constraintsToAdd) {
+    // Directly add each constraint in the batch
+    constraints[constraint->getId()] = constraint;
+  }
 }
 
 template <typename T>
