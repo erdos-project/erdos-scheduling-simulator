@@ -18,6 +18,7 @@ enum OptimizationPassType {
 /// An `OptimizationPass` is a base class for all Optimization passes that
 /// run on the STRL tree.
 class OptimizationPass {
+ protected:
   /// A representative name of the optimization pass.
   std::string name;
   /// The type of the optimization pass.
