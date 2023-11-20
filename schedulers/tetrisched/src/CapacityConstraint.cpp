@@ -141,6 +141,7 @@ void CapacityConstraintMap::registerUsageAtTime(
     const ExpressionPtr expression, const Partition& partition, const Time time,
     const Time granularity, const IndicatorT usageIndicator,
     const PartitionUsageT usageVariable, const Time duration) {
+  std::lock_guard<std::mutex> guard(mutex);
   if (!usageIndicator.isVariable() && usageIndicator.get<uint32_t>() == 0) {
     // No usage was registered. We don't need to add anything.
     return;
@@ -166,8 +167,6 @@ void CapacityConstraintMap::registerUsageForDuration(
     const ExpressionPtr expression, const Partition& partition,
     const Time startTime, const Time duration, const IndicatorT usageIndicator,
     const PartitionUsageT variable, std::optional<Time> granularity) {
-  std::lock_guard<std::mutex> guard(mutex);
-
   if (!useDynamicDiscretization) {
     // If we are not using dynamic discretization, then we can just
     // register the usage at the provided granularity.
