@@ -372,7 +372,7 @@ T ObjectiveFunctionT<T>::getValue() const {
 
 template <typename T>
 void SolverModelT<T>::addVariable(std::shared_ptr<VariableT<T>> variable) {
-  std::lock_guard<std::mutex> guard(mutex);
+  std::lock_guard<std::mutex> guard(mutexVariables);
 
   // Check if variable name exists in the solutionValueCache
   auto it = solutionValueCache.find(variable->getName());
@@ -390,7 +390,7 @@ void SolverModelT<T>::addVariable(std::shared_ptr<VariableT<T>> variable) {
 
 template <typename T>
 void SolverModelT<T>::addVariables(const std::vector<std::shared_ptr<VariableT<T>>>& variablesToAdd) {
-  std::lock_guard<std::mutex> guard(mutex);
+  std::lock_guard<std::mutex> guard(mutexVariables);
   for (const auto& variable : variablesToAdd) {
     // Similar logic as in addVariable, but for each variable in the batch
     auto it = solutionValueCache.find(variable->getName());
@@ -405,17 +405,16 @@ void SolverModelT<T>::addVariables(const std::vector<std::shared_ptr<VariableT<T
   }
 }
 
-
 template <typename T>
 void SolverModelT<T>::addConstraint(
     std::shared_ptr<ConstraintT<T>> constraint) {
-  std::lock_guard<std::mutex> guard(mutex);
+  std::lock_guard<std::mutex> guard(mutexConstraints);
   constraints[constraint->getId()] = constraint;
 }
 
 template <typename T>
 void SolverModelT<T>::addConstraints(const std::vector<std::shared_ptr<ConstraintT<T>>>& constraintsToAdd) {
-  std::lock_guard<std::mutex> guard(mutex);
+  std::lock_guard<std::mutex> guard(mutexConstraints);
   for (const auto& constraint : constraintsToAdd) {
     // Directly add each constraint in the batch
     constraints[constraint->getId()] = constraint;
@@ -425,7 +424,7 @@ void SolverModelT<T>::addConstraints(const std::vector<std::shared_ptr<Constrain
 template <typename T>
 void SolverModelT<T>::setObjectiveFunction(
     std::shared_ptr<ObjectiveFunctionT<T>> objectiveFunction) {
-  std::lock_guard<std::mutex> guard(mutex);
+  std::lock_guard<std::mutex> guard(mutexObjectiveFunction);
   this->objectiveFunction = objectiveFunction;
 }
 
@@ -502,8 +501,6 @@ SolverModelT<T>::getConstraintByName(std::string constraintName) const {
 
 template <typename T>
 void SolverModelT<T>::clear() {
-  std::lock_guard<std::mutex> guard(mutex);
-
   // Clear the solution value cache first.
   // As of now we only keep track of the solution value from the previous
   // invocation of the solver.

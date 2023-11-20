@@ -370,7 +370,9 @@ class SolverModelT {
   /// The objective function in this model.
   std::shared_ptr<ObjectiveFunctionT<T>> objectiveFunction;
   /// Mutex for thread-safe parsing
-  std::mutex mutex;
+  std::mutex mutexVariables;
+  std::mutex mutexConstraints;
+  std::mutex mutexObjectiveFunction;
 
   /// Generate a new solver model.
   /// Construct a Solver to get an instance of the Model.
