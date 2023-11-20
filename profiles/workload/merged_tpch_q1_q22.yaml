@@ -1,4 +1,448 @@
 graphs:
+- name: TPCH_Q1
+  graph:
+  - name: Stage0
+    work_profile: TPCH_Q1_Stage0_Profile
+    children:
+    - Stage2
+  - name: Stage2
+    work_profile: TPCH_Q1_Stage2_Profile
+    children:
+    - Stage4
+  - name: Stage4
+    work_profile: TPCH_Q1_Stage4_Profile
+    children:
+    - Stage7
+  - name: Stage7
+    work_profile: TPCH_Q1_Stage7_Profile
+    children: []
+  release_policy: fixed
+  period: 0
+  invocations: 1
+  deadline_variance: [2000, 2000]
+- name: TPCH_Q2
+  graph:
+  - name: Stage0
+    work_profile: TPCH_Q2_Stage0_Profile
+    children:
+    - Stage13
+    - Stage11
+  - name: Stage1
+    work_profile: TPCH_Q2_Stage1_Profile
+    children:
+    - Stage14
+  - name: Stage2
+    work_profile: TPCH_Q2_Stage2_Profile
+    children:
+    - Stage6
+    - Stage7
+  - name: Stage3
+    work_profile: TPCH_Q2_Stage3_Profile
+    children:
+    - Stage14
+  - name: Stage4
+    work_profile: TPCH_Q2_Stage4_Profile
+    children:
+    - Stage6
+  - name: Stage5
+    work_profile: TPCH_Q2_Stage5_Profile
+    children:
+    - Stage7
+  - name: Stage6
+    work_profile: TPCH_Q2_Stage6_Profile
+    children:
+    - Stage9
+  - name: Stage7
+    work_profile: TPCH_Q2_Stage7_Profile
+    children:
+    - Stage11
+  - name: Stage9
+    work_profile: TPCH_Q2_Stage9_Profile
+    children:
+    - Stage13
+  - name: Stage11
+    work_profile: TPCH_Q2_Stage11_Profile
+    children:
+    - Stage14
+  - name: Stage13
+    work_profile: TPCH_Q2_Stage13_Profile
+    children:
+    - Stage16
+  - name: Stage14
+    work_profile: TPCH_Q2_Stage14_Profile
+    children:
+    - Stage19
+  - name: Stage16
+    work_profile: TPCH_Q2_Stage16_Profile
+    children:
+    - Stage19
+  - name: Stage19
+    work_profile: TPCH_Q2_Stage19_Profile
+    children: []
+  release_policy: fixed
+  period: 0
+  invocations: 1
+  deadline_variance: [2000, 2000]
+- name: TPCH_Q3
+  graph:
+  - name: Stage0
+    work_profile: TPCH_Q3_Stage0_Profile
+    children:
+    - Stage6
+  - name: Stage1
+    work_profile: TPCH_Q3_Stage1_Profile
+    children:
+    - Stage2
+  - name: Stage2
+    work_profile: TPCH_Q3_Stage2_Profile
+    children:
+    - Stage4
+  - name: Stage4
+    work_profile: TPCH_Q3_Stage4_Profile
+    children:
+    - Stage6
+  - name: Stage6
+    work_profile: TPCH_Q3_Stage6_Profile
+    children:
+    - Stage7
+  - name: Stage7
+    work_profile: TPCH_Q3_Stage7_Profile
+    children: []
+  release_policy: fixed
+  period: 0
+  invocations: 1
+  deadline_variance: [2000, 2000]
+- name: TPCH_Q4
+  graph:
+  - name: Stage0
+    work_profile: TPCH_Q4_Stage0_Profile
+    children:
+    - Stage5
+  - name: Stage1
+    work_profile: TPCH_Q4_Stage1_Profile
+    children:
+    - Stage3
+  - name: Stage3
+    work_profile: TPCH_Q4_Stage3_Profile
+    children:
+    - Stage5
+  - name: Stage5
+    work_profile: TPCH_Q4_Stage5_Profile
+    children:
+    - Stage8
+    - Stage11
+  - name: Stage8
+    work_profile: TPCH_Q4_Stage8_Profile
+    children:
+    - Stage15
+  - name: Stage11
+    work_profile: TPCH_Q4_Stage11_Profile
+    children:
+    - Stage15
+  - name: Stage15
+    work_profile: TPCH_Q4_Stage15_Profile
+    children: []
+  release_policy: fixed
+  period: 0
+  invocations: 1
+  deadline_variance: [2000, 2000]
+- name: TPCH_Q5
+  graph:
+  - name: Stage0
+    work_profile: TPCH_Q5_Stage0_Profile
+    children:
+    - Stage13
+  - name: Stage1
+    work_profile: TPCH_Q5_Stage1_Profile
+    children:
+    - Stage7
+  - name: Stage2
+    work_profile: TPCH_Q5_Stage2_Profile
+    children:
+    - Stage6
+  - name: Stage3
+    work_profile: TPCH_Q5_Stage3_Profile
+    children:
+    - Stage9
+  - name: Stage4
+    work_profile: TPCH_Q5_Stage4_Profile
+    children:
+    - Stage7
+  - name: Stage6
+    work_profile: TPCH_Q5_Stage6_Profile
+    children:
+    - Stage13
+  - name: Stage7
+    work_profile: TPCH_Q5_Stage7_Profile
+    children:
+    - Stage11
+  - name: Stage9
+    work_profile: TPCH_Q5_Stage9_Profile
+    children:
+    - Stage13
+  - name: Stage11
+    work_profile: TPCH_Q5_Stage11_Profile
+    children:
+    - Stage13
+  - name: Stage13
+    work_profile: TPCH_Q5_Stage13_Profile
+    children:
+    - Stage16
+    - Stage19
+  - name: Stage16
+    work_profile: TPCH_Q5_Stage16_Profile
+    children:
+    - Stage23
+  - name: Stage19
+    work_profile: TPCH_Q5_Stage19_Profile
+    children:
+    - Stage23
+  - name: Stage23
+    work_profile: TPCH_Q5_Stage23_Profile
+    children: []
+  release_policy: fixed
+  period: 0
+  invocations: 1
+  deadline_variance: [2000, 2000]
+- name: TPCH_Q6
+  graph:
+  - name: Stage0
+    work_profile: TPCH_Q6_Stage0_Profile
+    children:
+    - Stage2
+  - name: Stage2
+    work_profile: TPCH_Q6_Stage2_Profile
+    children: []
+  release_policy: fixed
+  period: 0
+  invocations: 1
+  deadline_variance: [2000, 2000]
+- name: TPCH_Q7
+  graph:
+  - name: Stage0
+    work_profile: TPCH_Q7_Stage0_Profile
+    children:
+    - Stage12
+  - name: Stage1
+    work_profile: TPCH_Q7_Stage1_Profile
+    children:
+    - Stage3
+    - Stage4
+  - name: Stage2
+    work_profile: TPCH_Q7_Stage2_Profile
+    children:
+    - Stage10
+  - name: Stage3
+    work_profile: TPCH_Q7_Stage3_Profile
+    children:
+    - Stage8
+  - name: Stage4
+    work_profile: TPCH_Q7_Stage4_Profile
+    children:
+    - Stage15
+  - name: Stage6
+    work_profile: TPCH_Q7_Stage6_Profile
+    children:
+    - Stage18
+  - name: Stage8
+    work_profile: TPCH_Q7_Stage8_Profile
+    children:
+    - Stage12
+  - name: Stage10
+    work_profile: TPCH_Q7_Stage10_Profile
+    children:
+    - Stage18
+  - name: Stage12
+    work_profile: TPCH_Q7_Stage12_Profile
+    children:
+    - Stage6
+  - name: Stage15
+    work_profile: TPCH_Q7_Stage15_Profile
+    children:
+    - Stage10
+  - name: Stage18
+    work_profile: TPCH_Q7_Stage18_Profile
+    children:
+    - Stage22
+    - Stage26
+  - name: Stage22
+    work_profile: TPCH_Q7_Stage22_Profile
+    children:
+    - Stage31
+  - name: Stage26
+    work_profile: TPCH_Q7_Stage26_Profile
+    children:
+    - Stage31
+  - name: Stage31
+    work_profile: TPCH_Q7_Stage31_Profile
+    children: []
+  release_policy: fixed
+  period: 0
+  invocations: 1
+  deadline_variance: [2000, 2000]
+- name: TPCH_Q8
+  graph:
+  - name: Stage0
+    work_profile: TPCH_Q8_Stage0_Profile
+    children:
+    - Stage13
+  - name: Stage1
+    work_profile: TPCH_Q8_Stage1_Profile
+    children:
+    - Stage9
+  - name: Stage2
+    work_profile: TPCH_Q8_Stage2_Profile
+    children:
+    - Stage8
+  - name: Stage3
+    work_profile: TPCH_Q8_Stage3_Profile
+    children:
+    - Stage5
+  - name: Stage4
+    work_profile: TPCH_Q8_Stage4_Profile
+    children:
+    - Stage15
+  - name: Stage5
+    work_profile: TPCH_Q8_Stage5_Profile
+    children:
+    - Stage6
+  - name: Stage6
+    work_profile: TPCH_Q8_Stage6_Profile
+    children:
+    - Stage11
+  - name: Stage8
+    work_profile: TPCH_Q8_Stage8_Profile
+    children:
+    - Stage18
+  - name: Stage9
+    work_profile: TPCH_Q8_Stage9_Profile
+    children:
+    - Stage8
+  - name: Stage11
+    work_profile: TPCH_Q8_Stage11_Profile
+    children:
+    - Stage13
+  - name: Stage13
+    work_profile: TPCH_Q8_Stage13_Profile
+    children:
+    - Stage18
+  - name: Stage15
+    work_profile: TPCH_Q8_Stage15_Profile
+    children:
+    - Stage9
+  - name: Stage18
+    work_profile: TPCH_Q8_Stage18_Profile
+    children:
+    - Stage22
+  - name: Stage22
+    work_profile: TPCH_Q8_Stage22_Profile
+    children:
+    - Stage31
+  - name: Stage31
+    work_profile: TPCH_Q8_Stage31_Profile
+    children: []
+  release_policy: fixed
+  period: 0
+  invocations: 1
+  deadline_variance: [2000, 2000]
+- name: TPCH_Q9
+  graph:
+  - name: Stage0
+    work_profile: TPCH_Q9_Stage0_Profile
+    children:
+    - Stage13
+  - name: Stage1
+    work_profile: TPCH_Q9_Stage1_Profile
+    children:
+    - Stage19
+  - name: Stage2
+    work_profile: TPCH_Q9_Stage2_Profile
+    children:
+    - Stage4
+  - name: Stage3
+    work_profile: TPCH_Q9_Stage3_Profile
+    children:
+    - Stage5
+  - name: Stage4
+    work_profile: TPCH_Q9_Stage4_Profile
+    children:
+    - Stage7
+  - name: Stage5
+    work_profile: TPCH_Q9_Stage5_Profile
+    children:
+    - Stage9
+  - name: Stage7
+    work_profile: TPCH_Q9_Stage7_Profile
+    children:
+    - Stage9
+  - name: Stage9
+    work_profile: TPCH_Q9_Stage9_Profile
+    children:
+    - Stage13
+  - name: Stage13
+    work_profile: TPCH_Q9_Stage13_Profile
+    children:
+    - Stage19
+  - name: Stage19
+    work_profile: TPCH_Q9_Stage19_Profile
+    children:
+    - Stage26
+  - name: Stage26
+    work_profile: TPCH_Q9_Stage26_Profile
+    children:
+    - Stage41
+  - name: Stage33
+    work_profile: TPCH_Q9_Stage33_Profile
+    children:
+    - Stage41
+  - name: Stage41
+    work_profile: TPCH_Q9_Stage41_Profile
+    children: []
+  release_policy: fixed
+  period: 0
+  invocations: 1
+  deadline_variance: [2000, 2000]
+- name: TPCH_Q10
+  graph:
+  - name: Stage0
+    work_profile: TPCH_Q10_Stage0_Profile
+    children:
+    - Stage5
+  - name: Stage1
+    work_profile: TPCH_Q10_Stage1_Profile
+    children:
+    - Stage7
+  - name: Stage2
+    work_profile: TPCH_Q10_Stage2_Profile
+    children:
+    - Stage7
+  - name: Stage3
+    work_profile: TPCH_Q10_Stage3_Profile
+    children:
+    - Stage11
+  - name: Stage5
+    work_profile: TPCH_Q10_Stage5_Profile
+    children:
+    - Stage7
+  - name: Stage7
+    work_profile: TPCH_Q10_Stage7_Profile
+    children:
+    - Stage11
+  - name: Stage11
+    work_profile: TPCH_Q10_Stage11_Profile
+    children:
+    - Stage16
+  - name: Stage16
+    work_profile: TPCH_Q10_Stage16_Profile
+    children:
+    - Stage17
+  - name: Stage17
+    work_profile: TPCH_Q10_Stage17_Profile
+    children: []
+  release_policy: fixed
+  period: 0
+  invocations: 1
+  deadline_variance: [2000, 2000]
 - name: TPCH_Q11
   graph:
   - name: Stage0
@@ -450,6 +894,595 @@ graphs:
   invocations: 1
   deadline_variance: [2000, 2000]
 profiles:
+- name: TPCH_Q1_Stage0_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 1400
+    resource_requirements:
+      Slot:any: 24
+- name: TPCH_Q1_Stage2_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 110
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q1_Stage4_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 40
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q1_Stage7_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 130
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q2_Stage0_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 1100
+    resource_requirements:
+      Slot:any: 24
+- name: TPCH_Q2_Stage1_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 250
+    resource_requirements:
+      Slot:any: 6
+- name: TPCH_Q2_Stage2_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 40
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q2_Stage3_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 250
+    resource_requirements:
+      Slot:any: 6
+- name: TPCH_Q2_Stage4_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 40
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q2_Stage5_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 140
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q2_Stage6_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 70
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q2_Stage7_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 50
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q2_Stage9_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 60
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q2_Stage11_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 50
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q2_Stage13_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 300
+    resource_requirements:
+      Slot:any: 11
+- name: TPCH_Q2_Stage14_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 420
+    resource_requirements:
+      Slot:any: 11
+- name: TPCH_Q2_Stage16_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 40
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q2_Stage19_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 30
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q3_Stage0_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 1700
+    resource_requirements:
+      Slot:any: 24
+- name: TPCH_Q3_Stage1_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 250
+    resource_requirements:
+      Slot:any: 6
+- name: TPCH_Q3_Stage2_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 460
+    resource_requirements:
+      Slot:any: 24
+- name: TPCH_Q3_Stage4_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 130
+    resource_requirements:
+      Slot:any: 2
+- name: TPCH_Q3_Stage6_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 530
+    resource_requirements:
+      Slot:any: 25
+- name: TPCH_Q3_Stage7_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 110
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q4_Stage0_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 1850
+    resource_requirements:
+      Slot:any: 24
+- name: TPCH_Q4_Stage1_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 450
+    resource_requirements:
+      Slot:any: 24
+- name: TPCH_Q4_Stage3_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 120
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q4_Stage5_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 440
+    resource_requirements:
+      Slot:any: 7
+- name: TPCH_Q4_Stage8_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 25
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q4_Stage11_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 25
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q4_Stage15_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 130
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q5_Stage0_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 1750
+    resource_requirements:
+      Slot:any: 24
+- name: TPCH_Q5_Stage1_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 140
+    resource_requirements:
+      Slot:any: 24
+- name: TPCH_Q5_Stage2_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 450
+    resource_requirements:
+      Slot:any: 24
+- name: TPCH_Q5_Stage3_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 240
+    resource_requirements:
+      Slot:any: 6
+- name: TPCH_Q5_Stage4_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 100
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q5_Stage6_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 150
+    resource_requirements:
+      Slot:any: 3
+- name: TPCH_Q5_Stage7_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 70
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q5_Stage9_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 130
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q5_Stage11_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 15
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q5_Stage13_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 600
+    resource_requirements:
+      Slot:any: 24
+- name: TPCH_Q5_Stage16_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 50
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q5_Stage19_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 40
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q5_Stage23_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 150
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q6_Stage0_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 1150
+    resource_requirements:
+      Slot:any: 24
+- name: TPCH_Q6_Stage2_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 140
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q7_Stage0_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 1180
+    resource_requirements:
+      Slot:any: 24
+- name: TPCH_Q7_Stage1_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 60
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q7_Stage2_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 1300
+    resource_requirements:
+      Slot:any: 24
+- name: TPCH_Q7_Stage3_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 1000
+    resource_requirements:
+      Slot:any: 6
+- name: TPCH_Q7_Stage4_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 95
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q7_Stage6_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 60
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q7_Stage8_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 60
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q7_Stage10_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 350
+    resource_requirements:
+      Slot:any: 24
+- name: TPCH_Q7_Stage12_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 120
+    resource_requirements:
+      Slot:any: 16
+- name: TPCH_Q7_Stage15_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 130
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q7_Stage18_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 190
+    resource_requirements:
+      Slot:any: 4
+- name: TPCH_Q7_Stage22_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 50
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q7_Stage26_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 30
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q7_Stage31_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 120
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q8_Stage0_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 1130
+    resource_requirements:
+      Slot:any: 24
+- name: TPCH_Q8_Stage1_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 320
+    resource_requirements:
+      Slot:any: 6
+- name: TPCH_Q8_Stage2_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 40
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q8_Stage3_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 35
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q8_Stage4_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 125
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q8_Stage5_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 30
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q8_Stage6_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 230
+    resource_requirements:
+      Slot:any: 6
+- name: TPCH_Q8_Stage8_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 70
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q8_Stage9_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 850
+    resource_requirements:
+      Slot:any: 24
+- name: TPCH_Q8_Stage11_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 60
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q8_Stage13_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 140
+    resource_requirements:
+      Slot:any: 8
+- name: TPCH_Q8_Stage15_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 40
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q8_Stage18_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 140
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q8_Stage22_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 40
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q8_Stage26_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 30
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q8_Stage31_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 130
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q9_Stage0_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 1000
+    resource_requirements:
+      Slot:any: 24
+- name: TPCH_Q9_Stage1_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 600
+    resource_requirements:
+      Slot:any: 24
+- name: TPCH_Q9_Stage2_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 110
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q9_Stage3_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 170
+    resource_requirements:
+      Slot:any: 6
+- name: TPCH_Q9_Stage4_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 70
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q9_Stage5_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 850
+    resource_requirements:
+      Slot:any: 24
+- name: TPCH_Q9_Stage7_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 80
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q9_Stage9_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 140
+    resource_requirements:
+      Slot:any: 8
+- name: TPCH_Q9_Stage13_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 1250
+    resource_requirements:
+      Slot:any: 22
+- name: TPCH_Q9_Stage19_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 880
+    resource_requirements:
+      Slot:any: 25
+- name: TPCH_Q9_Stage26_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 50
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q9_Stage33_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 55
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q9_Stage41_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 110
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q10_Stage0_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 1100
+    resource_requirements:
+      Slot:any: 24
+- name: TPCH_Q10_Stage1_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 40
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q10_Stage2_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 530
+    resource_requirements:
+      Slot:any: 6
+- name: TPCH_Q10_Stage3_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 1000
+    resource_requirements:
+      Slot:any: 24
+- name: TPCH_Q10_Stage5_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 200
+    resource_requirements:
+      Slot:any: 1
+- name: TPCH_Q10_Stage7_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 200
+    resource_requirements:
+      Slot:any: 12
+- name: TPCH_Q10_Stage11_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 900
+    resource_requirements:
+      Slot:any: 25
+- name: TPCH_Q10_Stage16_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 130
+    resource_requirements:
+      Slot:any: 7
+- name: TPCH_Q10_Stage17_Profile
+  execution_strategies:
+  - batch_size: 1
+    runtime: 100
+    resource_requirements:
+      Slot:any: 1
+
 - name: TPCH_Q11_Stage0_Profile
   execution_strategies:
   - batch_size: 1
