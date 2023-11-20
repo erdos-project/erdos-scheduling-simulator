@@ -162,10 +162,17 @@ void CapacityConstraintMap::registerUsageAtTime(
                                              usageVariable, duration);
 }
 
+void CapacityConstraintMap::setDynamicDiscretization(std::vector<std::pair<TimeRange, Time>> passedtimeRangeToGranularities)
+{
+  timeRangeToGranularities = passedtimeRangeToGranularities;
+  useDynamicDiscretization = true;
+}
+
 void CapacityConstraintMap::registerUsageForDuration(
-    const ExpressionPtr expression, const Partition& partition,
+    const ExpressionPtr expression, const Partition &partition,
     const Time startTime, const Time duration, const IndicatorT usageIndicator,
-    const PartitionUsageT variable, std::optional<Time> granularity) {
+    const PartitionUsageT variable, std::optional<Time> granularity)
+{
   if (!useDynamicDiscretization) {
     // If we are not using dynamic discretization, then we can just
     // register the usage at the provided granularity.

@@ -9,7 +9,7 @@
 #include <string>
 
 // Macros for logging.
-#define TETRISCHED_DEBUG_ENABLED false
+#define TETRISCHED_DEBUG_ENABLED true
 #define TETRISCHED_DEBUG(x)       \
   if (TETRISCHED_DEBUG_ENABLED) { \
     std::cout << x << std::endl;  \

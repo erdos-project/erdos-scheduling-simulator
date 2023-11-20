@@ -2,7 +2,7 @@
 #define _TETRISCHED_OPTIMIZATION_PASSES_HPP_
 
 #include <string>
-
+#include <cmath>
 #include "tetrisched/Expression.hpp"
 
 namespace tetrisched {

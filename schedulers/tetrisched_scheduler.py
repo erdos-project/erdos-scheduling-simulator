@@ -283,7 +283,7 @@ class TetriSchedScheduler(BaseScheduler):
                     objective_strl,
                     partitions,
                     sim_time.time,
-                    False,
+                    True,
                     start_end_time_list,
                 )
                 solver_start_time = time.time()

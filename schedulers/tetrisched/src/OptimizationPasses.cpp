@@ -554,6 +554,75 @@ void DiscretizationSelectorOptimizationPass::runPass(
     TETRISCHED_DEBUG("[DiscretizationSelectorOptimizationPass] "
                      << i + minOccupancyTime << ": " << occupancyRequests[i]);
   }
+
+  // finding the right discretization
+  // TODO(Alind): all these values should be made input from python for this optimization pass
+  uint32_t minDiscretization = 1;
+  uint32_t maxDiscretization = 5;
+  uint32_t maxOccupancyThreshold = 50;
+
+  // decay function for finding the right discretization
+  // TODO(Alind): Type of Decay fn should also be made input from python
+  auto linearDecayFunction = [minDiscretization, maxDiscretization, maxOccupancyThreshold](double curentOccupancy){ 
+      double fraction = curentOccupancy / maxOccupancyThreshold; 
+      double value = (maxDiscretization - minDiscretization)*fraction;
+      auto predictedDiscretization = std::max(maxDiscretization - value, (double) minDiscretization);
+      return (uint32_t)std::round(predictedDiscretization);
+  };
+  // algorithm for deciding the discretization based on occupancy map
+  std::vector<std::pair<TimeRange, Time>> timeRangeToGranularities;
+  int planAheadIndex = -1;
+  for (size_t i = 0; i < occupancyRequests.size(); i++) {
+      // if discretization is decided for more plan ahead continue
+      if (planAheadIndex > -1){
+        Time endTime = timeRangeToGranularities[planAheadIndex].first.second;
+        Time currentTime = minOccupancyTime + i;
+        if (currentTime < endTime){
+          continue;
+        }
+      }
+
+      // find the right discretization for current occupancy
+      uint32_t currentOccupancy = occupancyRequests[i];
+      uint32_t predictedDiscretization = linearDecayFunction(currentOccupancy);
+      auto nextPlanAhead = std::min(i + predictedDiscretization, occupancyRequests.size());
+
+      // find the right discretization such that average occupancy for that period predicts same discretization
+      while (nextPlanAhead >= (i+1)) {
+        double averageOccupancy = 0;
+        int count = 0;
+        for(size_t j = i; j < nextPlanAhead; j++){
+          averageOccupancy += occupancyRequests[j];
+          count++;
+        }
+        averageOccupancy /= count;
+        uint32_t avgPredictedDiscretization = linearDecayFunction(averageOccupancy);
+        if (avgPredictedDiscretization == predictedDiscretization){
+          TimeRange discretizedtimeRange = std::make_pair(minOccupancyTime + i, minOccupancyTime + nextPlanAhead);
+          Time granularity = (nextPlanAhead - i);
+          auto value = std::make_pair(discretizedtimeRange, granularity);
+          timeRangeToGranularities.push_back(value);
+          planAheadIndex++; 
+          break;
+        }
+        nextPlanAhead--;
+      }
+  }
+
+  // set capacity constraint map to dynamic and update it
+  // TODO(Alind): check if the usage was registered for different dynamic discretization?
+  // capacityConstraints.setDynamicDiscretization(timeRangeToGranularities);
+
+  // Log the found dynamic discretizations and times.
+  TETRISCHED_DEBUG(
+      "[DiscretizationSelectorOptimizationPass] Dynamic Discretization between "
+      << minOccupancyTime << " and " << maxOccupancyTime << ": ");
+
+  for (auto &[discretizationTimeRange, granularity] :
+       timeRangeToGranularities){
+    TETRISCHED_DEBUG("[DiscretizationSelectorOptimizationPassDiscreteTime] "
+                     << discretizationTimeRange.first << " - " << discretizationTimeRange.second << " : " << granularity);
+  }
 }
 
 void DiscretizationSelectorOptimizationPass::clean() {}
@@ -804,8 +873,8 @@ OptimizationPassRunner::OptimizationPassRunner(bool debug) : debug(debug) {
   // Register the Critical Path optimization pass.
   registeredPasses.push_back(std::make_shared<CriticalPathOptimizationPass>());
   // Register the DiscretizationGenerator pass.
-  // registeredPasses.push_back(
-  //     std::make_shared<DiscretizationSelectorOptimizationPass>());
+  registeredPasses.push_back(
+      std::make_shared<DiscretizationSelectorOptimizationPass>());
   // Register the CapacityConstraintMapPurging optimization pass.
   // registeredPasses.push_back(
   //     std::make_shared<CapacityConstraintMapPurgingOptimizationPass>());
