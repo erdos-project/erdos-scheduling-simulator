@@ -57,7 +57,7 @@ class CSVReader(object):
                         simulator = Simulator(
                             csv_path=csv_path,
                             start_time=int(reading[0]),
-                            total_tasks=reading[2],
+                            total_tasks=None,
                         )
                     elif reading[1] == "SIMULATOR_END":
                         assert (

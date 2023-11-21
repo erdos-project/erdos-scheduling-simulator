@@ -356,6 +356,7 @@ class Simulator(object):
         self.end_time = int(csv_reading[0])
         self.finished_tasks = int(csv_reading[2])
         self.dropped_tasks = int(csv_reading[3])
+        self.total_tasks = self.finished_tasks + self.dropped_tasks
         self.missed_deadlines = int(csv_reading[4])
         self.goodput_taskgraphs = int(csv_reading[5]) - int(csv_reading[7])
         self.dropped_taskgraphs = int(csv_reading[6])
