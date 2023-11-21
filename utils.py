@@ -237,12 +237,28 @@ def fuzz_time(time: EventTime, variance: Tuple[int, int]) -> EventTime:
     Returns:
         The fuzzed time according to the given variance.
     """
-    min_variance, max_variance = variance
+
+    # For initial test check if variance is negative or positive
+    if variance[1] <= 0 and variance[0] >= 0:
+        max_variance, min_variance = variance
+    elif variance[0] <= 0 and variance[1] >= 0:
+        min_variance, max_variance = variance
+    else:
+        raise ValueError(
+            "Variance must be either positive or negative, not both. "
+            "Please provide a tuple of the form (min_variance, max_variance) "
+            "where min_variance <= max_variance."
+        )
+    
+
+    assert min_variance <= max_variance, "Min variance must be <= max variance."
+    assert min_variance >= -100, "Min variance must be >= -100."
+
     return EventTime(
         int(
             random.uniform(
-                time.time + (time.time * abs(min_variance) / 100.0),
-                time.time + (time.time * abs(max_variance) / 100.0),
+                time.time * (1 + min_variance / 100.0),
+                time.time * (1 + max_variance / 100.0),
             )
         ),
         time.unit,

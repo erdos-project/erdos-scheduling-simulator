@@ -174,9 +174,8 @@ class TetriSchedScheduler(BaseScheduler):
         # Construct the STRL expression.
         scheduler_start_time = time.time()
         placements = []
-        if len(tasks_to_be_scheduled) > 0 and any(
-            task.state != TaskState.SCHEDULED for task in tasks_to_be_scheduled
-        ):
+        if len(tasks_to_be_scheduled) > 0:
+            #and any(task.state != TaskState.SCHEDULED for task in tasks_to_be_scheduled): # TB: Reschedule already scheduled tasks
             # Construct the partitions from the Workers in the WorkerPool.
             partitions = self.construct_partitions(worker_pools=worker_pools)
 

@@ -2,27 +2,32 @@
 # $1 directory where to save the logs.
 
 # Scheduler runtimes in us.TetriSched
-# SCHEDULERS=(EDF TetriSched_Gurobi)
-# SCHEDULERS=(EDF TetriSched)
 SCHEDULERS=(EDF TetriSched)
-DEADLINE_VARIANCES=(50 100 200)
-SCHEDULER_TIME_DISCRETIZATIONS=(1 5)
-RELEASE_POLICIES=(fixed poisson gamma)
+#SCHEDULERS=(EDF TetriSched_Gurobi)
+#SCHEDULERS=(TetriSched_Gurobi)
+#DEADLINE_VARIANCES=(50 100 200)
+DEADLINE_VARIANCES=(0)
+#SCHEDULER_TIME_DISCRETIZATIONS=(1 5)
+SCHEDULER_TIME_DISCRETIZATIONS=(1)
+#RELEASE_POLICIES=(fixed poisson gamma)
+RELEASE_POLICIES=(fixed)
 # SCHEDULERS=(EDF TetriSched)
 # DEADLINE_VARIANCES=(50 100 200)
 # SCHEDULER_TIME_DISCRETIZATIONS=(1 5 10)
+RUNTIME_VARIANCES=(0 -20 20)
 
 SCHEDULER_LOG_TIMES=10
 SCHEDULER_TIME_DISCRETIZATION=1
 SCHEDULER_RUNTIME=0
-LOG_LEVEL=debug
+#LOG_LEVEL=debug
+LOG_LEVEL=error
 REPLAY_TRACE=alibaba
 WORKLOAD_PROFILE_PATH=./traces/alibaba-cluster-trace-v2018/alibaba_random_50_dags.pkl
 EXECUTION_MODE=replay
 WORKER_CONFIG=alibaba_cluster
 # RELEASE_POLICY=fixed
 
-PARALLEL_FACTOR=2
+PARALLEL_FACTOR=4
 # Move to the simulator directory.
 if [[ -z ${ERDOS_SIMULATOR_DIR} ]]; then
     echo "[x] ERRROR: ERDOS_SIMULATOR_DIR is not set"
@@ -42,6 +47,7 @@ execute_experiment () {
     echo "[x] Initiating the execution of ${LOG_BASE}"
     if [ ! -f "${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.csv" ]; then
 	MYCONF="\
+    --runtime_variance=${RUNTIME_VARIANCE}
     --log_file_name=${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.log
     --csv_file_name=${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.csv
     --log_level=${LOG_LEVEL}
@@ -92,22 +98,24 @@ for DEADLINE_VAR in ${DEADLINE_VARIANCES[@]}; do
     for SCHEDULER in ${SCHEDULERS[@]}; do
         for RELEASE_POLICY in ${RELEASE_POLICIES[@]}; do
             for SCHEDULER_TIME_DISCRETIZATION in ${SCHEDULER_TIME_DISCRETIZATIONS[@]}; do
-                if [[ ${SCHEDULER} == EDF && "${SCHEDULER_TIME_DISCRETIZATION}" -ne "${SCHEDULER_TIME_DISCRETIZATIONS[0]}"  ]]; then
-                    continue
-                fi
+                for RUNTIME_VARIANCE in ${RUNTIME_VARIANCES[@]}; do
+                    if [[ ${SCHEDULER} == EDF && "${SCHEDULER_TIME_DISCRETIZATION}" -ne "${SCHEDULER_TIME_DISCRETIZATIONS[0]}"  ]]; then
+                        continue
+                    fi
 
-                LOG_BASE=${REPLAY_TRACE}_scheduler_${SCHEDULER}_release_policy_${RELEASE_POLICY}_deadline_var_${DEADLINE_VAR}
+                    LOG_BASE=${REPLAY_TRACE}_scheduler_${SCHEDULER}_release_policy_${RELEASE_POLICY}_deadline_var_${DEADLINE_VAR}_runtime_var_${RUNTIME_VARIANCE}
 
-                if [[ ${SCHEDULER} != EDF ]]; then
-                LOG_BASE+="_scheduler_discretization_${SCHEDULER_TIME_DISCRETIZATION}"
-                fi
+                    if [[ ${SCHEDULER} != EDF ]]; then
+                    LOG_BASE+="_scheduler_discretization_${SCHEDULER_TIME_DISCRETIZATION}"
+                    fi
 
-                mkdir -p ${LOG_DIR}/${LOG_BASE} 
-                execute_experiment ${LOG_DIR} ${LOG_BASE} &
-                if [[ $(jobs -r -p | wc -l) -ge $PARALLEL_FACTOR ]]; then
-                                echo "[x] Waiting for a job to terminate because $PARALLEL_FACTOR jobs are running."
-                                        wait -n 
-                fi
+                    mkdir -p ${LOG_DIR}/${LOG_BASE} 
+                    execute_experiment ${LOG_DIR} ${LOG_BASE} &
+                    if [[ $(jobs -r -p | wc -l) -ge $PARALLEL_FACTOR ]]; then
+                                    echo "[x] Waiting for a job to terminate because $PARALLEL_FACTOR jobs are running."
+                                            wait -n 
+                    fi
+                done
             done
         done
     done
