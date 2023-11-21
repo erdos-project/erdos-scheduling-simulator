@@ -1,0 +1,35 @@
+Set parameter Username
+Academic license - for non-commercial use only - expires 2024-11-12
+Warning: Gurobi version mismatch between C++ 10.0.1 and C library 10.0.0
+Set parameter Threads to value 48
+Set parameter Cuts to value 3
+Set parameter Presolve to value 1
+Set parameter MIPFocus to value 1
+Set parameter Threads to value 48
+Set parameter Cuts to value 3
+Set parameter Presolve to value 1
+Set parameter MIPFocus to value 1
+Set parameter LogFile to value "tetrisched_81.log"
+Gurobi Optimizer version 10.0.0 build v10.0.0rc2 (linux64)
+
+CPU model: Intel(R) Xeon(R) Gold 6226 CPU @ 2.70GHz, instruction set [SSE2|AVX|AVX2|AVX512]
+Thread count: 24 physical cores, 48 logical processors, using up to 48 threads
+
+Optimize a model with 7 rows, 5 columns and 12 nonzeros
+Model fingerprint: 0x9ceafcc7
+Variable types: 0 continuous, 5 integer (2 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 8e+01]
+  Objective range  [1e+00, 1e+00]
+  Bounds range     [1e+00, 8e+01]
+  RHS range        [1e+01, 8e+01]
+Found heuristic solution: objective -0.0000000
+Found heuristic solution: objective 1.0000000
+
+Explored 0 nodes (0 simplex iterations) in 0.00 seconds (0.00 work units)
+Thread count was 1 (of 48 available processors)
+
+Solution count 2: 1 -0 
+
+Optimal solution found (tolerance 1.00e-04)
+Best objective 1.000000000000e+00, best bound 1.000000000000e+00, gap 0.0000%
