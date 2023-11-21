@@ -822,16 +822,24 @@ class Simulator(object):
                 "Rescheduling of PREEMPTED tasks hasn't been implemented yet."
             )
         else:
-            # Task was either completed or cancelled before the Scheduler finished,
-            # we skip the application of this Placement decision.
-            self._logger.warning(
-                "[%s] Skipping the application of Placement of Task %s at "
-                "time %s because the Task was in %s state.",
-                event_time.to(EventTime.Unit.US).time,
-                placement.task,
-                placement.placement_time,
-                placement.task.state,
-            )
+            if not placement.is_placed():
+                self._logger.debug(
+                    "[%s] The Task %s was cancelled by an upstream task, "
+                    "skipping its re-cancellation.",
+                    event_time.to(EventTime.Unit.US).time,
+                    placement.task,
+                )
+            else:
+                # Task was either completed or cancelled before the Scheduler finished,
+                # we skip the application of this Placement decision.
+                self._logger.warning(
+                    "[%s] Skipping the application of Placement of Task %s at "
+                    "time %s because the Task was in %s state.",
+                    event_time.to(EventTime.Unit.US).time,
+                    placement.task,
+                    placement.placement_time,
+                    placement.task.state,
+                )
 
         return simulator_events
 
