@@ -1,7 +1,8 @@
-from typing import Sequence
+from typing import Optional, Sequence
 
 import pytest
 
+from data import BaseWorkloadLoader
 from schedulers import BaseScheduler
 from simulator import Event, EventQueue, EventType, Simulator
 from tests.utils import create_default_task
@@ -34,6 +35,20 @@ class MockScheduler(BaseScheduler):
         self, sim_time=None, released_tasks=None, task_graph=None, worker_pools=None
     ) -> Placements:
         return Placements(self._runtime, self._task_placement)
+
+
+class MockWorkloadLoader(BaseWorkloadLoader):
+    """A MockWorkloadLoader that enables the testing of the Simulator."""
+
+    def __init__(self, workload: Workload) -> None:
+        self._released_workload = False
+        self._workload = workload
+
+    def get_next_workload(self, current_time: EventTime) -> Optional[Workload]:
+        if self._released_workload:
+            return None
+        self._released_workload = True
+        return self._workload
 
 
 def __create_default_worker_pool(
@@ -149,11 +164,11 @@ def test_simulator_construction():
     simulator = Simulator(
         worker_pools=WorkerPools([worker_pool]),
         scheduler=MockScheduler(runtime=EventTime(1, EventTime.Unit.US), placement=[]),
-        workload=Workload.empty(),
+        workload_loader=MockWorkloadLoader(workload=Workload.empty()),
     )
     assert len(simulator._worker_pools) == 1, "Incorrect number of WorkerPool"
     assert (
-        len(simulator._event_queue) == 2
+        len(simulator._event_queue) == 3
     ), "Incorrect number of starting events in the EventQueue."
 
 
@@ -163,7 +178,7 @@ def test_failed_construction_of_scheduler_start_event():
     simulator = Simulator(
         worker_pools=WorkerPools([worker_pool]),
         scheduler=MockScheduler(runtime=EventTime(1, EventTime.Unit.US), placement=[]),
-        workload=Workload.empty(),
+        workload_loader=MockWorkloadLoader(workload=Workload.empty()),
     )
     with pytest.raises(ValueError):
         simulator._Simulator__get_next_scheduler_event(
@@ -182,7 +197,7 @@ def test_construction_of_scheduler_start_event():
     simulator = Simulator(
         worker_pools=WorkerPools([worker_pool]),
         scheduler=MockScheduler(runtime=EventTime(1, EventTime.Unit.US), placement=[]),
-        workload=Workload.empty(),
+        workload_loader=MockWorkloadLoader(Workload.empty()),
     )
 
     simulator_start_event = simulator._Simulator__get_next_scheduler_event(
@@ -228,10 +243,13 @@ def test_simulator_loop_finish_event():
     simulator = Simulator(
         worker_pools=WorkerPools([worker_pool]),
         scheduler=MockScheduler(runtime=EventTime(1, EventTime.Unit.US), placement=[]),
-        workload=Workload.empty(),
+        workload_loader=MockWorkloadLoader(Workload.empty()),
     )
     assert (
         simulator._event_queue.next().event_type == EventType.SIMULATOR_START
+    ), "Incorrect event received."
+    assert (
+        simulator._event_queue.next().event_type == EventType.UPDATE_WORKLOAD
     ), "Incorrect event received."
     assert (
         simulator._event_queue.next().event_type == EventType.SCHEDULER_START
@@ -257,7 +275,7 @@ def test_scheduler_invocation_by_simulator():
     simulator = Simulator(
         worker_pools=WorkerPools([worker_pool]),
         scheduler=MockScheduler(runtime=EventTime(5, EventTime.Unit.US), placement=[]),
-        workload=Workload.empty(),
+        workload_loader=MockWorkloadLoader(Workload.empty()),
     )
     scheduler_finished_event = simulator._Simulator__run_scheduler(
         event=Event(
@@ -275,7 +293,7 @@ def test_simulator_step():
     simulator = Simulator(
         worker_pools=WorkerPools([worker_pool]),
         scheduler=MockScheduler(runtime=EventTime(5, EventTime.Unit.US), placement=[]),
-        workload=Workload.empty(),
+        workload_loader=MockWorkloadLoader(Workload.empty()),
     )
 
     # Create, release and place a Task.
@@ -296,38 +314,40 @@ def test_simulator_step():
     assert simulator._simulator_time == EventTime(
         0, EventTime.Unit.US
     ), "Incorrect starting simulator time."
-    assert len(simulator._event_queue) == 2, "Incorrect number of starting events."
+    assert len(simulator._event_queue) == 3, "Incorrect number of starting events."
 
     # Step through the execution.
     simulator._Simulator__step()
     assert simulator._simulator_time == EventTime(
         1, EventTime.Unit.US
     ), "Incorrect starting simulator time."
-    assert len(simulator._event_queue) == 2, "Incorrect number of starting events."
+    assert len(simulator._event_queue) == 3, "Incorrect number of starting events."
     simulator._Simulator__step()
     assert simulator._simulator_time == EventTime(
         2, EventTime.Unit.US
     ), "Incorrect starting simulator time."
-    assert len(simulator._event_queue) == 2, "Incorrect number of starting events."
+    assert len(simulator._event_queue) == 3, "Incorrect number of starting events."
     simulator._Simulator__step()
     assert simulator._simulator_time == EventTime(
         3, EventTime.Unit.US
     ), "Incorrect starting simulator time."
-    assert len(simulator._event_queue) == 2, "Incorrect number of starting events."
+    assert len(simulator._event_queue) == 3, "Incorrect number of starting events."
     simulator._Simulator__step()
     assert simulator._simulator_time == EventTime(
         4, EventTime.Unit.US
     ), "Incorrect starting simulator time."
-    assert len(simulator._event_queue) == 2, "Incorrect number of starting events."
+    assert len(simulator._event_queue) == 3, "Incorrect number of starting events."
     simulator._Simulator__step()
     assert simulator._simulator_time == EventTime(
         5, EventTime.Unit.US
     ), "Incorrect starting simulator time."
-    assert len(simulator._event_queue) == 3, "Incorrect number of starting events."
+    assert len(simulator._event_queue) == 4, "Incorrect number of starting events."
 
     # Check the order of events in the queue.
     next_event = simulator._event_queue.next()
     assert next_event.event_type == EventType.SIMULATOR_START, "Incorrect event type."
+    next_event = simulator._event_queue.next()
+    assert next_event.event_type == EventType.UPDATE_WORKLOAD, "Incorrect event type."
     next_event = simulator._event_queue.next()
     assert next_event.event_type == EventType.SCHEDULER_START, "Incorrect event type."
     next_event = simulator._event_queue.next()
@@ -344,7 +364,9 @@ def test_simulator_handle_event():
     simulator = Simulator(
         worker_pools=WorkerPools([worker_pool]),
         scheduler=MockScheduler(runtime=EventTime(5, EventTime.Unit.US), placement=[]),
-        workload=Workload.from_task_graphs({perception_task.task_graph: task_graph}),
+        workload_loader=MockWorkloadLoader(
+            Workload.from_task_graphs({perception_task.task_graph: task_graph})
+        ),
     )
 
     # Test the SIMULATOR_START event.
@@ -362,6 +384,16 @@ def test_simulator_handle_event():
         ),
     )
     assert return_value, "Incorrect return value for event type."
+
+    # Test the UPDATE_WORKLOAD event.
+    assert len(simulator._workload) == 0, "Incorrect size of Workload."
+    return_value = simulator._Simulator__handle_event(
+        event=Event(
+            event_type=EventType.UPDATE_WORKLOAD, time=EventTime(1, EventTime.Unit.US)
+        ),
+    )
+    assert len(simulator._workload) != 0, "Incorrect size of Workload."
+    assert not return_value, "Incorrect return value for event type."
 
     # Test the TASK_FINISHED event.
     perception_task.release(EventTime(2, EventTime.Unit.US))
@@ -381,7 +413,7 @@ def test_simulator_handle_event():
     perception_task.start(EventTime(3, EventTime.Unit.US))
     perception_task.update_remaining_time(EventTime.zero())
 
-    assert len(simulator._event_queue) == 2, "Incorrect length of EventQueue."
+    assert len(simulator._event_queue) == 5, "Incorrect length of EventQueue."
     return_value = simulator._Simulator__handle_event(
         event=Event(
             event_type=EventType.TASK_FINISHED,
@@ -390,7 +422,7 @@ def test_simulator_handle_event():
         ),
     )
     assert not return_value, "Incorrect return value for event type."
-    assert len(simulator._event_queue) == 3, "Incorrect length of EventQueue."
+    assert len(simulator._event_queue) == 6, "Incorrect length of EventQueue."
 
     # Test the SCHEDULER_START event.
     return_value = simulator._Simulator__handle_event(
@@ -400,7 +432,7 @@ def test_simulator_handle_event():
         ),
     )
     assert not return_value, "Incorrect return value for event type."
-    assert len(simulator._event_queue) == 4, "Incorrect length of EventQueue."
+    assert len(simulator._event_queue) == 7, "Incorrect length of EventQueue."
 
     # Test the SCHEDULER_FINISHED event.
     simulator._last_scheduler_placements = Placements(
@@ -421,7 +453,7 @@ def test_simulator_handle_event():
             time=EventTime(6, EventTime.Unit.US),
         ),
     )
-    assert len(simulator._event_queue) == 7, "Incorrect length of EventQueue."
+    assert len(simulator._event_queue) == 10, "Incorrect length of EventQueue."
 
 
 def test_simulator_loads_and_evicts_profiles_correctly():
@@ -452,7 +484,9 @@ def test_simulator_loads_and_evicts_profiles_correctly():
     simulator = Simulator(
         worker_pools=WorkerPools([worker_pool]),
         scheduler=MockScheduler(runtime=EventTime(5, EventTime.Unit.US), placement=[]),
-        workload=Workload.from_task_graphs({perception_task.task_graph: task_graph}),
+        workload_loader=MockWorkloadLoader(
+            Workload.from_task_graphs({perception_task.task_graph: task_graph})
+        ),
     )
     profile_loading_event = Event(
         event_type=EventType.LOAD_PROFILE,

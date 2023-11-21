@@ -117,6 +117,13 @@ flags.DEFINE_bool(
     "This option can be used with SAT/ILP based schedulers to stop wastefully"
     "reconsidering tasks that will never meet their deadlines.",
 )
+flags.DEFINE_integer(
+    "workload_update_interval",
+    -1,
+    "The interval (in µs) to update the workload. "
+    "If set to default (-1), then the Simulator will automatically choose an interval "
+    "based on the set of released tasks in the previous iteration.",
+)
 
 # Benchmark related flags.
 flags.DEFINE_integer(
@@ -227,9 +234,21 @@ flags.DEFINE_bool(
     "Worker becomes free. This is a way of specifying a coarse-grained scheduler "
     "frequency that is not tied to the release of Tasks in the system.",
 )
+flags.DEFINE_bool(
+    "scheduler_adaptive_discretization",
+    False,
+    "If `True`, the scheduler creates space-time matrix non-uniformly. "
+    "The discretization is finer initially, and coarser at the end. (default: False)",
+)
+flags.DEFINE_integer(
+    "scheduler_max_time_discretization",
+    5,
+    "The maximum discretization that the scheduler can have (in µs). "
+    "Only used when scheduler_adaptive_discretization flag is enabled. (default: 5)",
+)
 flags.DEFINE_integer(
     "scheduler_delay",
-    1,
+    0,
     "The delay (in µs) associated with invoking a scheduler after the "
     "release of a Task in the system.",
 )
@@ -414,14 +433,22 @@ def main(args):
                 {"pylot_dataflow": task_loader.get_task_graph()},
                 _flags=FLAGS,
             )
+            raise NotImplementedError(
+                "Pylot loader does not yet support dynamic workloads."
+            )
         elif FLAGS.replay_trace == "clockwork_bursty":
             workload_loader = WorkloadLoaderClockworkBursty()
-            workload = workload_loader.workload
+            raise NotImplementedError(
+                "Clockwork loader does not yet support dynamic workloads."
+            )
         elif FLAGS.replay_trace == "alibaba":
             workload_loader = AlibabaLoader(
-                path=FLAGS.workload_profile_path, _flags=FLAGS
+                path=FLAGS.workload_profile_path,
+                workload_interval=EventTime(
+                    FLAGS.workload_update_interval, EventTime.Unit.US
+                ),
+                flags=FLAGS,
             )
-            workload = workload_loader.workload
         else:
             raise NotImplementedError(
                 f"Replay trace {FLAGS.replay_trace} is not implemented yet."
@@ -443,7 +470,6 @@ def main(args):
         raise NotImplementedError("Workload has not been specified yet.")
     elif FLAGS.execution_mode == "json" or FLAGS.execution_mode == "yaml":
         workload_loader = WorkloadLoader(path=FLAGS.workload_profile_path, _flags=FLAGS)
-        workload = workload_loader.workload
 
     # Dilate the time if needed.
     if FLAGS.timestamp_difference != -1:
@@ -462,6 +488,8 @@ def main(args):
             pass
         return
 
+    # TODO (Sukrit): Move this to the Simulator dry run method since we'll remove the
+    # workload entirely from main.
     if FLAGS.graph_file_prefix:
         # Log a DOT representation of each of the JobGraph to the required file.
         for job_graph_name, job_graph in workload.job_graphs.items():
@@ -494,6 +522,7 @@ def main(args):
         scheduler = EDFScheduler(
             preemptive=FLAGS.preemption,
             runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
+            enforce_deadlines=FLAGS.enforce_deadlines,
             _flags=FLAGS,
         )
     elif FLAGS.scheduler == "LSF":
@@ -593,8 +622,13 @@ def main(args):
             time_discretization=EventTime(
                 FLAGS.scheduler_time_discretization, EventTime.Unit.US
             ),
+            plan_ahead=EventTime(FLAGS.scheduler_plan_ahead, EventTime.Unit.US),
             log_to_file=FLAGS.scheduler_log_to_file,
+            adaptive_discretization=FLAGS.scheduler_adaptive_discretization,
             _flags=FLAGS,
+            max_time_discretization=EventTime(
+                FLAGS.scheduler_max_time_discretization, EventTime.Unit.US
+            ),
         )
     else:
         raise ValueError(
@@ -620,7 +654,7 @@ def main(args):
     simulator = Simulator(
         worker_pools=worker_loader.get_worker_pools(),
         scheduler=scheduler,
-        workload=workload,
+        workload_loader=workload_loader,
         loop_timeout=EventTime(FLAGS.loop_timeout, EventTime.Unit.US),
         scheduler_frequency=EventTime(FLAGS.scheduler_frequency, EventTime.Unit.US),
         _flags=FLAGS,

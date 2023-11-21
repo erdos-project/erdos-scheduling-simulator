@@ -25,7 +25,7 @@ def test_tetrisched_partition_creation_non_slot_failure():
     worker_pools = WorkerPools(worker_pools=[worker_pool])
 
     # Create the TetriSchedScheduler and check that it raises a ValueError.
-    scheduler = TetriSchedScheduler()
+    scheduler = TetriSchedScheduler(enforce_deadlines=True)
     with pytest.raises(ValueError):
         scheduler.construct_partitions(worker_pools=worker_pools)
 
@@ -53,7 +53,7 @@ def test_tetrisched_partition_creation_success():
 
     # Create the TetriSchedScheduler and check that it returns a single Partitions
     # object with four partitions that each have 2 slots.
-    scheduler = TetriSchedScheduler()
+    scheduler = TetriSchedScheduler(enforce_deadlines=True)
     partitions = scheduler.construct_partitions(worker_pools=worker_pools)
 
     assert len(partitions) == 4, "The number of Partition objects is not 2."
@@ -79,11 +79,14 @@ def test_tetrisched_task_strl_no_slot_fail():
     )
 
     # Construct the scheduler and the partitions.
-    scheduler = TetriSchedScheduler()
+    scheduler = TetriSchedScheduler(enforce_deadlines=True)
     partitions = scheduler.construct_partitions(worker_pools=worker_pools)
     with pytest.raises(ValueError):
         scheduler.construct_task_strl(
-            current_time=EventTime.zero(), task=task, partitions=partitions
+            current_time=EventTime.zero(),
+            task=task,
+            partitions=partitions,
+            placement_times_and_rewards={},
         )
 
 
@@ -106,11 +109,20 @@ def test_tetrisched_task_choice_strl_generation():
 
     # Construct the scheduler and the partitions.
     scheduler = TetriSchedScheduler(
-        time_discretization=EventTime(10, EventTime.Unit.US)
+        time_discretization=EventTime(10, EventTime.Unit.US),
+        enforce_deadlines=True,
     )
     partitions = scheduler.construct_partitions(worker_pools=worker_pools)
     task_strl = scheduler.construct_task_strl(
-        current_time=EventTime.zero(), task=task, partitions=partitions
+        current_time=EventTime.zero(),
+        task=task,
+        partitions=partitions,
+        placement_times_and_rewards=[
+            (EventTime.zero(), 1),
+            (EventTime(10, EventTime.Unit.US), 1),
+            (EventTime(20, EventTime.Unit.US), 1),
+            (EventTime(30, EventTime.Unit.US), 1),
+        ],
     )
 
     # Ensure that the type and number of choices are correct.
@@ -152,7 +164,8 @@ def test_tetrisched_task_graph_strl_generation_simple():
 
     # Construct the scheduler and the partitions.
     scheduler = TetriSchedScheduler(
-        time_discretization=EventTime(10, EventTime.Unit.US)
+        time_discretization=EventTime(10, EventTime.Unit.US),
+        enforce_deadlines=True,
     )
     partitions = scheduler.construct_partitions(worker_pools=worker_pools)
 
@@ -164,6 +177,12 @@ def test_tetrisched_task_graph_strl_generation_simple():
         task_graph=task_graph,
         partitions=partitions,
         task_strls=task_strls,
+        placement_times_and_rewards=[
+            (EventTime.zero(), 1),
+            (EventTime(10, EventTime.Unit.US), 1),
+            (EventTime(20, EventTime.Unit.US), 1),
+            (EventTime(30, EventTime.Unit.US), 1),
+        ],
     )
 
     # Ensure that STRL expressions were constructed for all tasks.
@@ -223,7 +242,8 @@ def test_two_tasks_correctly_scheduled():
 
     # Construct the scheduler and invoke it at the current time.
     scheduler = TetriSchedScheduler(
-        time_discretization=EventTime(10, EventTime.Unit.US)
+        time_discretization=EventTime(10, EventTime.Unit.US),
+        enforce_deadlines=True,
     )
     placements = scheduler.schedule(
         sim_time=EventTime.zero(), workload=workload, worker_pools=worker_pools
@@ -287,7 +307,9 @@ def test_two_tasks_dependency_correctly_scheduled():
 
     # Construct the scheduler and invoke it at the current time.
     scheduler = TetriSchedScheduler(
-        time_discretization=EventTime(10, EventTime.Unit.US), release_taskgraphs=True
+        time_discretization=EventTime(10, EventTime.Unit.US),
+        release_taskgraphs=True,
+        enforce_deadlines=True,
     )
     placements = scheduler.schedule(
         sim_time=EventTime.zero(), workload=workload, worker_pools=worker_pools

@@ -19,6 +19,21 @@ TEST(Expression, TestChooseExpressionIsLeaf) {
                tetrisched::exceptions::ExpressionConstructionException);
 }
 
+/// Checks that no children can be added to a WindowedChooseExpression.
+/// i.e., a WindowedChooseExpression is a leaf node in the expression tree.
+TEST(Expression, TestWindowedChooseExpressionIsLeaf) {
+  tetrisched::Partitions partitions = tetrisched::Partitions();
+  auto windowedChooseExpression =
+      std::make_unique<tetrisched::WindowedChooseExpression>(
+          "task1", partitions, 0, 0, 10, 20, 1, 1);
+  auto windowedChooseExpression2 =
+      std::make_unique<tetrisched::WindowedChooseExpression>(
+          "task1", partitions, 0, 0, 10, 20, 1, 1);
+  EXPECT_THROW(
+      windowedChooseExpression->addChild(std::move(windowedChooseExpression2)),
+      tetrisched::exceptions::ExpressionConstructionException);
+}
+
 TEST(Expression, TestMinExpressionIsNOTLeaf) {
   tetrisched::Partitions partitions = tetrisched::Partitions();
   tetrisched::ExpressionPtr chooseExpression =
@@ -587,5 +602,56 @@ TEST(Expression, TestNonOverlappingChooseIsAllowed) {
       << "task1 should start at 0.";
   EXPECT_EQ(task2Placement->getStartTime().value(), 0)
       << "task2 should start at 0.";
+}
+
+/// Test that a WindowedChooseExpression generates the correct amount of
+/// ChooseExpressions.
+TEST(Expression, TestWindowedChoosedExpressionCorrect) {
+  // Construct the Partition.
+  tetrisched::PartitionPtr partition1 =
+      std::make_shared<tetrisched::Partition>(1, "partition1", 5);
+  tetrisched::Partitions partitions = tetrisched::Partitions({partition1});
+
+  // Construct the WindowedChooseExpression.
+  tetrisched::ExpressionPtr task1ChooseExpression =
+      std::make_shared<tetrisched::WindowedChooseExpression>(
+          "task1", partitions, 5, 0, 5, 10, 1, 1);
+
+  // Construct an ObjectiveExpression.
+  tetrisched::ExpressionPtr objectiveExpression =
+      std::make_shared<tetrisched::ObjectiveExpression>("TestObjective");
+  objectiveExpression->addChild(task1ChooseExpression);
+
+  // Construct a Solver.
+  tetrisched::GurobiSolver gurobiSolver = tetrisched::GurobiSolver();
+  auto solverModelPtr = gurobiSolver.getModel();
+
+  // Construct a CapacityConstraintMap and parse the expression tree.
+  tetrisched::CapacityConstraintMap capacityConstraintMap;
+  auto _ = objectiveExpression->parse(solverModelPtr, partitions,
+                                      capacityConstraintMap, 0);
+
+  // Check that the correct number of terms are generated.
+  auto windowConstraint =
+      solverModelPtr->getConstraintByName("task1_choose_one_constraint");
+  ASSERT_TRUE(windowConstraint.has_value());
+  EXPECT_EQ(windowConstraint.value()->size(), 12)
+      << "There should be 11 ChooseExpressions in the WindowedChooseExpression, "
+         "but constraint was: "
+      << windowConstraint.value()->toString();
+  solverModelPtr->exportModel("testWindowedChooseExpressionCorrect.lp");
+
+  // Translate and Solve the model.
+  gurobiSolver.translateModel();
+  gurobiSolver.solveModel();
+  auto result = objectiveExpression->populateResults(solverModelPtr);
+  ASSERT_TRUE(result->utility) << "Result should have some utility.";
+  EXPECT_EQ(1, result->utility.value()) << "The utility should be 1.";
+  auto task1Placement = result->placements["task1"];
+  EXPECT_TRUE(task1Placement->isPlaced()) << "task1 should be placed.";
+  EXPECT_GE(task1Placement->getStartTime().value(), 0)
+      << "task1 should start at or after 0.";
+  EXPECT_LE(task1Placement->getStartTime().value(), 10)
+      << "task1 should start at or before 5.";
 }
 #endif
