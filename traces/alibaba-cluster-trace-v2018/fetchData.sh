@@ -1,5 +1,5 @@
-#!/bin/bash  
-  
+#!/bin/bash
+
 url='http://aliopentrace.oss-cn-beijing.aliyuncs.com/v2018Traces'
 
 mkdir data

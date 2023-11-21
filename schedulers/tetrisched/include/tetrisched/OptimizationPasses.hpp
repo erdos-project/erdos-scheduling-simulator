@@ -18,6 +18,7 @@ enum OptimizationPassType {
 /// An `OptimizationPass` is a base class for all Optimization passes that
 /// run on the STRL tree.
 class OptimizationPass {
+ protected:
   /// A representative name of the optimization pass.
   std::string name;
   /// The type of the optimization pass.
@@ -64,6 +65,24 @@ class CriticalPathOptimizationPass : public OptimizationPass {
   CriticalPathOptimizationPass();
 
   /// Run the Critical Path optimization pass on the given STRL expression.
+  void runPass(ExpressionPtr strlExpression,
+               CapacityConstraintMap& capacityConstraints,
+               std::optional<std::string> debugFile) override;
+
+  /// Clean the pass data structures.
+  void clean() override;
+};
+
+/// A `DiscretizationSelectorOptimizationPass` is an optimization pass that
+/// aims to select the best discretization for the capacity checks to be
+/// generated at.
+class DiscretizationSelectorOptimizationPass : public OptimizationPass {
+ public:
+  /// Instantiate the DiscretizationSelectorOptimizationPass.
+  DiscretizationSelectorOptimizationPass();
+
+  /// Run the DiscretizationSelectorOptimizationPass on the given STRL
+  /// expression.
   void runPass(ExpressionPtr strlExpression,
                CapacityConstraintMap& capacityConstraints,
                std::optional<std::string> debugFile) override;

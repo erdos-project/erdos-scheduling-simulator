@@ -100,16 +100,6 @@ void CapacityConstraint::translate(SolverModelPtr solverModel) {
   }
   capacityConstraint->addAttribute(ConstraintAttribute::LAZY_CONSTRAINT);
   solverModel->addConstraint(capacityConstraint);
-  // if (!capacityConstraint->isTriviallySatisfiable()) {
-  //   // COMMENT (Sukrit): We can try to see if adding Lazy constraints
-  //   // helps ever. In my initial analysis, this makes the presolve and
-  //   // root relaxation less efficient making the overall solver time
-  //   // higher. Maybe for too many of the CapacityConstraintMap constraints,
-  //   // this will help.
-  //   //
-  //   capacityConstraint->addAttribute(ConstraintAttribute::LAZY_CONSTRAINT);
-  //   solverModel->addConstraint(capacityConstraint);
-  // }
 }
 
 void CapacityConstraint::deactivate() { capacityConstraint->deactivate(); }
@@ -119,18 +109,38 @@ uint32_t CapacityConstraint::getQuantity() const { return quantity; }
 std::string CapacityConstraint::getName() const { return name; }
 
 /* Method definitions for CapacityConstraintMap */
+CapacityConstraintMap::CapacityConstraintMap()
+    : CapacityConstraintMap(1, false) {}
 
 CapacityConstraintMap::CapacityConstraintMap(Time granularity,
                                              bool useOverlapConstraints)
-    : granularity(granularity), useOverlapConstraints(useOverlapConstraints) {}
+    : granularity(granularity),
+      useOverlapConstraints(useOverlapConstraints),
+      useDynamicDiscretization(false) {}
 
-CapacityConstraintMap::CapacityConstraintMap()
-    : granularity(1), useOverlapConstraints(false) {}
+CapacityConstraintMap::CapacityConstraintMap(
+    std::vector<std::pair<TimeRange, Time>> timeRangeToGranularities,
+    bool useOverlapConstraints)
+    : timeRangeToGranularities(timeRangeToGranularities),
+      useOverlapConstraints(useOverlapConstraints),
+      useDynamicDiscretization(true) {
+  // Check that the time ranges provided are non-overlapping and
+  // monotonically increasing.
+  for (auto i = 0; i < timeRangeToGranularities.size(); i++) {
+    if (i != timeRangeToGranularities.size() - 1) {
+      if (timeRangeToGranularities[i + 1].first.first <
+          timeRangeToGranularities[i].first.second) {
+        throw tetrisched::exceptions::RuntimeException(
+            "Time ranges are not in increasing, non-overlapping order.");
+      }
+    }
+  }
+}
 
 void CapacityConstraintMap::registerUsageAtTime(
-    const ExpressionPtr expression, const Partition& partition, Time time,
-    const IndicatorT usageIndicator, const PartitionUsageT usageVariable,
-    Time duration) {
+    const ExpressionPtr expression, const Partition& partition, const Time time,
+    const Time granularity, const IndicatorT usageIndicator,
+    const PartitionUsageT usageVariable, const Time duration) {
   if (!usageIndicator.isVariable() && usageIndicator.get<uint32_t>() == 0) {
     // No usage was registered. We don't need to add anything.
     return;
@@ -153,21 +163,81 @@ void CapacityConstraintMap::registerUsageAtTime(
 }
 
 void CapacityConstraintMap::registerUsageForDuration(
-    const ExpressionPtr expression, const Partition& partition, Time startTime,
-    Time duration, const IndicatorT usageIndicator,
+    const ExpressionPtr expression, const Partition& partition,
+    const Time startTime, const Time duration, const IndicatorT usageIndicator,
     const PartitionUsageT variable, std::optional<Time> granularity) {
-  Time _granularity = granularity.value_or(this->granularity);
-  Time remainderTime = duration;
-  for (Time time = startTime; time < startTime + duration;
-       time += _granularity) {
-    if (remainderTime > _granularity) {
-      registerUsageAtTime(expression, partition, time, usageIndicator, variable,
-                          _granularity);
-      remainderTime -= _granularity;
-    } else {
-      registerUsageAtTime(expression, partition, time, usageIndicator, variable,
-                          remainderTime);
-      remainderTime = 0;
+  if (!useDynamicDiscretization) {
+    // If we are not using dynamic discretization, then we can just
+    // register the usage at the provided granularity.
+    Time _granularity = granularity.value_or(this->granularity);
+    Time remainderTime = duration;
+    for (Time time = startTime; time < startTime + duration;
+         time += _granularity) {
+      if (remainderTime > _granularity) {
+        registerUsageAtTime(expression, partition, time, _granularity,
+                            usageIndicator, variable, _granularity);
+        remainderTime -= _granularity;
+      } else {
+        registerUsageAtTime(expression, partition, time, _granularity,
+                            usageIndicator, variable, remainderTime);
+        remainderTime = 0;
+      }
+    }
+  } else {
+    // Find the first interval where the start time is in the range.
+    decltype(timeRangeToGranularities)::size_type granularityIndex = 0;
+    for (; granularityIndex < timeRangeToGranularities.size();
+         ++granularityIndex) {
+      auto& timeRange = timeRangeToGranularities[granularityIndex].first;
+      if (startTime < timeRange.second) {
+        break;
+      }
+    }
+
+    if (granularityIndex == timeRangeToGranularities.size()) {
+      throw tetrisched::exceptions::RuntimeException(
+          "Start time is out of range of the discretization.");
+    }
+
+    Time currentTime = startTime;
+    Time remainderTime = duration;
+    while (remainderTime > 0) {
+      auto& timeRange = timeRangeToGranularities[granularityIndex].first;
+      auto& granularity = timeRangeToGranularities[granularityIndex].second;
+      TETRISCHED_DEBUG("Registering usage for expression starting at "
+                       << startTime << " with duration " << duration
+                       << " at time: " << currentTime
+                       << " within the time range [" << timeRange.first << ", "
+                       << timeRange.second
+                       << "] with granularity: " << granularity
+                       << " and remainder time: " << remainderTime << ".")
+
+      // Check if either we're in the interval, or if there's any remainder
+      // time if we're in the upmost interval.
+      while (currentTime < std::min(startTime + duration, timeRange.second) ||
+             (remainderTime > 0 &&
+              granularityIndex == timeRangeToGranularities.size() - 1)) {
+        if (remainderTime > granularity) {
+          registerUsageAtTime(expression, partition, currentTime, granularity,
+                              usageIndicator, variable, granularity);
+          currentTime += granularity;
+          remainderTime -= granularity;
+        } else {
+          registerUsageAtTime(expression, partition, currentTime, granularity,
+                              usageIndicator, variable, remainderTime);
+          currentTime += remainderTime;
+          remainderTime = 0;
+        }
+      }
+
+      if (currentTime >=
+          timeRangeToGranularities[granularityIndex].first.second) {
+        // We have passed the interval. We need to skip to the next interval, if
+        // possible.
+        if (granularityIndex != timeRangeToGranularities.size() - 1) {
+          granularityIndex++;
+        }
+      }
     }
   }
 }

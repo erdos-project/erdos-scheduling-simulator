@@ -98,13 +98,13 @@ class Workload(object):
         )
 
     @staticmethod
-    def empty() -> "Workload":
+    def empty(_flags: Optional["absl.flags"] = None) -> "Workload":
         """Creates an empty Workload.
 
         Returns:
             An empty `Workload` that has no TaskGraphs.
         """
-        return Workload.from_task_graphs(task_graphs={})
+        return Workload.from_task_graphs(task_graphs={}, _flags=_flags)
 
     def populate_task_graphs(
         self,
@@ -127,6 +127,38 @@ class Workload(object):
                     completion_time, _flags=self._flags
                 )
             self._initialized = True
+
+    def add_job_graphs(
+        self, new_job_graphs: Sequence[JobGraph], completion_time: EventTime
+    ) -> None:
+        """
+        Adds the given JobGraphs to the Workload. The task graph of the workload is also
+        populated with new tasks generated from new_job_graphs.
+
+        Args:
+            new_job_graphs: A sequence of job graphs to be added to the workload.
+        """
+        self._job_graphs |= {job.name: job for job in new_job_graphs}
+        for job_graph in new_job_graphs:
+            self._task_graphs |= job_graph.generate_task_graphs(
+                completion_time, _flags=self._flags
+            )
+
+    def add_task_graph(self, task_graph: TaskGraph) -> None:
+        """Adds a single TaskGraph to the Workload.
+
+        Args:
+            task_graph: The TaskGraph to be added to the Workload.
+        """
+        self._task_graphs[task_graph.name] = task_graph
+
+    def add_task_graphs(self, task_graphs: Sequence[TaskGraph]) -> None:
+        """Adds multiple TaskGraphs to the Workload.
+
+        Args:
+            task_graphs: The TaskGraphs to be added to the Workload.
+        """
+        self._task_graphs |= {task_graph.name: task_graph for task_graph in task_graphs}
 
     def get_job_graph(self, name: str) -> Optional[JobGraph]:
         """Retrieves the JobGraph for the given application, if present.
@@ -191,14 +223,22 @@ class Workload(object):
                 f"The TaskGraph {task_graph} was not found in the Workload."
             )
 
-        task_graph = task_graph.job_graph.get_next_task_graph(
-            completion_time=finish_time, _flags=self._flags
-        )
-        if task_graph is not None:
-            self._task_graphs[task_graph.name] = task_graph
-            return task_graph.get_releasable_tasks()
-        else:
-            return []
+        job_graph_release_policy = task_graph.job_graph.release_policy
+        if (
+            job_graph_release_policy
+            and job_graph_release_policy.policy_type
+            == JobGraph.ReleasePolicyType.CLOSED_LOOP
+        ):
+            task_graph = task_graph.job_graph.get_next_task_graph(
+                start_time=finish_time + EventTime(1, EventTime.Unit.US),
+                _flags=self._flags,
+            )
+            if task_graph is not None:
+                self._task_graphs[task_graph.name] = task_graph
+                return task_graph.get_releasable_tasks()
+            else:
+                return []
+        return []
 
     def get_releasable_tasks(self) -> Sequence[Task]:
         """Retrieves the set of Tasks that are ready to run, and can be released

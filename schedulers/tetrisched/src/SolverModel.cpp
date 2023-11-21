@@ -448,6 +448,28 @@ T SolverModelT<T>::getObjectiveValue() const {
 }
 
 template <typename T>
+std::optional<std::shared_ptr<VariableT<T>>> SolverModelT<T>::getVariableByName(
+    std::string variableName) const {
+  for (auto& [_, variable] : variables) {
+    if (variable->getName() == variableName) {
+      return variable;
+    }
+  }
+  return std::nullopt;
+}
+
+template <typename T>
+std::optional<std::shared_ptr<ConstraintT<T>>>
+SolverModelT<T>::getConstraintByName(std::string constraintName) const {
+  for (auto& [_, constraint] : constraints) {
+    if (constraint->getName() == constraintName) {
+      return constraint;
+    }
+  }
+  return std::nullopt;
+}
+
+template <typename T>
 void SolverModelT<T>::clear() {
   // Clear the solution value cache first.
   // As of now we only keep track of the solution value from the previous
