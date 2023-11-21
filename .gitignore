@@ -26,6 +26,5 @@ env
 # Ignore build of tetrisched
 schedulers/tetrisched/build/*
 
-#Ignore test.yaml file
-test.yaml
+
 
