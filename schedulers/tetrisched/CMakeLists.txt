@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.5...3.26)
 project(tetrisched LANGUAGES CXX)
 
 # Compile with atleast C++20.
-# Run export CMAKE_INSTALL_MODE=ABS_SYMBLINK to install dependencies correctly.
+# Run export CMAKE_INSTALL_MODE=ABS_SYMLINK to install dependencies correctly.
 # Set cmake -D CMAKE_CXX_COMPILER=/path/to/C++20/compatible/compiler.
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
