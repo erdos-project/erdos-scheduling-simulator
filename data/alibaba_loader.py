@@ -1,3 +1,4 @@
+import json
 import math
 import os
 import pathlib
@@ -142,11 +143,15 @@ class AlibabaLoader(BaseWorkloadLoader):
                 with open(file_path, "rb") as pickled_file:
                     data: Mapping[str, List[str]] = pickle.load(pickled_file)
                     for job_graph_name, job_tasks in data.items():
-                        self._job_graphs[
-                            job_graph_name
-                        ] = self._convert_job_data_to_job_graph(
-                            job_graph_name, job_tasks
-                        )
+                        try:
+                            self._job_graphs[
+                                job_graph_name
+                            ] = self._convert_job_data_to_job_graph(
+                                job_graph_name, job_tasks
+                            )
+                        except Exception as e:
+                            print(f"Error converting {job_graph_name}: {e}")
+                            pass
                 yield
 
         return job_data_generator()
