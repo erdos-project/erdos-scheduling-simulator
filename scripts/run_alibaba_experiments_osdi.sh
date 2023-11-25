@@ -3,15 +3,15 @@
 
 # Scheduler runtimes in us.TetriSched
 SCHEDULERS=(EDF TetriSched)
-DEADLINE_VARIANCES=(50 100 200)
+MAX_DEADLINE_VARIANCES=(15 25 50 100 200)
 SCHEDULER_TIME_DISCRETIZATIONS=(1 10 20)
 RELEASE_POLICIES=(fixed poisson gamma)
 DAG_AWARENESS=(0 1) # False True
 
 ERDOS_SIMULATOR_DIR="." # Change this to the directory where the simulator is located.
-NUM_INVOCATIONS=100
+MIN_DEADLINE_VARIANCE=10
+NUM_INVOCATIONS=400
 SCHEDULER_LOG_TIMES=10
-SCHEDULER_TIME_DISCRETIZATION=1
 SCHEDULER_RUNTIME=0
 LOG_LEVEL=debug
 REPLAY_TRACE=alibaba
@@ -44,8 +44,8 @@ execute_experiment () {
 --log_level=${LOG_LEVEL}
 --execution_mode=${EXECUTION_MODE}
 --replay_trace=${REPLAY_TRACE}
---max_deadline_variance=${DEADLINE_VAR}
---min_deadline_variance=50
+--max_deadline_variance=${MAX_DEADLINE_VARIANCE}
+--min_deadline_variance=${MIN_DEADLINE_VARIANCE}
 --workload_profile_path=${WORKLOAD_PROFILE_PATH}
 --override_num_invocations=${NUM_INVOCATIONS}
 --randomize_start_time_max=100
@@ -91,7 +91,7 @@ execute_experiment () {
     echo "[x] Finished execution of ${LOG_BASE}."
 }
 
-for DEADLINE_VAR in ${DEADLINE_VARIANCES[@]}; do
+for MAX_DEADLINE_VARIANCE in ${MAX_DEADLINE_VARIANCES[@]}; do
     for SCHEDULER in ${SCHEDULERS[@]}; do
         for RELEASE_POLICY in ${RELEASE_POLICIES[@]}; do
             for SCHEDULER_TIME_DISCRETIZATION in ${SCHEDULER_TIME_DISCRETIZATIONS[@]}; do
@@ -100,7 +100,7 @@ for DEADLINE_VAR in ${DEADLINE_VARIANCES[@]}; do
                         continue
                     fi
 
-                    LOG_BASE=${REPLAY_TRACE}_scheduler_${SCHEDULER}_release_policy_${RELEASE_POLICY}_max_deadline_var_${DEADLINE_VAR}_dag_aware_${DAG_AWARE}
+                    LOG_BASE=${REPLAY_TRACE}_scheduler_${SCHEDULER}_release_policy_${RELEASE_POLICY}_max_deadline_var_${MAX_DEADLINE_VARIANCE}_dag_aware_${DAG_AWARE}
 
                     if [[ ${SCHEDULER} != EDF ]]; then
                         LOG_BASE+="_scheduler_discretization_${SCHEDULER_TIME_DISCRETIZATION}"
