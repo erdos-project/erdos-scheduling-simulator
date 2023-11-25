@@ -285,15 +285,20 @@ class JobGraph(Graph[Job]):
                     )
                     releases.append(current_release)
             elif self._policy_type == JobGraph.ReleasePolicyType.GAMMA:
-                inter_arrival_times = np.clip(
-                    self._rng.gamma(
+                # inter_arrival_times = np.clip(
+                #     self._rng.gamma(
+                #         (1 / self._coefficient),
+                #         self._coefficient / self._arrival_rate,
+                #         size=self._fixed_invocation_nums - 1,
+                #     ),
+                #     a_min=2500,  # Maintain a minimum rate of 2500µs between releases.
+                #     a_max=None,
+                # )
+                inter_arrival_times = self._rng.gamma(
                         (1 / self._coefficient),
                         self._coefficient / self._arrival_rate,
                         size=self._fixed_invocation_nums - 1,
-                    ),
-                    a_min=2500,  # Maintain a minimum rate of 2500µs between releases.
-                    a_max=None,
-                )
+                    )
                 current_release = self._start
                 releases.append(current_release)
                 for inter_arrival_time in inter_arrival_times:
