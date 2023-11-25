@@ -246,20 +246,33 @@ class TetriSchedScheduler(BaseScheduler):
             # Construct the STRL expressions for each TaskGraph and add them together
             # in a single objective expression.
             constructed_task_graphs: Set[str] = set()
-            for task_graph_name in task_graph_names:
-                # Retrieve the TaskGraph and construct its STRL.
-                task_graph = workload.get_task_graph(task_graph_name)
-                task_graph_strl = self.construct_task_graph_strl(
-                    current_time=sim_time,
-                    task_graph=task_graph,
-                    partitions=partitions,
-                    placement_times_and_rewards=placement_times_and_rewards,
-                    tasks_to_be_scheduled=tasks_to_be_scheduled
-                    + previously_placed_tasks,
-                )
-                if task_graph_strl is not None:
-                    constructed_task_graphs.add(task_graph_name)
-                    objective_strl.addChild(task_graph_strl)
+            if self.release_taskgraphs:
+                for task_graph_name in task_graph_names:
+                    # Retrieve the TaskGraph and construct its STRL.
+                    task_graph = workload.get_task_graph(task_graph_name)
+                    task_graph_strl = self.construct_task_graph_strl(
+                        current_time=sim_time,
+                        task_graph=task_graph,
+                        partitions=partitions,
+                        placement_times_and_rewards=placement_times_and_rewards,
+                        tasks_to_be_scheduled=tasks_to_be_scheduled
+                        + previously_placed_tasks,
+                    )
+                    if task_graph_strl is not None:
+                        constructed_task_graphs.add(task_graph_name)
+                        objective_strl.addChild(task_graph_strl)
+            else:
+                # If we are not releasing TaskGraphs, then we just construct the STRL
+                # for the tasks that are to be scheduled.
+                for task in tasks_to_be_scheduled:
+                    task_strl = self.construct_task_strl(
+                        sim_time,
+                        task,
+                        partitions,
+                        placement_times_and_rewards,
+                    )
+                    if task_strl is not None:
+                        objective_strl.addChild(task_strl)
 
             # For the tasks that have been previously placed, add an
             # AllocationExpression for their current allocations so as to correctly
