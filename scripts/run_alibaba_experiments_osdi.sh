@@ -39,8 +39,9 @@ execute_experiment () {
     echo "[x] Initiating the execution of ${LOG_BASE}"
     if [ ! -f "${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.csv" ]; then
     MYCONF="\
---log_file_name=${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.log
---csv_file_name=${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.csv
+--log_dir=${LOG_DIR}/${LOG_BASE}
+--log_file_name=${LOG_BASE}.log
+--csv_file_name=${LOG_BASE}.csv
 --log_level=${LOG_LEVEL}
 --execution_mode=${EXECUTION_MODE}
 --replay_trace=${REPLAY_TRACE}
@@ -106,7 +107,7 @@ for MAX_DEADLINE_VARIANCE in ${MAX_DEADLINE_VARIANCES[@]}; do
                         LOG_BASE+="_scheduler_discretization_${SCHEDULER_TIME_DISCRETIZATION}"
                     fi
 
-                    mkdir -p ${LOG_DIR}/${LOG_BASE} 
+                    mkdir -p ${LOG_DIR}/${LOG_BASE}
                     execute_experiment ${LOG_DIR} ${LOG_BASE} &
                     if [[ $(jobs -r -p | wc -l) -ge $PARALLEL_FACTOR ]]; then
                                     echo "[x] Waiting for a job to terminate because $PARALLEL_FACTOR jobs are running."
