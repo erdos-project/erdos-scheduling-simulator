@@ -1,5 +1,6 @@
 import heapq
 import logging
+import os
 import sys
 from enum import Enum
 from functools import total_ordering
@@ -274,11 +275,13 @@ class Simulator(object):
                 log_dir=_flags.log_dir,
                 log_file=_flags.csv_file_name,
             )
+            self._log_dir = _flags.log_dir
         else:
             self._logger = setup_logging(name=self.__class__.__name__)
             self._csv_logger = setup_csv_logging(
                 name=self.__class__.__name__, log_file=None
             )
+            self._log_dir = os.getcwd()
         if not self._logger.isEnabledFor(logging.DEBUG):
             self._logger.addFilter(event_representation_filter)
 
@@ -335,6 +338,7 @@ class Simulator(object):
             if _flags
             else EventTime.invalid()
         )
+        self._log_task_graphs = _flags.log_graphs if _flags else False
 
         # Statistics about the Task.
         self._finished_tasks = 0
@@ -423,6 +427,11 @@ class Simulator(object):
                     task_graph.deadline,
                     task_graph.job_graph.completion_time,
                 )
+                if self._log_task_graphs:
+                    # Log a DOT representation of the TaskGraph, if requested.
+                    task_graph.to_dot(
+                        os.path.join(self._log_dir, f"{task_graph.name}.dot")
+                    )
 
     def simulate(self) -> None:
         """Run the simulator loop.
