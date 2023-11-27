@@ -69,6 +69,8 @@ class TetriSchedScheduler(BaseScheduler):
         _flags: Optional["absl.flags"] = None,
         adaptive_discretization: bool = False,
         max_time_discretization: EventTime = EventTime(5, EventTime.Unit.US),
+        dynamic_discretization: bool = False,
+        max_occupancy_threshold: int = 50,
     ):
         if preemptive:
             raise ValueError("TetrischedScheduler does not support preemption.")
@@ -93,16 +95,21 @@ class TetriSchedScheduler(BaseScheduler):
         self._goal = goal
         self._time_discretization = time_discretization.to(EventTime.Unit.US)
         self._plan_ahead = plan_ahead.to(EventTime.Unit.US)
+        # Values for STRL generation.
+        self._use_windowed_choose = True
+        self._dynamic_discretization = dynamic_discretization
+        if self._dynamic_discretization:
+            self._use_windowed_choose = False
+        self._adaptive_discretization = adaptive_discretization
+        self._max_discretization = max_time_discretization.to(EventTime.Unit.US)
         self._scheduler = tetrisched.Scheduler(
             self._time_discretization.time,
             tetrisched.backends.SolverBackendType.GUROBI,
             self._log_dir,
+            self._dynamic_discretization,  # enable dynamic discretization
+            self._max_discretization.time,
+            max_occupancy_threshold,
         )
-
-        # Values for STRL generation.
-        self._use_windowed_choose = True
-        self._adaptive_discretization = adaptive_discretization
-        self._max_discretization = max_time_discretization.to(EventTime.Unit.US)
         if (
             self._adaptive_discretization
             and self._max_discretization.time < self._time_discretization.time
@@ -114,6 +121,18 @@ class TetriSchedScheduler(BaseScheduler):
         if self._adaptive_discretization and self._use_windowed_choose:
             raise ValueError(
                 "Adaptive discretization and windowed choose cannot be used together."
+            )
+        if self._dynamic_discretization and self._use_windowed_choose:
+            raise ValueError(
+                "Dynamic discretization and windowed choose cannot be used together."
+            )
+        if self._adaptive_discretization and self._dynamic_discretization:
+            raise ValueError(
+                "Adaptive and Dynamic discretization cannot be used together."
+            )
+        if self._dynamic_discretization and self._time_discretization.time != 1:
+            raise ValueError(
+                "Dynamic discretization cannot be used with min Discretization > 1."
             )
         if self._goal != "max_goodput" and self._use_windowed_choose:
             raise NotImplementedError(

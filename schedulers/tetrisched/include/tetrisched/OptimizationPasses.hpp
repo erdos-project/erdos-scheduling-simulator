@@ -77,9 +77,16 @@ class CriticalPathOptimizationPass : public OptimizationPass {
 /// aims to select the best discretization for the capacity checks to be
 /// generated at.
 class DiscretizationSelectorOptimizationPass : public OptimizationPass {
- public:
+
+private:
+  Time minDiscretization;
+  Time maxDiscretization;
+  uint32_t maxOccupancyThreshold;
+
+public:
   /// Instantiate the DiscretizationSelectorOptimizationPass.
   DiscretizationSelectorOptimizationPass();
+  DiscretizationSelectorOptimizationPass(Time minDiscretization = 1, Time maxDiscretization = 5, uint32_t maxOccupancyThreshold = 50);
 
   /// Run the DiscretizationSelectorOptimizationPass on the given STRL
   /// expression.
@@ -126,18 +133,20 @@ class OptimizationPassRunner {
   bool debug;
   /// A list of optimization passes to run.
   std::vector<OptimizationPassPtr> registeredPasses;
+  /// flag for dynamic discretization optimization pass
+  bool enableDynamicDiscretization;
 
  public:
   /// Initialize the OptimizationPassRunner.
-  OptimizationPassRunner(bool debug = false);
+   OptimizationPassRunner(bool debug = false, bool enableDynamicDiscretization = false, Time minDiscretization = 1, Time maxDiscretization = 5, uint32_t maxOccupancyThreshold = 50);
 
-  /// Run the pre-translation optimization passes on the given STRL expression.
-  void runPreTranslationPasses(Time currentTime, ExpressionPtr strlExpression,
-                               CapacityConstraintMap& capacityConstraints);
+   /// Run the pre-translation optimization passes on the given STRL expression.
+   void runPreTranslationPasses(Time currentTime, ExpressionPtr strlExpression,
+                                CapacityConstraintMap &capacityConstraints);
 
-  /// Run the post-translation optimization passes on the given STRL expression.
-  void runPostTranslationPasses(Time currentTime, ExpressionPtr strlExpression,
-                                CapacityConstraintMap& capacityConstraints);
+   /// Run the post-translation optimization passes on the given STRL expression.
+   void runPostTranslationPasses(Time currentTime, ExpressionPtr strlExpression,
+                                 CapacityConstraintMap &capacityConstraints);
 };
 }  // namespace tetrisched
 #endif  // _TETRISCHED_OPTIMIZATION_PASSES_HPP_

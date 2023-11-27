@@ -11,13 +11,14 @@
 #endif
 
 namespace tetrisched {
-Scheduler::Scheduler(Time discretization, SolverBackendType solverBackend,
-                     std::string logDir)
-    : discretization(discretization),
-      solverBackend(solverBackend),
-      logDir(logDir) {
-  // Initialize the solver backend.
-  switch (solverBackend) {
+  Scheduler::Scheduler(Time discretization, SolverBackendType solverBackend, std::string logDir, bool enableDynamicDiscretization, Time maxDiscretization, uint32_t maxOccupancyThreshold)
+      : discretization(discretization),
+        solverBackend(solverBackend),
+        logDir(logDir)
+  {
+    // Initialize the solver backend.
+    switch (solverBackend)
+    {
 #ifdef _TETRISCHED_WITH_CPLEX_
     case SolverBackendType::CPLEX:
       solver = std::make_shared<CPLEXSolver>();
@@ -33,8 +34,8 @@ Scheduler::Scheduler(Time discretization, SolverBackendType solverBackend,
           "The solver backend type is not supported.");
   }
   solverModel = solver->getModel();
-  optimizationPasses = OptimizationPassRunner(true);
-}
+  optimizationPasses = OptimizationPassRunner(true, enableDynamicDiscretization, discretization, maxDiscretization, maxOccupancyThreshold);
+  }
 
 void Scheduler::registerSTRL(
     ExpressionPtr expression, Partitions availablePartitions, Time currentTime,
