@@ -595,12 +595,14 @@ class WorkerPool(object):
                 worker_id
             ].can_accomodate_strategy(execution_strategy):
                 worker = self._workers[worker_id]
-                raise RuntimeError(
+                error_message = (
                     f"{worker.name} ({worker_id}) cannot accomodate the strategy "
                     f"{execution_strategy} ({execution_strategy.id}) for task "
                     f"{task.unique_name}. It is running: "
                     f"[{','.join(t.unique_name for t in worker.get_placed_tasks())}]"
                 )
+                self._logger.error(error_message)
+                raise RuntimeError(error_message)
             else:
                 strategy = execution_strategy
 

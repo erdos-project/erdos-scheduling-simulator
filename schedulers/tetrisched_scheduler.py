@@ -243,10 +243,9 @@ class TetriSchedScheduler(BaseScheduler):
                     (t, 1) for t in placement_reward_discretizations
                 ]
 
-            
             if self.release_taskgraphs:
-                # Construct the STRL expressions for each TaskGraph and add them together
-                # in a single objective expression.
+                # Construct the STRL expressions for each TaskGraph and add them
+                # together in a single objective expression.
                 task_strls: Mapping[str, tetrisched.strl.Expression] = {}
                 for task_graph_name in task_graph_names:
                     # Retrieve the TaskGraph and construct its STRL.
@@ -262,7 +261,7 @@ class TetriSchedScheduler(BaseScheduler):
                     )
                     if task_graph_strl is not None:
                         objective_strl.addChild(task_graph_strl)
-                
+
                 # For the tasks that have been previously placed, add an
                 # AllocationExpression for their current allocations so as to correctly
                 # account for capacities at each time discretization.
@@ -288,11 +287,11 @@ class TetriSchedScheduler(BaseScheduler):
                             f"This is required for previously placed tasks to account "
                             f"for correct Allocations."
                         )
-               
+
             else:
                 # If we are not releasing TaskGraphs, then we just construct the STRL
                 # for the tasks that are to be scheduled.
-                for task in tasks_to_be_scheduled:
+                for task in tasks_to_be_scheduled + previously_placed_tasks:
                     task_strl = self.construct_task_strl(
                         sim_time,
                         task,
@@ -301,7 +300,6 @@ class TetriSchedScheduler(BaseScheduler):
                     )
                     if task_strl is not None:
                         objective_strl.addChild(task_strl)
-
 
             # Register the STRL expression with the scheduler and solve it.
             try:
