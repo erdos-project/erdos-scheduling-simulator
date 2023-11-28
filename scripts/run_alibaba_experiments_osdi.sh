@@ -3,9 +3,13 @@
 
 # Scheduler runtimes in us.TetriSched
 SCHEDULERS=(EDF TetriSched)
-MAX_DEADLINE_VARIANCES=(15 25 50 100 200)
+# MAX_DEADLINE_VARIANCES=(15 25 50 100 200)
+MAX_DEADLINE_VARIANCES=(15 50 200)
 SCHEDULER_TIME_DISCRETIZATIONS=(1 10 20)
-RELEASE_POLICIES=(fixed poisson gamma)
+# RELEASE_POLICIES=(fixed poisson gamma)
+RELEASE_POLICIES=(gamma)
+POISSON_ARRIVAL_RATES=(5 10 15)
+GAMMA_COEFFICIENTS=(1 2 4)
 DAG_AWARENESS=(0 1) # False True
 
 ERDOS_SIMULATOR_DIR="." # Change this to the directory where the simulator is located.
@@ -38,10 +42,11 @@ execute_experiment () {
     LOG_BASE=$2
     echo "[x] Initiating the execution of ${LOG_BASE}"
     if [ ! -f "${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.csv" ]; then
+# --log_dir=${LOG_DIR}/${LOG_BASE}
+# --scheduler_log_to_file
     MYCONF="\
---log_dir=${LOG_DIR}/${LOG_BASE}
---log_file_name=${LOG_BASE}.log
---csv_file_name=${LOG_BASE}.csv
+--log_file_name=${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.log
+--csv_file_name=${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.csv
 --log_level=${LOG_LEVEL}
 --execution_mode=${EXECUTION_MODE}
 --replay_trace=${REPLAY_TRACE}
@@ -59,10 +64,10 @@ execute_experiment () {
             MYCONF+="--override_arrival_period=10
 "
         else
-            MYCONF+="--override_poisson_arrival_rate=10
+            MYCONF+="--override_poisson_arrival_rate=${POISSON_ARRIVAL_RATE}
 "
             if [[ ${RELEASE_POLICY} == gamma ]]; then
-                MYCONF+="--override_gamma_coefficient=2
+                MYCONF+="--override_gamma_coefficient=${GAMMA_COEFFICIENT}
 "
             fi
         fi
@@ -95,24 +100,28 @@ execute_experiment () {
 for MAX_DEADLINE_VARIANCE in ${MAX_DEADLINE_VARIANCES[@]}; do
     for SCHEDULER in ${SCHEDULERS[@]}; do
         for RELEASE_POLICY in ${RELEASE_POLICIES[@]}; do
-            for SCHEDULER_TIME_DISCRETIZATION in ${SCHEDULER_TIME_DISCRETIZATIONS[@]}; do
-                for DAG_AWARE in ${DAG_AWARENESS[@]}; do
-                    if [[ ${SCHEDULER} == EDF && ( "${SCHEDULER_TIME_DISCRETIZATION}" -ne "${SCHEDULER_TIME_DISCRETIZATIONS[0]}" || "${DAG_AWARE}" -ne "${DAG_AWARENESS[0]}" )  ]]; then
-                        continue
-                    fi
+            for POISSON_ARRIVAL_RATE in ${POISSON_ARRIVAL_RATES[@]}; do
+                for GAMMA_COEFFICIENT in ${GAMMA_COEFFICIENTS[@]}; do
+                    for SCHEDULER_TIME_DISCRETIZATION in ${SCHEDULER_TIME_DISCRETIZATIONS[@]}; do
+                        for DAG_AWARE in ${DAG_AWARENESS[@]}; do
+                            if [[ ${SCHEDULER} == EDF && ( "${SCHEDULER_TIME_DISCRETIZATION}" -ne "${SCHEDULER_TIME_DISCRETIZATIONS[0]}" || "${DAG_AWARE}" -ne "${DAG_AWARENESS[0]}" )  ]]; then
+                                continue
+                            fi
 
-                    LOG_BASE=${REPLAY_TRACE}_scheduler_${SCHEDULER}_release_policy_${RELEASE_POLICY}_max_deadline_var_${MAX_DEADLINE_VARIANCE}_dag_aware_${DAG_AWARE}
+                            LOG_BASE=${REPLAY_TRACE}_scheduler_${SCHEDULER}_release_policy_${RELEASE_POLICY}_max_deadline_var_${MAX_DEADLINE_VARIANCE}_dag_aware_${DAG_AWARE}_poisson_arrival_rate_${POISSON_ARRIVAL_RATE}_gamma_coefficient_${GAMMA_COEFFICIENT}
 
-                    if [[ ${SCHEDULER} != EDF ]]; then
-                        LOG_BASE+="_scheduler_discretization_${SCHEDULER_TIME_DISCRETIZATION}"
-                    fi
+                            if [[ ${SCHEDULER} != EDF ]]; then
+                                LOG_BASE+="_scheduler_discretization_${SCHEDULER_TIME_DISCRETIZATION}"
+                            fi
 
-                    mkdir -p ${LOG_DIR}/${LOG_BASE}
-                    execute_experiment ${LOG_DIR} ${LOG_BASE} &
-                    if [[ $(jobs -r -p | wc -l) -ge $PARALLEL_FACTOR ]]; then
-                                    echo "[x] Waiting for a job to terminate because $PARALLEL_FACTOR jobs are running."
-                                            wait -n 
-                    fi
+                            mkdir -p ${LOG_DIR}/${LOG_BASE}
+                            execute_experiment ${LOG_DIR} ${LOG_BASE} &
+                            if [[ $(jobs -r -p | wc -l) -ge $PARALLEL_FACTOR ]]; then
+                                            echo "[x] Waiting for a job to terminate because $PARALLEL_FACTOR jobs are running."
+                                                    wait -n 
+                            fi
+                        done
+                    done
                 done
             done
         done
