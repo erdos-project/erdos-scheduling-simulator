@@ -565,14 +565,14 @@ void DiscretizationSelectorOptimizationPass::runPass(
     }
   }
 
-  // Log the occupancy requests and times.
-  TETRISCHED_DEBUG(
-      "[DiscretizationSelectorOptimizationPass] Occupancy requests between "
-      << minOccupancyTime << " and " << maxOccupancyTime << ": ");
-  for (size_t i = 0; i < occupancyRequests.size(); i++) {
-    TETRISCHED_DEBUG("[DiscretizationSelectorOptimizationPass] "
-                     << i + minOccupancyTime << ": " << occupancyRequests[i]);
-  }
+  // // Log the occupancy requests and times.
+  // TETRISCHED_DEBUG(
+  //     "[DiscretizationSelectorOptimizationPass] Occupancy requests between "
+  //     << minOccupancyTime << " and " << maxOccupancyTime << ": ");
+  // for (size_t i = 0; i < occupancyRequests.size(); i++) {
+  //   TETRISCHED_DEBUG("[DiscretizationSelectorOptimizationPass] "
+  //                    << i + minOccupancyTime << ": " << occupancyRequests[i]);
+  // }
 
   // finding the right discretization
 
@@ -586,7 +586,7 @@ void DiscretizationSelectorOptimizationPass::runPass(
   };
   // algorithm for deciding the discretization based on occupancy map
   std::vector<std::pair<TimeRange, Time>> timeRangeToGranularities;
-  std::vector<Time> newStartTimes;
+  // std::vector<Time> newStartTimes;
   int planAheadIndex = -1;
   for (size_t i = 0; i < occupancyRequests.size(); i++) {
       // if discretization is decided for more plan ahead continue
@@ -618,7 +618,7 @@ void DiscretizationSelectorOptimizationPass::runPass(
           Time granularity = (nextPlanAhead - i);
           auto value = std::make_pair(discretizedtimeRange, granularity);
           timeRangeToGranularities.push_back(value);
-          newStartTimes.push_back(minOccupancyTime + i);
+          // newStartTimes.push_back(minOccupancyTime + i);
           planAheadIndex++;
           break;
         }
@@ -629,42 +629,49 @@ void DiscretizationSelectorOptimizationPass::runPass(
   // set capacity constraint map to dynamic and update it
   capacityConstraints.setDynamicDiscretization(timeRangeToGranularities);
 
-  // Log the found dynamic discretizations and times.
-  TETRISCHED_DEBUG(
-      "[DiscretizationSelectorOptimizationPass] Dynamic Discretization between "
-      << minOccupancyTime << " and " << maxOccupancyTime << ": ");
+  // // Log the found dynamic discretizations and times.
+  // TETRISCHED_DEBUG(
+  //     "[DiscretizationSelectorOptimizationPass] Dynamic Discretization between "
+  //     << minOccupancyTime << " and " << maxOccupancyTime << ": ");
 
-  for (auto &[discretizationTimeRange, granularity] :
-       timeRangeToGranularities) {
-    TETRISCHED_DEBUG("[DiscretizationSelectorOptimizationPassDiscreteTime] "
-                     << discretizationTimeRange.first << " - " << discretizationTimeRange.second << " : " << granularity);
-  }
+  // for (auto &[discretizationTimeRange, granularity] :
+  //      timeRangeToGranularities) {
+  //   TETRISCHED_DEBUG("[DiscretizationSelectorOptimizationPassDiscreteTime] "
+  //                    << discretizationTimeRange.first << " - " << discretizationTimeRange.second << " : " << granularity);
+  // }
 
   // changing the STRL expressions
-  // Find Max expressions over NCK and remove NCK expressions with invalid start times
-  // assuming discretization of 1
-  for(auto maxNckExpr: maxOverNckExprs){
-    // filter out children whose start time doesn't match
-    auto expressionChildren = maxNckExpr->getChildren();
-    int previousNumChidlren = maxNckExpr->getNumChildren();
-    for (auto child = expressionChildren.rbegin();
-         child != expressionChildren.rend(); ++child){
-      auto timeBounds = (*child)->getTimeBounds(); 
-      auto startTimeNck = timeBounds.startTimeRange.first;
-      // if start time of nck doesn't fit with the new start times
-      if (!std::binary_search(newStartTimes.begin(), newStartTimes.end(), startTimeNck)) {
-        maxNckExpr->removeChild(*child);
-        TETRISCHED_DEBUG("[DiscretizationSelectorOptimizationPassRemoveNck] Removing NCK: " + (*child)->getName() + " From Max: " + maxNckExpr->getName());
+  // Find Max expressions over NCK and remove NCK expressions with redundant start times
+  for(auto &[discreteTimeRange, discreteGranularity]: timeRangeToGranularities) {
+    auto startTime = discreteTimeRange.first;
+    auto endTime = discreteTimeRange.second;
+    for (auto maxNckExpr: maxOverNckExprs) {
+      // find ncks within startTime and endTime for this Max expr
+      std::vector<ExpressionPtr> ncksWithinTimeRange;
+      auto expressionChildren = maxNckExpr->getChildren();
+      ExpressionPtr minStartTimeNckExpr = nullptr;
+      for (auto child = expressionChildren.rbegin(); child != expressionChildren.rend(); ++child) {
+        auto startTimeNck = (*child)->getTimeBounds().startTimeRange.first;
+        if (startTimeNck >= startTime && startTimeNck < endTime){
+          ncksWithinTimeRange.push_back(*child);
+          if(minStartTimeNckExpr != nullptr) {
+            if (minStartTimeNckExpr->getTimeBounds().startTimeRange.first > startTimeNck) {
+              minStartTimeNckExpr = *child;
+            }
+          } else {
+            minStartTimeNckExpr = *child;
+          }
+        }
       }
-    }
-    int newNumChildren = maxNckExpr->getNumChildren();
-    
-    TETRISCHED_DEBUG("[DiscretizationSelectorOptimizationPassRemoveNck] Removed children from Max Expr: " + maxNckExpr->getName() + " From earlier children: " + std::to_string(previousNumChidlren) + " To new children: " + std::to_string(newNumChildren));
-
-    if (maxNckExpr->getNumChildren() == 0){
-      throw exceptions::RuntimeException(
-        "All children removed for MaxOverNck Expr id: " + maxNckExpr->getId() + " with Name: " + maxNckExpr->getName() + ". This is probably due to invalid min discretization"
-      );
+      if(ncksWithinTimeRange.size() > 1){
+        // if more than one nck found within the time range, remove it as only one nck within granularity is sufficient. Nck with minimum start time is kept within this time range
+        for (auto redundantNckExpr: ncksWithinTimeRange){
+          if (redundantNckExpr->getId() != minStartTimeNckExpr->getId()) {
+            maxNckExpr->removeChild(redundantNckExpr);
+            // TETRISCHED_DEBUG("[DiscretizationSelectorOptimizationPassRemoveNck] Removing NCK: " + redundantNckExpr->getName() + " From Max: " + maxNckExpr->getName());
+          }
+        }
+      }
     }
   }
 }

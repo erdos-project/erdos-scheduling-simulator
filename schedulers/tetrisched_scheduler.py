@@ -98,9 +98,9 @@ class TetriSchedScheduler(BaseScheduler):
         # Values for STRL generation.
         self._use_windowed_choose = True
         self._dynamic_discretization = dynamic_discretization
-        if self._dynamic_discretization:
-            self._use_windowed_choose = False
         self._adaptive_discretization = adaptive_discretization
+        if self._dynamic_discretization or self._adaptive_discretization:
+            self._use_windowed_choose = False
         self._max_discretization = max_time_discretization.to(EventTime.Unit.US)
         self._scheduler = tetrisched.Scheduler(
             self._time_discretization.time,
