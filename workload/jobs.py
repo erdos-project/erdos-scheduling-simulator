@@ -296,7 +296,7 @@ class JobGraph(Graph[Job]):
                 # )
                 inter_arrival_times = self._rng.gamma(
                         (1 / self._coefficient),
-                        self._coefficient / self._arrival_rate,
+                        self._arrival_rate * self._coefficient,
                         size=self._fixed_invocation_nums - 1,
                     )
                 current_release = self._start
