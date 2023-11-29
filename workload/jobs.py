@@ -288,7 +288,7 @@ class JobGraph(Graph[Job]):
                 inter_arrival_times = np.clip(
                     self._rng.gamma(
                         (1 / self._coefficient),
-                        self._coefficient / self._arrival_rate,
+                        self._arrival_rate * self._coefficient,
                         size=self._fixed_invocation_nums - 1,
                     ),
                     a_min=2500,  # Maintain a minimum rate of 2500µs between releases.
