@@ -75,8 +75,10 @@ flags.DEFINE_string(
     "Name of the CSV file to log the results to.",
     short_name="csv",
 )
-flags.DEFINE_string(
-    "graph_file_prefix", None, "Name of the Graph file to log the JobGraph to."
+flags.DEFINE_bool(
+    "log_graphs",
+    False,
+    "If True, the simulator logs the TaskGraphs.",
 )
 flags.DEFINE_string("log_level", "debug", "Level of logging.")
 flags.DEFINE_string(
@@ -498,14 +500,6 @@ def main(args):
             # TODO (Sukrit): We should be implementing a statistics method for the
             # Workload too.
             pass
-        return
-
-    # TODO (Sukrit): Move this to the Simulator dry run method since we'll remove the
-    # workload entirely from main.
-    if FLAGS.graph_file_prefix:
-        # Log a DOT representation of each of the JobGraph to the required file.
-        for job_graph_name, job_graph in workload.job_graphs.items():
-            job_graph.to_dot(FLAGS.graph_file_prefix + f"_{job_graph_name}.dot")
         return
 
     # Retrieve the branch prediction policy from the flags.

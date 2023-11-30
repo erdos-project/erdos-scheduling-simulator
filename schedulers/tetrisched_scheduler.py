@@ -262,31 +262,55 @@ class TetriSchedScheduler(BaseScheduler):
                     (t, 1) for t in placement_reward_discretizations
                 ]
 
-            # Construct the STRL expressions for each TaskGraph and add them together
-            # in a single objective expression.
-            constructed_task_graphs: Set[str] = set()
-            for task_graph_name in task_graph_names:
-                # Retrieve the TaskGraph and construct its STRL.
-                task_graph = workload.get_task_graph(task_graph_name)
-                task_graph_strl = self.construct_task_graph_strl(
-                    current_time=sim_time,
-                    task_graph=task_graph,
-                    partitions=partitions,
-                    placement_times_and_rewards=placement_times_and_rewards,
-                    tasks_to_be_scheduled=tasks_to_be_scheduled
-                    + previously_placed_tasks,
-                )
-                if task_graph_strl is not None:
-                    constructed_task_graphs.add(task_graph_name)
-                    objective_strl.addChild(task_graph_strl)
+            if self.release_taskgraphs:
+                # Construct the STRL expressions for each TaskGraph and add them
+                # together in a single objective expression.
+                task_strls: Mapping[str, tetrisched.strl.Expression] = {}
+                for task_graph_name in task_graph_names:
+                    # Retrieve the TaskGraph and construct its STRL.
+                    task_graph = workload.get_task_graph(task_graph_name)
+                    task_graph_strl = self.construct_task_graph_strl(
+                        current_time=sim_time,
+                        task_graph=task_graph,
+                        partitions=partitions,
+                        placement_times_and_rewards=placement_times_and_rewards,
+                        tasks_to_be_scheduled=tasks_to_be_scheduled
+                        + previously_placed_tasks,
+                        task_strls=task_strls,
+                    )
+                    if task_graph_strl is not None:
+                        objective_strl.addChild(task_graph_strl)
 
-            # For the tasks that have been previously placed, add an
-            # AllocationExpression for their current allocations so as to correctly
-            # account for capacities at each time discretization.
-            for task in previously_placed_tasks:
-                # If this child is not in the TaskGraphs to be scheduled, then we
-                # add it to the root expression.
-                if task.task_graph not in constructed_task_graphs:
+                # For the tasks that have been previously placed, add an
+                # AllocationExpression for their current allocations so as to correctly
+                # account for capacities at each time discretization.
+                for task in previously_placed_tasks:
+                    # If this child is not in the TaskGraphs to be scheduled, then we
+                    # add it to the root expression.
+                    task_strl = None
+                    if task.id not in task_strls:
+                        task_strl = self.construct_task_strl(
+                            sim_time,
+                            task,
+                            partitions,
+                            placement_times_and_rewards,
+                        )
+                    else:
+                        task_strl = task_strls[task.id]
+
+                    if task_strl is not None:
+                        objective_strl.addChild(task_strl)
+                    else:
+                        raise RuntimeError(
+                            f"Could not construct STRL for Task {task.unique_name}. "
+                            f"This is required for previously placed tasks to account "
+                            f"for correct Allocations."
+                        )
+
+            else:
+                # If we are not releasing TaskGraphs, then we just construct the STRL
+                # for the tasks that are to be scheduled.
+                for task in tasks_to_be_scheduled + previously_placed_tasks:
                     task_strl = self.construct_task_strl(
                         sim_time,
                         task,
@@ -918,6 +942,7 @@ class TetriSchedScheduler(BaseScheduler):
         partitions: tetrisched.Partitions,
         placement_times_and_rewards: List[Tuple[EventTime, float]],
         tasks_to_be_scheduled: Optional[List[Task]] = None,
+        task_strls: Optional[Mapping[str, tetrisched.strl.Expression]] = None,
     ) -> tetrisched.strl.Expression:
         """Constructs the STRL expression subtree for a given TaskGraph.
 
@@ -931,8 +956,9 @@ class TetriSchedScheduler(BaseScheduler):
                 considered. Defaults to `None`.
         """
         # Maintain a cache to be used across the construction of the TaskGraph to make
-        # it DAG-aware.
-        task_strls = {}
+        # it DAG-aware, if not provided.
+        if task_strls is None:
+            task_strls = {}
 
         # Construct the STRL expression for all the roots of the TaskGraph.
         root_task_strls = {}

@@ -25,3 +25,5 @@ env
 
 # Ignore build of tetrisched
 schedulers/tetrisched/build/*
+
+experiments/*
