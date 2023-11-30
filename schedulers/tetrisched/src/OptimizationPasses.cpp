@@ -668,7 +668,7 @@ void DiscretizationSelectorOptimizationPass::runPass(
         for (auto redundantNckExpr: ncksWithinTimeRange){
           if (redundantNckExpr->getId() != minStartTimeNckExpr->getId()) {
             maxNckExpr->removeChild(redundantNckExpr);
-            // TETRISCHED_DEBUG("[DiscretizationSelectorOptimizationPassRemoveNck] Removing NCK: " + redundantNckExpr->getName() + " From Max: " + maxNckExpr->getName());
+            std::cout << "[DiscretizationSelectorOptimizationPassRemoveNck] Removing NCK: " + redundantNckExpr->getName() + " From Max: " + maxNckExpr->getName() << "Time Range: [" << startTime << ", " << endTime << "]";
           }
         }
       }
