@@ -1014,7 +1014,7 @@ class Simulator(object):
         """
         self._cancelled_tasks += 1
         self._logger.info(
-            "[%s] (%d) The Simulator is cancelling the task %s.",
+            "[%s] (%s) The Simulator is cancelling the task %s.",
             event.time.to(EventTime.Unit.US).time,
             self._cancelled_tasks,
             event.task,
