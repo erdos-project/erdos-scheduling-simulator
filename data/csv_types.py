@@ -325,7 +325,7 @@ class Scheduler(object):
 
 
 class Simulator(object):
-    def __init__(self, csv_path: str, start_time: int, total_tasks: int):
+    def __init__(self, csv_path: str, start_time: int, total_tasks: int = 0):
         self.csv_path = csv_path
         self.start_time = start_time
         self.total_tasks = total_tasks
