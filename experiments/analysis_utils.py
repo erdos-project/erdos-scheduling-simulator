@@ -2,6 +2,7 @@ import os
 from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
+import shutil
 
 def calculate_arrival_rate_and_cv2(release_time: list[int]):
     release_time.sort()
@@ -156,7 +157,13 @@ def plot_slo_attainments(data: pd.DataFrame):
 
             ax.set_xticks(x)
             ax.set_xticklabels(deadline_vars)
-            ax.set_title(f"Arrival Rate: {subset['actual_arrival_rate'].mean():.2f}, CV2: {subset['actual_cv2'].mean():.2f}")
+            
+            # This is the actual "task" arrival rate and cv2
+            # ax.set_title(f"Arrival Rate: {subset['actual_arrival_rate'].mean():.2f}, CV2: {subset['actual_cv2'].mean():.2f}")
+            
+            # This is the arrival rate and cv2 we specified for "task graph" in the config file
+            ax.set_title(f"Arrival Rate: {arrival_rate}, CV2: {cv2}")
+            
             ax.set_xlabel('Max Deadline Variance')
             ax.set_ylabel('SLO Attainment')
 
