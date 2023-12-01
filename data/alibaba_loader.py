@@ -300,6 +300,6 @@ class AlibabaLoader(BaseWorkloadLoader):
                 )
                 if task_graph is not None:
                     self._workload.add_task_graph(task_graph)
-                    self._csv_logger.info(f"{current_time.time},TASK_GRAPH_RELEASE,{task_graph.release_time.time},{task_graph.name},{len(task_graph.get_nodes())}")
+                    self._csv_logger.info(f"{current_time.time},TASK_GRAPH_RELEASE,{task_graph.release_time.time},{task_graph.deadline.time},{task_graph.name},{len(task_graph.get_nodes())}")
                     task_release_index += 1
             return self._workload
