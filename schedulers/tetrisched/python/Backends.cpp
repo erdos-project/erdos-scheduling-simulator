@@ -41,6 +41,8 @@ void defineSolverSolution(py::module_& tetrisched_m) {
                              [](const tetrisched::SolverSolution& solution) {
                                return solution.solverTimeMicroseconds;
                              })
+      .def("isValid", &tetrisched::SolverSolution::isValid,
+           "Check if the solution was valid.")
       .def("__str__", [](const tetrisched::SolverSolution& solution) {
         return "SolverSolution<type=" + solution.getSolutionTypeStr() +
                ", objectiveValue=" +

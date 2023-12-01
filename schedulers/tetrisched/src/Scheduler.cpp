@@ -116,7 +116,9 @@ void Scheduler::schedule(Time currentTime) {
   solverSolution = this->solver->solveModel();
 
   // Populate the results from the solver into the expression tree.
-  this->expression.value()->populateResults(solverModel);
+  if (solverSolution.has_value() && solverSolution.value()->isValid()) {
+    this->expression.value()->populateResults(solverModel);
+  }
 }
 
 SolverSolutionPtr Scheduler::getLastSolverSolution() const {
