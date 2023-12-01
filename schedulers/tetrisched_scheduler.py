@@ -217,6 +217,12 @@ class TetriSchedScheduler(BaseScheduler):
                     return_start_end_times=True,
                 )
 
+            self._logger.debug(
+                f"[{sim_time.time}] The plan ahead for this scheduler invocation was "
+                f"{plan_ahead_this_cycle}, and the resulting discretizations were: "
+                f"{placement_reward_discretizations}."
+            )
+
             # If the goal of the scheduler is to minimize the placement delay, we
             # value earlier placement choices for each task higher. Note that this
             # usually leads to a higher scheduler runtime since the solver has to close
@@ -582,6 +588,13 @@ class TetriSchedScheduler(BaseScheduler):
             raise NotImplementedError(
                 "TetrischedScheduler does not support multiple execution strategies."
             )
+
+        if len(placement_times_and_rewards) == 0:
+            self._logger.debug(
+                f"[{current_time.time}] No placement choices were available for "
+                f"{task.unique_name} with deadline {task.deadline}."
+            )
+            return None
 
         # Check that the Task works only on Slots for now.
         # TODO (Sukrit): We should expand this to general resource usage.
