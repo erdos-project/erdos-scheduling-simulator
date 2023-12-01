@@ -217,6 +217,12 @@ class TetriSchedScheduler(BaseScheduler):
                     return_start_end_times=True,
                 )
 
+            self._logger.debug(
+                f"[{sim_time.time}] The plan ahead for this scheduler invocation was "
+                f"{plan_ahead_this_cycle}, and the resulting discretizations were: "
+                f"{placement_reward_discretizations}."
+            )
+
             # If the goal of the scheduler is to minimize the placement delay, we
             # value earlier placement choices for each task higher. Note that this
             # usually leads to a higher scheduler runtime since the solver has to close
@@ -331,6 +337,21 @@ class TetriSchedScheduler(BaseScheduler):
                 )
                 raise e
 
+            # If the solver could not solve the model, log an error.
+            if not self._scheduler.getLastSolverSolution().isValid():
+                self._logger.error(
+                    f"[{sim_time.time}] The solver failed to find a solution for "
+                    f"the STRL expression. Dumping the model to "
+                    f"tetrisched_error_{sim_time.time}.lp and STRL expression to "
+                    f"tetrisched_error_{sim_time.time}.dot."
+                )
+                objective_strl.exportToDot(
+                    os.path.join(self._log_dir, f"tetrisched_error_{sim_time.time}.dot")
+                )
+                self._scheduler.exportLastSolverModel(
+                    os.path.join(self._log_dir, f"tetrisched_error_{sim_time.time}.lp")
+                )
+
             # If requested, log the model to a file.
             if self._log_to_file or sim_time.time in self._log_times:
                 self._scheduler.exportLastSolverModel(
@@ -347,12 +368,13 @@ class TetriSchedScheduler(BaseScheduler):
 
             # Retrieve the solution and check if we were able to schedule anything.
             solverSolution = objective_strl.getSolution()
-            self._logger.info(
-                f"[{sim_time.time}] Solver returned utility of {solverSolution.utility}"
-                f" and took {solver_time} to solve. The solution result "
-                f"was {self._scheduler.getLastSolverSolution()}."
-            )
-            if solverSolution.utility > 0:
+            if solverSolution is not None and solverSolution.utility > 0:
+                self._logger.info(
+                    f"[{sim_time.time}] Solver returned utility of "
+                    f"{solverSolution.utility} and took {solver_time} to solve. The "
+                    f"solution result was {self._scheduler.getLastSolverSolution()}."
+                )
+
                 # Retrieve the Placements for each task.
                 for task in tasks_to_be_scheduled:
                     task_placement = solverSolution.getPlacement(task.unique_name)
@@ -582,6 +604,13 @@ class TetriSchedScheduler(BaseScheduler):
             raise NotImplementedError(
                 "TetrischedScheduler does not support multiple execution strategies."
             )
+
+        if len(placement_times_and_rewards) == 0:
+            self._logger.debug(
+                f"[{current_time.time}] No placement choices were available for "
+                f"{task.unique_name} with deadline {task.deadline}."
+            )
+            return None
 
         # Check that the Task works only on Slots for now.
         # TODO (Sukrit): We should expand this to general resource usage.
