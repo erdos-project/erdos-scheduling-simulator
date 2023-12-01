@@ -5,14 +5,15 @@
 SCHEDULERS=(EDF TetriSched)
 # MAX_DEADLINE_VARIANCES=(15 25 50 100 200)
 # MAX_DEADLINE_VARIANCES=(200 400 800)
-MAX_DEADLINE_VARIANCES=(50 200 400)
-SCHEDULER_TIME_DISCRETIZATIONS=(1 10 20)
+MAX_DEADLINE_VARIANCES=(200 250 300 400)
+# SCHEDULER_TIME_DISCRETIZATIONS=(1 10 20)
+SCHEDULER_TIME_DISCRETIZATIONS=(1)
 # RELEASE_POLICIES=(fixed poisson gamma)
 RELEASE_POLICIES=(gamma)
 # POISSON_ARRIVAL_RATES=(0.2 0.5 1 2)
-POISSON_ARRIVAL_RATES=(0.05 0.1)
-GAMMA_COEFFICIENTS=(1 2 4) #cv2
-DAG_AWARENESS=(0 1) # False True
+POISSON_ARRIVAL_RATES=(0.01)
+GAMMA_COEFFICIENTS=(9 10 12 14) #cv2
+DAG_AWARENESS=(1) # False True
 
 ERDOS_SIMULATOR_DIR="." # Change this to the directory where the simulator is located.
 MIN_DEADLINE_VARIANCE=10
@@ -89,7 +90,7 @@ execute_experiment () {
     "
         fi 
         echo "${MYCONF}" > ${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.conf
-        if ! python3 main.py --flagfile=${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.conf > ${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.output; then
+        if ! time python3 main.py --flagfile=${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.conf > ${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.output; then
             echo "[x] Failed in the execution of ${LOG_BASE}. Exiting."
             exit 3
         fi
