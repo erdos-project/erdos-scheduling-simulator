@@ -206,7 +206,8 @@ void CapacityConstraintMap::registerUsageForDuration(
           "Start time is out of range of the discretization.");
     }
 
-    Time currentTime = startTime;
+    // Time currentTime = startTime;
+    Time currentTime = timeRangeToGranularities[granularityIndex].first.first;
     Time remainderTime = duration;
     while (remainderTime > 0) {
       auto& timeRange = timeRangeToGranularities[granularityIndex].first;
@@ -232,7 +233,7 @@ void CapacityConstraintMap::registerUsageForDuration(
         } else {
           registerUsageAtTime(expression, partition, currentTime, granularity,
                               usageIndicator, variable, remainderTime);
-          currentTime += remainderTime;
+          currentTime += granularity;
           remainderTime = 0;
         }
       }
