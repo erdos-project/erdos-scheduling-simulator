@@ -10,7 +10,7 @@ from typing import List, Mapping, Optional, Sequence
 
 import absl
 
-from utils import EventTime
+from utils import EventTime, setup_csv_logging, setup_logging
 from workload import (
     ExecutionStrategies,
     ExecutionStrategy,
@@ -56,6 +56,19 @@ class AlibabaLoader(BaseWorkloadLoader):
             else EventTime(sys.maxsize, EventTime.Unit.US)
         )
         self._workload = Workload.empty(flags)
+
+
+        if self._flags:
+            self._csv_logger = setup_csv_logging(
+                name=self.__class__.__name__,
+                log_dir=self._flags.log_dir,
+                log_file=self._flags.csv_file_name,
+            )
+        else:
+            self._csv_logger = setup_csv_logging(
+                name=self.__class__.__name__, log_file=None
+            )
+            self._log_dir = os.getcwd()
 
     def _construct_release_times(self):
         """Construct the release times of the jobs in the workload.
@@ -170,7 +183,13 @@ class AlibabaLoader(BaseWorkloadLoader):
         for task in job_tasks:
             job_resources = Resources(
                 resource_vector={
-                    Resource(name="Slot", _id="any"): int(math.ceil(task.cpu / 100)),
+                    # Note: We divide the CPU by 25 instead of 100 because this
+                    # would intorduce more variance into the resource/slots usage.
+                    # We used to divide by 100, but the majority of the tasks
+                    # would end up using 1 slot, which is not very interesting and 
+                    # makes no chance for DAG_Sched to do effective packing that 
+                    # would beat EDF by a significant margin.
+                    Resource(name="Slot", _id="any"): int(math.ceil(task.cpu / 25)),
                 }
             )
             job_name = task.name.split("_")[0]
@@ -281,5 +300,6 @@ class AlibabaLoader(BaseWorkloadLoader):
                 )
                 if task_graph is not None:
                     self._workload.add_task_graph(task_graph)
+                    self._csv_logger.info(f"{current_time.time},TASK_GRAPH_RELEASE,{task_graph.release_time.time},{task_graph.name},{len(task_graph.get_nodes())}")
                     task_release_index += 1
             return self._workload
