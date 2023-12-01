@@ -47,6 +47,12 @@ struct SolverSolution {
   /// The time taken by the solver to find the solution (in microseconds).
   uint64_t solverTimeMicroseconds;
 
+  /// Check if the solution was valid.
+  bool isValid() const {
+    return solutionType == SolutionType::FEASIBLE ||
+           solutionType == SolutionType::OPTIMAL;
+  }
+
   /// Get a string representation of the Solver's type.
   std::string getSolutionTypeStr() const {
     switch (solutionType) {
