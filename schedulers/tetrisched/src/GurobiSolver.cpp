@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <thread>
+#include <cmath>
 
 namespace tetrisched {
 GurobiSolver::GurobiSolver()
@@ -263,12 +264,25 @@ SolverSolutionPtr GurobiSolver::solveModel() {
           " was not found in the Gurobi model.");
     }
     switch (variable->variableType) {
-      case tetrisched::VariableType::VAR_INTEGER:
-      case tetrisched::VariableType::VAR_CONTINUOUS:
-      case tetrisched::VariableType::VAR_INDICATOR:
-        variable->solutionValue =
+      case tetrisched::VariableType::VAR_CONTINUOUS: {
+        double variableValue =
             gurobiVariables.at(variableId).get(GRB_DoubleAttr_X);
+        TETRISCHED_DEBUG("Variable " << variable->getName() << "(" << variableId
+                                     << ") has solved value " << variableValue);
+        variable->solutionValue = variableValue;
         break;
+      }
+      case tetrisched::VariableType::VAR_INTEGER:
+      case tetrisched::VariableType::VAR_INDICATOR: {
+        // If this is an integer or an indicator variable, we round it to
+        // nearest integer value.
+        double variableValue =
+            std::round(gurobiVariables.at(variableId).get(GRB_DoubleAttr_X));
+        TETRISCHED_DEBUG("Variable " << variable->getName() << "(" << variableId
+                                     << ") has solved value " << variableValue);
+        variable->solutionValue = variableValue;
+        break;
+      }
       default:
         throw tetrisched::exceptions::SolverException(
             "Unsupported variable type: " + variable->variableType);

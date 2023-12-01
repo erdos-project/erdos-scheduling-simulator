@@ -417,9 +417,7 @@ std::string Expression::getDescriptiveName() const {
   return this->getTypeString() + "(" + name + ")";
 }
 
-uint32_t Expression::getResourceQuantity() const {
-  return 0;
-}
+uint32_t Expression::getResourceQuantity() const { return 0; }
 
 /* Method definitions for ChooseExpression */
 
@@ -565,7 +563,13 @@ SolutionResultPtr ChooseExpression::populateResults(
       name, solution->startTime.value(), solution->endTime.value());
   for (const auto& [partitionId, variable] : partitionVariables) {
     auto variableValue = variable->getValue();
-    if (variableValue == 0) {
+    if (!variableValue.has_value()) {
+      throw tetrisched::exceptions::ExpressionSolutionException(
+          "ChooseExpression " + name +
+          " was parsed with a variable that does not have a value.");
+    }
+
+    if (std::abs(variableValue.value()) < 0.1) {
       // This partition was not used.
       continue;
     }
@@ -869,10 +873,23 @@ SolutionResultPtr WindowedChooseExpression::populateResults(
       name, solution->startTime.value(), solution->endTime.value());
   for (auto& [chooseTime, placementVariable] : placementTimeVariables) {
     auto placementVariableValue = placementVariable->getValue();
-    if (placementVariableValue == 0) {
+    if (!placementVariableValue.has_value()) {
+      throw tetrisched::exceptions::ExpressionSolutionException(
+          "WindowedChooseExpression " + name +
+          " was parsed with a variable that does not have a value.");
+    }
+
+    if (std::abs(placementVariableValue.value()) < 0.1) {
       // This placement was not used.
+      TETRISCHED_DEBUG("[WindowedChoose] The placement for time "
+                       << chooseTime << " and task " << name << " was 0.")
       continue;
     }
+    TETRISCHED_DEBUG("[WindowedChoose] The placement for time "
+                     << chooseTime << " and task " << name
+                     << " was 1 because the placementValueVariable with name "
+                     << placementVariable->getName() << " was "
+                     << *placementVariableValue << ".")
 
     if (placementPartitionVariables.find(chooseTime) ==
         placementPartitionVariables.end()) {
@@ -886,7 +903,12 @@ SolutionResultPtr WindowedChooseExpression::populateResults(
     for (auto& [partitionId, allocationVariable] :
          placementPartitionVariables[chooseTime]) {
       auto allocationVariableValue = allocationVariable->getValue();
-      if (allocationVariableValue == 0) {
+      if (!allocationVariableValue.has_value()) {
+        throw tetrisched::exceptions::ExpressionSolutionException(
+            "WindowedChooseExpression " + name +
+            " was parsed with a variable that does not have a value.");
+      }
+      if (std::abs(allocationVariableValue.value()) < 0.1) {
         // This partition was not used.
         continue;
       }
@@ -1257,7 +1279,12 @@ SolutionResultPtr MalleableChooseExpression::populateResults(
       name, solution->startTime.value(), solution->endTime.value());
   for (const auto& [partitionPair, variable] : partitionVariables) {
     auto variableValue = variable->getValue();
-    if (variableValue == 0) {
+    if (!variableValue.has_value()) {
+      throw tetrisched::exceptions::ExpressionSolutionException(
+          "MalleableChooseExpression " + name +
+          " was parsed with a variable that does not have a value.");
+    }
+    if (std::abs(variableValue.value()) < 0.1) {
       // This partition was not used.
       continue;
     }
