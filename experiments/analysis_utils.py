@@ -84,11 +84,15 @@ def extract_experiments_result(base_dir: str) -> pd.DataFrame:
             # Calculate the arrival rate and cv2
             release_times = []
             for line in lines:
-                if "TASK_RELEASE" not in line:
-                    continue
-                # event_time should be the actual release time
-                event_time, _, task_name, _, task_intended_release_time, task_release_time, task_deadline, task_id, task_graph = line.strip().split(",")
-                release_times.append(int(task_release_time))
+                
+                # if "TASK_RELEASE" in line:
+                #     # Compute arrival rate and cv2 for "task" release time     
+                #     # event_time should be the actual release time
+                #     event_time, _, task_name, _, task_intended_release_time, task_release_time, task_deadline, task_id, task_graph = line.strip().split(",")
+                
+                if "TASK_GRAPH_RELEASE" in line:
+                    event_time, _, release_time, deadline, task_graph_name, number_of_nodes = line.strip().split(",")
+                    release_times.append(int(release_time))
             
             actual_arrival_rate, actual_cv2 = calculate_arrival_rate_and_cv2(release_times)
             row["actual_arrival_rate"] = actual_arrival_rate
@@ -158,11 +162,8 @@ def plot_slo_attainments(data: pd.DataFrame):
             ax.set_xticks(x)
             ax.set_xticklabels(deadline_vars)
             
-            # This is the actual "task" arrival rate and cv2
-            # ax.set_title(f"Arrival Rate: {subset['actual_arrival_rate'].mean():.2f}, CV2: {subset['actual_cv2'].mean():.2f}")
-            
-            # This is the arrival rate and cv2 we specified for "task graph" in the config file
-            ax.set_title(f"Arrival Rate: {arrival_rate}, CV2: {cv2}")
+            # This is "task graph" arrival rate and cv2
+            ax.set_title(f"Input Arrival Rate: {arrival_rate}, CV2: {cv2} | Actual Arrival Rate: {subset['actual_arrival_rate'].mean():.2f}, CV2: {subset['actual_cv2'].mean():.2f}")
             
             ax.set_xlabel('Max Deadline Variance')
             ax.set_ylabel('SLO Attainment')
@@ -174,7 +175,7 @@ def plot_slo_attainments(data: pd.DataFrame):
     handles, labels = ax.get_legend_handles_labels()
     fig.legend(handles, labels, loc='upper center', bbox_to_anchor=(0.5, 0.95), ncol=len(labels))
 
-    plt.suptitle('SLO Attainment Comparison (min_deadline_var=10, num_invocation=400) 11_29_2023', size=16)
+    plt.suptitle('SLO Attainment Comparison (min_deadline_var=10, num_invocation=200) 12_1_2023', size=16)
 
     # Show the plot
     plt.show()
