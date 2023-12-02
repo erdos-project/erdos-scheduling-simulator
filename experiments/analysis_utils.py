@@ -135,7 +135,11 @@ def plot_slo_attainments(data: pd.DataFrame):
     # Iterate over each subplot and plot the data
     for i, arrival_rate in enumerate(arrival_rate_values):
         for j, cv2 in enumerate(cv2_values):
-            ax = axes[i][j]
+            if len(arrival_rate_values) == 1:
+                ax = axes[j]
+            else:
+                ax = axes[i][j]
+
             subset = data[(data['arrival_rate'] == arrival_rate) & (data['cv2'] == cv2)]
 
             # Get unique deadline variances
@@ -164,8 +168,8 @@ def plot_slo_attainments(data: pd.DataFrame):
             ax.set_xticklabels(deadline_vars)
             
             # This is "task graph" arrival rate and cv2
-            ax.set_title(f"Input Arrival Rate: {arrival_rate}, CV2: {cv2} | Actual Arrival Rate: {subset['actual_arrival_rate'].mean():.2f}, CV2: {subset['actual_cv2'].mean():.2f}")
-            # ax.set_title(f"Actual Arrival Rate: {subset['actual_arrival_rate'].mean():.2f}, CV2: {subset['actual_cv2'].mean():.2f}")
+            # ax.set_title(f"Input Arrival Rate: {arrival_rate}, CV2: {cv2} | Actual Arrival Rate: {subset['actual_arrival_rate'].mean():.2f}, CV2: {subset['actual_cv2'].mean():.2f}")
+            ax.set_title(f"Actual Arrival Rate: {subset['actual_arrival_rate'].mean():.2f}, CV2: {subset['actual_cv2'].mean():.2f}")
             
             ax.set_xlabel('Max Deadline Variance')
             ax.set_ylabel('SLO Attainment')
