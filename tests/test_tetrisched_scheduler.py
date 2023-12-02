@@ -86,7 +86,9 @@ def test_tetrisched_task_strl_no_slot_fail():
             current_time=EventTime.zero(),
             task=task,
             partitions=partitions,
-            placement_times_and_rewards={},
+            placement_times_and_rewards=[
+                (EventTime(x, EventTime.Unit.US), 1) for x in range(0, 30, 10)
+            ],
         )
 
 
