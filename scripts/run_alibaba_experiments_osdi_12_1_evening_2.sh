@@ -14,7 +14,7 @@ RELEASE_POLICIES=(gamma)
 POISSON_ARRIVAL_RATES=(0.005 0.0075)
 GAMMA_COEFFICIENTS=(8 10 12) #cv2
 DAG_AWARENESS=(1) # False True
-# task.cpu divid by 25
+TASK_CPU_DIVISOR=25
 
 ERDOS_SIMULATOR_DIR="." # Change this to the directory where the simulator is located.
 MIN_DEADLINE_VARIANCE=10
@@ -63,6 +63,7 @@ execute_experiment () {
 --scheduler_runtime=${SCHEDULER_RUNTIME}
 --override_release_policy=${RELEASE_POLICY}
 --scheduler=${SCHEDULER}
+--alibaba_loader_task_cpu_divisor=${TASK_CPU_DIVISOR}
 "
         if [[ ${RELEASE_POLICY} == fixed ]]; then
             MYCONF+="--override_arrival_period=10
