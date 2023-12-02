@@ -65,7 +65,7 @@ class AlibabaLoader(BaseWorkloadLoader):
             )
 
             self._task_cpu_divisor = int(self._flags.alibaba_loader_task_cpu_divisor)
-            self._task_duration_multipler = int(self._flags.alibaba_task_duration_multiplier)
+            self._task_duration_multipler = self._flags.alibaba_task_duration_multiplier
         else:
             self._csv_logger = setup_csv_logging(
                 name=self.__class__.__name__, log_file=None
