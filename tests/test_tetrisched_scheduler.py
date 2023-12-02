@@ -5,13 +5,21 @@ import pytest
 tetrisched = pytest.importorskip("tetrisched_py")
 
 try:
-    from schedulers import TetriSchedScheduler
+    from schedulers.tetrisched_scheduler import Partitions, TetriSchedScheduler
 except ImportError:
     pass
 from tests.utils import create_default_task
 from utils import EventTime
 from workers import Worker, WorkerPool, WorkerPools
-from workload import Resource, Resources, TaskGraph, Workload
+from workload import (
+    ExecutionStrategies,
+    ExecutionStrategy,
+    Resource,
+    Resources,
+    TaskGraph,
+    Workload,
+    WorkProfile,
+)
 
 
 def test_tetrisched_partition_creation_non_slot_failure():
@@ -24,10 +32,9 @@ def test_tetrisched_partition_creation_non_slot_failure():
     worker_pool = WorkerPool(name="worker_pool", workers=[worker_1])
     worker_pools = WorkerPools(worker_pools=[worker_pool])
 
-    # Create the TetriSchedScheduler and check that it raises a ValueError.
-    scheduler = TetriSchedScheduler(enforce_deadlines=True)
-    with pytest.raises(ValueError):
-        scheduler.construct_partitions(worker_pools=worker_pools)
+    # Create the Partitions and check that it raises a ValueError.
+    with pytest.raises(NotImplementedError):
+        Partitions(worker_pools=worker_pools)
 
 
 def test_tetrisched_partition_creation_success():
@@ -51,14 +58,53 @@ def test_tetrisched_partition_creation_success():
 
     worker_pools = WorkerPools(worker_pools=[worker_pool_1, worker_pool_2])
 
-    # Create the TetriSchedScheduler and check that it returns a single Partitions
+    # Create the Partitions and check that it returns a single Partitions
     # object with four partitions that each have 2 slots.
-    scheduler = TetriSchedScheduler(enforce_deadlines=True)
-    partitions = scheduler.construct_partitions(worker_pools=worker_pools)
+    partitions = Partitions(worker_pools=worker_pools)
 
-    assert len(partitions) == 4, "The number of Partition objects is not 2."
-    for partition in partitions.getPartitions():
-        assert len(partition) == 2, "The number of slots in a Partition is not 2."
+    assert len(partitions) == 1, "The number of Partition objects is 1."
+    slot_resource = Resource(name="Slot", _id="any")
+    for partition in partitions[slot_resource].getPartitions():
+        assert len(partition) == 2, "The quantity of the Partition is not 2."
+
+
+def test_tetrisched_partition_creation_with_different_resource_types():
+    """Tests that the Partition objects with different resource types are created
+    correctly."""
+    # Create the WorkerPools with two workers and two slots each.
+    worker_1 = Worker(
+        name="worker_1",
+        resources=Resources(resource_vector={Resource(name="Slot_1"): 2}),
+    )
+    worker_2 = Worker(
+        name="worker_2",
+        resources=Resources(resource_vector={Resource(name="Slot_2"): 2}),
+    )
+    worker_pool = WorkerPool(name="worker_pool", workers=[worker_1, worker_2])
+    worker_pools = WorkerPools(worker_pools=[worker_pool])
+
+    # Create the Partitions and check that it returns two Partitions object with
+    # one partition each.
+    partitions = Partitions(worker_pools=worker_pools)
+
+    assert len(partitions) == 2, "The number of Partition objects is not 2."
+    slot_1_resource = Resource(name="Slot_1", _id="any")
+    assert partitions[slot_1_resource] is not None, "Slot_1 not found in Partitions."
+    assert (
+        len(partitions[slot_1_resource].getPartitions()) == 1
+    ), "The number of Partitions is not 1."
+    assert (
+        len(partitions[slot_1_resource].getPartitions()[0]) == 2
+    ), "The quantity of the Partition is not 2."
+
+    slot_2_resource = Resource(name="Slot_2", _id="any")
+    assert partitions[slot_2_resource] is not None, "Slot_2 not found in Partitions."
+    assert (
+        len(partitions[slot_2_resource].getPartitions()) == 1
+    ), "The number of Partitions is not 1."
+    assert (
+        len(partitions[slot_2_resource].getPartitions()[0]) == 2
+    ), "The quantity of the Partition is not 2."
 
 
 def test_tetrisched_task_strl_no_slot_fail():
@@ -80,8 +126,8 @@ def test_tetrisched_task_strl_no_slot_fail():
 
     # Construct the scheduler and the partitions.
     scheduler = TetriSchedScheduler(enforce_deadlines=True)
-    partitions = scheduler.construct_partitions(worker_pools=worker_pools)
-    with pytest.raises(ValueError):
+    partitions = Partitions(worker_pools=worker_pools)
+    with pytest.raises(NotImplementedError):
         scheduler.construct_task_strl(
             current_time=EventTime.zero(),
             task=task,
@@ -92,7 +138,7 @@ def test_tetrisched_task_strl_no_slot_fail():
         )
 
 
-def test_tetrisched_task_choice_strl_generation():
+def test_tetrisched_task_choice_strl_generation_with_single_strategy():
     """Tests that a Task's STRL expression is correct."""
     # Construct the WorkerPools.
     worker_1 = Worker(
@@ -114,7 +160,7 @@ def test_tetrisched_task_choice_strl_generation():
         time_discretization=EventTime(10, EventTime.Unit.US),
         enforce_deadlines=True,
     )
-    partitions = scheduler.construct_partitions(worker_pools=worker_pools)
+    partitions = Partitions(worker_pools=worker_pools)
     task_strl = scheduler.construct_task_strl(
         current_time=EventTime.zero(),
         task=task,
@@ -129,13 +175,79 @@ def test_tetrisched_task_choice_strl_generation():
 
     # Ensure that the type and number of choices are correct.
     assert (
+        task_strl.getType() == tetrisched.strl.EXPR_WINDOWED_CHOOSE
+    ), f"Incorrect type of the root of STRL subtree: {task_strl.getType()}"
+    assert task_strl.getNumChildren() == 0, "Incorrect number of children in STRL."
+
+
+def test_tetrisched_task_choice_strl_generation_with_multiple_strategies():
+    """Tests that the STRL expression is correct when there are multiple strategies."""
+    # Construct the WorkerPools.
+    worker_1 = Worker(
+        name="worker_1",
+        resources=Resources(resource_vector={Resource(name="Slot_1"): 2}),
+    )
+    worker_2 = Worker(
+        name="worker_2",
+        resources=Resources(resource_vector={Resource(name="Slot_2"): 2}),
+    )
+    worker_pool = WorkerPool(name="worker_pool", workers=[worker_1, worker_2])
+    worker_pools = WorkerPools(worker_pools=[worker_pool])
+
+    # Construct the Task.
+    task = create_default_task(
+        name="task",
+        profile=WorkProfile(
+            name="task_work_profile",
+            execution_strategies=ExecutionStrategies(
+                strategies=[
+                    ExecutionStrategy(
+                        resources=Resources(
+                            resource_vector={Resource(name="Slot_1"): 1}
+                        ),
+                        batch_size=1,
+                        runtime=EventTime(10, EventTime.Unit.US),
+                    ),
+                    ExecutionStrategy(
+                        resources=Resources(
+                            resource_vector={Resource(name="Slot_2"): 1}
+                        ),
+                        batch_size=1,
+                        runtime=EventTime(5, EventTime.Unit.US),
+                    ),
+                ],
+            ),
+        ),
+        deadline=30,
+    )
+
+    # Construct the scheduler and the partitions.
+    scheduler = TetriSchedScheduler(
+        time_discretization=EventTime(5, EventTime.Unit.US),
+        enforce_deadlines=True,
+    )
+    partitions = Partitions(worker_pools=worker_pools)
+    task_strl = scheduler.construct_task_strl(
+        current_time=EventTime.zero(),
+        task=task,
+        partitions=partitions,
+        placement_times_and_rewards=[
+            (EventTime(x, EventTime.Unit.US), 1) for x in range(0, 30, 5)
+        ],
+    )
+
+    # Ensure that the type and number of choices are correct.
+    assert (
         task_strl.getType() == tetrisched.strl.EXPR_MAX
     ), f"Incorrect type of the root of STRL subtree: {task_strl.getType()}"
-    assert task_strl.getNumChildren() == 3, "Incorrect number of children in STRL."
-    for child_expr in task_strl.getChildren():
+    assert task_strl.getNumChildren() == 2, "Incorrect number of children in STRL."
+    for child in task_strl.getChildren():
         assert (
-            child_expr.getType() == tetrisched.strl.EXPR_CHOOSE
-        ), f"Incorrect type of child of STRL subtree: {child_expr.getType()}"
+            child.getType() == tetrisched.strl.EXPR_WINDOWED_CHOOSE
+        ), f"Incorrect type of the child of STRL subtree: {child.getType()}"
+        assert (
+            child.getNumChildren() == 0
+        ), f"Incorrect number of children in STRL: {child.getNumChildren()}"
 
 
 def test_tetrisched_task_graph_strl_generation_simple():
@@ -169,7 +281,7 @@ def test_tetrisched_task_graph_strl_generation_simple():
         time_discretization=EventTime(10, EventTime.Unit.US),
         enforce_deadlines=True,
     )
-    partitions = scheduler.construct_partitions(worker_pools=worker_pools)
+    partitions = Partitions(worker_pools=worker_pools)
 
     # Construct the STRL expression for the TaskGraph.
     task_strls = {}
@@ -199,13 +311,13 @@ def test_tetrisched_task_graph_strl_generation_simple():
     ), "Incorrect number of children in STRL."
     task_one_strl, task_two_strl = task_graph_strl.getChildren()
     assert (
-        task_one_strl.getType() == tetrisched.strl.EXPR_MAX
+        task_one_strl.getType() == tetrisched.strl.EXPR_WINDOWED_CHOOSE
     ), f"Incorrect type: {task_one_strl.getType()}"
-    assert task_one_strl.getNumChildren() == 3, "Incorrect number of children in STRL."
+    assert task_one_strl.getNumChildren() == 0, "Incorrect number of children in STRL."
     assert (
-        task_two_strl.getType() == tetrisched.strl.EXPR_MAX
+        task_two_strl.getType() == tetrisched.strl.EXPR_WINDOWED_CHOOSE
     ), f"Incorrect type: {task_two_strl.getType()}"
-    assert task_two_strl.getNumChildren() == 3, "Incorrect number of children in STRL."
+    assert task_two_strl.getNumChildren() == 0, "Incorrect number of children in STRL."
 
 
 def test_two_tasks_correctly_scheduled():
@@ -273,6 +385,93 @@ def test_two_tasks_correctly_scheduled():
         task_2_placement.placement_time.time + 20
         == task_1_placement.placement_time.time
     ), "Task 1 and Task 2 were not scheduled linearly."
+
+
+def test_two_tasks_with_multiple_strategies_correctly_scheduled():
+    """Tests that two tasks without dependencies are correctly scheduled when
+    they have multiple strategies."""
+    # Create two tasks.
+    task_1 = create_default_task(
+        name="task_1",
+        profile=WorkProfile(
+            name="task_1_work_profile",
+            execution_strategies=ExecutionStrategies(
+                strategies=[
+                    ExecutionStrategy(
+                        resources=Resources(
+                            resource_vector={Resource(name="Slot_1"): 1}
+                        ),
+                        batch_size=1,
+                        runtime=EventTime(10, EventTime.Unit.US),
+                    ),
+                    ExecutionStrategy(
+                        resources=Resources(
+                            resource_vector={Resource(name="Slot_2"): 1}
+                        ),
+                        batch_size=1,
+                        runtime=EventTime(20, EventTime.Unit.US),
+                    ),
+                ],
+            ),
+        ),
+        deadline=20,
+    )
+    task_2 = create_default_task(
+        name="task_2",
+        profile=WorkProfile(
+            name="task_2_work_profile",
+            execution_strategies=ExecutionStrategies(
+                strategies=[
+                    ExecutionStrategy(
+                        resources=Resources(
+                            resource_vector={Resource(name="Slot_1"): 1}
+                        ),
+                        batch_size=1,
+                        runtime=EventTime(15, EventTime.Unit.US),
+                    ),
+                    ExecutionStrategy(
+                        resources=Resources(
+                            resource_vector={Resource(name="Slot_2"): 1}
+                        ),
+                        batch_size=1,
+                        runtime=EventTime(20, EventTime.Unit.US),
+                    ),
+                ],
+            ),
+        ),
+        deadline=20,
+    )
+    task_graph = TaskGraph(name=task_1.task_graph, tasks={task_1: [], task_2: []})
+    workload = Workload.from_task_graphs(task_graphs={task_graph.name: task_graph})
+
+    # Release the tasks.
+    task_1.release(EventTime.zero())
+    task_2.release(EventTime.zero())
+
+    # Construct the WorkerPools.
+    # Create the WorkerPools with two workers and one slot each.
+    worker_1 = Worker(
+        name="worker_1",
+        resources=Resources(resource_vector={Resource(name="Slot_1"): 1}),
+    )
+    worker_2 = Worker(
+        name="worker_2",
+        resources=Resources(resource_vector={Resource(name="Slot_2"): 1}),
+    )
+    worker_pool = WorkerPool(name="worker_pool", workers=[worker_1, worker_2])
+    worker_pools = WorkerPools(worker_pools=[worker_pool])
+
+    # Construct the scheduler and invoke it at the current time.
+    scheduler = TetriSchedScheduler(
+        time_discretization=EventTime(5, EventTime.Unit.US),
+        enforce_deadlines=True,
+    )
+    placements = scheduler.schedule(
+        sim_time=EventTime.zero(), workload=workload, worker_pools=worker_pools
+    )
+    task_1_placement = placements.get_placements(task_1)[0]
+    task_2_placement = placements.get_placements(task_2)[0]
+    assert not task_1_placement.is_placed(), "Task 1 was not placed."
 
 
 def test_two_tasks_dependency_correctly_scheduled():
