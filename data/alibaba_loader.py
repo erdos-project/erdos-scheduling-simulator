@@ -48,7 +48,7 @@ class AlibabaLoader(BaseWorkloadLoader):
         self._logger = setup_logging(
             name=self.__class__.__name__,
             log_dir=flags.log_dir,
-            log_file=flags.log_file_level,
+            log_file=flags.log_file_name,
             log_level=flags.log_level,
         )
         self._job_data_generator = self._initialize_job_data_generator()
