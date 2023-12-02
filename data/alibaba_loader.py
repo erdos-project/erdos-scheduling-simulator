@@ -56,8 +56,6 @@ class AlibabaLoader(BaseWorkloadLoader):
             else EventTime(sys.maxsize, EventTime.Unit.US)
         )
         self._workload = Workload.empty(flags)
-        self._task_cpu_divisor = int(self._flags.alibaba_loader_task_cpu_divisor)
-
 
         if self._flags:
             self._csv_logger = setup_csv_logging(
@@ -65,11 +63,16 @@ class AlibabaLoader(BaseWorkloadLoader):
                 log_dir=self._flags.log_dir,
                 log_file=self._flags.csv_file_name,
             )
+
+            self._task_cpu_divisor = int(self._flags.alibaba_loader_task_cpu_divisor)
+            self._task_duration_multipler = int(self._flags.alibaba_task_duration_multiplier)
         else:
             self._csv_logger = setup_csv_logging(
                 name=self.__class__.__name__, log_file=None
             )
             self._log_dir = os.getcwd()
+            self._task_cpu_divisor = 25
+            self._task_duration_multipler = 1
 
     def _construct_release_times(self):
         """Construct the release times of the jobs in the workload.
@@ -190,11 +193,11 @@ class AlibabaLoader(BaseWorkloadLoader):
                     # would end up using 1 slot, which is not very interesting and 
                     # makes no chance for DAG_Sched to do effective packing that 
                     # would beat EDF by a significant margin.
-                    Resource(name="Slot", _id="any"): int(math.ceil(task.cpu / 25)),
+                    Resource(name="Slot", _id="any"): int(math.ceil(task.cpu / self._task_cpu_divisor)),
                 }
             )
             job_name = task.name.split("_")[0]
-            job_runtime = EventTime(int(math.ceil(task.duration)), EventTime.Unit.US)
+            job_runtime = EventTime(int(math.ceil(task.duration * self._task_duration_multipler)), EventTime.Unit.US)
             task_name_to_simulator_job_mapping[job_name] = Job(
                 name=job_name,
                 profile=WorkProfile(
