@@ -491,11 +491,11 @@ ParseResultPtr ChooseExpression::parse(
   // if this expression was satisfied.
   VariablePtr isSatisfiedVar = std::make_shared<Variable>(
       VariableType::VAR_INDICATOR,
-      name + "_placed_at_" + std::to_string(startTime));
+      name + "_placed_at_" + std::to_string(startTime) + "_for_" + id);
   solverModel->addVariable(isSatisfiedVar);
 
   ConstraintPtr fulfillsDemandConstraint = std::make_shared<Constraint>(
-      name + "_fulfills_demand_at_" + std::to_string(startTime),
+      name + "_fulfills_demand_at_" + std::to_string(startTime) + "_for_" + id,
       ConstraintType::CONSTR_EQ, 0);
   for (PartitionPtr& partition : schedulablePartitions.getPartitions()) {
     // For each partition, generate an integer that represents how many
@@ -696,7 +696,7 @@ ParseResultPtr WindowedChooseExpression::parse(
     // of results.
     VariablePtr placedAtChooseTime = std::make_shared<Variable>(
         VariableType::VAR_INDICATOR,
-        name + "_placed_at_" + std::to_string(chooseTime));
+        name + "_placed_at_" + std::to_string(chooseTime) + "_for_" + id);
     solverModel->addVariable(placedAtChooseTime);
     placementTimeVariables[chooseTime] = placedAtChooseTime;
 
@@ -704,7 +704,8 @@ ParseResultPtr WindowedChooseExpression::parse(
     std::vector<std::pair<uint32_t, VariablePtr>> allocationVariables;
 
     ConstraintPtr fulfillsDemandConstraint = std::make_shared<Constraint>(
-        name + "_fulfills_demand_at_" + std::to_string(chooseTime),
+        name + "_fulfills_demand_at_" + std::to_string(chooseTime) + "_for_" +
+            id,
         ConstraintType::CONSTR_EQ, 0);
     for (PartitionPtr& partition : schedulablePartitions.getPartitions()) {
       // For each partition, we generate an integer that represents how many

@@ -108,7 +108,7 @@ class Partitions(object):
             return self._worker_index_to_partition_map[partition_id]
         return None
 
-    def __getitem__(self, resource: Resource) -> Optional[tetrisched.Partition]:
+    def __getitem__(self, resource: Resource) -> Optional[tetrisched.Partitions]:
         # If the Resource exists, retun the Partitions else return None.
         if resource.name in self._resource_name_to_partitions_map:
             return self._resource_name_to_partitions_map[resource.name]
@@ -327,7 +327,7 @@ class TetriSchedScheduler(BaseScheduler):
             self._logger.debug(
                 f"[{sim_time.time}] The plan ahead for this scheduler invocation was "
                 f"{plan_ahead_this_cycle}, and the resulting discretizations were: "
-                f"{placement_reward_discretizations}."
+                f"{[str(t) for t in placement_reward_discretizations]}."
             )
 
             # If the goal of the scheduler is to minimize the placement delay, we
@@ -514,6 +514,25 @@ class TetriSchedScheduler(BaseScheduler):
                         )
                         raise e
                     partition = partitions.get_partition_for_partition_id(partitionId)
+
+                    # Find the strategy that fits this Worker.
+                    placement_execution_strategy_for_this_task = None
+                    for execution_strategy in task.available_execution_strategies:
+                        if partition.associatedWorker.can_accomodate_strategy(
+                            execution_strategy
+                        ):
+                            placement_execution_strategy_for_this_task = (
+                                execution_strategy
+                            )
+                            break
+
+                    if placement_execution_strategy_for_this_task is None:
+                        raise RuntimeError(
+                            f"[{sim_time.time}] Could not find a valid placement "
+                            f"execution strategy for Task {task.unique_name} on "
+                            f"Partition {partition.id}."
+                        )
+
                     task_placement = Placement.create_task_placement(
                         task=task,
                         placement_time=EventTime(
@@ -521,7 +540,7 @@ class TetriSchedScheduler(BaseScheduler):
                         ),
                         worker_id=partition.associatedWorker.id,
                         worker_pool_id=partition.associatedWorkerPool.id,
-                        execution_strategy=task.available_execution_strategies[0],
+                        execution_strategy=placement_execution_strategy_for_this_task,
                     )
                     placements.append(task_placement)
                     self._logger.debug(
@@ -757,6 +776,10 @@ class TetriSchedScheduler(BaseScheduler):
         # for the task that makes it available for scheduling.
         task_execution_strategy_strls = []
         for execution_strategy in task.available_execution_strategies:
+            self._logger.debug(
+                f"[{current_time.time}] Considering strategy {execution_strategy} for "
+                f"STRL generation for task {task.unique_name}."
+            )
             # Find the partitions where this execution strategy is valid.
             if len(execution_strategy.resources) > 1:
                 raise NotImplementedError(
@@ -868,15 +891,21 @@ class TetriSchedScheduler(BaseScheduler):
             else:
                 # We need to use a WindowedChoose here instead of generating Choose
                 # expressions ourselves.
+                start_time_discretization = (
+                    time_discretizations[1][0].to(EventTime.Unit.US)
+                    if time_discretizations[0][0].to(EventTime.Unit.US) > current_time
+                    else time_discretizations[0][0].to(EventTime.Unit.US)
+                )
+                end_time_discretization = time_discretizations[-1][0].to(
+                    EventTime.Unit.US
+                )
                 task_windowed_choose = tetrisched.strl.WindowedChooseExpression(
                     task.unique_name,
                     partitions_for_this_execution_strategy,
                     quantity,
-                    time_discretizations[1][0].to(EventTime.Unit.US).time
-                    if time_discretizations[0][0] > current_time
-                    else time_discretizations[0][0].to(EventTime.Unit.US).time,
+                    start_time_discretization.time,
                     execution_strategy.runtime.to(EventTime.Unit.US).time,
-                    time_discretizations[-1][0].to(EventTime.Unit.US).time,
+                    end_time_discretization.time,
                     self._time_discretization.to(EventTime.Unit.US).time,
                     1,
                 )
@@ -884,7 +913,7 @@ class TetriSchedScheduler(BaseScheduler):
                     f"[{current_time.time}] Generated a WindowedChooseExpression for "
                     f"{task.unique_name} with deadline {task.deadline} and execution "
                     f"strategy {execution_strategy} for times between "
-                    f"{time_discretizations[1][0]} and {time_discretizations[-1][0]} "
+                    f"{start_time_discretization} and {end_time_discretization} "
                     f"for {quantity} slots for duration {execution_strategy.runtime}."
                 )
                 task_execution_strategy_strls.append(task_windowed_choose)

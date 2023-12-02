@@ -399,14 +399,14 @@ def test_two_tasks_with_multiple_strategies_correctly_scheduled():
                 strategies=[
                     ExecutionStrategy(
                         resources=Resources(
-                            resource_vector={Resource(name="Slot_1"): 1}
+                            resource_vector={Resource(name="Slot_1", _id="any"): 1}
                         ),
                         batch_size=1,
                         runtime=EventTime(10, EventTime.Unit.US),
                     ),
                     ExecutionStrategy(
                         resources=Resources(
-                            resource_vector={Resource(name="Slot_2"): 1}
+                            resource_vector={Resource(name="Slot_2", _id="any"): 1}
                         ),
                         batch_size=1,
                         runtime=EventTime(20, EventTime.Unit.US),
@@ -424,14 +424,14 @@ def test_two_tasks_with_multiple_strategies_correctly_scheduled():
                 strategies=[
                     ExecutionStrategy(
                         resources=Resources(
-                            resource_vector={Resource(name="Slot_1"): 1}
+                            resource_vector={Resource(name="Slot_1", _id="any"): 1}
                         ),
                         batch_size=1,
                         runtime=EventTime(15, EventTime.Unit.US),
                     ),
                     ExecutionStrategy(
                         resources=Resources(
-                            resource_vector={Resource(name="Slot_2"): 1}
+                            resource_vector={Resource(name="Slot_2", _id="any"): 1}
                         ),
                         batch_size=1,
                         runtime=EventTime(20, EventTime.Unit.US),
@@ -469,9 +469,17 @@ def test_two_tasks_with_multiple_strategies_correctly_scheduled():
     placements = scheduler.schedule(
         sim_time=EventTime.zero(), workload=workload, worker_pools=worker_pools
     )
+
+    # Ensure that both tasks are placed.
     task_1_placement = placements.get_placements(task_1)[0]
     task_2_placement = placements.get_placements(task_2)[0]
-    assert not task_1_placement.is_placed(), "Task 1 was not placed."
+    assert task_1_placement.is_placed(), "Task 1 was not placed."
+    assert task_2_placement.is_placed(), "Task 2 was not placed."
+
+    # Ensure that both tasks are placed on different workers.
+    assert (
+        task_1_placement.worker_id != task_2_placement.worker_id
+    ), "Task 1 and Task 2 were not scheduled on different workers."
 
 
 def test_two_tasks_dependency_correctly_scheduled():
