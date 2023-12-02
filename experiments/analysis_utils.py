@@ -97,6 +97,7 @@ def extract_experiments_result(base_dir: str) -> pd.DataFrame:
             actual_arrival_rate, actual_cv2 = calculate_arrival_rate_and_cv2(release_times)
             row["actual_arrival_rate"] = actual_arrival_rate
             row["actual_cv2"] = actual_cv2
+            row["num_invocation"] = len(release_times)
             
             rows.append(row)
         except FileNotFoundError:
@@ -116,7 +117,7 @@ def plot_slo_attainments(data: pd.DataFrame):
     arrival_rate_values = sorted(data["arrival_rate"].unique())
     scheduler_values = ["TetriSched_time_dis_20", "TetriSched_time_dis_20_DAG_aware", "TetriSched_time_dis_10", 
                         "TetriSched_time_dis_10_DAG_aware", "TetriSched_time_dis_1",  "TetriSched_time_dis_1_DAG_aware", "EDF"]
-
+    num_invocation = data["num_invocation"].unique()[0]
     # Number of schedulers
     n_schedulers = len(scheduler_values)
 
@@ -164,6 +165,7 @@ def plot_slo_attainments(data: pd.DataFrame):
             
             # This is "task graph" arrival rate and cv2
             ax.set_title(f"Input Arrival Rate: {arrival_rate}, CV2: {cv2} | Actual Arrival Rate: {subset['actual_arrival_rate'].mean():.2f}, CV2: {subset['actual_cv2'].mean():.2f}")
+            # ax.set_title(f"Actual Arrival Rate: {subset['actual_arrival_rate'].mean():.2f}, CV2: {subset['actual_cv2'].mean():.2f}")
             
             ax.set_xlabel('Max Deadline Variance')
             ax.set_ylabel('SLO Attainment')
@@ -175,7 +177,7 @@ def plot_slo_attainments(data: pd.DataFrame):
     handles, labels = ax.get_legend_handles_labels()
     fig.legend(handles, labels, loc='upper center', bbox_to_anchor=(0.5, 0.95), ncol=len(labels))
 
-    plt.suptitle('SLO Attainment Comparison (min_deadline_var=10, num_invocation=200) 12_1_2023', size=16)
+    plt.suptitle(f'SLO Attainment Comparison (min_deadline_var=10, num_invocation={num_invocation})', size=16)
 
     # Show the plot
     plt.show()
