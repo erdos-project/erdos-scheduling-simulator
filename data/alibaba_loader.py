@@ -56,6 +56,7 @@ class AlibabaLoader(BaseWorkloadLoader):
             else EventTime(sys.maxsize, EventTime.Unit.US)
         )
         self._workload = Workload.empty(flags)
+        self._task_cpu_divisor = int(self._flags.alibaba_loader_task_cpu_divisor)
 
 
         if self._flags:

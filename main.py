@@ -43,6 +43,12 @@ Task = namedtuple(
 )
 
 # Define the flags.
+flags.DEFINE_integer(
+    "alibaba_loader_task_cpu_divisor",
+    25,
+    "The divisor used when converting alibaba trace tasks task.cpu to slot. The lower "
+    "the number, the higher the slots."
+)
 flags.DEFINE_enum(
     "execution_mode",
     "replay",
