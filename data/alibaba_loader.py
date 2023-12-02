@@ -44,6 +44,12 @@ class AlibabaLoader(BaseWorkloadLoader):
     ):
         self._path = path
         self._flags = flags
+        self._logger = setup_logging(
+            name=self.__class__.__name__,
+            log_dir=flags.log_dir,
+            log_file=flags.log_file_level,
+            log_level=flags.log_level,
+        )
         self._job_data_generator = self._initialize_job_data_generator()
         self._job_graphs: Mapping[str, JobGraph] = {}
         self._rng_seed = flags.random_seed
@@ -167,8 +173,10 @@ class AlibabaLoader(BaseWorkloadLoader):
                                 job_graph_name, job_tasks
                             )
                         except Exception as e:
-                            print(f"Error converting {job_graph_name}: {e}")
-                            pass
+                            self._logger.warning(
+                                f"Failed to convert job graph {job_graph_name} "
+                                f"with error {e}."
+                            )
                 yield
 
         return job_data_generator()
@@ -190,14 +198,19 @@ class AlibabaLoader(BaseWorkloadLoader):
                     # Note: We divide the CPU by 25 instead of 100 because this
                     # would intorduce more variance into the resource/slots usage.
                     # We used to divide by 100, but the majority of the tasks
-                    # would end up using 1 slot, which is not very interesting and 
-                    # makes no chance for DAG_Sched to do effective packing that 
+                    # would end up using 1 slot, which is not very interesting and
+                    # makes no chance for DAG_Sched to do effective packing that
                     # would beat EDF by a significant margin.
-                    Resource(name="Slot", _id="any"): int(math.ceil(task.cpu / self._task_cpu_divisor)),
+                    Resource(name="Slot", _id="any"): int(
+                        math.ceil(task.cpu / self._task_cpu_divisor)
+                    ),
                 }
             )
             job_name = task.name.split("_")[0]
-            job_runtime = EventTime(int(math.ceil(task.duration * self._task_duration_multipler)), EventTime.Unit.US)
+            job_runtime = EventTime(
+                int(math.ceil(task.duration * self._task_duration_multipler)),
+                EventTime.Unit.US,
+            )
             task_name_to_simulator_job_mapping[job_name] = Job(
                 name=job_name,
                 profile=WorkProfile(
@@ -304,6 +317,8 @@ class AlibabaLoader(BaseWorkloadLoader):
                 )
                 if task_graph is not None:
                     self._workload.add_task_graph(task_graph)
-                    self._csv_logger.info(f"{current_time.time},TASK_GRAPH_RELEASE,{task_graph.release_time.time},{task_graph.deadline.time},{task_graph.name},{len(task_graph.get_nodes())}")
+                    self._csv_logger.info(
+                        f"{current_time.time},TASK_GRAPH_RELEASE,{task_graph.release_time.time},{task_graph.deadline.time},{task_graph.name},{len(task_graph.get_nodes())}"
+                    )
                     task_release_index += 1
             return self._workload

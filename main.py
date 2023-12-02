@@ -442,7 +442,7 @@ def main(args):
                 profile_path=FLAGS.profile_path,
                 _flags=FLAGS,
             )
-            workload = Workload.from_task_graphs(
+            workload = Workload.from_task_graphs(  # noqa: F841
                 {"pylot_dataflow": task_loader.get_task_graph()},
                 _flags=FLAGS,
             )
