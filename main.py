@@ -153,6 +153,11 @@ flags.DEFINE_float(
     1,
     "The multiplier used for alibaba trace tasks task.duration."
 )
+flags.DEFINE_bool(
+    "alibaba_enable_heterogeneous_resource_type",
+    False,
+    "If true, we use heterogeneous resource types with %difference in runtime."
+)
 flags.DEFINE_integer(
     "max_timestamp",
     None,
@@ -461,6 +466,7 @@ def main(args):
                     FLAGS.workload_update_interval, EventTime.Unit.US
                 ),
                 flags=FLAGS,
+                heterogeneous=FLAGS.alibaba_enable_heterogeneous_resource_type,
             )
         else:
             raise NotImplementedError(

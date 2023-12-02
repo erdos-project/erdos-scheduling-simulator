@@ -41,6 +41,7 @@ class AlibabaLoader(BaseWorkloadLoader):
         path: str,
         workload_interval: EventTime,
         flags: "absl.flags",
+        heterogeneous: bool = False,
     ):
         self._path = path
         self._flags = flags
@@ -62,6 +63,7 @@ class AlibabaLoader(BaseWorkloadLoader):
             else EventTime(sys.maxsize, EventTime.Unit.US)
         )
         self._workload = Workload.empty(flags)
+        self._heterogeneous = heterogeneous
 
         if self._flags:
             self._csv_logger = setup_csv_logging(
@@ -193,37 +195,62 @@ class AlibabaLoader(BaseWorkloadLoader):
         # Create the individual Job instances corresponding to each Task.
         task_name_to_simulator_job_mapping = {}
         for task in job_tasks:
-            job_resources = Resources(
+            job_resources_1 = Resources(
                 resource_vector={
-                    # Note: We divide the CPU by 25 instead of 100 because this
-                    # would intorduce more variance into the resource/slots usage.
+                    # Note: We divide the CPU by some self._task_cpu_divisor instead 
+                    # of 100 because this would intorduce more variance into the 
+                    # resource/slots usage.
                     # We used to divide by 100, but the majority of the tasks
                     # would end up using 1 slot, which is not very interesting and
                     # makes no chance for DAG_Sched to do effective packing that
                     # would beat EDF by a significant margin.
-                    Resource(name="Slot", _id="any"): int(
+                    Resource(name="Slot_1", _id="any"): int(
                         math.ceil(task.cpu / self._task_cpu_divisor)
                     ),
                 }
             )
+
+            job_resources_2 = Resources(
+                resource_vector={
+                    Resource(name="Slot_2", _id="any"): int(
+                        math.ceil(task.cpu / self._task_cpu_divisor)
+                    ),
+                }
+            )
+
             job_name = task.name.split("_")[0]
-            job_runtime = EventTime(
+            job_runtime_1 = EventTime(
                 int(math.ceil(task.duration * self._task_duration_multipler)),
                 EventTime.Unit.US,
             )
+            # This is used when self._heterogeneous is True
+            # to support another execution strategy where it runs faster.
+            job_runtime_2 = EventTime(
+                int(math.ceil(task.duration * self._task_duration_multipler * 0.8)),
+                EventTime.Unit.US,
+            )
+
+            execution_strategies = [
+                ExecutionStrategy(
+                    resources=job_resources_1,
+                    batch_size=1,
+                    runtime=job_runtime_1,
+                ),
+            ]
+            if self._heterogeneous:
+                execution_strategies.append(
+                    ExecutionStrategy(
+                        resources=job_resources_2,
+                        batch_size=1,
+                        runtime=job_runtime_2,
+                    ),
+                )
+
             task_name_to_simulator_job_mapping[job_name] = Job(
                 name=job_name,
                 profile=WorkProfile(
                     name="SlotPolicyFor{}".format(job_name),
-                    execution_strategies=ExecutionStrategies(
-                        [
-                            ExecutionStrategy(
-                                resources=job_resources,
-                                batch_size=1,
-                                runtime=job_runtime,
-                            )
-                        ]
-                    ),
+                    execution_strategies=ExecutionStrategies(execution_strategies),
                 ),
             )
 
