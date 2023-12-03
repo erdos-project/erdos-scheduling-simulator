@@ -1,5 +1,6 @@
-import os
+import os, sys
 from matplotlib import pyplot as plt
+from matplotlib.patches import Patch
 import numpy as np
 import pandas as pd
 import shutil
@@ -168,8 +169,8 @@ def plot_slo_attainments(data: pd.DataFrame):
             ax.set_xticklabels(deadline_vars)
             
             # This is "task graph" arrival rate and cv2
-            # ax.set_title(f"Input Arrival Rate: {arrival_rate}, CV2: {cv2} | Actual Arrival Rate: {subset['actual_arrival_rate'].mean():.2f}, CV2: {subset['actual_cv2'].mean():.2f}")
-            ax.set_title(f"Actual Arrival Rate: {subset['actual_arrival_rate'].mean():.2f}, CV2: {subset['actual_cv2'].mean():.2f}")
+            ax.set_title(f"Input Arrival Rate: {arrival_rate}, CV2: {cv2} | Actual Arrival Rate: {subset['actual_arrival_rate'].mean():.2f}, CV2: {subset['actual_cv2'].mean():.2f}")
+            # ax.set_title(f"Actual Arrival Rate: {subset['actual_arrival_rate'].mean():.2f}, CV2: {subset['actual_cv2'].mean():.2f}")
             
             ax.set_xlabel('Max Deadline Variance')
             ax.set_ylabel('SLO Attainment')
@@ -184,4 +185,159 @@ def plot_slo_attainments(data: pd.DataFrame):
     plt.suptitle(f'SLO Attainment Comparison (min_deadline_var=10, num_invocation={num_invocation})', size=16)
 
     # Show the plot
+    plt.show()
+
+
+
+sys.path.append("..")
+from data.csv_reader import CSVReader
+
+def smooth_data(y, window_size):
+    """Applies a moving average filter to smooth the data."""
+    window = np.ones(window_size) / window_size
+    return np.convolve(y, window, mode='same')
+
+def analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var(
+    csv_reader, 
+    df, 
+    arrival_rate, 
+    cv2, 
+    max_deadline_var,
+    figure_size=(20, 20), 
+    axes_fontsize=16,
+    smoothing_window_size=10,  # Size of the moving average window
+    ):
+    # Filter the DataFrame
+    filtered_df = df[(df["arrival_rate"] == arrival_rate) & (df["cv2"] == cv2) & (df["max_deadline_variance"] == max_deadline_var)]
+    num_schedulers = filtered_df["scheduler"].nunique()
+
+    # Create subplots
+    fig, axes = plt.subplots(num_schedulers, 1, figsize=figure_size, sharex=True)
+    resource_color = {"GPU": "red", "CPU": "green", "Slot": "blue"}
+
+    # Iterate over each scheduler
+    for i, (index, row) in enumerate(filtered_df.iterrows()):
+        ax = axes[i] if num_schedulers > 1 else axes
+
+        # Worker Pool statistics
+        worker_pool_stats = csv_reader.get_worker_pool_utilizations(row["csv_file_path"])
+
+        # Find all the resource types in the system.
+        resource_types = set()
+        for wp_stats in worker_pool_stats:
+            for resource in wp_stats.resource_utilizations.keys():
+                resource_types.add(resource)
+
+        # Calculate the heights of utilization for each resource, after
+        # normalization.
+        resource_used_heights = {
+            resource: [
+                stat.resource_utilizations[resource][0]
+                / sum(stat.resource_utilizations[resource])
+                for stat in worker_pool_stats
+            ]
+            for resource in resource_types
+        }
+        sim_times_sec = [stat.simulator_time / 1000000 for stat in worker_pool_stats]
+
+        # Plotting for this scheduler
+        for resource_type in resource_types:
+            smoothed_utilization = smooth_data(resource_used_heights[resource_type], smoothing_window_size)
+            ax.plot(
+                sim_times_sec,
+                smoothed_utilization,
+                color=resource_color[resource_type],
+                label=f"{resource_type}" if i == 0 else ""
+            )
+
+        # Formatting the subplot
+        ax.set_ylabel("Utilization", fontsize=axes_fontsize)
+        ax.set_ylim(0, 1.01)
+        ax.set_title(f"{row['scheduler']}")
+
+    # Common X-axis label
+    plt.xlabel("Timeline [s]", fontsize=axes_fontsize)
+
+    # Creating a common legend
+    legend_elements = [Patch(facecolor=resource_color[rt], label=rt) for rt in resource_types]
+    fig.legend(handles=legend_elements, loc='upper right', fontsize='small')
+
+    # Adjust layout to prevent overlap
+    plt.tight_layout()
+    fig.subplots_adjust(top=0.93)
+    plt.suptitle(f"Resource Utilization for {arrival_rate=}, {cv2=},  max deadline variance={max_deadline_var}. Num invocations=400")
+
+    # Display the plot
+    plt.show()
+
+def analyze_resource_utilization_by_release_policy_and_max_deadline_var(
+    csv_reader, 
+    df, 
+    release_policy, 
+    max_deadline_variance, 
+    figure_size=(20, 20), 
+    axes_fontsize=16,
+    smoothing_window_size=10  # Size of the moving average window
+):
+    # Filter the DataFrame
+    filtered_df = df[(df["release_policy"] == release_policy) & (df["max_deadline_variance"] == max_deadline_variance)]
+    num_schedulers = filtered_df["scheduler"].nunique()
+
+    # Create subplots
+    fig, axes = plt.subplots(num_schedulers, 1, figsize=figure_size, sharex=True)
+    resource_color = {"GPU": "red", "CPU": "green", "Slot": "blue"}
+
+    # Iterate over each scheduler
+    for i, (index, row) in enumerate(filtered_df.iterrows()):
+        ax = axes[i] if num_schedulers > 1 else axes
+
+        # Worker Pool statistics
+        worker_pool_stats = csv_reader.get_worker_pool_utilizations(row["csv_file_path"])
+
+        # Find all the resource types in the system.
+        resource_types = set()
+        for wp_stats in worker_pool_stats:
+            for resource in wp_stats.resource_utilizations.keys():
+                resource_types.add(resource)
+
+        # Calculate the heights of utilization for each resource, after
+        # normalization.
+        resource_used_heights = {
+            resource: [
+                stat.resource_utilizations[resource][0]
+                / sum(stat.resource_utilizations[resource])
+                for stat in worker_pool_stats
+            ]
+            for resource in resource_types
+        }
+        sim_times_sec = [stat.simulator_time / 1000000 for stat in worker_pool_stats]
+
+        # Plotting for this scheduler
+        for resource_type in resource_types:
+            smoothed_utilization = smooth_data(resource_used_heights[resource_type], smoothing_window_size)
+            ax.plot(
+                sim_times_sec,
+                smoothed_utilization,
+                color=resource_color[resource_type],
+                label=f"{resource_type}" if i == 0 else ""
+            )
+
+        # Formatting the subplot
+        ax.set_ylabel("Utilization", fontsize=axes_fontsize)
+        ax.set_ylim(0, 1.01)
+        ax.set_title(f"{row['scheduler']}")
+
+    # Common X-axis label
+    plt.xlabel("Timeline [s]", fontsize=axes_fontsize)
+
+    # Creating a common legend
+    legend_elements = [Patch(facecolor=resource_color[rt], label=rt) for rt in resource_types]
+    fig.legend(handles=legend_elements, loc='upper right', fontsize='small')
+
+    # Adjust layout to prevent overlap
+    plt.tight_layout()
+    fig.subplots_adjust(top=0.93)
+    plt.suptitle(f"Resource Utilization for {release_policy} policy with max deadline variance={max_deadline_variance}. Num invocations=400")
+
+    # Display the plot
     plt.show()
