@@ -484,7 +484,6 @@ class TetriSchedScheduler(BaseScheduler):
 
                 # Retrieve the Placements for each task.
                 for task in tasks_to_be_scheduled:
-                    print(f"Working on {task.unique_name}")
                     task_placement = solverSolution.getPlacement(task.unique_name)
                     if task_placement is None or not task_placement.isPlaced():
                         self._logger.error(
@@ -511,8 +510,22 @@ class TetriSchedScheduler(BaseScheduler):
                     # Find the strategy that fits this Worker.
                     placement_execution_strategy_for_this_task = None
                     for execution_strategy in task.available_execution_strategies:
-                        if partition.associatedWorker.can_accomodate_strategy(
-                            execution_strategy
+                        if len(execution_strategy.resources) > 1:
+                            raise NotImplementedError(
+                                f"TetrischedScheduler does not support multiple "
+                                f"resources per execution strategy. The execution "
+                                f"strategy {execution_strategy} for "
+                                f"{task.unique_name} requires "
+                                f"{len(execution_strategy.resources)} resources."
+                            )
+                        resource, quantity = next(
+                            iter(execution_strategy.resources.resources)
+                        )
+                        if (
+                            partition.associatedWorker.resources.get_total_quantity(
+                                resource
+                            )
+                            > quantity
                         ):
                             placement_execution_strategy_for_this_task = (
                                 execution_strategy
