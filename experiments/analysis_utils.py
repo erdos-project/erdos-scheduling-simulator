@@ -206,6 +206,7 @@ def analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var(
     figure_size=(20, 20), 
     axes_fontsize=16,
     smoothing_window_size=10,  # Size of the moving average window
+    use_heterogeneous=False,
     ):
     # Filter the DataFrame
     filtered_df = df[(df["arrival_rate"] == arrival_rate) & (df["cv2"] == cv2) & (df["max_deadline_variance"] == max_deadline_var)]
@@ -214,6 +215,10 @@ def analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var(
     # Create subplots
     fig, axes = plt.subplots(num_schedulers, 1, figsize=figure_size, sharex=True)
     resource_color = {"GPU": "red", "CPU": "green", "Slot": "blue"}
+    if use_heterogeneous:
+        del resource_color["Slot"]
+        resource_color["Slot_1"] = "blue"
+        resource_color["Slot_2"] = "orange"
 
     # Iterate over each scheduler
     for i, (index, row) in enumerate(filtered_df.iterrows()):
@@ -277,7 +282,8 @@ def analyze_resource_utilization_by_release_policy_and_max_deadline_var(
     max_deadline_variance, 
     figure_size=(20, 20), 
     axes_fontsize=16,
-    smoothing_window_size=10  # Size of the moving average window
+    smoothing_window_size=10,  # Size of the moving average window
+    use_heterogeneous=False,
 ):
     # Filter the DataFrame
     filtered_df = df[(df["release_policy"] == release_policy) & (df["max_deadline_variance"] == max_deadline_variance)]
@@ -286,6 +292,10 @@ def analyze_resource_utilization_by_release_policy_and_max_deadline_var(
     # Create subplots
     fig, axes = plt.subplots(num_schedulers, 1, figsize=figure_size, sharex=True)
     resource_color = {"GPU": "red", "CPU": "green", "Slot": "blue"}
+    if use_heterogeneous:
+        del resource_color["Slot"]
+        resource_color["Slot_1"] = "blue"
+        resource_color["Slot_2"] = "orange"
 
     # Iterate over each scheduler
     for i, (index, row) in enumerate(filtered_df.iterrows()):
@@ -341,3 +351,24 @@ def analyze_resource_utilization_by_release_policy_and_max_deadline_var(
 
     # Display the plot
     plt.show()
+
+
+def plot_resource_utilization(base_dir: str):
+    # This function wraps analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var
+    csv_file_paths = find_all_file_paths(base_dir)
+    csv_reader = CSVReader(csv_file_paths)
+
+    df = extract_experiments_result(base_dir)
+    df = df.sort_values(by=["arrival_rate", "cv2", "scheduler_time_discretization", "scheduler", "DAG_aware", "max_deadline_variance"])
+    for cv2 in df["cv2"].unique():
+        for arrival_rate in df["arrival_rate"].unique():
+            for max_deadline_variance in df["max_deadline_variance"].unique():
+                analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var(
+                    csv_reader,
+                    df,
+                    arrival_rate,
+                    cv2,
+                    max_deadline_variance,
+                    figure_size=(14, 10),
+                    use_heterogeneous=True
+                )
