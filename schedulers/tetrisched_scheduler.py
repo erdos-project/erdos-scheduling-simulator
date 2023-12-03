@@ -70,7 +70,7 @@ class TetriSchedScheduler(BaseScheduler):
         adaptive_discretization: bool = False,
         max_time_discretization: EventTime = EventTime(5, EventTime.Unit.US),
         dynamic_discretization: bool = False,
-        max_occupancy_threshold: int = 50,
+        max_occupancy_threshold: float = 0.8,
     ):
         if preemptive:
             raise ValueError("TetrischedScheduler does not support preemption.")

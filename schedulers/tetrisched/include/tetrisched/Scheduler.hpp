@@ -27,7 +27,7 @@ class Scheduler {
  public:
   /// Initialize the scheduler with a solver backend.
    Scheduler(Time discretization, SolverBackendType solverBackend,
-             std::string logDir = "./", bool enableDynamicDiscretization = false, Time maxDiscretization = 5, uint32_t maxOccupancyThreshold = 50);
+             std::string logDir = "./", bool enableDynamicDiscretization = false, Time maxDiscretization = 5, float maxOccupancyThreshold = 0.8);
 
    /// Registers the STRL expression for the scheduler to schedule from
    /// and parses it to populate the SolverModel.

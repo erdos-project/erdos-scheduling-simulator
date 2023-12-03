@@ -254,11 +254,11 @@ flags.DEFINE_integer(
     "The maximum discretization that the scheduler can have (in µs). "
     "Only used when scheduler_adaptive_discretization flag is enabled. (default: 5)",
 )
-flags.DEFINE_integer(
+flags.DEFINE_float(
     "scheduler_max_occupancy_threshold",
-    50,
-    "The maximum occupancy threshold beyond which the discretization would always be 1 incase of dynamic discretization. "
-    "This flag is only used when dynamic discretization is enabled (default: 50)",
+    0.8,
+    "The percentage b/w 0 and 1 of maximum occupancy beyond which the discretization would always be 1 incase of dynamic discretization. "
+    "This flag is only used when dynamic discretization is enabled (default: 0.8)",
 )
 flags.DEFINE_integer(
     "scheduler_delay",
