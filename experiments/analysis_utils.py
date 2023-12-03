@@ -169,7 +169,7 @@ def plot_slo_attainments(data: pd.DataFrame):
             ax.set_xticklabels(deadline_vars)
             
             # This is "task graph" arrival rate and cv2
-            ax.set_title(f"Input Arrival Rate: {arrival_rate}, CV2: {cv2} | Actual Arrival Rate: {subset['actual_arrival_rate'].mean():.2f}, CV2: {subset['actual_cv2'].mean():.2f}")
+            ax.set_title(f"Input Arrival Rate: {arrival_rate}, CV2: {cv2} | Actual Arrival Rate: {subset['actual_arrival_rate'].mean():.3f}, CV2: {subset['actual_cv2'].mean():.3f}")
             # ax.set_title(f"Actual Arrival Rate: {subset['actual_arrival_rate'].mean():.2f}, CV2: {subset['actual_cv2'].mean():.2f}")
             
             ax.set_xlabel('Max Deadline Variance')
