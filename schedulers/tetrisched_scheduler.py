@@ -207,12 +207,7 @@ class TetriSchedScheduler(BaseScheduler):
         )
 
         # Values for STRL generation.
-        if _flags.alibaba_enable_heterogeneous_resource_type:
-            # TODO: Seems like there's some modelling issue, which is why
-            # we're seeing TASK_NOT_READY events in the CSV.
-            self._use_windowed_choose = False
-        else:
-            self._use_windowed_choose = True
+        self._use_windowed_choose = False
         self._adaptive_discretization = adaptive_discretization
         self._max_discretization = max_time_discretization.to(EventTime.Unit.US)
         if (
