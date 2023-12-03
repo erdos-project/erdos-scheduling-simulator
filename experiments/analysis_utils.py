@@ -208,6 +208,7 @@ def analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var(
     smoothing_window_size=10,  # Size of the moving average window
     use_heterogeneous=False,
     ):
+    num_invocation = df["num_invocation"].unique()[0]
     # Filter the DataFrame
     filtered_df = df[(df["arrival_rate"] == arrival_rate) & (df["cv2"] == cv2) & (df["max_deadline_variance"] == max_deadline_var)]
     num_schedulers = filtered_df["scheduler"].nunique()
@@ -270,7 +271,7 @@ def analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var(
     # Adjust layout to prevent overlap
     plt.tight_layout()
     fig.subplots_adjust(top=0.93)
-    plt.suptitle(f"Resource Utilization for {arrival_rate=}, {cv2=},  max deadline variance={max_deadline_var}. Num invocations=400")
+    plt.suptitle(f"Resource Utilization for {arrival_rate=}, {cv2=},  max deadline variance={max_deadline_var}. Num invocations={num_invocation}")
 
     # Display the plot
     plt.show()
