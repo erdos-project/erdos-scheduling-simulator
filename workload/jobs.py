@@ -563,7 +563,7 @@ class JobGraph(Graph[Job]):
             if completion_time or len(self) == 0
             else sum(
                 (
-                    job.execution_strategies.get_fastest_strategy().runtime
+                    job.execution_strategies.get_slowest_strategy().runtime
                     for job in self.get_longest_path()
                 ),
                 start=EventTime.zero(),
@@ -769,15 +769,15 @@ class JobGraph(Graph[Job]):
             task.update_deadline(task_graph_deadline)
 
         return task_graph
-
+    
     def __get_completion_time(self, start=EventTime.zero()) -> EventTime:
         return sum(
             (
                 job.slo
                 if job.slo != EventTime.invalid()
-                else job.execution_strategies.get_fastest_strategy().runtime
+                else job.execution_strategies.get_slowest_strategy().runtime
                 for job in self.get_longest_path(
-                    weights=lambda job: job.execution_strategies.get_fastest_strategy()
+                    weights=lambda job: job.execution_strategies.get_slowest_strategy()
                     .runtime.to(EventTime.Unit.US)
                     .time
                     if job.probability > sys.float_info.epsilon
