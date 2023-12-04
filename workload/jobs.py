@@ -285,29 +285,20 @@ class JobGraph(Graph[Job]):
                     )
                     releases.append(current_release)
             elif self._policy_type == JobGraph.ReleasePolicyType.GAMMA:
-                # inter_arrival_times = np.clip(
-                #     self._rng.gamma(
-                #         (1 / self._coefficient),
-                #         self._coefficient / self._arrival_rate,
-                #         size=self._fixed_invocation_nums - 1,
-                #     ),
-                #     a_min=2500,  # Maintain a minimum rate of 2500µs between releases.
-                #     a_max=None,
-                # )
                 inter_arrival_times = self._rng.gamma(
-                        (1 / self._coefficient),
-                        self._coefficient / self._arrival_rate,
-                        size=self._fixed_invocation_nums - 1,
-                    )
+                    (1 / self._coefficient),
+                    self._coefficient / self._arrival_rate,
+                    size=self._fixed_invocation_nums - 1,
+                )
                 current_release_time = self._start.time
-                releases.append(EventTime(
-                        round(current_release_time), EventTime.Unit.US
-                    ))
+                releases.append(
+                    EventTime(round(current_release_time), EventTime.Unit.US)
+                )
                 for inter_arrival_time in inter_arrival_times:
-                    current_release_time += inter_arrival_time 
-                    releases.append(EventTime(
-                        round(current_release_time), EventTime.Unit.US
-                    ))
+                    current_release_time += inter_arrival_time
+                    releases.append(
+                        EventTime(round(current_release_time), EventTime.Unit.US)
+                    )
             elif self._policy_type == JobGraph.ReleasePolicyType.CLOSED_LOOP:
                 # Release the first set of Tasks at the start time.
                 num_releases = (

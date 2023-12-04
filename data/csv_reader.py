@@ -60,7 +60,7 @@ class CSVReader(object):
                             start_time=int(reading[0]),
                         )
                     elif reading[1] == "UPDATE_WORKLOAD":
-                        simulator.total_tasks = int(reading[2])
+                        simulator.total_tasks += int(reading[2])
                     elif reading[1] == "SIMULATOR_END":
                         assert (
                             simulator is not None

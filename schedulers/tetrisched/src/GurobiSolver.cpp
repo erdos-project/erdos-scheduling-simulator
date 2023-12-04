@@ -1,6 +1,7 @@
 #include "tetrisched/GurobiSolver.hpp"
 
 #include <chrono>
+#include <cmath>
 #include <thread>
 #include <cmath>
 
@@ -241,16 +242,16 @@ SolverSolutionPtr GurobiSolver::solveModel() {
       break;
     case GRB_INFEASIBLE:
       solverSolution->solutionType = SolutionType::INFEASIBLE;
-      break;
+      return solverSolution;
     case GRB_INF_OR_UNBD:
     case GRB_UNBOUNDED:
       solverSolution->solutionType = SolutionType::UNBOUNDED;
-      break;
+      return solverSolution;
     default:
       solverSolution->solutionType = SolutionType::UNKNOWN;
       TETRISCHED_DEBUG("The Gurobi solver returned the value: "
                        << gurobiModel->get(GRB_IntAttr_Status));
-      break;
+      return solverSolution;
   }
   TETRISCHED_DEBUG("The Gurobi solver took "
                    << solverSolution->solverTimeMicroseconds << " microseconds "

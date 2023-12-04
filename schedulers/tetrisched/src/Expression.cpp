@@ -491,11 +491,11 @@ ParseResultPtr ChooseExpression::parse(
   // if this expression was satisfied.
   VariablePtr isSatisfiedVar = std::make_shared<Variable>(
       VariableType::VAR_INDICATOR,
-      name + "_placed_at_" + std::to_string(startTime));
+      name + "_placed_at_" + std::to_string(startTime) + "_for_" + id);
   solverModel->addVariable(isSatisfiedVar);
 
   ConstraintPtr fulfillsDemandConstraint = std::make_shared<Constraint>(
-      name + "_fulfills_demand_at_" + std::to_string(startTime),
+      name + "_fulfills_demand_at_" + std::to_string(startTime) + "_for_" + id,
       ConstraintType::CONSTR_EQ, 0);
   for (PartitionPtr& partition : schedulablePartitions.getPartitions()) {
     // For each partition, generate an integer that represents how many
@@ -696,7 +696,7 @@ ParseResultPtr WindowedChooseExpression::parse(
     // of results.
     VariablePtr placedAtChooseTime = std::make_shared<Variable>(
         VariableType::VAR_INDICATOR,
-        name + "_placed_at_" + std::to_string(chooseTime));
+        name + "_placed_at_" + std::to_string(chooseTime) + "_for_" + id);
     solverModel->addVariable(placedAtChooseTime);
     placementTimeVariables[chooseTime] = placedAtChooseTime;
 
@@ -704,7 +704,8 @@ ParseResultPtr WindowedChooseExpression::parse(
     std::vector<std::pair<uint32_t, VariablePtr>> allocationVariables;
 
     ConstraintPtr fulfillsDemandConstraint = std::make_shared<Constraint>(
-        name + "_fulfills_demand_at_" + std::to_string(chooseTime),
+        name + "_fulfills_demand_at_" + std::to_string(chooseTime) + "_for_" +
+            id,
         ConstraintType::CONSTR_EQ, 0);
     for (PartitionPtr& partition : schedulablePartitions.getPartitions()) {
       // For each partition, we generate an integer that represents how many
@@ -1888,9 +1889,13 @@ MaxExpression::MaxExpression(std::string name)
     : Expression(name, ExpressionType::EXPR_MAX) {}
 
 void MaxExpression::addChild(ExpressionPtr child) {
-  if (child->getType() != ExpressionType::EXPR_CHOOSE) {
+  if (child->getType() != ExpressionType::EXPR_CHOOSE &&
+      child->getType() != ExpressionType::EXPR_MALLEABLE_CHOOSE &&
+      child->getType() != ExpressionType::EXPR_WINDOWED_CHOOSE) {
     throw tetrisched::exceptions::ExpressionConstructionException(
-        "MaxExpression can only have ChooseExpression children.");
+        "MaxExpression can only have ChooseExpression children. Received "
+        "expression of type " +
+        child->getTypeString() + " instead.");
   }
   Expression::addChild(child);
 }
@@ -1969,16 +1974,20 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
 
     // Check that the MaxExpression's childrens were specified correctly.
     if (!childParsedResult->startTime ||
-        childParsedResult->startTime.value().isVariable()) {
+        (childParsedResult->startTime.value().isVariable() &&
+         children[i]->getType() != ExpressionType::EXPR_WINDOWED_CHOOSE)) {
       throw tetrisched::exceptions::ExpressionConstructionException(
           name + " child-" + std::to_string(i) + " (" + children[i]->getName() +
-          ") must have a non-variable start time.");
+          ") of type " + children[i]->getTypeString() +
+          " must have a non-variable start time.");
     }
     if (!childParsedResult->endTime ||
-        childParsedResult->endTime.value().isVariable()) {
+        (childParsedResult->endTime.value().isVariable() &&
+         children[i]->getType() != ExpressionType::EXPR_WINDOWED_CHOOSE)) {
       throw tetrisched::exceptions::ExpressionConstructionException(
           name + " child-" + std::to_string(i) + " (" + children[i]->getName() +
-          ") must have a non-variable end time.");
+          ") of type " + children[i]->getTypeString() +
+          " must have a non-variable end time.");
     }
     if (!childParsedResult->indicator) {
       throw tetrisched::exceptions::ExpressionConstructionException(
@@ -1991,36 +2000,75 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
           ") must have a utility.");
     }
 
-    auto childStartTime = childParsedResult->startTime.value().get<Time>();
-    auto childEndTime = childParsedResult->endTime.value().get<Time>();
+    // Retrieve the indicator for the child.
     auto childIndicator = childParsedResult->indicator.value();
-    auto childUtility = childParsedResult->utility.value();
 
     // Enforce that only one of the children is satisfied.
     maxChildSubexprConstraint->addTerm(childIndicator);
 
-    // Add the start time of the child to the MaxExpression's start time.
-    maxStartTimeConstraint->addTerm(childStartTime, childIndicator);
+    // Set the start time of the Max expression.
+    if (childParsedResult->startTime.value().isVariable()) {
+      // This variable comes from subexpressions that must already have their
+      // start times modulated by indicators. We can just merge them instead
+      // of using the child indicator again.
+      auto childStartTime = childParsedResult->startTime.value().get<VariablePtr>();
+      maxStartTimeConstraint->addTerm(childStartTime);
 
-    // Add the end time of the child to the MaxExpression's end time.
-    maxEndTimeConstraint->addTerm(childEndTime, childIndicator);
+      // The bounds are set by the child's bounds.
+      auto childBounds = children[i]->getTimeBounds().startTimeRange;
+      if (childBounds.first < startTimeBounds.first) {
+        startTimeBounds.first = childBounds.first;
+      }
+      if (childBounds.second > startTimeBounds.second) {
+        startTimeBounds.second = childBounds.second;
+      }
+    } else {
+      // Add the start time of the child to the MaxExpression's start time.
+      auto childStartTime = childParsedResult->startTime.value().get<Time>();
+      maxStartTimeConstraint->addTerm(childStartTime, childIndicator);
+
+      // Set the bounds of the start time of the MaxExpression.
+      if (childStartTime < startTimeBounds.first) {
+        startTimeBounds.first = childStartTime;
+      }
+      if (childStartTime > startTimeBounds.second) {
+        startTimeBounds.second = childStartTime;
+      }
+    }
+
+    // Set the end time of the Max expression.
+    if (childParsedResult->endTime.value().isVariable()) {
+      // This variable comes from subexpressions that must already have their
+      // end times modulated by indicators. We can just merge them instead
+      // of using the child indicator again.
+      auto childEndTime = childParsedResult->endTime.value().get<VariablePtr>();
+      maxEndTimeConstraint->addTerm(childEndTime);
+
+      // The bounds are set by the child's bounds.
+      auto childBounds = children[i]->getTimeBounds().endTimeRange;
+      if (childBounds.first < endTimeBounds.first) {
+        endTimeBounds.first = childBounds.first;
+      }
+      if (childBounds.second > endTimeBounds.second) {
+        endTimeBounds.second = childBounds.second;
+      }
+    } else {
+      // Add the end time of the child to the MaxExpression's end time.
+      auto childEndTime = childParsedResult->endTime.value().get<Time>();
+      maxEndTimeConstraint->addTerm(childEndTime, childIndicator);
+
+      // Set the bounds of the end time of the MaxExpression.
+      if (childEndTime < endTimeBounds.first) {
+        endTimeBounds.first = childEndTime;
+      }
+      if (childEndTime > endTimeBounds.second) {
+        endTimeBounds.second = childEndTime;
+      }
+    }
 
     // Add the utility of the child to the MaxExpression's utility.
+    auto childUtility = childParsedResult->utility.value();
     (*maxObjectiveFunction) += (*childUtility);
-
-    // Set the bounds of the start time of the MaxExpression.
-    if (childStartTime < startTimeBounds.first) {
-      startTimeBounds.first = childStartTime;
-    }
-    if (childStartTime > startTimeBounds.second) {
-      startTimeBounds.second = childStartTime;
-    }
-    if (childEndTime < endTimeBounds.first) {
-      endTimeBounds.first = childEndTime;
-    }
-    if (childEndTime > endTimeBounds.second) {
-      endTimeBounds.second = childEndTime;
-    }
   }
 
   if (!anyChildrenWithUtilities) {

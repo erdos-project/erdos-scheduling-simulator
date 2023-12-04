@@ -10,7 +10,7 @@ from typing import List, Mapping, Optional, Sequence
 
 import absl
 
-from utils import EventTime
+from utils import EventTime, setup_logging
 from workload import (
     ExecutionStrategies,
     ExecutionStrategy,
@@ -44,6 +44,12 @@ class AlibabaLoader(BaseWorkloadLoader):
     ):
         self._path = path
         self._flags = flags
+        self._logger = setup_logging(
+            name=self.__class__.__name__,
+            log_dir=flags.log_dir,
+            log_file=flags.log_file_level,
+            log_level=flags.log_level,
+        )
         self._job_data_generator = self._initialize_job_data_generator()
         self._job_graphs: Mapping[str, JobGraph] = {}
         self._rng_seed = flags.random_seed
@@ -150,8 +156,10 @@ class AlibabaLoader(BaseWorkloadLoader):
                                 job_graph_name, job_tasks
                             )
                         except Exception as e:
-                            print(f"Error converting {job_graph_name}: {e}")
-                            pass
+                            self._logger.warning(
+                                f"Failed to convert job graph {job_graph_name} "
+                                f"with error {e}."
+                            )
                 yield
 
         return job_data_generator()
