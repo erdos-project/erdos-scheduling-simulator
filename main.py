@@ -258,11 +258,23 @@ flags.DEFINE_bool(
     "If `True`, the scheduler creates space-time matrix non-uniformly. "
     "The discretization is finer initially, and coarser at the end. (default: False)",
 )
+flags.DEFINE_bool(
+    "scheduler_dynamic_discretization",
+    False,
+    "If `True`, the scheduler creates space-time matrix non-uniformly. "
+    "The discretization is dynamically decided based on the occupancy request for each time slice. (default: False)",
+)
 flags.DEFINE_integer(
     "scheduler_max_time_discretization",
     5,
     "The maximum discretization that the scheduler can have (in µs). "
     "Only used when scheduler_adaptive_discretization flag is enabled. (default: 5)",
+)
+flags.DEFINE_float(
+    "scheduler_max_occupancy_threshold",
+    0.8,
+    "The percentage b/w 0 and 1 of maximum occupancy beyond which the discretization would always be 1 incase of dynamic discretization. "
+    "This flag is only used when dynamic discretization is enabled (default: 0.8)",
 )
 flags.DEFINE_integer(
     "scheduler_delay",
@@ -640,6 +652,8 @@ def main(args):
             max_time_discretization=EventTime(
                 FLAGS.scheduler_max_time_discretization, EventTime.Unit.US
             ),
+            dynamic_discretization=FLAGS.scheduler_dynamic_discretization,
+            max_occupancy_threshold=FLAGS.scheduler_max_occupancy_threshold,
         )
     else:
         raise ValueError(

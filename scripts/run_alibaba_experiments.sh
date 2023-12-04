@@ -4,15 +4,16 @@
 # Scheduler runtimes in us.TetriSched
 # SCHEDULERS=(EDF TetriSched_Gurobi)
 # SCHEDULERS=(EDF TetriSched)
-SCHEDULERS=(EDF TetriSched)
+SCHEDULERS=(EDF TetriSched TetriSched_DYN)
 DEADLINE_VARIANCES=(50 100 200)
 SCHEDULER_TIME_DISCRETIZATIONS=(1 5)
 # SCHEDULERS=(EDF TetriSched)
 # DEADLINE_VARIANCES=(50 100 200)
 # SCHEDULER_TIME_DISCRETIZATIONS=(1 5 10)
-
+NUM_INVOCATIONS=50
 SCHEDULER_LOG_TIMES=10
 SCHEDULER_TIME_DISCRETIZATION=1
+SCHEDULER_MAX_DISCRETIZATION=5
 SCHEDULER_RUNTIME=0
 LOG_LEVEL=debug
 REPLAY_TRACE=alibaba
@@ -40,6 +41,11 @@ fi
 execute_experiment () {
     LOG_DIR=$1
     LOG_BASE=$2
+    SCHEDULER_NAME=$SCHEDULER
+    if [[ ${SCHEDULER} == TetriSched_DYN ]];
+    SCHEDULER_NAME=TetriSched
+    fi
+
     echo "[x] Initiating the execution of ${LOG_BASE}"
     if [ ! -f "${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.csv" ]; then
 	MYCONF="\
@@ -49,24 +55,34 @@ execute_experiment () {
     --execution_mode=${EXECUTION_MODE}
     --replay_trace=${REPLAY_TRACE}
     --max_deadline_variance=${DEADLINE_VAR}
-    --min_deadline_variance=50
+    --min_deadline_variance=${NUM_INVOCATIONS}
     --workload_profile_path=${WORKLOAD_PROFILE_PATH}
     --override_num_invocations=1
     --override_arrival_period=10
     --randomize_start_time_max=100
     --worker_profile_path=profiles/workers/${WORKER_CONFIG}.yaml
     --scheduler_runtime=${SCHEDULER_RUNTIME}
-    --scheduler=${SCHEDULER}"
+    --scheduler=${SCHEDULER_NAME}"
     if [[ ${SCHEDULER} != EDF ]]; then
-    MYCONF+="
-    --enforce_deadlines
-    --retract_schedules
-    --drop_skipped_tasks
-    --release_taskgraphs
-    --scheduler_log_times=${SCHEDULER_LOG_TIMES}
-    --scheduler_time_discretization=${SCHEDULER_TIME_DISCRETIZATION}
-    "
-    fi 
+        MYCONF+="
+        --enforce_deadlines
+        --retract_schedules
+        --drop_skipped_tasks
+        --release_taskgraphs
+        --scheduler_log_times=${SCHEDULER_LOG_TIMES}
+        "
+        if [[ ${SCHEDULER} != TetriSched_DYN ]]; then
+            MYCONF+="
+            --scheduler_time_discretization=${SCHEDULER_TIME_DISCRETIZATION}
+            "
+        fi
+        else
+            MYCONF+="
+            --scheduler_time_discretization=1
+            --scheduler_adaptive_discretization
+            --scheduler_max_time_discretization=${SCHEDULER_MAX_DISCRETIZATION}
+            "
+        fi 
     echo "${MYCONF}" > ${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.conf
 	if ! python3 main.py --flagfile=${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.conf > ${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.output; then
 	    echo "[x] Failed in the execution of ${LOG_BASE}. Exiting."
@@ -84,11 +100,14 @@ for DEADLINE_VAR in ${DEADLINE_VARIANCES[@]}; do
             if [[ ${SCHEDULER} == EDF && "${SCHEDULER_TIME_DISCRETIZATION}" -ne "${SCHEDULER_TIME_DISCRETIZATIONS[0]}"  ]]; then
                 continue
             fi
+            if [[ ${SCHEDULER} == TetriSched_DYN && "${SCHEDULER_TIME_DISCRETIZATION}" -ne "${SCHEDULER_TIME_DISCRETIZATIONS[0]}"  ]]; then
+                continue
+            fi
 
             LOG_BASE=${REPLAY_TRACE}_scheduler_${SCHEDULER}_release_policy_${RELEASE_POLICY}_deadline_var_${DEADLINE_VAR}
             LABEL=${SCHEDULER}_deadline_${DEADLINE_VAR}
 
-            if [[ ${SCHEDULER} != EDF ]]; then
+            if [[ ${SCHEDULER} != EDF ] && [ ${SCHEDULER} != TetriSched_DYN ]]; then
              LOG_BASE+="_scheduler_discretization_${SCHEDULER_TIME_DISCRETIZATION}"
              LABEL+="_discr_${SCHEDULER_TIME_DISCRETIZATION}"
             fi
@@ -122,6 +141,9 @@ for DEADLINE_VAR in ${DEADLINE_VARIANCES[@]}; do
     for SCHEDULER in ${SCHEDULERS[@]}; do
         for SCHEDULER_TIME_DISCRETIZATION in ${SCHEDULER_TIME_DISCRETIZATIONS[@]}; do
         if [[ ${SCHEDULER} == EDF && "${SCHEDULER_TIME_DISCRETIZATION}" -ne "${SCHEDULER_TIME_DISCRETIZATIONS[0]}"  ]]; then
+                continue
+        fi
+        if [[ ${SCHEDULER} == TetriSched_DYN && "${SCHEDULER_TIME_DISCRETIZATION}" -ne "${SCHEDULER_TIME_DISCRETIZATIONS[0]}"  ]]; then
                 continue
         fi
 
