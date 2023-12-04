@@ -207,6 +207,7 @@ def analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var(
     axes_fontsize=16,
     smoothing_window_size=10,  # Size of the moving average window
     use_heterogeneous=False,
+    extra_title: str = "",
     ):
     num_invocation = df["num_invocation"].unique()[0]
     # Filter the DataFrame
@@ -275,7 +276,7 @@ def analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var(
     # Adjust layout to prevent overlap
     plt.tight_layout()
     fig.subplots_adjust(top=0.93)
-    plt.suptitle(f"Resource Utilization for {arrival_rate=}, {cv2=},  max deadline variance={max_deadline_var}. Num invocations={num_invocation}")
+    plt.suptitle(f"Resource Utilization for {arrival_rate=}, {cv2=},  max deadline variance={max_deadline_var}. Num invocations={num_invocation} {extra_title}")
 
     # Display the plot
     plt.show()
@@ -358,7 +359,7 @@ def analyze_resource_utilization_by_release_policy_and_max_deadline_var(
     plt.show()
 
 
-def plot_resource_utilization(base_dir: str):
+def plot_resource_utilization(base_dir: str, extra_title: str = ""):
     # This function wraps analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var
     csv_file_paths = find_all_file_paths(base_dir)
     csv_reader = CSVReader(csv_file_paths)
