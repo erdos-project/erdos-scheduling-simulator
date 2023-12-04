@@ -420,7 +420,7 @@ class TetriSchedScheduler(BaseScheduler):
                     objective_strl,
                     partitions.partitions,
                     sim_time.time,
-                    False,
+                    self._flags.scheduler_enable_optimization_pass,
                     start_end_time_list,
                 )
                 solver_start_time = time.time()

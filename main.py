@@ -350,6 +350,12 @@ flags.DEFINE_bool(
     "If `True`, the scheduler is allowed to batch tasks "
     "that share a WorkProfile together.",
 )
+flags.DEFINE_bool(
+    "scheduler_enable_optimization_pass",
+    False,
+    "If `True`, the scheduler runs pre/post-translation optimization passes"
+    "when registering STRL expression.",
+)
 
 # Workload definition related flags.
 flags.DEFINE_integer(
