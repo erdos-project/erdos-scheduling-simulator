@@ -226,7 +226,11 @@ def analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var(
         ax = axes[i] if num_schedulers > 1 else axes
 
         # Worker Pool statistics
-        worker_pool_stats = csv_reader.get_worker_pool_utilizations(row["csv_file_path"])
+        try:
+            worker_pool_stats = csv_reader.get_worker_pool_utilizations(row["csv_file_path"])
+        except:
+            print(f"Error while csv_reader.get_worker_pool_utilizations{row['csv_file_path']}")
+            continue
 
         # Find all the resource types in the system.
         resource_types = set()
