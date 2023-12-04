@@ -112,7 +112,7 @@ def extract_experiments_result(base_dir: str) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def plot_slo_attainments(data: pd.DataFrame):
+def plot_slo_attainments(data: pd.DataFrame, extra_title: str = ""):
     # Define your unique values for the grid
     cv2_values = sorted(data["cv2"].unique())
     arrival_rate_values = sorted(data["arrival_rate"].unique())
@@ -182,7 +182,7 @@ def plot_slo_attainments(data: pd.DataFrame):
     handles, labels = ax.get_legend_handles_labels()
     fig.legend(handles, labels, loc='upper center', bbox_to_anchor=(0.5, 0.95), ncol=len(labels))
 
-    plt.suptitle(f'SLO Attainment Comparison (min_deadline_var=10, num_invocation={num_invocation})', size=16)
+    plt.suptitle(f'SLO Attainment Comparison (min_deadline_var=10, num_invocation={num_invocation}) {extra_title}', size=16)
 
     # Show the plot
     plt.show()
