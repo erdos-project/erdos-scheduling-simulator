@@ -13,7 +13,6 @@ RELEASE_POLICIES=(gamma)
 POISSON_ARRIVAL_RATES=(0.03 0.02) # Tune this
 DAG_AWARENESS=(1) # False True
 TASK_CPU_DIVISOR=25
-OPTIMIZATION_PASS=1
 
 ERDOS_SIMULATOR_DIR="." # Change this to the directory where the simulator is located.
 MIN_DEADLINE_VARIANCE=10

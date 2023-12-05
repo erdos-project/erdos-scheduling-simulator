@@ -2,29 +2,30 @@
 # $1 directory where to save the logs.
 
 # Scheduler runtimes in us.TetriSched
-SCHEDULERS=(TetriSched)
+SCHEDULERS=(EDF TetriSched)
 # MAX_DEADLINE_VARIANCES=(15 25 50 100 200)
 # MAX_DEADLINE_VARIANCES=(200 400 800)
-MAX_DEADLINE_VARIANCES=(25 50 100 200) # Keep deadline tight. Don't change this
-SCHEDULER_TIME_DISCRETIZATIONS=(20 10)
-GAMMA_COEFFICIENTS=(1 2 4) #cv2 don't change this
+MAX_DEADLINE_VARIANCES=(25 200 50 100) # Keep deadline tight. Don't change this
+SCHEDULER_TIME_DISCRETIZATIONS=(1)
+GAMMA_COEFFICIENTS=(1 4 2) #cv2 don't change this
 RELEASE_POLICIES=(gamma)
 # POISSON_ARRIVAL_RATES=(0.2 0.5 1 2)
-POISSON_ARRIVAL_RATES=(0.03 0.02) # Tune this
+POISSON_ARRIVAL_RATES=(0.08 0.11) # Tune this
 DAG_AWARENESS=(1) # False True
 TASK_CPU_DIVISOR=25
-OPTIMIZATION_PASS=1
+
+HETEROGENEOUS_RESOURCE=1
+WORKER_CONFIG=alibaba_cluster_heterogeneous_40_slots
 
 ERDOS_SIMULATOR_DIR="." # Change this to the directory where the simulator is located.
 MIN_DEADLINE_VARIANCE=10
-NUM_INVOCATIONS=150
+NUM_INVOCATIONS=250
 SCHEDULER_LOG_TIMES=10
 SCHEDULER_RUNTIME=0
-LOG_LEVEL=debug
+LOG_LEVEL=info
 REPLAY_TRACE=alibaba
 WORKLOAD_PROFILE_PATH=./traces/alibaba-cluster-trace-v2018/alibaba_set_0_6600_dags.pkl
 EXECUTION_MODE=replay
-WORKER_CONFIG=alibaba_cluster
 
 PARALLEL_FACTOR=2
 # Move to the simulator directory.
@@ -45,12 +46,11 @@ execute_experiment () {
     LOG_BASE=$2
     echo "[x] Initiating the execution of ${LOG_BASE}"
     if [ ! -f "${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.csv" ]; then
-
+# --log_dir=${LOG_DIR}/${LOG_BASE}
+# --scheduler_log_to_file
     MYCONF="\
---log_dir=${LOG_DIR}/${LOG_BASE}
---scheduler_log_to_file
---log_file_name=${LOG_BASE}.log
---csv_file_name=${LOG_BASE}.csv
+--log_file_name=${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.log
+--csv_file_name=${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.csv
 --log_level=${LOG_LEVEL}
 --execution_mode=${EXECUTION_MODE}
 --replay_trace=${REPLAY_TRACE}
@@ -79,6 +79,11 @@ execute_experiment () {
 
         if [[ ${DAG_AWARE} == 1 ]]; then
             MYCONF+="--release_taskgraphs
+"
+        fi
+
+        if [[ ${HETEROGENEOUS_RESOURCE} == 1 ]]; then
+            MYCONF+="--alibaba_enable_heterogeneous_resource_type
 "
         fi
 
