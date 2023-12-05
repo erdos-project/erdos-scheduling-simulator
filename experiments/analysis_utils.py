@@ -1,4 +1,5 @@
 import os, sys
+import re
 from matplotlib import pyplot as plt
 from matplotlib.patches import Patch
 import numpy as np
@@ -216,7 +217,7 @@ def analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var(
 
     # Create subplots
     fig, axes = plt.subplots(num_schedulers, 1, figsize=figure_size, sharex=True)
-    resource_color = {"GPU": "red", "CPU": "green", "Slot": "blue"}
+    resource_color = {"GPU": "red", "CPU": "green", "Slot": "blue", "Slot_1": "blue"}
     if use_heterogeneous:
         del resource_color["Slot"]
         resource_color["Slot_1"] = "blue"
@@ -249,6 +250,7 @@ def analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var(
             ]
             for resource in resource_types
         }
+        
         sim_times_sec = [stat.simulator_time / 1000000 for stat in worker_pool_stats]
 
         # Plotting for this scheduler
@@ -378,3 +380,62 @@ def plot_resource_utilization(base_dir: str, extra_title: str = ""):
                     figure_size=(14, 10),
                     use_heterogeneous=True
                 )
+
+
+def plot_solver_time(log_file_path_1: str, title_1: str, log_file_path_2: str = None, title_2: str = None, super_title: str = "Solver Time Microseconds"):
+    # Regular expression pattern to find 'solverTimeMicroseconds=' followed by a number
+    pattern = r'solverTimeMicroseconds=(\d+)'
+    
+    solver_times_1, solver_times_2 = [], []
+
+    # Process the first log file
+    with open(log_file_path_1, 'r') as file:
+        lines = file.readlines()
+        for line in lines:
+            if "solverTimeMicroseconds" in line:
+                match = re.search(pattern, line)
+                if match:
+                    solver_time_microseconds = int(match.group(1))
+                    solver_times_1.append(solver_time_microseconds)
+
+    # Process the second log file, if provided
+    if log_file_path_2 is not None:
+        with open(log_file_path_2, 'r') as file:
+            lines = file.readlines()
+            for line in lines:
+                if "solverTimeMicroseconds" in line:
+                    match = re.search(pattern, line)
+                    if match:
+                        solver_time_microseconds = int(match.group(1))
+                        solver_times_2.append(solver_time_microseconds)
+
+    # Plotting
+    plt.figure(figsize=(12, 6))
+
+    if log_file_path_2 is None:
+        # If only one file, plot a single histogram
+        plt.hist(solver_times_1, bins=30, alpha=0.7, label=log_file_path_1)
+        plt.legend([title_1])
+    else:
+        # Plot histograms for comparison
+        plt.hist(solver_times_1, bins=30, alpha=0.7, label=log_file_path_1)
+        plt.hist(solver_times_2, bins=30, alpha=0.7, label=log_file_path_2)
+        plt.legend([title_1, title_2])
+    
+    plt.xlabel('Solver Time Microseconds')
+    plt.ylabel('Frequency')
+    plt.title(super_title)
+    
+    plt.show()
+
+    # Optional: Plot boxplots for comparison
+    plt.figure(figsize=(6, 6))
+    data_to_plot = [solver_times_1]
+    labels = [title_1]
+    if log_file_path_2 is not None:
+        data_to_plot.append(solver_times_2)
+        labels.append(title_2)
+    plt.boxplot(data_to_plot, labels=labels)
+    plt.ylabel('Solver Time Microseconds')
+    plt.title(super_title)
+    plt.show()
