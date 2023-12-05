@@ -207,7 +207,6 @@ def analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var(
     figure_size=(20, 20), 
     axes_fontsize=16,
     smoothing_window_size=10,  # Size of the moving average window
-    use_heterogeneous=False,
     extra_title: str = "",
     ):
     num_invocation = df["num_invocation"].unique()[0]
@@ -217,16 +216,12 @@ def analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var(
 
     # Create subplots
     fig, axes = plt.subplots(num_schedulers, 1, figsize=figure_size, sharex=True)
-    resource_color = {"GPU": "red", "CPU": "green", "Slot": "blue", "Slot_1": "blue"}
-    if use_heterogeneous:
-        del resource_color["Slot"]
-        resource_color["Slot_1"] = "blue"
-        resource_color["Slot_2"] = "orange"
+    resource_color = {"GPU": "red", "CPU": "green", "All_Slots": "red", "Slot_1": "blue", "Slot_2": "orange"}
 
     # Iterate over each scheduler
     for i, (index, row) in enumerate(filtered_df.iterrows()):
         ax = axes[i] if num_schedulers > 1 else axes
-
+        
         # Worker Pool statistics
         try:
             worker_pool_stats = csv_reader.get_worker_pool_utilizations(row["csv_file_path"])
@@ -235,11 +230,12 @@ def analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var(
             continue
 
         # Find all the resource types in the system.
-        resource_types = set()
+        resource_types: set[str] = set()
         for wp_stats in worker_pool_stats:
             for resource in wp_stats.resource_utilizations.keys():
                 resource_types.add(resource)
-
+        num_resource_type = len(resource_types)
+        
         # Calculate the heights of utilization for each resource, after
         # normalization.
         resource_used_heights = {
@@ -252,6 +248,18 @@ def analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var(
         }
         
         sim_times_sec = [stat.simulator_time / 1000000 for stat in worker_pool_stats]
+        
+        # Combine slot_1 and slot_2 into a total "slot"
+        if "All_Slots" not in resource_types:
+            resource_types.add("All_Slots")
+            resource_used_heights["All_Slots"] = []
+            for resource_type in resource_types:
+                if resource_type.startswith("Slot"):
+                    for i, h in enumerate(resource_used_heights[resource_type]):
+                        if i >= len(resource_used_heights["All_Slots"]):
+                            resource_used_heights["All_Slots"].append(h)
+                        else:
+                            resource_used_heights["All_Slots"][i] += h
 
         # Plotting for this scheduler
         for resource_type in resource_types:
@@ -265,7 +273,7 @@ def analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var(
 
         # Formatting the subplot
         ax.set_ylabel("Utilization", fontsize=axes_fontsize)
-        ax.set_ylim(0, 1.01)
+        ax.set_ylim(0, num_resource_type + 0.01)
         ax.set_title(f"{row['scheduler']}")
 
     # Common X-axis label
@@ -283,6 +291,7 @@ def analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var(
     # Display the plot
     plt.show()
 
+# TODO: This needs some fix
 def analyze_resource_utilization_by_release_policy_and_max_deadline_var(
     csv_reader, 
     df, 
@@ -291,7 +300,6 @@ def analyze_resource_utilization_by_release_policy_and_max_deadline_var(
     figure_size=(20, 20), 
     axes_fontsize=16,
     smoothing_window_size=10,  # Size of the moving average window
-    use_heterogeneous=False,
 ):
     # Filter the DataFrame
     filtered_df = df[(df["release_policy"] == release_policy) & (df["max_deadline_variance"] == max_deadline_variance)]
@@ -299,11 +307,8 @@ def analyze_resource_utilization_by_release_policy_and_max_deadline_var(
 
     # Create subplots
     fig, axes = plt.subplots(num_schedulers, 1, figsize=figure_size, sharex=True)
-    resource_color = {"GPU": "red", "CPU": "green", "Slot": "blue"}
-    if use_heterogeneous:
-        del resource_color["Slot"]
-        resource_color["Slot_1"] = "blue"
-        resource_color["Slot_2"] = "orange"
+    # Have "Slot": "blue" for backward compatibility
+    resource_color = {"GPU": "red", "CPU": "green", "Slot": "red", "Slot_1": "blue", "Slot_2": "orange"}
 
     # Iterate over each scheduler
     for i, (index, row) in enumerate(filtered_df.iterrows()):
@@ -313,7 +318,7 @@ def analyze_resource_utilization_by_release_policy_and_max_deadline_var(
         worker_pool_stats = csv_reader.get_worker_pool_utilizations(row["csv_file_path"])
 
         # Find all the resource types in the system.
-        resource_types = set()
+        resource_types: set[str] = set(["Slot"])
         for wp_stats in worker_pool_stats:
             for resource in wp_stats.resource_utilizations.keys():
                 resource_types.add(resource)
@@ -328,8 +333,8 @@ def analyze_resource_utilization_by_release_policy_and_max_deadline_var(
             ]
             for resource in resource_types
         }
+        
         sim_times_sec = [stat.simulator_time / 1000000 for stat in worker_pool_stats]
-
         # Plotting for this scheduler
         for resource_type in resource_types:
             smoothed_utilization = smooth_data(resource_used_heights[resource_type], smoothing_window_size)
@@ -377,8 +382,7 @@ def plot_resource_utilization(base_dir: str, extra_title: str = ""):
                     arrival_rate,
                     cv2,
                     max_deadline_variance,
-                    figure_size=(14, 10),
-                    use_heterogeneous=True
+                    figure_size=(12, 8)
                 )
 
 
