@@ -273,7 +273,7 @@ std::vector<ExpressionPtr> Expression::getParents() const {
 
 SolutionResultPtr Expression::populateResults(SolverModelPtr solverModel) {
   TETRISCHED_DEBUG("Populating results for " << name << " of type "
-                                             << getTypeString() << ".")
+                                            << getTypeString() << ".")
   // Check that the Expression was parsed before.
   if (!parsedResult) {
     solution = std::make_shared<SolutionResult>();
@@ -2011,7 +2011,8 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
       // This variable comes from subexpressions that must already have their
       // start times modulated by indicators. We can just merge them instead
       // of using the child indicator again.
-      auto childStartTime = childParsedResult->startTime.value().get<VariablePtr>();
+      auto childStartTime =
+          childParsedResult->startTime.value().get<VariablePtr>();
       maxStartTimeConstraint->addTerm(childStartTime);
 
       // The bounds are set by the child's bounds.
