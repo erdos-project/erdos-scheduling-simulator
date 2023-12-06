@@ -32,6 +32,7 @@ STATS_FUNCTIONS = {
 # TODO (Dhruv): remove the hardcoding for rng seed
 _rng = random.Random(42)
 
+
 @total_ordering
 class EventTime:
     @total_ordering

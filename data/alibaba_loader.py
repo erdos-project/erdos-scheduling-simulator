@@ -206,8 +206,8 @@ class AlibabaLoader(BaseWorkloadLoader):
         for task in job_tasks:
             job_resources_1 = Resources(
                 resource_vector={
-                    # Note: We divide the CPU by some self._task_cpu_divisor instead 
-                    # of 100 because this would intorduce more variance into the 
+                    # Note: We divide the CPU by some self._task_cpu_divisor instead
+                    # of 100 because this would intorduce more variance into the
                     # resource/slots usage.
                     # We used to divide by 100, but the majority of the tasks
                     # would end up using 1 slot, which is not very interesting and
@@ -353,8 +353,5 @@ class AlibabaLoader(BaseWorkloadLoader):
                 )
                 if task_graph is not None:
                     self._workload.add_task_graph(task_graph)
-                    self._csv_logger.info(
-                        f"{current_time.time},TASK_GRAPH_RELEASE,{task_graph.release_time.time},{task_graph.deadline.time},{task_graph.name},{len(task_graph.get_nodes())}"
-                    )
                     task_release_index += 1
             return self._workload

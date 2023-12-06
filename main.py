@@ -146,17 +146,17 @@ flags.DEFINE_integer(
     "alibaba_loader_task_cpu_divisor",
     25,
     "The divisor used when converting alibaba trace tasks task.cpu to slot. The lower "
-    "the number, the higher the slots."
+    "the number, the higher the slots.",
 )
 flags.DEFINE_float(
     "alibaba_task_duration_multiplier",
     1,
-    "The multiplier used for alibaba trace tasks task.duration."
+    "The multiplier used for alibaba trace tasks task.duration.",
 )
 flags.DEFINE_bool(
     "alibaba_enable_heterogeneous_resource_type",
     False,
-    "If true, we use heterogeneous resource types with %difference in runtime."
+    "If true, we use heterogeneous resource types with %difference in runtime.",
 )
 flags.DEFINE_integer(
     "max_timestamp",
@@ -262,7 +262,8 @@ flags.DEFINE_bool(
     "scheduler_dynamic_discretization",
     False,
     "If `True`, the scheduler creates space-time matrix non-uniformly. "
-    "The discretization is dynamically decided based on the occupancy request for each time slice. (default: False)",
+    "The discretization is dynamically decided based on the occupancy request for "
+    "each time slice. (default: False)",
 )
 flags.DEFINE_integer(
     "scheduler_max_time_discretization",
@@ -273,7 +274,8 @@ flags.DEFINE_integer(
 flags.DEFINE_float(
     "scheduler_max_occupancy_threshold",
     0.8,
-    "The percentage b/w 0 and 1 of maximum occupancy beyond which the discretization would always be 1 incase of dynamic discretization. "
+    "The percentage b/w 0 and 1 of maximum occupancy beyond which the discretization "
+    "would always be 1 incase of dynamic discretization. "
     "This flag is only used when dynamic discretization is enabled (default: 0.8)",
 )
 flags.DEFINE_integer(
@@ -457,7 +459,7 @@ def main(args):
     logger.info("Workload File: %s", FLAGS.workload_profile_path)
     logger.info("Workers File: %s", FLAGS.worker_profile_path)
     logger.info("Profile File: %s", FLAGS.profile_path)
-    
+
     csv_logger = setup_csv_logging(
         name=__name__,
         log_dir=FLAGS.log_dir,
@@ -465,7 +467,7 @@ def main(args):
     )
     for flag_name in FLAGS:
         csv_logger.debug(f"input_flag,{flag_name},{getattr(FLAGS, flag_name)}")
-    
+
     # Load the data.
     if FLAGS.execution_mode == "replay":
         if FLAGS.replay_trace == "pylot":

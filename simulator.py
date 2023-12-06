@@ -13,7 +13,15 @@ from data import BaseWorkloadLoader
 from schedulers import BaseScheduler
 from utils import EventTime, setup_csv_logging, setup_logging
 from workers import WorkerPools
-from workload import Placement, Placements, Resource, Task, TaskState, Workload
+from workload import (
+    Placement,
+    Placements,
+    Resource,
+    Task,
+    TaskGraph,
+    TaskState,
+    Workload,
+)
 
 
 @total_ordering
@@ -24,16 +32,17 @@ class EventType(Enum):
     TASK_CANCEL = 1  # Ask the simulator to cancel the task.
     EVICT_PROFILE = 2  # Ask the simulator to evict the profile from the WorkerPool.
     TASK_FINISHED = 3  # Notify the simulator of the end of a task.
-    TASK_RELEASE = 4  # Ask the simulator to release the task.
-    UPDATE_WORKLOAD = 5  # Ask the simulator to update the workload.
-    TASK_PREEMPT = 6  # Ask the simulator to preempt a task.
-    TASK_MIGRATION = 7  # Ask the simulator to migrate a task.
-    LOAD_PROFILE = 8  # Ask the simulator to load a profile into the WorkerPool.
-    TASK_PLACEMENT = 9  # Ask the simulator to place a task.
-    SCHEDULER_START = 10  # Requires the simulator to invoke the scheduler.
-    SCHEDULER_FINISHED = 11  # Signifies the end of the scheduler loop.
-    SIMULATOR_END = 12  # Signify the end of the simulator loop.
-    LOG_UTILIZATION = 13  # Ask the simulator to log worker pool utilization.
+    TASK_GRAPH_RELEASE = 4  # Notify the simulator of the release of a task graph.
+    TASK_RELEASE = 5  # Ask the simulator to release the task.
+    UPDATE_WORKLOAD = 6  # Ask the simulator to update the workload.
+    TASK_PREEMPT = 7  # Ask the simulator to preempt a task.
+    TASK_MIGRATION = 8  # Ask the simulator to migrate a task.
+    LOAD_PROFILE = 9  # Ask the simulator to load a profile into the WorkerPool.
+    TASK_PLACEMENT = 10  # Ask the simulator to place a task.
+    SCHEDULER_START = 11  # Requires the simulator to invoke the scheduler.
+    SCHEDULER_FINISHED = 12  # Signifies the end of the scheduler loop.
+    SIMULATOR_END = 13  # Signify the end of the simulator loop.
+    LOG_UTILIZATION = 14  # Ask the simulator to log worker pool utilization.
 
     def __lt__(self, other) -> bool:
         # This method is used to order events in the event queue. We prioritize
@@ -53,6 +62,8 @@ class Event(object):
         time (`EventTime`): The simulator time at which the event occurred.
         task (`Optional[Task]`): The task associated with this event if it is
             of type `TASK_RELEASE` or `TASK_FINISHED`.
+        task_graph (`Optional[str]`): The name of the TaskGraph associated with
+            this event.
 
     Raises:
         `ValueError` if the event is of type `TASK_RELEASE` or `TASK_FINISHED`
@@ -64,6 +75,7 @@ class Event(object):
         event_type: EventType,
         time: EventTime,
         task: Optional[Task] = None,
+        task_graph: Optional[str] = None,
         placement: Optional[Placement] = None,
     ):
         if event_type in [
@@ -81,11 +93,18 @@ class Event(object):
                     raise ValueError(f"No placement provided with {event_type}.")
                 elif type(placement) != Placement:
                     raise ValueError(f"Invalid type for placement: {type(placement)}.")
+
+        if event_type == EventType.TASK_GRAPH_RELEASE and task_graph is None:
+            raise ValueError(f"No task graph provided with {event_type}.")
+
         if type(time) != EventTime:
             raise ValueError(f"Invalid type for time: {type(time)}")
         self._event_type = event_type
         self._time = time
         self._task = task
+        self._task_graph = (
+            task.task_graph if task is not None and task_graph is None else task_graph
+        )
         self._placement = placement
 
     def __lt__(self, other: "Event") -> bool:
@@ -119,6 +138,10 @@ class Event(object):
     @property
     def task(self) -> Optional[Task]:
         return self._task
+
+    @property
+    def task_graph(self) -> Optional[str]:
+        return self._task_graph
 
     @property
     def placement(self) -> Optional[Placement]:
@@ -294,7 +317,7 @@ class Simulator(object):
 
         # Workload variables.
         self._workload_loader = workload_loader
-        self._workload = Workload.empty(_flags)
+        self._workload: Workload = Workload.empty(_flags)
 
         self._worker_pools = worker_pools
         self._logger.info("The Worker Pools are: ")
@@ -1047,6 +1070,9 @@ class Simulator(object):
         # Release a task for the scheduler.
         event.task.release(event.time)
 
+        slowest_execution_strategy = (
+            event.task.available_execution_strategies.get_slowest_strategy()
+        )
         self._csv_logger.debug(
             f"{event.time.time},TASK_RELEASE,{event.task.name},"
             f"{event.task.timestamp},"
@@ -1054,11 +1080,9 @@ class Simulator(object):
             f"{event.task.release_time.to(EventTime.Unit.US).time},"
             f"{event.task.deadline.to(EventTime.Unit.US).time},{event.task.id},"
             f"{event.task.task_graph},"
-            f"{event.task.available_execution_strategies.get_slowest_strategy().runtime.to(EventTime.Unit.US).time}"
+            f"{slowest_execution_strategy.runtime.to(EventTime.Unit.US).time}"
         )
-        
-        with open("simulator_task_release_log.csv", "a") as log_file:
-            log_file.write(f"task_name={event.task.name},task_graph={event.task.task_graph},deadline={event.task.deadline},release_time={event.task.release_time.to(EventTime.Unit.US).time},intended_release_time={event.task.intended_release_time.to(EventTime.Unit.US).time}\n")
+
         # If we are not in the midst of a scheduler invocation, and the task hasn't
         # already been scheduled and next scheduled invocation is too late, then
         # bring the invocation sooner to (event time + scheduler_delay), and re-heapify
@@ -1405,6 +1429,27 @@ class Simulator(object):
                 worker_pool,
             )
 
+    def __handle_task_graph_release(self, event: Event) -> None:
+        """Handles an event of type `TASK_GRAPH_RELEASE`.
+
+        Currently, this method just outputs the information about the TaskGraph into
+        the CSV."""
+        if event.event_type != EventType.TASK_GRAPH_RELEASE:
+            raise ValueError(
+                f"__handle_task_graph_release called with event of type {event.type}."
+            )
+        task_graph: TaskGraph = self._workload.get_task_graph(event.task_graph)
+        if task_graph is None:
+            raise ValueError(f"TaskGraph {event.task_graph} not found in the Workload.")
+        self._csv_logger.debug(
+            "%s,TASK_GRAPH_RELEASE,%s,%s,%s,%s",
+            event.time.to(EventTime.Unit.US).time,
+            task_graph.release_time.to(EventTime.Unit.US).time,
+            task_graph.deadline.to(EventTime.Unit.US).time,
+            task_graph.name,
+            len(task_graph.get_nodes()),
+        )
+
     def __handle_update_workload(self, event: Event) -> None:
         """Handles an Event of type `UPDATE_WORKLOAD`.
 
@@ -1438,10 +1483,25 @@ class Simulator(object):
             )
             self._csv_logger.info(
                 "%s,UPDATE_WORKLOAD,%s,%s",
-                self._simulator_time.time,
+                event.time.to(EventTime.Unit.US).time,
                 len(self._workload.task_graphs),
                 len(releasable_tasks),
             )
+
+            # Add the TaskGraphRelease events into the system.
+            for task_graph_name, task_graph in self._workload.task_graphs.items():
+                event = Event(
+                    event_type=EventType.TASK_GRAPH_RELEASE,
+                    time=task_graph.release_time,
+                    task_graph=task_graph_name,
+                )
+                self._event_queue.add_event(event)
+                self._logger.info(
+                    "[%s] Added %s to the event queue.",
+                    self._simulator_time.to(EventTime.Unit.US).time,
+                    event,
+                )
+
             max_release_time = self._simulator_time
             for task in releasable_tasks:
                 event = Event(
@@ -1524,6 +1584,8 @@ class Simulator(object):
             self.__handle_profile_eviction(event)
         elif event.event_type == EventType.TASK_FINISHED:
             self.__handle_task_finished(event)
+        elif event.event_type == EventType.TASK_GRAPH_RELEASE:
+            self.__handle_task_graph_release(event)
         elif event.event_type == EventType.TASK_RELEASE:
             self.__handle_task_release(event)
         elif event.event_type == EventType.UPDATE_WORKLOAD:
