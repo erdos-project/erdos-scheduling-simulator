@@ -225,7 +225,7 @@ class JobGraph(Graph[Job]):
             coefficient: float,
             concurrency: int,
             start: EventTime,
-            base_arrival_rate: Optional[float], # Only used in fix_and_gamma policy
+            base_arrival_rate: Optional[float] = None, # Only used in fix_and_gamma policy
             rng_seed: Optional[int] = None,
         ) -> None:
             self._policy_type = policy_type
