@@ -12,7 +12,8 @@
 
 namespace tetrisched {
 Scheduler::Scheduler(Time discretization, SolverBackendType solverBackend,
-                     std::string logDir)
+                     std::string logDir, bool enableDynamicDiscretization,
+                     Time maxDiscretization, float maxOccupancyThreshold)
     : discretization(discretization),
       solverBackend(solverBackend),
       logDir(logDir) {
@@ -33,13 +34,18 @@ Scheduler::Scheduler(Time discretization, SolverBackendType solverBackend,
           "The solver backend type is not supported.");
   }
   solverModel = solver->getModel();
-  optimizationPasses = OptimizationPassRunner(true);
+  optimizationPasses =
+      OptimizationPassRunner(true, enableDynamicDiscretization, discretization,
+                             maxDiscretization, maxOccupancyThreshold);
 }
 
 void Scheduler::registerSTRL(
     ExpressionPtr expression, Partitions availablePartitions, Time currentTime,
     bool optimize,
     std::vector<std::pair<TimeRange, Time>> timeRangeToGranularities) {
+  TETRISCHED_INFO("Registering the STRL expression: " << expression->getName()
+                                                      << " for time "
+                                                      << currentTime << ".")
   // Clear the previously saved expressions in the SolverModel.
   solverModel->clear();
 
@@ -98,6 +104,7 @@ void Scheduler::registerSTRL(
 }
 
 void Scheduler::schedule(Time currentTime) {
+  TETRISCHED_INFO("Invoking the Scheduler for time " << currentTime << ".")
   if (!this->expression.has_value()) {
     throw exceptions::ExpressionSolutionException(
         "No expression has been registered with the scheduler. "
@@ -129,7 +136,7 @@ SolverSolutionPtr Scheduler::getLastSolverSolution() const {
   return solverSolution.value();
 }
 
-void Scheduler::exportLastSolverModel(const std::string& fileName) const {
+void Scheduler::exportLastSolverModel(const std::string &fileName) const {
   if (!solverSolution.has_value()) {
     throw exceptions::ExpressionSolutionException(
         "No solution has been computed yet. Please invoke schedule() first.");
@@ -137,7 +144,7 @@ void Scheduler::exportLastSolverModel(const std::string& fileName) const {
   solver->exportModel(fileName);
 }
 
-void Scheduler::exportLastSolverSolution(const std::string& fileName) const {
+void Scheduler::exportLastSolverSolution(const std::string &fileName) const {
   if (!solverSolution.has_value()) {
     throw exceptions::ExpressionSolutionException(
         "No solution has been computed yet. Please invoke schedule() first.");

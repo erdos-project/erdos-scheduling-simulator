@@ -27,7 +27,8 @@ class Scheduler {
  public:
   /// Initialize the scheduler with a solver backend.
   Scheduler(Time discretization, SolverBackendType solverBackend,
-            std::string logDir = "./");
+            std::string logDir = "./", bool enableDynamicDiscretization = false,
+            Time maxDiscretization = 5, float maxOccupancyThreshold = 0.8);
 
   /// Registers the STRL expression for the scheduler to schedule from
   /// and parses it to populate the SolverModel.
@@ -45,10 +46,10 @@ class Scheduler {
   SolverSolutionPtr getLastSolverSolution() const;
 
   /// Exports the model from the last invocation of the solver.
-  void exportLastSolverModel(const std::string& fileName) const;
+  void exportLastSolverModel(const std::string &fileName) const;
 
   /// Exports the solution from the last invocation of the solver.
-  void exportLastSolverSolution(const std::string& fileName) const;
+  void exportLastSolverSolution(const std::string &fileName) const;
 };
 }  // namespace tetrisched
 

@@ -176,6 +176,8 @@ class TetriSchedScheduler(BaseScheduler):
         _flags: Optional["absl.flags"] = None,
         adaptive_discretization: bool = False,
         max_time_discretization: EventTime = EventTime(5, EventTime.Unit.US),
+        dynamic_discretization: bool = False,
+        max_occupancy_threshold: float = 0.8,
     ):
         if preemptive:
             raise ValueError("TetrischedScheduler does not support preemption.")
@@ -200,16 +202,28 @@ class TetriSchedScheduler(BaseScheduler):
         self._goal = goal
         self._time_discretization = time_discretization.to(EventTime.Unit.US)
         self._plan_ahead = plan_ahead.to(EventTime.Unit.US)
+        # Values for STRL generation.
+        self._use_windowed_choose = False
+        self._dynamic_discretization = dynamic_discretization
+        self._adaptive_discretization = adaptive_discretization
+        if self._dynamic_discretization or self._adaptive_discretization:
+            self._use_windowed_choose = False
+        self._max_discretization = max_time_discretization.to(EventTime.Unit.US)
         self._scheduler = tetrisched.Scheduler(
             self._time_discretization.time,
             tetrisched.backends.SolverBackendType.GUROBI,
             self._log_dir,
+            self._dynamic_discretization,  # enable dynamic discretization
+            self._max_discretization.time,
+            max_occupancy_threshold,
         )
 
-        # Values for STRL generation.
-        self._use_windowed_choose = False
-        self._adaptive_discretization = adaptive_discretization
-        self._max_discretization = max_time_discretization.to(EventTime.Unit.US)
+        # A cache for the STRLs generated for individual tasks.
+        # This is used to avoid generating the same STRL multiple times, and so that
+        # we can add AllocationExpressions as children of ObjectiveExpressions to make
+        # sure that no optimization passes remove it.
+        # Reset at the beginning of each Scheduler invocation (`schedule()`).
+        self._individual_task_strls: Mapping[str, tetrisched.Expression] = {}
         if (
             self._adaptive_discretization
             and self._max_discretization.time < self._time_discretization.time
@@ -222,6 +236,18 @@ class TetriSchedScheduler(BaseScheduler):
             raise ValueError(
                 "Adaptive discretization and windowed choose cannot be used together."
             )
+        if self._dynamic_discretization and self._use_windowed_choose:
+            raise ValueError(
+                "Dynamic discretization and windowed choose cannot be used together."
+            )
+        if self._adaptive_discretization and self._dynamic_discretization:
+            raise ValueError(
+                "Adaptive and Dynamic discretization cannot be used together."
+            )
+        if self._dynamic_discretization and self._time_discretization.time != 1:
+            raise ValueError(
+                "Dynamic discretization cannot be used with min Discretization > 1."
+            )
         if self._goal != "max_goodput" and self._use_windowed_choose:
             raise NotImplementedError(
                 f"Windowed choose not implemented for the goal: {self._goal}."
@@ -230,6 +256,9 @@ class TetriSchedScheduler(BaseScheduler):
     def schedule(
         self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools
     ) -> Placements:
+        # Reset the STRL mappings.
+        self._individual_task_strls = {}
+
         # Retrieve the schedulable tasks from the Workload.
         tasks_to_be_scheduled: List[Task] = workload.get_schedulable_tasks(
             time=sim_time,
@@ -382,7 +411,7 @@ class TetriSchedScheduler(BaseScheduler):
                     # If this child is not in the TaskGraphs to be scheduled, then we
                     # add it to the root expression.
                     task_strl = None
-                    if task.id not in task_strls:
+                    if task.id not in self._individual_task_strls:
                         task_strl = self.construct_task_strl(
                             sim_time,
                             task,
@@ -390,10 +419,18 @@ class TetriSchedScheduler(BaseScheduler):
                             placement_times_and_rewards,
                         )
                     else:
-                        task_strl = task_strls[task.id]
+                        task_strl = self._individual_task_strls[task.id]
+                        self._logger.debug(
+                            f"[{sim_time.time}] Found STRL for Task "
+                            f"{task.unique_name} with name {task_strl.name}."
+                        )
 
                     if task_strl is not None:
                         objective_strl.addChild(task_strl)
+                        self._logger.debug(
+                            f"[{sim_time.time}] Added STRL for task {task.unique_name} "
+                            f"to ObjectiveExpression with name {objective_strl.name}."
+                        )
                     else:
                         raise RuntimeError(
                             f"Could not construct STRL for Task {task.unique_name}. "
@@ -696,6 +733,7 @@ class TetriSchedScheduler(BaseScheduler):
                 f"[{current_time.time}] No placement choices were available for "
                 f"{task.unique_name} with deadline {task.deadline}."
             )
+            self._individual_task_strls[task.id] = None
             return None
 
         # If the task is already running or scheduled and we're not reconsidering
@@ -776,6 +814,7 @@ class TetriSchedScheduler(BaseScheduler):
                 f"{scheduled_discretization} and running for {task.remaining_time} "
                 f"on Partition {scheduled_partition.id}."
             )
+            self._individual_task_strls[task.id] = task_allocation_expression
             return task_allocation_expression
 
         # If the task is not running or scheduled, we construct the STRL expression
@@ -931,6 +970,7 @@ class TetriSchedScheduler(BaseScheduler):
                 f"[{current_time.time}] No STRL expressions were generated for "
                 f"{task.unique_name} with deadline {task.deadline}."
             )
+            self._individual_task_strls[task.id] = None
             return None
         elif len(task_execution_strategy_strls) == 1:
             self._logger.debug(
@@ -938,6 +978,7 @@ class TetriSchedScheduler(BaseScheduler):
                 f"{task.unique_name} with deadline {task.deadline}. Returning the "
                 f"expression of type {task_execution_strategy_strls[0].getType()}"
             )
+            self._individual_task_strls[task.id] = task_execution_strategy_strls[0]
             return task_execution_strategy_strls[0]
         else:
             self._logger.debug(
@@ -952,6 +993,7 @@ class TetriSchedScheduler(BaseScheduler):
             for choose_expression in task_execution_strategy_strls:
                 chooseOneFromSet.addChild(choose_expression)
 
+            self._individual_task_strls[task.id] = chooseOneFromSet
             return chooseOneFromSet
 
     def _construct_task_graph_strl(
