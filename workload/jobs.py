@@ -1,3 +1,4 @@
+import math
 import random
 import sys
 import uuid
@@ -326,8 +327,11 @@ class JobGraph(Graph[Job]):
                 # (self._base_arrival_rate + self._variable_arrival_rate) * (end_time - start_time) = self._fixed_invocation_nums
                 start_time = self._start.to(EventTime.Unit.US).time
                 end_time = int(self._fixed_invocation_nums / (self._base_arrival_rate + self._variable_arrival_rate)) + start_time
-                gamma_policy_invocations = round(self._variable_arrival_rate * (end_time - start_time))
-                fixed_policy_invocations = round(self._fixed_invocation_nums * (end_time - start_time))
+                gamma_policy_invocations = math.floor(self._variable_arrival_rate * (end_time - start_time))
+                fixed_policy_invocations = math.floor(self._base_arrival_rate * (end_time - start_time))
+                # Due to rounding, we may have less invocations than the fixed_invocation_nums.
+                # We will add the difference to the gamma_policy_invocations.
+                gamma_policy_invocations += self._fixed_invocation_nums - (fixed_policy_invocations + gamma_policy_invocations)
                 
                 # First we apply gamma release policy
                 inter_arrival_times = self._rng.gamma(
@@ -494,7 +498,7 @@ class JobGraph(Graph[Job]):
             )
         
         @staticmethod
-        def fix_and_gamma(
+        def fixed_gamma(
             variable_arrival_rate: float,
             base_arrival_rate: float,
             coefficient: float,
@@ -505,8 +509,9 @@ class JobGraph(Graph[Job]):
             """Creates the parameters corresponding to the `GAMMA` release policy.
 
             Args:
-                rate (`float`): The lambda (rate) parameter defining the Gamma
+                variable_arrival_rate (`float`): The lambda (rate) parameter defining the Gamma
                     arrival distribution.
+                base_arrival_rate (`float`): The base arrival rate of the fixed release policy.
                 coefficient (`float`): The coefficient parameter defining the Gamma
                     arrival distribution.
                 num_invocations (`int`): The number of invocations of the `TaskGraph`.

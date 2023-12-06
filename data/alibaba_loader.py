@@ -137,8 +137,8 @@ class AlibabaLoader(BaseWorkloadLoader):
                 start=start_time,
                 rng_seed=self._rng_seed,
             )
-        elif self._flags.override_release_policy == "fixed_and_gamma":
-            release_policy = JobGraph.ReleasePolicy.fix_and_gamma(
+        elif self._flags.override_release_policy == "fixed_gamma":
+            release_policy = JobGraph.ReleasePolicy.fixed_gamma(
                 variable_arrival_rate=self._flags.override_poisson_arrival_rate,
                 base_arrival_rate=self._flags.override_base_arrival_rate,
                 num_invocations=self._flags.override_num_invocations,
