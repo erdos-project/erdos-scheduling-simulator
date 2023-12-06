@@ -5,12 +5,12 @@
 SCHEDULERS=(EDF TetriSched)
 # MAX_DEADLINE_VARIANCES=(15 25 50 100 200)
 # MAX_DEADLINE_VARIANCES=(200 400 800)
-MAX_DEADLINE_VARIANCES=(200 25 50 100) # Keep deadline tight. Don't change this
+MAX_DEADLINE_VARIANCES=(200) # Keep deadline tight. Don't change this
 SCHEDULER_TIME_DISCRETIZATIONS=(1)
-GAMMA_COEFFICIENTS=(1 4 2) #cv2 don't change this
-RELEASE_POLICIES=(gamma)
+GAMMA_COEFFICIENTS=(1 4) #cv2 don't change this
+RELEASE_POLICIES=(fixed_and_gamma)
 # POISSON_ARRIVAL_RATES=(0.2 0.5 1 2)
-POISSON_ARRIVAL_RATES=(0.1 0.2 0.4) # Tune this
+POISSON_ARRIVAL_RATES=(0.4 0.5 0.7 1 1.5) # Tune this
 DAG_AWARENESS=(1) # False True
 TASK_CPU_DIVISOR=25
 
@@ -19,7 +19,7 @@ WORKER_CONFIG=alibaba_cluster_heterogeneous_80_slots
 
 ERDOS_SIMULATOR_DIR="." # Change this to the directory where the simulator is located.
 MIN_DEADLINE_VARIANCE=10
-NUM_INVOCATIONS=150
+NUM_INVOCATIONS=50
 SCHEDULER_LOG_TIMES=10
 SCHEDULER_RUNTIME=0
 LOG_LEVEL=info
@@ -102,7 +102,7 @@ execute_experiment () {
     "
         fi 
         echo "${MYCONF}" > ${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.conf
-        if ! time python3 main.py --dry_run --flagfile=${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.conf > ${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.output; then
+        if ! time python3 main.py --flagfile=${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.conf > ${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.output; then
             echo "[x] Failed in the execution of ${LOG_BASE}. Exiting."
             exit 3
         fi
