@@ -2,7 +2,7 @@
 # $1 directory where to save the logs.
 
 # Scheduler runtimes in us.TetriSched
-SCHEDULERS=(TetriSched)
+SCHEDULERS=(EDF TetriSched)
 # MAX_DEADLINE_VARIANCES=(15 25 50 100 200)
 # MAX_DEADLINE_VARIANCES=(200 400 800)
 MAX_DEADLINE_VARIANCES=(25 50 100 200) # Keep deadline tight. Don't change this
@@ -10,7 +10,7 @@ SCHEDULER_TIME_DISCRETIZATIONS=(1)
 # RELEASE_POLICIES=(fixed poisson gamma)
 RELEASE_POLICIES=(gamma)
 # POISSON_ARRIVAL_RATES=(0.2 0.5 1 2)
-POISSON_ARRIVAL_RATES=(0.5 1 2 4) # Tune this
+POISSON_ARRIVAL_RATES=(0.005 0.012 0.025) # Tune this
 GAMMA_COEFFICIENTS=(1 2 4) #cv2 don't change this
 DAG_AWARENESS=(1) # False True
 TASK_CPU_DIVISOR=25

@@ -2,7 +2,7 @@
 # $1 directory where to save the logs.
 
 # Scheduler runtimes in us.TetriSched
-SCHEDULERS=(TetriSched)
+SCHEDULERS=(EDF TetriSched)
 # MAX_DEADLINE_VARIANCES=(15 25 50 100 200)
 # MAX_DEADLINE_VARIANCES=(200 400 800)
 MAX_DEADLINE_VARIANCES=(25 50 100 200) # Keep deadline tight. Don't change this
@@ -10,14 +10,14 @@ SCHEDULER_TIME_DISCRETIZATIONS=(1)
 # RELEASE_POLICIES=(fixed poisson gamma)
 RELEASE_POLICIES=(gamma)
 # POISSON_ARRIVAL_RATES=(0.2 0.5 1 2)
-POISSON_ARRIVAL_RATES=(0.5 1 2 4) # Tune this
+POISSON_ARRIVAL_RATES=(0.012 0.025 0.04) # Tune this
 GAMMA_COEFFICIENTS=(1 2 4) #cv2 don't change this
 DAG_AWARENESS=(1) # False True
 TASK_CPU_DIVISOR=25
 
 ERDOS_SIMULATOR_DIR="." # Change this to the directory where the simulator is located.
 MIN_DEADLINE_VARIANCE=10
-NUM_INVOCATIONS=50
+NUM_INVOCATIONS=300
 SCHEDULER_LOG_TIMES=10
 SCHEDULER_RUNTIME=0
 LOG_LEVEL=info
@@ -108,7 +108,7 @@ for MAX_DEADLINE_VARIANCE in ${MAX_DEADLINE_VARIANCES[@]}; do
                 for GAMMA_COEFFICIENT in ${GAMMA_COEFFICIENTS[@]}; do
                     for SCHEDULER_TIME_DISCRETIZATION in ${SCHEDULER_TIME_DISCRETIZATIONS[@]}; do
                         for DAG_AWARE in ${DAG_AWARENESS[@]}; do
-                            if [[ ${SCHEDULER} == EDF && ( "${SCHEDULER_TIME_DISCRETIZATION}" -ne "${SCHEDULER_TIME_DISCRETIZATIONS[0]}" || "${DAG_AWARE}" -ne "${DAG_AWARENESS[0]}" )  ]]; then
+                            if [[ ${SCHEDULER} == EDF && ( "${SCHEDULER_TIME_DISCRETIZATION}" -ne "${SCHEDULER_TIME_DISCRETIZATIONS[0]}" || ${DAG_AWARE} == 1 )  ]]; then
                                 continue
                             fi
 
