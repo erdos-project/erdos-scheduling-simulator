@@ -1053,7 +1053,8 @@ class Simulator(object):
             f"{event.task.intended_release_time.to(EventTime.Unit.US).time},"
             f"{event.task.release_time.to(EventTime.Unit.US).time},"
             f"{event.task.deadline.to(EventTime.Unit.US).time},{event.task.id},"
-            f"{event.task.task_graph}",f"{event.task.available_execution_strategies.get_slowest_strategy().runtime}"
+            f"{event.task.task_graph},"
+            f"{event.task.available_execution_strategies.get_slowest_strategy().runtime.to(EventTime.Unit.US).time}"
         )
         
         with open("simulator_task_release_log.csv", "a") as log_file:
