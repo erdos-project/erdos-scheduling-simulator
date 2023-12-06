@@ -66,7 +66,7 @@ void CriticalPathOptimizationPass::computeTimeBounds(ExpressionPtr expression) {
             leftChild->getName() + ") of " + currentExpression->getId() + "(" +
             currentExpression->getName() + ") does not have time bounds.");
       }
-      auto& leftChildTimeBounds = expressionTimeBoundMap[leftChild->getId()];
+      auto &leftChildTimeBounds = expressionTimeBoundMap[leftChild->getId()];
       TETRISCHED_DEBUG("[" << name << "] Left child " << leftChild->getId()
                            << " (" << leftChild->getName()
                            << ") has time bounds: "
@@ -80,7 +80,7 @@ void CriticalPathOptimizationPass::computeTimeBounds(ExpressionPtr expression) {
             rightChild->getName() + ") of " + currentExpression->getId() + "(" +
             currentExpression->getName() + ") does not have time bounds.");
       }
-      auto& rightChildTimeBounds = expressionTimeBoundMap[rightChild->getId()];
+      auto &rightChildTimeBounds = expressionTimeBoundMap[rightChild->getId()];
       TETRISCHED_DEBUG("[" << name << "] Right child " << rightChild->getId()
                            << " (" << rightChild->getName()
                            << ") has time bounds: "
@@ -177,7 +177,7 @@ void CriticalPathOptimizationPass::pushDownTimeBounds(
             leftChild->getName() + ") of " + currentExpression->getId() + "(" +
             currentExpression->getName() + ") does not have time bounds.");
       }
-      auto& leftChildTimeBounds = expressionTimeBoundMap[leftChild->getId()];
+      auto &leftChildTimeBounds = expressionTimeBoundMap[leftChild->getId()];
       TETRISCHED_DEBUG("[" << name << "] Left child " << leftChild->getId()
                            << " (" << leftChild->getName()
                            << ") has time bounds: "
@@ -191,7 +191,7 @@ void CriticalPathOptimizationPass::pushDownTimeBounds(
             rightChild->getName() + ") of " + currentExpression->getId() + "(" +
             currentExpression->getName() + ") does not have time bounds.");
       }
-      auto& rightChildTimeBounds = expressionTimeBoundMap[rightChild->getId()];
+      auto &rightChildTimeBounds = expressionTimeBoundMap[rightChild->getId()];
       TETRISCHED_DEBUG("[" << name << "] Right child " << rightChild->getId()
                            << "(" << rightChild->getName()
                            << ") has time bounds: "
@@ -252,7 +252,7 @@ void CriticalPathOptimizationPass::pushDownTimeBounds(
       }
     } else {
       // Iterate through the children and tighten the bounds, if possible.
-      for (auto& child : currentExpression->getChildren()) {
+      for (auto &child : currentExpression->getChildren()) {
         if (expressionTimeBoundMap.find(child->getId()) ==
             expressionTimeBoundMap.end()) {
           throw exceptions::RuntimeException(
@@ -260,7 +260,7 @@ void CriticalPathOptimizationPass::pushDownTimeBounds(
               child->getName() + ") of " + currentExpression->getId() + "(" +
               currentExpression->getName() + ") does not have time bounds.");
         }
-        auto& childTimeBounds = expressionTimeBoundMap[child->getId()];
+        auto &childTimeBounds = expressionTimeBoundMap[child->getId()];
         TETRISCHED_DEBUG("[" << name << "] Child " << child->getId() << " ("
                              << child->getName() << ") has time bounds: "
                              << childTimeBounds.toString())
@@ -407,12 +407,12 @@ void CriticalPathOptimizationPass::purgeNodes(ExpressionPtr expression) {
       // This is not a leaf node, so we need to remove the children that
       // need to be purged.
       std::vector<ExpressionPtr> purgedChildrens;
-      for (auto& child : currentExpression->getChildren()) {
+      for (auto &child : currentExpression->getChildren()) {
         if (purgedExpressions.find(child->getId()) != purgedExpressions.end()) {
           purgedChildrens.push_back(child);
         }
       }
-      for (auto& purgedChild : purgedChildrens) {
+      for (auto &purgedChild : purgedChildrens) {
         currentExpression->removeChild(purgedChild);
       }
 
@@ -431,7 +431,7 @@ void CriticalPathOptimizationPass::purgeNodes(ExpressionPtr expression) {
 }
 
 void CriticalPathOptimizationPass::runPass(
-    ExpressionPtr strlExpression, CapacityConstraintMap& capacityConstraints,
+    ExpressionPtr strlExpression, CapacityConstraintMap &capacityConstraints,
     std::optional<std::string> debugFile) {
   /* Phase 1: We first do a bottom-up traversal of the tree to compute
   a tight bound for each node in the STRL tree. */
@@ -450,94 +450,111 @@ void CriticalPathOptimizationPass::clean() { expressionTimeBoundMap.clear(); }
 
 /* Methods for DiscretizationSelectorOptimizationPass */
 DiscretizationSelectorOptimizationPass::DiscretizationSelectorOptimizationPass()
-    : OptimizationPass("DiscretizationSelectorOptimizationPass",
+    : minDiscretization(1),
+      maxDiscretization(5),
+      maxOccupancyThreshold(0.8),
+      OptimizationPass("DiscretizationSelectorOptimizationPass",
+                       OptimizationPassType::PRE_TRANSLATION_PASS) {}
+
+DiscretizationSelectorOptimizationPass::DiscretizationSelectorOptimizationPass(
+    Time minDiscretization, Time maxDiscretization, float maxOccupancyThreshold)
+    : minDiscretization(minDiscretization),
+      maxDiscretization(maxDiscretization),
+      maxOccupancyThreshold(maxOccupancyThreshold),
+      OptimizationPass("DiscretizationSelectorOptimizationPass",
                        OptimizationPassType::PRE_TRANSLATION_PASS) {}
 
 void DiscretizationSelectorOptimizationPass::runPass(
-    ExpressionPtr strlExpression, CapacityConstraintMap& capacityConstraints,
+    ExpressionPtr strlExpression, CapacityConstraintMap &capacityConstraints,
     std::optional<std::string> debugFile) {
   /* Do a Post-Order Traversal of the DAG. */
   std::stack<ExpressionPtr> firstStack;
-  std::stack<ExpressionPtr> secondStack;
   firstStack.push(strlExpression);
+
+  std::vector<ExpressionPtr> maxOverNckExprs;
+  std::vector<ExpressionPtr> independentNcks;
 
   while (!firstStack.empty()) {
     // Move the expression to the second stack.
     auto currentExpression = firstStack.top();
     firstStack.pop();
-    secondStack.push(currentExpression);
+    bool isMaxExpr = false;
+    if (currentExpression->getType() == ExpressionType::EXPR_MAX) {
+      isMaxExpr = true;
+    } else if ((currentExpression->getType() == ExpressionType::EXPR_CHOOSE ||
+                currentExpression->getType() ==
+                    ExpressionType::EXPR_WINDOWED_CHOOSE) &&
+               currentExpression->getParents()[0]->getType() !=
+                   ExpressionType::EXPR_MAX) {
+      // TODO(Alind): Actual check should be that MAX has all children NCK for
+      // EXPR_CHOOSE
+      independentNcks.push_back(currentExpression);
+    }
+    bool allChildrenNck = false;
+    int numChildNcks = 0;
 
     // Add the children to the first stack.
     auto expressionChildren = currentExpression->getChildren();
     for (auto child = expressionChildren.rbegin();
          child != expressionChildren.rend(); ++child) {
+      if ((*child)->getType() == ExpressionType::EXPR_CHOOSE) {
+        numChildNcks++;
+      }
       firstStack.push(*child);
     }
+    if (numChildNcks == expressionChildren.size()) {
+      allChildrenNck = true;
+    }
+    if (isMaxExpr && allChildrenNck) {
+      maxOverNckExprs.push_back(currentExpression);
+    }
+  }
+  if (maxOverNckExprs.size() == 0 && independentNcks.size() == 0) {
+    throw tetrisched::exceptions::RuntimeException(
+        "Inside Discretization Optimization pass: but no max over nck or "
+        "independent ncks found!");
   }
 
   std::vector<std::pair<TimeRange, uint32_t>> occupancyRequestRanges;
   Time minOccupancyTime = std::numeric_limits<Time>::max();
   Time maxOccupancyTime = 0;
+  for (auto maxNckExpr : maxOverNckExprs) {
+    auto timeBounds = maxNckExpr->getTimeBounds();
+    TimeRange occupancyRequestRange = std::make_pair(
+        timeBounds.startTimeRange.first, timeBounds.endTimeRange.second);
 
-  // A Post-Order Traversal will now be the order in which
-  // the expressions are popped from the second stack.
-  std::set<std::string> visitedExpressions;
-  std::set<std::string> purgedExpressions;
-  while (!secondStack.empty()) {
-    auto currentExpression = secondStack.top();
-    secondStack.pop();
-    if (visitedExpressions.find(currentExpression->getId()) ==
-        visitedExpressions.end()) {
-      visitedExpressions.insert(currentExpression->getId());
-    } else {
-      continue;
+    // Update min and max occupancy times, if necessary.
+    if (occupancyRequestRange.first < minOccupancyTime) {
+      minOccupancyTime = occupancyRequestRange.first;
     }
-    TETRISCHED_DEBUG(
-        "[DiscretizationSelectorOptimizationPass] Attending to nodes for "
-        << currentExpression->getId() << "(" << currentExpression->getName()
-        << ")")
-
-    if (currentExpression->getNumChildren() != 0) {
-      TETRISCHED_DEBUG("[DiscretizationSelectorOptimizationPass] Skipping "
-                       << currentExpression->getId() << "("
-                       << currentExpression->getName()
-                       << ") since it is not a leaf node.")
-      continue;
+    if (occupancyRequestRange.second > maxOccupancyTime) {
+      maxOccupancyTime = occupancyRequestRange.second;
     }
+    auto numResources = maxNckExpr->getChildren()[0]->getResourceQuantity();
+    // Push the occupancy request range into the vector.
+    occupancyRequestRanges.push_back({occupancyRequestRange, numResources});
+  }
+  for (auto iNck : independentNcks) {
+    auto timeBounds = iNck->getTimeBounds();
+    TimeRange occupancyRequestRange = std::make_pair(
+        timeBounds.startTimeRange.first, timeBounds.endTimeRange.second);
 
-    if (currentExpression->getType() == ExpressionType::EXPR_CHOOSE ||
-        currentExpression->getType() == ExpressionType::EXPR_WINDOWED_CHOOSE ||
-        currentExpression->getType() == ExpressionType::EXPR_MALLEABLE_CHOOSE) {
-      // Get the time bounds of the choose expression.
-      auto timeBounds = currentExpression->getTimeBounds();
-      TimeRange occupancyRequestRange = std::make_pair(
-          timeBounds.startTimeRange.first, timeBounds.endTimeRange.second);
-
-      // Update min and max occupancy times, if necessary.
-      if (occupancyRequestRange.first < minOccupancyTime) {
-        minOccupancyTime = occupancyRequestRange.first;
-      }
-      if (occupancyRequestRange.second > maxOccupancyTime) {
-        maxOccupancyTime = occupancyRequestRange.second;
-      }
-
-      // Push the occupancy request range into the vector.
-      occupancyRequestRanges.push_back(
-          {occupancyRequestRange, currentExpression->getResourceQuantity()});
-      TETRISCHED_DEBUG(
-          "[DiscretizationSelectorOptimizationPass] Adding "
-          << currentExpression->getId() << "(" << currentExpression->getName()
-          << ") to the occupancy request ranges with range: "
-          << "[" << occupancyRequestRange.first << ", "
-          << occupancyRequestRange.second << "]"
-          << " and quantity: " << currentExpression->getResourceQuantity())
+    // Update min and max occupancy times, if necessary.
+    if (occupancyRequestRange.first < minOccupancyTime) {
+      minOccupancyTime = occupancyRequestRange.first;
     }
+    if (occupancyRequestRange.second > maxOccupancyTime) {
+      maxOccupancyTime = occupancyRequestRange.second;
+    }
+    auto numResources = iNck->getResourceQuantity();
+    // Push the occupancy request range into the vector.
+    occupancyRequestRanges.push_back({occupancyRequestRange, numResources});
   }
 
   // We now have the occupancy request ranges, we can now discretize them.
   std::vector<uint32_t> occupancyRequests(
       maxOccupancyTime - minOccupancyTime + 1, 0);
-  for (auto& [occupancyRequestTimeRange, occupancyRequest] :
+  for (auto &[occupancyRequestTimeRange, occupancyRequest] :
        occupancyRequestRanges) {
     // Add the occupancy request throughout this time range.
     for (Time time = occupancyRequestTimeRange.first;
@@ -547,12 +564,148 @@ void DiscretizationSelectorOptimizationPass::runPass(
   }
 
   // Log the occupancy requests and times.
-  TETRISCHED_DEBUG(
-      "[DiscretizationSelectorOptimizationPass] Occupancy requests between "
-      << minOccupancyTime << " and " << maxOccupancyTime << ": ");
+  // std::cout << "[" << minOccupancyTime << "]"
+  //           << "[DiscretizationSelectorOptimizationPass] Occupancy requests
+  //           between "
+  //           << minOccupancyTime << " and " << maxOccupancyTime << ": " <<
+  //           std::endl;
+  uint32_t maxOccupancyVal = 0;
   for (size_t i = 0; i < occupancyRequests.size(); i++) {
-    TETRISCHED_DEBUG("[DiscretizationSelectorOptimizationPass] "
-                     << i + minOccupancyTime << ": " << occupancyRequests[i]);
+    auto currentOccupancy = occupancyRequests[i];
+    if (currentOccupancy > maxOccupancyVal) {
+      maxOccupancyVal = currentOccupancy;
+    }
+    // std::cout << "\t" << "[" << minOccupancyTime << "]" <<
+    // "[DiscretizationSelectorOptimizationPass] "
+    //                  << i + minOccupancyTime << ": " << occupancyRequests[i]
+    //                  << std::endl;
+  }
+
+  double autoMaxOccupancyThreshold = maxOccupancyThreshold * maxOccupancyVal;
+  // std::cout << "** [DiscretizationSelectorOptimizationPass] Max
+  // Discretization Value" << maxOccupancyVal << " Threshold Decided is: " <<
+  // autoMaxOccupancyThreshold << " threshold val: " << maxOccupancyThreshold <<
+  // std::endl;
+
+  // finding the right discretization
+
+  // decay function for finding the right discretization
+  // TODO(Alind): Type of Decay fn should also be made input from python
+  auto linearDecayFunction =
+      [this, autoMaxOccupancyThreshold](double curentOccupancy) {
+        double fraction = curentOccupancy / autoMaxOccupancyThreshold;
+        double value = (maxDiscretization - minDiscretization) * fraction;
+        auto predictedDiscretization =
+            std::max(maxDiscretization - value, (double)minDiscretization);
+        return (uint32_t)std::round(predictedDiscretization);
+      };
+  // algorithm for deciding the discretization based on occupancy map
+  std::vector<std::pair<TimeRange, Time>> timeRangeToGranularities;
+  int planAheadIndex = -1;
+  for (size_t i = 0; i < occupancyRequests.size(); i++) {
+    // if discretization is decided for more plan ahead continue
+    if (planAheadIndex > -1) {
+      Time endTime = timeRangeToGranularities[planAheadIndex].first.second;
+      Time currentTime = minOccupancyTime + i;
+      if (currentTime < endTime) {
+        continue;
+      }
+    }
+
+    // find the right discretization for current occupancy
+    uint32_t currentOccupancy = occupancyRequests[i];
+    uint32_t predictedDiscretization = linearDecayFunction(currentOccupancy);
+    auto nextPlanAhead =
+        std::min(i + predictedDiscretization, occupancyRequests.size());
+
+    // find the right discretization such that average occupancy for that period
+    // predicts same discretization
+    while (nextPlanAhead >= (i + 1)) {
+      double averageOccupancy = 0;
+      int count = 0;
+      for (size_t j = i; j < nextPlanAhead; j++) {
+        averageOccupancy += occupancyRequests[j];
+        count++;
+      }
+      averageOccupancy /= count;
+      uint32_t avgPredictedDiscretization =
+          linearDecayFunction(averageOccupancy);
+      if (avgPredictedDiscretization == predictedDiscretization) {
+        TimeRange discretizedtimeRange = std::make_pair(
+            minOccupancyTime + i, minOccupancyTime + nextPlanAhead);
+        Time granularity = (nextPlanAhead - i);
+        auto value = std::make_pair(discretizedtimeRange, granularity);
+        timeRangeToGranularities.push_back(value);
+        // newStartTimes.push_back(minOccupancyTime + i);
+        planAheadIndex++;
+        break;
+      }
+      nextPlanAhead--;
+    }
+  }
+
+  // set capacity constraint map to dynamic and update it
+  capacityConstraints.setDynamicDiscretization(timeRangeToGranularities);
+
+  // // Log the found dynamic discretizations and times.
+  // std::cout <<
+  //     "[DiscretizationSelectorOptimizationPass] Dynamic Discretization
+  //     between "
+  //     << minOccupancyTime << " and " << maxOccupancyTime << ": "<< std::endl;
+
+  // for (auto &[discretizationTimeRange, granularity] :
+  //      timeRangeToGranularities) {
+  //   std::cout << "\t"
+  //             << "[" << minOccupancyTime << "]"
+  //             << "[DiscretizationSelectorOptimizationPassDiscreteTime] "
+  //             << discretizationTimeRange.first << " - " <<
+  //             discretizationTimeRange.second << " : " << granularity << "
+  //             Occuapncy: " << occupancyRequests[discretizationTimeRange.first
+  //             - minOccupancyTime] << std::endl;
+  // }
+
+  // changing the STRL expressions
+  // Find Max expressions over NCK and remove NCK expressions with redundant
+  // start times
+  for (auto &[discreteTimeRange, discreteGranularity] :
+       timeRangeToGranularities) {
+    auto startTime = discreteTimeRange.first;
+    auto endTime = discreteTimeRange.second;
+    for (auto maxNckExpr : maxOverNckExprs) {
+      // find ncks within startTime and endTime for this Max expr
+      std::vector<ExpressionPtr> ncksWithinTimeRange;
+      auto expressionChildren = maxNckExpr->getChildren();
+      ExpressionPtr minStartTimeNckExpr = nullptr;
+      for (auto child = expressionChildren.rbegin();
+           child != expressionChildren.rend(); ++child) {
+        auto startTimeNck = (*child)->getTimeBounds().startTimeRange.first;
+        if (startTimeNck >= startTime && startTimeNck < endTime) {
+          ncksWithinTimeRange.push_back(*child);
+          if (minStartTimeNckExpr != nullptr) {
+            if (minStartTimeNckExpr->getTimeBounds().startTimeRange.first >
+                startTimeNck) {
+              minStartTimeNckExpr = *child;
+            }
+          } else {
+            minStartTimeNckExpr = *child;
+          }
+        }
+      }
+      if (ncksWithinTimeRange.size() > 1) {
+        // if more than one nck found within the time range, remove it as only
+        // one nck within granularity is sufficient. Nck with minimum start time
+        // is kept within this time range
+        for (auto redundantNckExpr : ncksWithinTimeRange) {
+          if (redundantNckExpr->getId() != minStartTimeNckExpr->getId()) {
+            maxNckExpr->removeChild(redundantNckExpr);
+            // std::cout << "[DiscretizationSelectorOptimizationPassRemoveNck]
+            // Removing NCK: " + redundantNckExpr->getName() + " From Max: " +
+            // maxNckExpr->getName() << "Time Range: [" << startTime << ", " <<
+            // endTime << "]";
+          }
+        }
+      }
+    }
   }
 }
 
@@ -589,7 +742,7 @@ void CapacityConstraintMapPurgingOptimizationPass::computeCliques(
     // ChooseExpressions, then we use this clique.
     if (currentExpression->getType() == ExpressionType::EXPR_MAX) {
       bool allChildrenAreChooseExpressions = true;
-      for (auto& child : currentExpression->getChildren()) {
+      for (auto &child : currentExpression->getChildren()) {
         if (child->getType() != ExpressionType::EXPR_CHOOSE &&
             child->getType() != ExpressionType::EXPR_MALLEABLE_CHOOSE) {
           allChildrenAreChooseExpressions = false;
@@ -605,7 +758,7 @@ void CapacityConstraintMapPurgingOptimizationPass::computeCliques(
                          << currentExpression->getId() << " ("
                          << currentExpression->getName() << ")")
         std::unordered_set<ExpressionPtr> clique;
-        for (auto& child : currentExpression->getChildren()) {
+        for (auto &child : currentExpression->getChildren()) {
           clique.insert(child);
           TETRISCHED_DEBUG("Inserting " << child->getId() << " ("
                                         << child->getName()
@@ -617,7 +770,7 @@ void CapacityConstraintMapPurgingOptimizationPass::computeCliques(
     }
 
     // Visit all the children.
-    for (auto& child : currentExpression->getChildren()) {
+    for (auto &child : currentExpression->getChildren()) {
       if (child->getNumChildren() > 0) {
         expressionStack.push(child);
       }
@@ -627,7 +780,7 @@ void CapacityConstraintMapPurgingOptimizationPass::computeCliques(
 }
 
 void CapacityConstraintMapPurgingOptimizationPass::
-    deactivateCapacityConstraints(CapacityConstraintMap& capacityConstraints,
+    deactivateCapacityConstraints(CapacityConstraintMap &capacityConstraints,
                                   std::optional<std::string> debugFile) {
   std::ofstream debugFileStream;
   if (debugFile.has_value()) {
@@ -643,7 +796,7 @@ void CapacityConstraintMapPurgingOptimizationPass::
   std::unordered_map<ExpressionPtr, uint32_t> expressionUsageMap;
 
   // Iterate over each of the individual CapacityConstraints in the map.
-  for (auto& [key, capacityConstraint] :
+  for (auto &[key, capacityConstraint] :
        capacityConstraints.capacityConstraints) {
     // If the capacity check is trivially satisfiable, don't even bother
     // checking the cliques.
@@ -661,7 +814,7 @@ void CapacityConstraintMapPurgingOptimizationPass::
 
     // Iterate over all the Expressions that contribute to a usage in
     // this CapacityConstraint, and turn on their clique usage.
-    for (auto& [expression, usage] : capacityConstraint->usageVector) {
+    for (auto &[expression, usage] : capacityConstraint->usageVector) {
       if (expression->getNumParents() != 1) {
         throw tetrisched::exceptions::RuntimeException(
             "Expression " + expression->getId() + " (" + expression->getName() +
@@ -707,8 +860,8 @@ void CapacityConstraintMapPurgingOptimizationPass::
       keysToDelete.clear();
 
       // Bubble up cliques.
-      for (auto& [clique, usage] : expressionUsageMap) {
-        for (auto& parent : clique->getParents()) {
+      for (auto &[clique, usage] : expressionUsageMap) {
+        for (auto &parent : clique->getParents()) {
           if (parent->getType() == ExpressionType::EXPR_LESSTHAN) {
             keysToDelete.insert(clique);
             if (expressionUsageMap.find(parent) == expressionUsageMap.end()) {
@@ -722,7 +875,7 @@ void CapacityConstraintMapPurgingOptimizationPass::
       }
 
       // Delete redundant keys.
-      for (auto& key : keysToDelete) {
+      for (auto &key : keysToDelete) {
         expressionUsageMap.erase(key);
       }
     } while (keysToDelete.size() > 0);
@@ -738,7 +891,7 @@ void CapacityConstraintMapPurgingOptimizationPass::
 
     // If the clique usage is <= RHS, then we can deactivate this constraint.
     uint32_t totalUsage = 0;
-    for (auto& [clique, usage] : expressionUsageMap) {
+    for (auto &[clique, usage] : expressionUsageMap) {
       totalUsage += usage;
     }
     if (totalUsage <= capacityConstraint->getQuantity()) {
@@ -768,7 +921,7 @@ void CapacityConstraintMapPurgingOptimizationPass::
 }
 
 void CapacityConstraintMapPurgingOptimizationPass::runPass(
-    ExpressionPtr strlExpression, CapacityConstraintMap& capacityConstraints,
+    ExpressionPtr strlExpression, CapacityConstraintMap &capacityConstraints,
     std::optional<std::string> debugFile) {
   /* Phase 1: We compute the cliques from  the Expressions in the DAG. */
   // auto cliqueStartTime = std::chrono::high_resolution_clock::now();
@@ -800,12 +953,22 @@ void CapacityConstraintMapPurgingOptimizationPass::runPass(
 void CapacityConstraintMapPurgingOptimizationPass::clean() { cliques.clear(); }
 
 /* Methods for OptimizationPassRunner */
-OptimizationPassRunner::OptimizationPassRunner(bool debug) : debug(debug) {
+OptimizationPassRunner::OptimizationPassRunner(bool debug,
+                                               bool enableDynamicDiscretization,
+                                               Time minDiscretization,
+                                               Time maxDiscretization,
+                                               float maxOccupancyThreshold)
+    : debug(debug), enableDynamicDiscretization(enableDynamicDiscretization) {
   // Register the Critical Path optimization pass.
-  registeredPasses.push_back(std::make_shared<CriticalPathOptimizationPass>());
-  // Register the DiscretizationGenerator pass.
-  // registeredPasses.push_back(
-  //     std::make_shared<DiscretizationSelectorOptimizationPass>());
+  // registeredPasses.push_back(std::make_shared<CriticalPathOptimizationPass>());
+
+  if (enableDynamicDiscretization) {
+    // Register the DiscretizationGenerator pass.
+    registeredPasses.push_back(
+        std::make_shared<DiscretizationSelectorOptimizationPass>(
+            minDiscretization, maxDiscretization, maxOccupancyThreshold));
+  }
+
   // Register the CapacityConstraintMapPurging optimization pass.
   // registeredPasses.push_back(
   //     std::make_shared<CapacityConstraintMapPurgingOptimizationPass>());
@@ -813,9 +976,9 @@ OptimizationPassRunner::OptimizationPassRunner(bool debug) : debug(debug) {
 
 void OptimizationPassRunner::runPreTranslationPasses(
     Time currentTime, ExpressionPtr strlExpression,
-    CapacityConstraintMap& capacityConstraints) {
+    CapacityConstraintMap &capacityConstraints) {
   // Run the registered optimization passes on the given STRL expression.
-  for (auto& pass : registeredPasses) {
+  for (auto &pass : registeredPasses) {
     if (pass->getType() == OptimizationPassType::PRE_TRANSLATION_PASS) {
       auto debugFile =
           debug
@@ -830,9 +993,9 @@ void OptimizationPassRunner::runPreTranslationPasses(
 
 void OptimizationPassRunner::runPostTranslationPasses(
     Time currentTime, ExpressionPtr strlExpression,
-    CapacityConstraintMap& capacityConstraints) {
+    CapacityConstraintMap &capacityConstraints) {
   // Run the registered optimization passes on the given STRL expression.
-  for (auto& pass : registeredPasses) {
+  for (auto &pass : registeredPasses) {
     if (pass->getType() == OptimizationPassType::POST_TRANSLATION_PASS) {
       auto debugFile =
           debug

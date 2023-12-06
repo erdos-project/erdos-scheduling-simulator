@@ -1046,14 +1046,19 @@ class Simulator(object):
         """
         # Release a task for the scheduler.
         event.task.release(event.time)
+
         self._csv_logger.debug(
             f"{event.time.time},TASK_RELEASE,{event.task.name},"
             f"{event.task.timestamp},"
             f"{event.task.intended_release_time.to(EventTime.Unit.US).time},"
             f"{event.task.release_time.to(EventTime.Unit.US).time},"
             f"{event.task.deadline.to(EventTime.Unit.US).time},{event.task.id},"
-            f"{event.task.task_graph}"
+            f"{event.task.task_graph},"
+            f"{event.task.available_execution_strategies.get_slowest_strategy().runtime.to(EventTime.Unit.US).time}"
         )
+        
+        with open("simulator_task_release_log.csv", "a") as log_file:
+            log_file.write(f"task_name={event.task.name},task_graph={event.task.task_graph},deadline={event.task.deadline},release_time={event.task.release_time.to(EventTime.Unit.US).time},intended_release_time={event.task.intended_release_time.to(EventTime.Unit.US).time}\n")
         # If we are not in the midst of a scheduler invocation, and the task hasn't
         # already been scheduled and next scheduled invocation is too late, then
         # bring the invocation sooner to (event time + scheduler_delay), and re-heapify

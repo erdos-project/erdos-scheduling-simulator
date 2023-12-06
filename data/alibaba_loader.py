@@ -1,3 +1,4 @@
+import json
 import math
 import os
 import pathlib
@@ -9,7 +10,7 @@ from typing import List, Mapping, Optional, Sequence
 
 import absl
 
-from utils import EventTime, setup_logging
+from utils import EventTime, setup_csv_logging, setup_logging
 from workload import (
     ExecutionStrategies,
     ExecutionStrategy,
@@ -40,13 +41,14 @@ class AlibabaLoader(BaseWorkloadLoader):
         path: str,
         workload_interval: EventTime,
         flags: "absl.flags",
+        heterogeneous: bool = False,
     ):
         self._path = path
         self._flags = flags
         self._logger = setup_logging(
             name=self.__class__.__name__,
             log_dir=flags.log_dir,
-            log_file=flags.log_file_level,
+            log_file=flags.log_file_name,
             log_level=flags.log_level,
         )
         self._job_data_generator = self._initialize_job_data_generator()
@@ -61,6 +63,24 @@ class AlibabaLoader(BaseWorkloadLoader):
             else EventTime(sys.maxsize, EventTime.Unit.US)
         )
         self._workload = Workload.empty(flags)
+        self._heterogeneous = heterogeneous
+
+        if self._flags:
+            self._csv_logger = setup_csv_logging(
+                name=self.__class__.__name__,
+                log_dir=self._flags.log_dir,
+                log_file=self._flags.csv_file_name,
+            )
+
+            self._task_cpu_divisor = int(self._flags.alibaba_loader_task_cpu_divisor)
+            self._task_duration_multipler = self._flags.alibaba_task_duration_multiplier
+        else:
+            self._csv_logger = setup_csv_logging(
+                name=self.__class__.__name__, log_file=None
+            )
+            self._log_dir = os.getcwd()
+            self._task_cpu_divisor = 25
+            self._task_duration_multipler = 1
 
     def _construct_release_times(self):
         """Construct the release times of the jobs in the workload.
@@ -112,6 +132,15 @@ class AlibabaLoader(BaseWorkloadLoader):
         elif self._flags.override_release_policy == "gamma":
             release_policy = JobGraph.ReleasePolicy.gamma(
                 rate=self._flags.override_poisson_arrival_rate,
+                num_invocations=self._flags.override_num_invocations,
+                coefficient=self._flags.override_gamma_coefficient,
+                start=start_time,
+                rng_seed=self._rng_seed,
+            )
+        elif self._flags.override_release_policy == "fixed_gamma":
+            release_policy = JobGraph.ReleasePolicy.fixed_gamma(
+                variable_arrival_rate=self._flags.override_poisson_arrival_rate,
+                base_arrival_rate=self._flags.override_base_arrival_rate,
                 num_invocations=self._flags.override_num_invocations,
                 coefficient=self._flags.override_gamma_coefficient,
                 start=start_time,
@@ -175,26 +204,62 @@ class AlibabaLoader(BaseWorkloadLoader):
         # Create the individual Job instances corresponding to each Task.
         task_name_to_simulator_job_mapping = {}
         for task in job_tasks:
-            job_resources = Resources(
+            job_resources_1 = Resources(
                 resource_vector={
-                    Resource(name="Slot", _id="any"): int(math.ceil(task.cpu / 100)),
+                    # Note: We divide the CPU by some self._task_cpu_divisor instead 
+                    # of 100 because this would intorduce more variance into the 
+                    # resource/slots usage.
+                    # We used to divide by 100, but the majority of the tasks
+                    # would end up using 1 slot, which is not very interesting and
+                    # makes no chance for DAG_Sched to do effective packing that
+                    # would beat EDF by a significant margin.
+                    Resource(name="Slot_1", _id="any"): int(
+                        math.ceil(task.cpu / self._task_cpu_divisor)
+                    ),
                 }
             )
+
+            job_resources_2 = Resources(
+                resource_vector={
+                    Resource(name="Slot_2", _id="any"): int(
+                        math.ceil(task.cpu / self._task_cpu_divisor)
+                    ),
+                }
+            )
+
             job_name = task.name.split("_")[0]
-            job_runtime = EventTime(int(math.ceil(task.duration)), EventTime.Unit.US)
+            job_runtime_1 = EventTime(
+                int(math.ceil(task.duration * self._task_duration_multipler)),
+                EventTime.Unit.US,
+            )
+            # This is used when self._heterogeneous is True
+            # to support another execution strategy where it runs faster.
+            job_runtime_2 = EventTime(
+                int(math.ceil(task.duration * self._task_duration_multipler * 0.8)),
+                EventTime.Unit.US,
+            )
+
+            execution_strategies = [
+                ExecutionStrategy(
+                    resources=job_resources_1,
+                    batch_size=1,
+                    runtime=job_runtime_1,
+                ),
+            ]
+            if self._heterogeneous:
+                execution_strategies.append(
+                    ExecutionStrategy(
+                        resources=job_resources_2,
+                        batch_size=1,
+                        runtime=job_runtime_2,
+                    ),
+                )
+
             task_name_to_simulator_job_mapping[job_name] = Job(
                 name=job_name,
                 profile=WorkProfile(
                     name="SlotPolicyFor{}".format(job_name),
-                    execution_strategies=ExecutionStrategies(
-                        [
-                            ExecutionStrategy(
-                                resources=job_resources,
-                                batch_size=1,
-                                runtime=job_runtime,
-                            )
-                        ]
-                    ),
+                    execution_strategies=ExecutionStrategies(execution_strategies),
                 ),
             )
 
@@ -288,5 +353,8 @@ class AlibabaLoader(BaseWorkloadLoader):
                 )
                 if task_graph is not None:
                     self._workload.add_task_graph(task_graph)
+                    self._csv_logger.info(
+                        f"{current_time.time},TASK_GRAPH_RELEASE,{task_graph.release_time.time},{task_graph.deadline.time},{task_graph.name},{len(task_graph.get_nodes())}"
+                    )
                     task_release_index += 1
             return self._workload

@@ -29,6 +29,8 @@ STATS_FUNCTIONS = {
     "p99.9": (partial(np.percentile, q=99.9), "Percentile (99.9th)"),
 }
 
+# TODO (Dhruv): remove the hardcoding for rng seed
+_rng = random.Random(42)
 
 @total_ordering
 class EventTime:
@@ -240,7 +242,7 @@ def fuzz_time(time: EventTime, variance: Tuple[int, int]) -> EventTime:
     min_variance, max_variance = variance
     return EventTime(
         int(
-            random.uniform(
+            _rng.uniform(
                 time.time + (time.time * abs(min_variance) / 100.0),
                 time.time + (time.time * abs(max_variance) / 100.0),
             )

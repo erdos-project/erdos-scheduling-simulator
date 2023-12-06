@@ -119,6 +119,8 @@ class CapacityConstraintMap {
                            const Time granularity,
                            const IndicatorT usageIndicator,
                            const PartitionUsageT usageVariable, const Time duration);
+  /// Sets dynamic discretization for capacity contraint map
+  void setDynamicDiscretization(std::vector<std::pair<TimeRange, Time>> passedtimeRangeToGranularities);
 
   /// Registers the usage by the Expression for the Partition in the
   /// time range starting from startTime and lasting for duration as

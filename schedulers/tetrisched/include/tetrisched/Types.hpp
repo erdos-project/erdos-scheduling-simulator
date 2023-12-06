@@ -4,15 +4,29 @@
 #include <cstdint>
 #include <cstring>
 #include <exception>
+#include <experimental/source_location>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <string>
 
 // Macros for logging.
-#define TETRISCHED_DEBUG_ENABLED false
-#define TETRISCHED_DEBUG(x)       \
-  if (TETRISCHED_DEBUG_ENABLED) { \
-    std::cout << x << std::endl;  \
+#define TETRISCHED_LOGGING_ENABLED false
+#define TETRISCHED_LOGGING_DIR_ENV_NAME "TETRISCHED_LOGGING_DIR"
+#define TETRISCHED_DEFAULT_LOG_LEVEL tetrisched::logging::INFO
+#define TETRISCHED_DEBUG(x)                                                   \
+  if (TETRISCHED_LOGGING_ENABLED &&                                           \
+      TETRISCHED_DEFAULT_LOG_LEVEL >= tetrisched::logging::DEBUG) {           \
+    auto sourceLocation = std::experimental::source_location::current();      \
+    tetrisched::logging::Logger::debug()                                      \
+        << "[DEBUG, " << sourceLocation.function_name() << "] " << x << "\n"; \
+  }
+#define TETRISCHED_INFO(x)                                                   \
+  if (TETRISCHED_LOGGING_ENABLED &&                                          \
+      TETRISCHED_DEFAULT_LOG_LEVEL >= tetrisched::logging::INFO) {           \
+    auto sourceLocation = std::experimental::source_location::current();     \
+    tetrisched::logging::Logger::info()                                      \
+        << "[INFO, " << sourceLocation.function_name() << "] " << x << "\n"; \
   }
 
 // Macro for the coefficient and the permissible values for the Variables.
@@ -67,6 +81,64 @@ class RuntimeException : public std::exception {
   const char* what() const noexcept override { return message.c_str(); }
 };
 }  // namespace exceptions
+
+/// Defines the namespace for logging.
+namespace logging {
+enum LogLevel {
+  DEBUG,
+  INFO,
+  WARN,
+  ERROR,
+};
+
+class Logger {
+ private:
+  std::ostream& outputStream;
+  LogLevel logLevel;
+
+ public:
+  Logger(std::ostream& outputStream = std::cout, LogLevel level = INFO)
+      : logLevel(level), outputStream(outputStream) {
+    outputStream << std::unitbuf;
+  }
+
+  template <typename T>
+  Logger& operator<<(const T& val) {
+    if (logLevel >= TETRISCHED_DEFAULT_LOG_LEVEL) {
+      outputStream << val;
+    }
+    return *this;
+  }
+
+  ~Logger() { outputStream << std::endl << std::nounitbuf; }
+
+  void flush() { outputStream.flush(); }
+
+  static Logger& debug() {
+    static std::string outputDir =
+        std::getenv(TETRISCHED_LOGGING_DIR_ENV_NAME)
+            ? std::getenv(TETRISCHED_LOGGING_DIR_ENV_NAME)
+            : "./";
+    static std::ofstream outputStream(outputDir + "libtetrisched.log",
+                                      std::ios::app | std::ios::out);
+    static Logger logger(outputStream.is_open() ? outputStream : std::cout,
+                         LogLevel::DEBUG);
+    return logger;
+  }
+
+  static Logger& info() {
+    static std::string outputDir =
+        std::getenv(TETRISCHED_LOGGING_DIR_ENV_NAME)
+            ? std::getenv(TETRISCHED_LOGGING_DIR_ENV_NAME)
+            : "./";
+    static std::ofstream outputStream(outputDir + "libtetrisched.log",
+                                      std::ios::app | std::ios::out);
+    static Logger logger(outputStream.is_open() ? outputStream : std::cout,
+                         LogLevel::INFO);
+    return logger;
+  }
+};
+}  // namespace logging
 
 /// A Representation of time in the system.
 /// We currently use a uint32_t since it translates well from the simulator.

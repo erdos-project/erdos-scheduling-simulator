@@ -2,5 +2,5 @@
   workers:
       - name: Worker_1_1
         resources:
-            - name: Slot
+            - name: Slot_1
               quantity: 10

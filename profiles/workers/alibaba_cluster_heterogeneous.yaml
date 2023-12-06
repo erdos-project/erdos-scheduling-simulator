@@ -1,0 +1,10 @@
+- name: WorkerPool_1
+  workers:
+      - name: Worker_1_1
+        resources:
+            - name: Slot_1
+              quantity: 5
+      - name: Worker_1_2
+        resources:
+            - name: Slot_2
+              quantity: 5

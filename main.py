@@ -32,7 +32,7 @@ try:
 except ImportError:
     pass
 from simulator import Simulator
-from utils import EventTime, setup_logging
+from utils import EventTime, setup_csv_logging, setup_logging
 from workload import BranchPredictionPolicy, Workload
 
 FLAGS = flags.FLAGS
@@ -143,6 +143,22 @@ flags.DEFINE_integer(
 
 # Task related flags.
 flags.DEFINE_integer(
+    "alibaba_loader_task_cpu_divisor",
+    25,
+    "The divisor used when converting alibaba trace tasks task.cpu to slot. The lower "
+    "the number, the higher the slots."
+)
+flags.DEFINE_float(
+    "alibaba_task_duration_multiplier",
+    1,
+    "The multiplier used for alibaba trace tasks task.duration."
+)
+flags.DEFINE_bool(
+    "alibaba_enable_heterogeneous_resource_type",
+    False,
+    "If true, we use heterogeneous resource types with %difference in runtime."
+)
+flags.DEFINE_integer(
     "max_timestamp",
     None,
     "Maximum timestamp of tasks to load from the JSON file.",
@@ -242,11 +258,23 @@ flags.DEFINE_bool(
     "If `True`, the scheduler creates space-time matrix non-uniformly. "
     "The discretization is finer initially, and coarser at the end. (default: False)",
 )
+flags.DEFINE_bool(
+    "scheduler_dynamic_discretization",
+    False,
+    "If `True`, the scheduler creates space-time matrix non-uniformly. "
+    "The discretization is dynamically decided based on the occupancy request for each time slice. (default: False)",
+)
 flags.DEFINE_integer(
     "scheduler_max_time_discretization",
     5,
     "The maximum discretization that the scheduler can have (in µs). "
     "Only used when scheduler_adaptive_discretization flag is enabled. (default: 5)",
+)
+flags.DEFINE_float(
+    "scheduler_max_occupancy_threshold",
+    0.8,
+    "The percentage b/w 0 and 1 of maximum occupancy beyond which the discretization would always be 1 incase of dynamic discretization. "
+    "This flag is only used when dynamic discretization is enabled (default: 0.8)",
 )
 flags.DEFINE_integer(
     "scheduler_delay",
@@ -334,6 +362,12 @@ flags.DEFINE_bool(
     "If `True`, the scheduler is allowed to batch tasks "
     "that share a WorkProfile together.",
 )
+flags.DEFINE_bool(
+    "scheduler_enable_optimization_pass",
+    False,
+    "If `True`, the scheduler runs pre/post-translation optimization passes"
+    "when registering STRL expression.",
+)
 
 # Workload definition related flags.
 flags.DEFINE_integer(
@@ -349,7 +383,7 @@ flags.DEFINE_integer(
 flags.DEFINE_enum(
     "override_release_policy",
     "fixed",
-    ["periodic", "poisson", "gamma", "fixed", "closed_loop"],
+    ["periodic", "poisson", "gamma", "fixed", "closed_loop", "fixed_gamma"],
     "Override the release policy for all TaskGraphs defined in the Workload.",
 )
 flags.DEFINE_integer(
@@ -361,6 +395,12 @@ flags.DEFINE_float(
     "override_poisson_arrival_rate",
     0.0,
     "Override the Poisson arrival rate for all TaskGraphs defined"
+    "in the JSON workload definition.",
+)
+flags.DEFINE_float(
+    "override_base_arrival_rate",
+    0.0,
+    "Override the base arrival rate for all TaskGraphs defined"
     "in the JSON workload definition.",
 )
 flags.DEFINE_float(
@@ -417,7 +457,15 @@ def main(args):
     logger.info("Workload File: %s", FLAGS.workload_profile_path)
     logger.info("Workers File: %s", FLAGS.worker_profile_path)
     logger.info("Profile File: %s", FLAGS.profile_path)
-
+    
+    csv_logger = setup_csv_logging(
+        name=__name__,
+        log_dir=FLAGS.log_dir,
+        log_file=FLAGS.csv_file_name,
+    )
+    for flag_name in FLAGS:
+        csv_logger.debug(f"input_flag,{flag_name},{getattr(FLAGS, flag_name)}")
+    
     # Load the data.
     if FLAGS.execution_mode == "replay":
         if FLAGS.replay_trace == "pylot":
@@ -450,6 +498,7 @@ def main(args):
                     FLAGS.workload_update_interval, EventTime.Unit.US
                 ),
                 flags=FLAGS,
+                heterogeneous=FLAGS.alibaba_enable_heterogeneous_resource_type,
             )
         else:
             raise NotImplementedError(
@@ -623,6 +672,8 @@ def main(args):
             max_time_discretization=EventTime(
                 FLAGS.scheduler_max_time_discretization, EventTime.Unit.US
             ),
+            dynamic_discretization=FLAGS.scheduler_dynamic_discretization,
+            max_occupancy_threshold=FLAGS.scheduler_max_occupancy_threshold,
         )
     else:
         raise ValueError(

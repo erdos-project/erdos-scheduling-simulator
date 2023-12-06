@@ -53,11 +53,11 @@ class CSVReader(object):
             schedulers = []
             for reading in csv_readings:
                 try:
+                    # TODO: This
                     if reading[1] == "SIMULATOR_START":
                         simulator = Simulator(
                             csv_path=csv_path,
                             start_time=int(reading[0]),
-                            total_tasks=reading[2],
                         )
                     elif reading[1] == "UPDATE_WORKLOAD":
                         simulator.total_tasks += int(reading[2])
