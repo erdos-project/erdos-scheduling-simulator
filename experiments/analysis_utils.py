@@ -98,6 +98,9 @@ def extract_variables_from_filename_v2(filename):
                 variables["worker_profile_path"] = flag_value    
         else:
             break
+    
+    if variables["scheduler"] == "TetriSched":
+        variables["scheduler"] = f'TetriSched_time_dis_{variables["scheduler_time_discretization"]}' + ("_DAG_aware" if variables["DAG_aware"] else "")
     return variables
 
 
@@ -113,7 +116,7 @@ def extract_experiments_result(base_dir: str) -> pd.DataFrame:
                 last_line = lines[-1]
             
             end_time, _, finished_tasks, cancelled_tasks, missed_task_deadlines, finished_task_graphs, cancelled_task_graphs, missed_task_graph_deadlines = last_line.split(",")
-            row = extract_variables_from_filename(file_name)
+            row = extract_variables_from_filename_v2(csv_file_path)
             # Analyze SLO attainment and goodput
             slo_attainment = (int(finished_task_graphs) - int(missed_task_graph_deadlines)) / (int(cancelled_task_graphs) + int(finished_task_graphs))
             row["slo_attainment"] = slo_attainment
@@ -172,14 +175,14 @@ def plot_slo_attainments(data: pd.DataFrame, extra_title: str = ""):
     handles, labels = [], []
 
     # Iterate over each subplot and plot the data
-    for i, arrival_rate in enumerate(variable_arrival_rate_values):
+    for i, variable_arrival_rate in enumerate(variable_arrival_rate_values):
         for j, cv2 in enumerate(cv2_values):
             if len(variable_arrival_rate_values) == 1:
                 ax = axes[j]
             else:
                 ax = axes[i][j]
 
-            subset = data[(data['arrival_rate'] == arrival_rate) & (data['cv2'] == cv2)]
+            subset = data[(data['variable_arrival_rate'] == variable_arrival_rate) & (data['cv2'] == cv2)]
 
             # Get unique deadline variances
             deadline_vars = sorted(subset['max_deadline_variance'].unique())
@@ -207,7 +210,7 @@ def plot_slo_attainments(data: pd.DataFrame, extra_title: str = ""):
             ax.set_xticklabels(deadline_vars)
             
             # This is "task graph" arrival rate and cv2
-            ax.set_title(f"Input Arrival Rate: {arrival_rate}, CV2: {cv2} | Actual Arrival Rate: {subset['actual_arrival_rate'].mean():.3f}, CV2: {subset['actual_cv2'].mean():.3f}")
+            ax.set_title(f"Input Arrival Rate: {variable_arrival_rate}, CV2: {cv2} | Actual Arrival Rate: {subset['actual_arrival_rate'].mean():.3f}, CV2: {subset['actual_cv2'].mean():.3f}")
             # ax.set_title(f"Actual Arrival Rate: {subset['actual_arrival_rate'].mean():.3f}, CV2: {subset['actual_cv2'].mean():.3f}")
             
             ax.set_xlabel('Max Deadline Variance')
