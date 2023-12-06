@@ -32,7 +32,7 @@ try:
 except ImportError:
     pass
 from simulator import Simulator
-from utils import EventTime, setup_logging
+from utils import EventTime, setup_csv_logging, setup_logging
 from workload import BranchPredictionPolicy, Workload
 
 FLAGS = flags.FLAGS
@@ -371,7 +371,7 @@ flags.DEFINE_integer(
 flags.DEFINE_enum(
     "override_release_policy",
     "fixed",
-    ["periodic", "poisson", "gamma", "fixed", "closed_loop"],
+    ["periodic", "poisson", "gamma", "fixed", "closed_loop", "fixed_gamma"],
     "Override the release policy for all TaskGraphs defined in the Workload.",
 )
 flags.DEFINE_integer(
@@ -445,7 +445,15 @@ def main(args):
     logger.info("Workload File: %s", FLAGS.workload_profile_path)
     logger.info("Workers File: %s", FLAGS.worker_profile_path)
     logger.info("Profile File: %s", FLAGS.profile_path)
-
+    
+    csv_logger = setup_csv_logging(
+        name=__name__,
+        log_dir=FLAGS.log_dir,
+        log_file=FLAGS.csv_file_name,
+    )
+    for flag_name in FLAGS:
+        csv_logger.debug(f"input_flag,{flag_name},{getattr(FLAGS, flag_name)}")
+    
     # Load the data.
     if FLAGS.execution_mode == "replay":
         if FLAGS.replay_trace == "pylot":
