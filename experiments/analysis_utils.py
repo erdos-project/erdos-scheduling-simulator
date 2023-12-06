@@ -36,11 +36,11 @@ def extract_variables_from_filename(filename):
     dag_aware = parts[12] == "1"
     
     try:
-        arrival_rate = float(parts[16])
+        variable_arrival_rate = float(parts[16])
         cv2 = int(parts[19].split('.')[0])  # Assuming the file extension is .csv
     except:
         # Before 11/28 afternoon, I used a different format for the filename and didn't include the arrival rate and CV2
-        arrival_rate = 10
+        variable_arrival_rate = 10
         cv2 = 2
 
     if scheduler == "TetriSched":
@@ -57,10 +57,47 @@ def extract_variables_from_filename(filename):
         'scheduler': scheduler,
         'DAG_aware': dag_aware,
         'scheduler_time_discretization': scheduler_time_discretization,
-        "arrival_rate": arrival_rate,
+        "variable_arrival_rate": variable_arrival_rate,
         "cv2": cv2,
     }
 
+    return variables
+
+
+def extract_variables_from_filename_v2(filename):
+    with open(filename, 'r') as file:
+        lines = file.readlines()
+    
+    variables = {}
+    for line in lines:
+        if "input_flag" in line:
+            _, flag_name, flag_value = line.strip().split(",")
+            if flag_name == "replay_trace":
+                variables["trace"] = flag_value
+            elif flag_name == "override_release_policy":
+                variables["release_policy"] = flag_value
+            elif flag_name == "min_deadline_variance":
+                variables["min_deadline_variance"] = int(flag_value)
+            elif flag_name == "max_deadline_variance":
+                variables["max_deadline_variance"] = int(flag_value)
+            elif flag_name == "scheduler":
+                variables["scheduler"] = flag_value
+            elif flag_name == "release_taskgraphs":
+                variables["DAG_aware"] = flag_value.lower() == "true"
+            elif flag_name == "scheduler_time_discretization":
+                variables["scheduler_time_discretization"] = int(flag_value)
+            elif flag_name == "override_poisson_arrival_rate":
+                variables["variable_arrival_rate"] = float(flag_value)
+            elif flag_name == "override_base_arrival_rate":
+                variables["base_arrival_rate"] = float(flag_value)
+            elif flag_name == "override_gamma_coefficient":
+                variables["cv2"] = float(flag_value)
+            elif flag_name == "workload_profile_path":
+                variables["workload_profile_path"] = flag_value
+            elif flag_name == "worker_profile_path":
+                variables["worker_profile_path"] = flag_value    
+        else:
+            break
     return variables
 
 
@@ -116,7 +153,7 @@ def extract_experiments_result(base_dir: str) -> pd.DataFrame:
 def plot_slo_attainments(data: pd.DataFrame, extra_title: str = ""):
     # Define your unique values for the grid
     cv2_values = sorted(data["cv2"].unique())
-    arrival_rate_values = sorted(data["arrival_rate"].unique())
+    variable_arrival_rate_values = sorted(data["variable_arrival_rate"].unique())
     scheduler_values = ["TetriSched_time_dis_20", "TetriSched_time_dis_20_DAG_aware", "TetriSched_time_dis_10", 
                         "TetriSched_time_dis_10_DAG_aware", "TetriSched_time_dis_1",  "TetriSched_time_dis_1_DAG_aware", "EDF"]
     num_invocation = data["num_invocation"].unique()[0]
@@ -124,7 +161,7 @@ def plot_slo_attainments(data: pd.DataFrame, extra_title: str = ""):
     n_schedulers = len(scheduler_values)
 
     # Create a subplot grid
-    fig, axes = plt.subplots(len(arrival_rate_values), len(cv2_values), figsize=(20, 15), sharey=True)
+    fig, axes = plt.subplots(len(variable_arrival_rate_values), len(cv2_values), figsize=(20, 15), sharey=True)
 
     # Define the width of each bar and the spacing between them
     bar_width = 0.20
@@ -135,9 +172,9 @@ def plot_slo_attainments(data: pd.DataFrame, extra_title: str = ""):
     handles, labels = [], []
 
     # Iterate over each subplot and plot the data
-    for i, arrival_rate in enumerate(arrival_rate_values):
+    for i, arrival_rate in enumerate(variable_arrival_rate_values):
         for j, cv2 in enumerate(cv2_values):
-            if len(arrival_rate_values) == 1:
+            if len(variable_arrival_rate_values) == 1:
                 ax = axes[j]
             else:
                 ax = axes[i][j]
@@ -171,7 +208,7 @@ def plot_slo_attainments(data: pd.DataFrame, extra_title: str = ""):
             
             # This is "task graph" arrival rate and cv2
             ax.set_title(f"Input Arrival Rate: {arrival_rate}, CV2: {cv2} | Actual Arrival Rate: {subset['actual_arrival_rate'].mean():.3f}, CV2: {subset['actual_cv2'].mean():.3f}")
-            # ax.set_title(f"Actual Arrival Rate: {subset['actual_arrival_rate'].mean():.2f}, CV2: {subset['actual_cv2'].mean():.2f}")
+            # ax.set_title(f"Actual Arrival Rate: {subset['actual_arrival_rate'].mean():.3f}, CV2: {subset['actual_cv2'].mean():.3f}")
             
             ax.set_xlabel('Max Deadline Variance')
             ax.set_ylabel('SLO Attainment')
@@ -201,7 +238,7 @@ def smooth_data(y, window_size):
 def analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var(
     csv_reader, 
     df, 
-    arrival_rate, 
+    variable_arrival_rate, 
     cv2, 
     max_deadline_var,
     figure_size=(20, 20), 
@@ -211,7 +248,7 @@ def analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var(
     ):
     num_invocation = df["num_invocation"].unique()[0]
     # Filter the DataFrame
-    filtered_df = df[(df["arrival_rate"] == arrival_rate) & (df["cv2"] == cv2) & (df["max_deadline_variance"] == max_deadline_var)]
+    filtered_df = df[(df["variable_arrival_rate"] == variable_arrival_rate) & (df["cv2"] == cv2) & (df["max_deadline_variance"] == max_deadline_var)]
     num_schedulers = filtered_df["scheduler"].nunique()
 
     # Create subplots
@@ -286,7 +323,7 @@ def analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var(
     # Adjust layout to prevent overlap
     plt.tight_layout()
     fig.subplots_adjust(top=0.93)
-    plt.suptitle(f"Resource Utilization for {arrival_rate=}, {cv2=},  max deadline variance={max_deadline_var}. Num invocations={num_invocation} {extra_title}")
+    plt.suptitle(f"Resource Utilization for {variable_arrival_rate=}, {cv2=},  max deadline variance={max_deadline_var}. Num invocations={num_invocation} {extra_title}")
 
     # Display the plot
     plt.show()
@@ -372,9 +409,9 @@ def plot_resource_utilization(base_dir: str, extra_title: str = ""):
     csv_reader = CSVReader(csv_file_paths)
 
     df = extract_experiments_result(base_dir)
-    df = df.sort_values(by=["arrival_rate", "cv2", "scheduler_time_discretization", "scheduler", "DAG_aware", "max_deadline_variance"])
+    df = df.sort_values(by=["variable_arrival_rate", "cv2", "scheduler_time_discretization", "scheduler", "DAG_aware", "max_deadline_variance"])
     for cv2 in df["cv2"].unique():
-        for arrival_rate in df["arrival_rate"].unique():
+        for arrival_rate in df["variable_arrival_rate"].unique():
             for max_deadline_variance in df["max_deadline_variance"].unique():
                 analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var(
                     csv_reader,
