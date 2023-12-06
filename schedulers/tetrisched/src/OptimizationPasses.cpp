@@ -960,7 +960,7 @@ OptimizationPassRunner::OptimizationPassRunner(bool debug,
                                                float maxOccupancyThreshold)
     : debug(debug), enableDynamicDiscretization(enableDynamicDiscretization) {
   // Register the Critical Path optimization pass.
-  registeredPasses.push_back(std::make_shared<CriticalPathOptimizationPass>());
+  // registeredPasses.push_back(std::make_shared<CriticalPathOptimizationPass>());
 
   if (enableDynamicDiscretization) {
     // Register the DiscretizationGenerator pass.
