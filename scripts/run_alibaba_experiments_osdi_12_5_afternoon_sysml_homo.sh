@@ -10,11 +10,11 @@ SCHEDULER_TIME_DISCRETIZATIONS=(1)
 GAMMA_COEFFICIENTS=(1 4 2) #cv2 don't change this
 RELEASE_POLICIES=(gamma)
 # POISSON_ARRIVAL_RATES=(0.2 0.5 1 2)
-POISSON_ARRIVAL_RATES=(0.1 0.2 0.4) # Tune this
-DAG_AWARENESS=(1) # False True
+POISSON_ARRIVAL_RATES=(0.025) # Tune this
+DAG_AWARENESS=(1 0) # False True
 TASK_CPU_DIVISOR=25
 
-WORKER_CONFIG=alibaba_cluster_40_slots
+WORKER_CONFIG=alibaba_cluster
 
 ERDOS_SIMULATOR_DIR="." # Change this to the directory where the simulator is located.
 MIN_DEADLINE_VARIANCE=10
