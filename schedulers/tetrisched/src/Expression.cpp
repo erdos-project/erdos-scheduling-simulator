@@ -273,7 +273,7 @@ std::vector<ExpressionPtr> Expression::getParents() const {
 
 SolutionResultPtr Expression::populateResults(SolverModelPtr solverModel) {
   TETRISCHED_DEBUG("Populating results for " << name << " of type "
-                                            << getTypeString() << ".")
+                                             << getTypeString() << ".")
   // Check that the Expression was parsed before.
   if (!parsedResult) {
     solution = std::make_shared<SolutionResult>();
@@ -449,6 +449,8 @@ uint32_t ChooseExpression::getResourceQuantity() const {
 ParseResultPtr ChooseExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMap& capacityConstraints, Time currentTime) {
+  TETRISCHED_SCOPE_TIMER("ChooseExpression::parse," +
+                         std::to_string(currentTime) + "," + name + "," + id)
   // Check that the Expression was parsed before
   if (parsedResult != nullptr) {
     // return the already parsed sub-tree from another parent
@@ -623,6 +625,8 @@ uint32_t WindowedChooseExpression::getResourceQuantity() const {
 ParseResultPtr WindowedChooseExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMap& capacityConstraints, Time currentTime) {
+  TETRISCHED_SCOPE_TIMER("WindowedChooseExpression::parse," +
+                         std::to_string(currentTime) + "," + name + "," + id)
   // Check that the Expression was parsed before.
   if (parsedResult != nullptr) {
     // Return the already parsed STRL-tree from another parent.
@@ -966,6 +970,8 @@ uint32_t MalleableChooseExpression::getResourceQuantity() const {
 ParseResultPtr MalleableChooseExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMap& capacityConstraints, Time currentTime) {
+  TETRISCHED_SCOPE_TIMER("MalleableChooseExpression::parse," +
+                         std::to_string(currentTime) + "," + name + "," + id)
   // Check that the Expression was parsed before
   if (parsedResult != nullptr) {
     // Return the alread parsed sub-tree.
@@ -1325,6 +1331,8 @@ void AllocationExpression::addChild(ExpressionPtr child) {
 ParseResultPtr AllocationExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMap& capacityConstraints, Time currentTime) {
+  TETRISCHED_SCOPE_TIMER("AllocationExpression::parse," +
+                         std::to_string(currentTime) + "," + name + "," + id)
   // Check that the Expression was parsed before.
   if (parsedResult != nullptr) {
     // Return the already parsed sub-tree.
@@ -1376,6 +1384,8 @@ ObjectiveExpression::ObjectiveExpression(std::string name)
 ParseResultPtr ObjectiveExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMap& capacityConstraints, Time currentTime) {
+  TETRISCHED_SCOPE_TIMER("ObjectiveExpression::parse," +
+                         std::to_string(currentTime) + "," + name + "," + id)
   // Check that the Expression was parsed before
   if (parsedResult != nullptr) {
     // return the already parsed sub-tree from another parent
@@ -1504,6 +1514,8 @@ void LessThanExpression::addChild(ExpressionPtr child) {
 ParseResultPtr LessThanExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMap& capacityConstraints, Time currentTime) {
+  TETRISCHED_SCOPE_TIMER("LessThanExpression::parse," +
+                         std::to_string(currentTime) + "," + name + "," + id)
   // Sanity check the children.
   if (children.size() != 2) {
     throw tetrisched::exceptions::ExpressionConstructionException(
@@ -1671,6 +1683,8 @@ ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
                                     Partitions availablePartitions,
                                     CapacityConstraintMap& capacityConstraints,
                                     Time currentTime) {
+  TETRISCHED_SCOPE_TIMER("MinExpression::parse," + std::to_string(currentTime) +
+                         "," + name + "," + id)
   // Check that the Expression was parsed before
   if (parsedResult != nullptr) {
     // Return the already parsed sub-tree from another parent
@@ -1904,6 +1918,8 @@ ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
                                     Partitions availablePartitions,
                                     CapacityConstraintMap& capacityConstraints,
                                     Time currentTime) {
+  TETRISCHED_SCOPE_TIMER("MaxExpression::parse," + std::to_string(currentTime) +
+                         "," + name + "," + id)
   // Check that the Expression was parsed before
   if (parsedResult != nullptr) {
     // return the already parsed sub-tree from another parent
@@ -2138,6 +2154,8 @@ void ScaleExpression::addChild(ExpressionPtr child) {
 ParseResultPtr ScaleExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMap& capacityConstraints, Time currentTime) {
+  TETRISCHED_SCOPE_TIMER("ScaleExpression::parse," +
+                         std::to_string(currentTime) + "," + name + "," + id)
   // Sanity check the children.
   if (children.size() != 1) {
     throw tetrisched::exceptions::ExpressionConstructionException(

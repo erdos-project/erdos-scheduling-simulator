@@ -177,6 +177,12 @@ class ScopeTimer {
  public:
   ScopeTimer(std::string scopeTimerName) : scopeTimerName(scopeTimerName) {
     startTime = std::chrono::high_resolution_clock::now();
+    getOutputFileStream()
+        << "BEGIN," << scopeTimerName << ","
+        << std::chrono::duration_cast<std::chrono::microseconds>(
+               startTime.time_since_epoch())
+               .count()
+        << std::endl;
   }
 
   ~ScopeTimer() {
@@ -193,9 +199,9 @@ class ScopeTimer {
         std::chrono::duration_cast<std::chrono::microseconds>(
             endTime.time_since_epoch())
             .count();
-    getOutputFileStream() << scopeTimerName << "," << startTimeMicroseconds
-                          << "," << endtimeMicroseconds << "," << duration
-                          << std::endl;
+    getOutputFileStream() << "END," << scopeTimerName << ","
+                          << startTimeMicroseconds << "," << endtimeMicroseconds
+                          << "," << duration << std::endl;
   }
 };
 }  // namespace timing
