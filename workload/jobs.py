@@ -204,7 +204,8 @@ class JobGraph(Graph[Job]):
         # Releases a fixed number of TaskGraphs in a closed loop fashion (i.e., a new
         # job graph is released whenever the previous one completes).
         CLOSED_LOOP = 5
-        # Releases a fixed number of TaskGraphs seperated by a Gamma arrival rate with some base arrival rate.
+        # Releases a fixed number of TaskGraphs seperated by a Gamma arrival rate with
+        # some base arrival rate.
         FIXED_AND_GAMMA = 6
 
     class ReleasePolicy(object):
@@ -226,7 +227,9 @@ class JobGraph(Graph[Job]):
             coefficient: float,
             concurrency: int,
             start: EventTime,
-            base_arrival_rate: Optional[float] = None, # Only used in fix_and_gamma policy
+            base_arrival_rate: Optional[
+                float
+            ] = None,  # Only used in fix_and_gamma policy
             rng_seed: Optional[int] = None,
         ) -> None:
             self._policy_type = policy_type
@@ -322,17 +325,31 @@ class JobGraph(Graph[Job]):
                 )
                 releases.extend([self._start] * num_releases)
             elif self._policy_type == JobGraph.ReleasePolicyType.FIXED_AND_GAMMA:
-                # Given base_arrival_rate, variable_arrival_rate, start_time, and fixed_invocation_nums, we want to 
-                # solve for end_time
-                # (self._base_arrival_rate + self._variable_arrival_rate) * (end_time - start_time) = self._fixed_invocation_nums
+                # Given base_arrival_rate, variable_arrival_rate, start_time, and
+                # fixed_invocation_nums, we want to # solve for end_time
+                # (self._base_arrival_rate + self._variable_arrival_rate) *
+                # (end_time - start_time) = self._fixed_invocation_nums
                 start_time = self._start.to(EventTime.Unit.US).time
-                end_time = int(self._fixed_invocation_nums / (self._base_arrival_rate + self._variable_arrival_rate)) + start_time
-                gamma_policy_invocations = math.floor(self._variable_arrival_rate * (end_time - start_time))
-                fixed_policy_invocations = math.floor(self._base_arrival_rate * (end_time - start_time))
-                # Due to rounding, we may have less invocations than the fixed_invocation_nums.
-                # We will add the difference to the gamma_policy_invocations.
-                gamma_policy_invocations += self._fixed_invocation_nums - (fixed_policy_invocations + gamma_policy_invocations)
-                
+                end_time = (
+                    int(
+                        self._fixed_invocation_nums
+                        / (self._base_arrival_rate + self._variable_arrival_rate)
+                    )
+                    + start_time
+                )
+                gamma_policy_invocations = math.floor(
+                    self._variable_arrival_rate * (end_time - start_time)
+                )
+                fixed_policy_invocations = math.floor(
+                    self._base_arrival_rate * (end_time - start_time)
+                )
+                # Due to rounding, we may have less invocations than the
+                # fixed_invocation_nums. We will add the difference to the
+                # gamma_policy_invocations.
+                gamma_policy_invocations += self._fixed_invocation_nums - (
+                    fixed_policy_invocations + gamma_policy_invocations
+                )
+
                 # First we apply gamma release policy
                 inter_arrival_times = self._rng.gamma(
                     (1 / self._coefficient),
@@ -348,7 +365,7 @@ class JobGraph(Graph[Job]):
                     releases.append(
                         EventTime(round(current_release_time), EventTime.Unit.US)
                     )
-                
+
                 # Then we apply fixed release policy
                 releases.extend(
                     map(
@@ -496,7 +513,7 @@ class JobGraph(Graph[Job]):
                 start=start,
                 rng_seed=rng_seed,
             )
-        
+
         @staticmethod
         def fixed_gamma(
             variable_arrival_rate: float,
@@ -509,9 +526,10 @@ class JobGraph(Graph[Job]):
             """Creates the parameters corresponding to the `GAMMA` release policy.
 
             Args:
-                variable_arrival_rate (`float`): The lambda (rate) parameter defining the Gamma
-                    arrival distribution.
-                base_arrival_rate (`float`): The base arrival rate of the fixed release policy.
+                variable_arrival_rate (`float`): The lambda (rate) parameter defining
+                    the Gamma arrival distribution.
+                base_arrival_rate (`float`): The base arrival rate of the fixed release
+                    policy.
                 coefficient (`float`): The coefficient parameter defining the Gamma
                     arrival distribution.
                 num_invocations (`int`): The number of invocations of the `TaskGraph`.
@@ -853,7 +871,7 @@ class JobGraph(Graph[Job]):
             task.update_deadline(task_graph_deadline)
 
         return task_graph
-    
+
     def __get_completion_time(self, start=EventTime.zero()) -> EventTime:
         return sum(
             (

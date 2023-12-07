@@ -413,7 +413,7 @@ def test_simulator_handle_event():
     perception_task.start(EventTime(3, EventTime.Unit.US))
     perception_task.update_remaining_time(EventTime.zero())
 
-    assert len(simulator._event_queue) == 5, "Incorrect length of EventQueue."
+    assert len(simulator._event_queue) == 6, "Incorrect length of EventQueue."
     return_value = simulator._Simulator__handle_event(
         event=Event(
             event_type=EventType.TASK_FINISHED,
@@ -422,7 +422,7 @@ def test_simulator_handle_event():
         ),
     )
     assert not return_value, "Incorrect return value for event type."
-    assert len(simulator._event_queue) == 6, "Incorrect length of EventQueue."
+    assert len(simulator._event_queue) == 7, "Incorrect length of EventQueue."
 
     # Test the SCHEDULER_START event.
     return_value = simulator._Simulator__handle_event(
@@ -432,7 +432,7 @@ def test_simulator_handle_event():
         ),
     )
     assert not return_value, "Incorrect return value for event type."
-    assert len(simulator._event_queue) == 7, "Incorrect length of EventQueue."
+    assert len(simulator._event_queue) == 8, "Incorrect length of EventQueue."
 
     # Test the SCHEDULER_FINISHED event.
     simulator._last_scheduler_placements = Placements(
@@ -453,7 +453,7 @@ def test_simulator_handle_event():
             time=EventTime(6, EventTime.Unit.US),
         ),
     )
-    assert len(simulator._event_queue) == 10, "Incorrect length of EventQueue."
+    assert len(simulator._event_queue) == 11, "Incorrect length of EventQueue."
 
 
 def test_simulator_loads_and_evicts_profiles_correctly():

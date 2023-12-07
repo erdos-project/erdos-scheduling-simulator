@@ -43,6 +43,8 @@ void Scheduler::registerSTRL(
     ExpressionPtr expression, Partitions availablePartitions, Time currentTime,
     bool optimize,
     std::vector<std::pair<TimeRange, Time>> timeRangeToGranularities) {
+  TETRISCHED_SCOPE_TIMER("Scheduler::registerSTRL," +
+                         std::to_string(currentTime));
   TETRISCHED_INFO("Registering the STRL expression: " << expression->getName()
                                                       << " for time "
                                                       << currentTime << ".")
@@ -70,6 +72,9 @@ void Scheduler::registerSTRL(
 
   // Run the Pre-Translation OptimizationPasses on this expression.
   if (optimize) {
+    TETRISCHED_SCOPE_TIMER(
+        "Scheduler::registerSTRL::preTranslationOptimizationPasses," +
+        std::to_string(currentTime));
     auto optimizerStartTime = std::chrono::high_resolution_clock::now();
     optimizationPasses.runPreTranslationPasses(currentTime, expression,
                                                capacityConstraintMap);
@@ -81,16 +86,23 @@ void Scheduler::registerSTRL(
                      << duration << " microseconds.")
   }
 
-  // Parse the ExpressionTree to populate the solver model.
-  TETRISCHED_DEBUG("Beginning the parsing of the ExpressionTree rooted at "
-                   << expression->getName() << ".")
-  auto _ = expression->parse(solverModel, availablePartitions,
-                             capacityConstraintMap, currentTime);
-  TETRISCHED_DEBUG("Finished parsing the ExpressionTree rooted at "
-                   << expression->getName() << ".")
+  {
+    TETRISCHED_SCOPE_TIMER("Scheduler::registerSTRL::parse," +
+                           std::to_string(currentTime));
+    // Parse the ExpressionTree to populate the solver model.
+    TETRISCHED_DEBUG("Beginning the parsing of the ExpressionTree rooted at "
+                     << expression->getName() << ".")
+    auto _ = expression->parse(solverModel, availablePartitions,
+                               capacityConstraintMap, currentTime);
+    TETRISCHED_DEBUG("Finished parsing the ExpressionTree rooted at "
+                     << expression->getName() << ".")
+  }
 
   // Run the Post-Translation OptimizationPasses on this expression.
   if (optimize) {
+    TETRISCHED_SCOPE_TIMER(
+        "Scheduler::registerSTRL::postTranslationOptimizationPasses," +
+        std::to_string(currentTime));
     auto optimizerStartTime = std::chrono::high_resolution_clock::now();
     optimizationPasses.runPostTranslationPasses(currentTime, expression,
                                                 capacityConstraintMap);
@@ -112,19 +124,31 @@ void Scheduler::schedule(Time currentTime) {
   }
 
   // Set the log file based on the current time.
-  std::string logFileName =
+  std::filesystem::path logFileName =
       "tetrisched_" + std::to_string(currentTime) + ".log";
-  this->solver->setLogFile(logDir + logFileName);
+  this->solver->setLogFile(std::filesystem::path(logDir) / logFileName);
 
   // Translate the model to the solver backend.
-  this->solver->translateModel();
+  {
+    TETRISCHED_SCOPE_TIMER("Scheduler::schedule::translateModel," +
+                           std::to_string(currentTime));
+    this->solver->translateModel();
+  }
 
   // Solve the model.
-  solverSolution = this->solver->solveModel();
+  {
+    TETRISCHED_SCOPE_TIMER("Scheduler::schedule::solveModel," +
+                           std::to_string(currentTime));
+    solverSolution = this->solver->solveModel();
+  }
 
   // Populate the results from the solver into the expression tree.
-  if (solverSolution.has_value() && solverSolution.value()->isValid()) {
-    this->expression.value()->populateResults(solverModel);
+  {
+    TETRISCHED_SCOPE_TIMER("Scheduler::schedule::populateResults," +
+                           std::to_string(currentTime));
+    if (solverSolution.has_value() && solverSolution.value()->isValid()) {
+      this->expression.value()->populateResults(solverModel);
+    }
   }
 }
 
