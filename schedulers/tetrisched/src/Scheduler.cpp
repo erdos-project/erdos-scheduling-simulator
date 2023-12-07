@@ -124,9 +124,9 @@ void Scheduler::schedule(Time currentTime) {
   }
 
   // Set the log file based on the current time.
-  std::string logFileName =
+  std::filesystem::path logFileName =
       "tetrisched_" + std::to_string(currentTime) + ".log";
-  this->solver->setLogFile(logDir + logFileName);
+  this->solver->setLogFile(std::filesystem::path(logDir) / logFileName);
 
   // Translate the model to the solver backend.
   {
