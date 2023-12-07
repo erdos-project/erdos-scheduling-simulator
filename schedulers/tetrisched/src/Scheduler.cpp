@@ -43,6 +43,7 @@ void Scheduler::registerSTRL(
     ExpressionPtr expression, Partitions availablePartitions, Time currentTime,
     bool optimize,
     std::vector<std::pair<TimeRange, Time>> timeRangeToGranularities) {
+  TETRISCHED_SCOPE_TIMER("Scheduler::registerSTRL")
   TETRISCHED_INFO("Registering the STRL expression: " << expression->getName()
                                                       << " for time "
                                                       << currentTime << ".")

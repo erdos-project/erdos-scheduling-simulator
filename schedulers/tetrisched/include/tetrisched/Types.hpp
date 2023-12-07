@@ -5,6 +5,7 @@
 #include <cstring>
 #include <exception>
 #include <experimental/source_location>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -13,6 +14,7 @@
 // Macros for logging.
 #define TETRISCHED_LOGGING_ENABLED false
 #define TETRISCHED_LOGGING_DIR_ENV_NAME "TETRISCHED_LOGGING_DIR"
+#define TETRISCHED_LOG_FILE_NAME "libtetrisched.log"
 #define TETRISCHED_DEFAULT_LOG_LEVEL tetrisched::logging::INFO
 #define TETRISCHED_DEBUG(x)                                                   \
   if (TETRISCHED_LOGGING_ENABLED &&                                           \
@@ -28,6 +30,17 @@
     tetrisched::logging::Logger::info()                                      \
         << "[INFO, " << sourceLocation.function_name() << "] " << x << "\n"; \
   }
+
+// Macros for timing.
+// Uncomment the following line to enable timing.
+#define TETRISCHED_TIMING_ENABLED
+#define TETRISCHED_TIMING_FILE_NAME "libtetrisched_performance.csv"
+#ifdef TETRISCHED_TIMING_ENABLED
+#define TETRISCHED_SCOPE_TIMER(TIMER_NAME) \
+  tetrisched::timing::ScopeTimer timer##__LINE__(TIMER_NAME);
+#else
+#define TETRISCHED_SCOPE_TIMER(TIMER_NAME)
+#endif
 
 // Macro for the coefficient and the permissible values for the Variables.
 // (Sukrit): It is unknown if the ILP will perform better if the coefficients
@@ -115,11 +128,13 @@ class Logger {
   void flush() { outputStream.flush(); }
 
   static Logger& debug() {
-    static std::string outputDir =
+    static std::filesystem::path outputDir =
         std::getenv(TETRISCHED_LOGGING_DIR_ENV_NAME)
             ? std::getenv(TETRISCHED_LOGGING_DIR_ENV_NAME)
             : "./";
-    static std::ofstream outputStream(outputDir + "libtetrisched.log",
+    static std::filesystem::path outputFile =
+        outputDir / TETRISCHED_LOG_FILE_NAME;
+    static std::ofstream outputStream(outputFile,
                                       std::ios::app | std::ios::out);
     static Logger logger(outputStream.is_open() ? outputStream : std::cout,
                          LogLevel::DEBUG);
@@ -127,11 +142,13 @@ class Logger {
   }
 
   static Logger& info() {
-    static std::string outputDir =
+    static std::filesystem::path outputDir =
         std::getenv(TETRISCHED_LOGGING_DIR_ENV_NAME)
             ? std::getenv(TETRISCHED_LOGGING_DIR_ENV_NAME)
             : "./";
-    static std::ofstream outputStream(outputDir + "libtetrisched.log",
+    static std::filesystem::path outputFile =
+        outputDir / TETRISCHED_LOG_FILE_NAME;
+    static std::ofstream outputStream(outputFile,
                                       std::ios::app | std::ios::out);
     static Logger logger(outputStream.is_open() ? outputStream : std::cout,
                          LogLevel::INFO);
@@ -139,6 +156,49 @@ class Logger {
   }
 };
 }  // namespace logging
+
+namespace timing {
+/// A class to measure the time taken for a block of code to execute.
+class ScopeTimer {
+ private:
+  std::string scopeTimerName;
+  std::chrono::high_resolution_clock::time_point startTime;
+  static std::ofstream& getOutputFileStream() {
+    static std::filesystem::path outputDir =
+        std::getenv("TETRISCHED_LOGGING_DIR_ENV_NAME")
+            ? std::getenv("TETRISCHED_LOGGING_DIR_ENV_NAME")
+            : "./";
+    static std::filesystem::path outputFile =
+        outputDir / TETRISCHED_TIMING_FILE_NAME;
+    static std::ofstream file(outputFile, std::ios::app | std::ios::out);
+    return file;
+  }
+
+ public:
+  ScopeTimer(std::string scopeTimerName) : scopeTimerName(scopeTimerName) {
+    startTime = std::chrono::high_resolution_clock::now();
+  }
+
+  ~ScopeTimer() {
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
+                        endTime - startTime)
+                        .count();
+
+    auto startTimeMicroseconds =
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            startTime.time_since_epoch())
+            .count();
+    auto endtimeMicroseconds =
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            endTime.time_since_epoch())
+            .count();
+    getOutputFileStream() << scopeTimerName << "," << startTimeMicroseconds
+                          << "," << endtimeMicroseconds << "," << duration
+                          << std::endl;
+  }
+};
+}  // namespace timing
 
 /// A Representation of time in the system.
 /// We currently use a uint32_t since it translates well from the simulator.
