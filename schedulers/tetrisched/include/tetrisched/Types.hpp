@@ -165,8 +165,8 @@ class ScopeTimer {
   std::chrono::high_resolution_clock::time_point startTime;
   static std::ofstream& getOutputFileStream() {
     static std::filesystem::path outputDir =
-        std::getenv("TETRISCHED_LOGGING_DIR_ENV_NAME")
-            ? std::getenv("TETRISCHED_LOGGING_DIR_ENV_NAME")
+        std::getenv(TETRISCHED_LOGGING_DIR_ENV_NAME)
+            ? std::getenv(TETRISCHED_LOGGING_DIR_ENV_NAME)
             : "./";
     static std::filesystem::path outputFile =
         outputDir / TETRISCHED_TIMING_FILE_NAME;
