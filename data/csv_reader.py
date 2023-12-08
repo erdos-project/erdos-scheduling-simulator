@@ -305,15 +305,20 @@ class CSVReader(object):
     def get_time_spent_on_completed_canceled_miss_deadline_task_graph(
         self, csv_path: str
     ) -> tuple[dict[str, int], dict[str, int], dict[str, int]]:
-        """Calculate the time scheduler spent on running tasks belong to task graph that eventually
-        got canceled. This helped you identify the wasted time spent on canceled task graph.
+        """Calculate the time scheduler spent on running tasks belong to task graphs that
+            1. completed
+            2. eventually got canceled
+            3. missed deadline.
+
+        This helped you identify the wasted time spent on canceled task graph.
 
         Args:
             csv_path (`str`): The path to the CSV file whose tasks need to
                 be retrieved.
 
         Returns:
-            A `Dict[str, int]` that contains the task graph name to wasted time.
+            A `tuple[dict[str, int], dict[str, int], dict[str, int]]` where each dict
+            contains the task graph name to time spent.
         """
         completed_task_graph_run_time = defaultdict(int)
         canceled_task_graph_run_time = defaultdict(int)
