@@ -1449,7 +1449,6 @@ class Simulator(object):
         task_graph: TaskGraph = self._workload.get_task_graph(event.task_graph)
         if task_graph is None:
             raise ValueError(f"TaskGraph {event.task_graph} not found in the Workload.")
-        
 
     def __handle_update_workload(self, event: Event) -> None:
         """Handles an Event of type `UPDATE_WORKLOAD`.
