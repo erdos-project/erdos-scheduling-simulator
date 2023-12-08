@@ -166,7 +166,8 @@ class CSVReader(object):
                         print(f"[x] Unknown event type: {reading[1]}")
                 except Exception as e:
                     raise ValueError(
-                        f"Error while parsing the following line: {reading} from {csv_path}"
+                        f"Error while parsing the following line: {reading} "
+                        "from {csv_path}"
                     ) from e
 
             # Some sanity check for task state and task graph state consistency
@@ -305,7 +306,8 @@ class CSVReader(object):
     def get_time_spent_on_completed_canceled_miss_deadline_task_graph(
         self, csv_path: str
     ) -> tuple[dict[str, int], dict[str, int], dict[str, int]]:
-        """Calculate the time scheduler spent on running tasks belong to task graphs that
+        """Calculate the time scheduler spent on running tasks belong to task
+           graphs that
             1. completed
             2. eventually got canceled
             3. missed deadline.
@@ -333,9 +335,7 @@ class CSVReader(object):
                     )
             else:
                 # This task graph was completed
-                assert (
-                    self.get_task_graph(csv_path)[task.task_graph].was_completed == True
-                )
+                assert self.get_task_graph(csv_path)[task.task_graph].was_completed
                 completed_task_graph_run_time[task.task_graph] += task.runtime
                 if self.get_task_graph(csv_path)[task.task_graph].missed_deadline:
                     miss_deadline_task_graph_run_time[task.task_graph] += task.runtime
