@@ -1,4 +1,5 @@
 from collections import namedtuple
+from dataclasses import dataclass
 from functools import total_ordering
 from typing import List, Mapping, Optional, Sequence
 
@@ -80,6 +81,10 @@ class Task(object):
         # Values updated from the MISSED_DEADLINE event.
         self.missed_deadline = False
         self.deadline_miss_detected_at = None
+
+        # Values updated from the TASK_CANCEL event.
+        self.cancelled: bool = False
+        self.cancelled_at: Optional[int] = None
 
     def get_deadline_delay(self) -> int:
         """Retrieve the deadline delay in microseconds.
@@ -263,6 +268,28 @@ class Task(object):
         return self.id == other.id
 
 
+@dataclass
+class TaskGraph(object):
+    name: str
+    release_time: int
+    deadline: int
+
+    cancelled: bool = False
+    cancelled_at: Optional[int] = None
+
+    # Values updated from the TASK_GRAPH_FINISHED event.
+    completion_time: Optional[int] = None
+    deadline_miss_detected_at: Optional[int] = None
+
+    @property
+    def was_completed(self):
+        return self.completion_time is not None
+
+    @property
+    def missed_deadline(self):
+        return self.completion_time is not None and self.completion_time > self.deadline
+
+
 class Scheduler(object):
     def __init__(
         self,
@@ -335,13 +362,15 @@ class Simulator(object):
         self.finished_tasks = None
         self.dropped_tasks = None
         self.missed_deadlines = None
-        self.goodput_taskgraphs = None
+        self.finished_task_graphs = None
         self.dropped_taskgraphs = None
         self.missed_taskgraphs = None
+        self.goodput_taskgraphs = None
 
         self.worker_pools = []
         self.tasks = []
         self.scheduler_invocations = []
+        self.task_graphs: dict[str, TaskGraph] = {}
 
     def update_finish(self, csv_reading: str):
         """Updates the values of the Simulator based on the SIMULATOR_END event from
@@ -357,6 +386,7 @@ class Simulator(object):
         self.finished_tasks = int(csv_reading[2])
         self.dropped_tasks = int(csv_reading[3])
         self.missed_deadlines = int(csv_reading[4])
-        self.goodput_taskgraphs = int(csv_reading[5]) - int(csv_reading[7])
+        self.finished_task_graphs = int(csv_reading[5])
         self.dropped_taskgraphs = int(csv_reading[6])
         self.missed_taskgraphs = int(csv_reading[7])
+        self.goodput_taskgraphs = self.finished_task_graphs - self.missed_taskgraphs

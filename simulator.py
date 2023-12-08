@@ -450,6 +450,14 @@ class Simulator(object):
                     task_graph.deadline,
                     task_graph.job_graph.completion_time,
                 )
+                self._csv_logger.debug(
+                    "%s,TASK_GRAPH_RELEASE,%s,%s,%s,%s",
+                    0,
+                    task_graph.release_time.to(EventTime.Unit.US).time,
+                    task_graph.deadline.to(EventTime.Unit.US).time,
+                    task_graph.name,
+                    len(task_graph.get_nodes()),
+                )
                 if self._log_task_graphs:
                     # Log a DOT representation of the TaskGraph, if requested.
                     task_graph.to_dot(
@@ -1441,14 +1449,6 @@ class Simulator(object):
         task_graph: TaskGraph = self._workload.get_task_graph(event.task_graph)
         if task_graph is None:
             raise ValueError(f"TaskGraph {event.task_graph} not found in the Workload.")
-        self._csv_logger.debug(
-            "%s,TASK_GRAPH_RELEASE,%s,%s,%s,%s",
-            event.time.to(EventTime.Unit.US).time,
-            task_graph.release_time.to(EventTime.Unit.US).time,
-            task_graph.deadline.to(EventTime.Unit.US).time,
-            task_graph.name,
-            len(task_graph.get_nodes()),
-        )
 
     def __handle_update_workload(self, event: Event) -> None:
         """Handles an Event of type `UPDATE_WORKLOAD`.
