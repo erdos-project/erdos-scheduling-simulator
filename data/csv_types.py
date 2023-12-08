@@ -81,7 +81,7 @@ class Task(object):
         # Values updated from the MISSED_DEADLINE event.
         self.missed_deadline = False
         self.deadline_miss_detected_at = None
-        
+
         # Values updated from the TASK_CANCEL event.
         self.cancelled: bool = False
         self.cancelled_at: Optional[int] = None
@@ -273,10 +273,10 @@ class TaskGraph(object):
     name: str
     release_time: int
     deadline: int
-    
+
     cancelled: bool = False
     cancelled_at: Optional[int] = None
-    
+
     # Values updated from the TASK_GRAPH_FINISHED event.
     completion_time: Optional[int] = None
     deadline_miss_detected_at: Optional[int] = None
@@ -284,10 +284,11 @@ class TaskGraph(object):
     @property
     def was_completed(self):
         return self.completion_time is not None
-    
+
     @property
     def missed_deadline(self):
         return self.completion_time is not None and self.completion_time > self.deadline
+
 
 class Scheduler(object):
     def __init__(
