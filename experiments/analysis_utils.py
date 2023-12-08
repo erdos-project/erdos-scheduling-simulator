@@ -107,6 +107,14 @@ def extract_variables_from_filename_v2(filename):
                 variables["workload_profile_path"] = flag_value
             elif flag_name == "worker_profile_path":
                 variables["worker_profile_path"] = flag_value
+            elif flag_name == "scheduler_dynamic_discretization":
+                variables["dynamic_discretization"] = flag_value.lower() == "true"
+            elif flag_name == "scheduler_adaptive_discretization":
+                variables["adaptive_discretization"] = flag_value.lower() == "true"
+            elif flag_name == "scheduler_max_time_discretization":
+                variables["max_time_discretization"] = int(flag_value)
+            elif flag_name == "scheduler_max_occupancy_threshold":
+                variables["max_occupancy_threshold"] = float(flag_value)
         else:
             break
 
@@ -124,6 +132,8 @@ def extract_experiments_result(base_dir: str) -> pd.DataFrame:
     # Loop through each folder and process the CSV file
     for csv_file_path in find_all_file_paths(base_dir):
         file_name = csv_file_path.split(os.sep)[-1]
+        if file_name == "libtetrisched_performance.csv":
+            continue
         try:
             # Open the CSV file and read the last line
             with open(csv_file_path, "r") as file:
