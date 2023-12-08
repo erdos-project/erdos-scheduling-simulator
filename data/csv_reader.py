@@ -128,7 +128,8 @@ class CSVReader(object):
                                 task_id=reading[4],
                                 intended_release_time=float("inf"),
                                 release_time=float("inf"),
-                                deadline=float("inf"))
+                                deadline=float("inf"),
+                            )
                         tasks[reading[4]].cancelled = True
                         tasks[reading[4]].cancelled_at = int(reading[0])
                         task_graphs[reading[5]].cancelled = True
@@ -153,27 +154,35 @@ class CSVReader(object):
                             deadline=int(reading[3]),
                         )
                     elif reading[1] == "TASK_GRAPH_FINISHED":
-                        # Add the task to the last scheduler's invocation.    
+                        # Add the task to the last scheduler's invocation.
                         task_graphs[reading[2]].completion_time = int(reading[0])
                         task_graphs[reading[2]].cancelled = False
                     elif reading[1] == "MISSED_TASK_GRAPH_DEADLINE":
                         # Add the task to the last scheduler's invocation.
-                        task_graphs[reading[2]].deadline_miss_detected_at = int(reading[0])
+                        task_graphs[reading[2]].deadline_miss_detected_at = int(
+                            reading[0]
+                        )
                     else:
                         print(f"[x] Unknown event type: {reading[1]}")
                 except Exception as e:
                     raise ValueError(
                         f"Error while parsing the following line: {reading} from {csv_path}"
                     ) from e
-            
-            # Some sanity check for task state and task graph state consistency 
-            canceled_task_graphs_count = len([tg for tg in task_graphs.values() if tg.cancelled])
-            missed_deadline_task_graphs_count = len([tg for tg in task_graphs.values() if tg.missed_deadline])
-            completed_task_graphs_count = len([tg for tg in task_graphs.values() if tg.was_completed])
+
+            # Some sanity check for task state and task graph state consistency
+            canceled_task_graphs_count = len(
+                [tg for tg in task_graphs.values() if tg.cancelled]
+            )
+            missed_deadline_task_graphs_count = len(
+                [tg for tg in task_graphs.values() if tg.missed_deadline]
+            )
+            completed_task_graphs_count = len(
+                [tg for tg in task_graphs.values() if tg.was_completed]
+            )
             assert simulator.finished_task_graphs == completed_task_graphs_count
             assert simulator.missed_taskgraphs == missed_deadline_task_graphs_count
             assert simulator.dropped_taskgraphs == canceled_task_graphs_count
-            
+
             simulator.worker_pools = worker_pools.values()
             simulator.tasks = list(
                 sorted(tasks.values(), key=attrgetter("release_time"))
@@ -264,7 +273,7 @@ class CSVReader(object):
             ordered by their release time.
         """
         return self._simulators[csv_path].tasks
-    
+
     def get_task_graph(self, csv_path: str) -> dict[str, TaskGraph]:
         """Retrieves the tasks ordered by their release time.
 
@@ -292,8 +301,10 @@ class CSVReader(object):
         return [
             task for task in self.get_tasks(csv_path) if len(task.skipped_times) > 0
         ]
-    
-    def get_time_spent_on_completed_canceled_miss_deadline_task_graph(self, csv_path: str) -> tuple[dict[str, int], dict[str, int], dict[str, int]]:
+
+    def get_time_spent_on_completed_canceled_miss_deadline_task_graph(
+        self, csv_path: str
+    ) -> tuple[dict[str, int], dict[str, int], dict[str, int]]:
         """Calculate the time scheduler spent on running tasks belong to task graph that eventually
         got canceled. This helped you identify the wasted time spent on canceled task graph.
 
@@ -308,19 +319,27 @@ class CSVReader(object):
         canceled_task_graph_run_time = defaultdict(int)
         miss_deadline_task_graph_run_time = defaultdict(int)
         for task in self.get_tasks(csv_path):
-            if self.get_task_graph(csv_path)[task.task_graph].cancelled: 
+            if self.get_task_graph(csv_path)[task.task_graph].cancelled:
                 if task.was_completed:
                     canceled_task_graph_run_time[task.task_graph] += task.runtime
                 elif task.cancelled and task.placement_time is not None:
-                    canceled_task_graph_run_time[task.task_graph] += task.cancelled_at - task.placement_time
-            else: 
+                    canceled_task_graph_run_time[task.task_graph] += (
+                        task.cancelled_at - task.placement_time
+                    )
+            else:
                 # This task graph was completed
-                assert self.get_task_graph(csv_path)[task.task_graph].was_completed == True
+                assert (
+                    self.get_task_graph(csv_path)[task.task_graph].was_completed == True
+                )
                 completed_task_graph_run_time[task.task_graph] += task.runtime
                 if self.get_task_graph(csv_path)[task.task_graph].missed_deadline:
                     miss_deadline_task_graph_run_time[task.task_graph] += task.runtime
-        return completed_task_graph_run_time, canceled_task_graph_run_time, miss_deadline_task_graph_run_time
-    
+        return (
+            completed_task_graph_run_time,
+            canceled_task_graph_run_time,
+            miss_deadline_task_graph_run_time,
+        )
+
     def get_simulator_end_time(self, csv_path: str) -> int:
         """Retrieves the time at which the simulator ended.
 
