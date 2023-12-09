@@ -448,7 +448,7 @@ uint32_t ChooseExpression::getResourceQuantity() const {
 
 ParseResultPtr ChooseExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
-    CapacityConstraintMap& capacityConstraints, Time currentTime) {
+    CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
   TETRISCHED_SCOPE_TIMER("ChooseExpression::parse," +
                          std::to_string(currentTime) + "," + name + "," + id)
   // Check that the Expression was parsed before
@@ -521,7 +521,7 @@ ParseResultPtr ChooseExpression::parse(
 
     // Register this indicator with the capacity constraints that
     // are being bubbled up.
-    capacityConstraints.registerUsageForDuration(
+    capacityConstraints->registerUsageForDuration(
         shared_from_this(), *partition, startTime, duration, isSatisfiedVar,
         allocationVar, std::nullopt);
   }
@@ -624,7 +624,7 @@ uint32_t WindowedChooseExpression::getResourceQuantity() const {
 
 ParseResultPtr WindowedChooseExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
-    CapacityConstraintMap& capacityConstraints, Time currentTime) {
+    CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
   TETRISCHED_SCOPE_TIMER("WindowedChooseExpression::parse," +
                          std::to_string(currentTime) + "," + name + "," + id)
   // Check that the Expression was parsed before.
@@ -732,7 +732,7 @@ ParseResultPtr WindowedChooseExpression::parse(
       fulfillsDemandConstraint->addTerm(allocationVar);
 
       // Register the allocation variable with the capacity constraints.
-      capacityConstraints.registerUsageForDuration(
+      capacityConstraints->registerUsageForDuration(
           shared_from_this(), *partition, chooseTime, duration,
           placedAtChooseTime, allocationVar, std::nullopt);
     }
@@ -969,7 +969,7 @@ uint32_t MalleableChooseExpression::getResourceQuantity() const {
 
 ParseResultPtr MalleableChooseExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
-    CapacityConstraintMap& capacityConstraints, Time currentTime) {
+    CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
   TETRISCHED_SCOPE_TIMER("MalleableChooseExpression::parse," +
                          std::to_string(currentTime) + "," + name + "," + id)
   // Check that the Expression was parsed before
@@ -1042,7 +1042,7 @@ ParseResultPtr MalleableChooseExpression::parse(
 
         // Register this Integer variable with the CapacityConstraintMap
         // that is being bubbled up.
-        capacityConstraints.registerUsageForDuration(
+        capacityConstraints->registerUsageForDuration(
             shared_from_this(), *partition, time, granularity, isSatisfiedVar,
             allocationAtTime, std::nullopt);
       } else {
@@ -1330,7 +1330,7 @@ void AllocationExpression::addChild(ExpressionPtr child) {
 
 ParseResultPtr AllocationExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
-    CapacityConstraintMap& capacityConstraints, Time currentTime) {
+    CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
   TETRISCHED_SCOPE_TIMER("AllocationExpression::parse," +
                          std::to_string(currentTime) + "," + name + "," + id)
   // Check that the Expression was parsed before.
@@ -1352,7 +1352,7 @@ ParseResultPtr AllocationExpression::parse(
       std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
   (parsedResult->utility).value()->addTerm(1);
   for (const auto& [partition, allocation] : allocatedResources) {
-    capacityConstraints.registerUsageForDuration(shared_from_this(), *partition,
+    capacityConstraints->registerUsageForDuration(shared_from_this(), *partition,
                                                  startTime, duration, 1,
                                                  allocation, std::nullopt);
   }
@@ -1383,7 +1383,7 @@ ObjectiveExpression::ObjectiveExpression(std::string name)
 
 ParseResultPtr ObjectiveExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
-    CapacityConstraintMap& capacityConstraints, Time currentTime) {
+    CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
   TETRISCHED_SCOPE_TIMER("ObjectiveExpression::parse," +
                          std::to_string(currentTime) + "," + name + "," + id)
   // Check that the Expression was parsed before
@@ -1423,7 +1423,7 @@ ParseResultPtr ObjectiveExpression::parse(
   TETRISCHED_DEBUG(
       "Finalizing the CapacityConstraintMap for ObjectiveExpression " << name
                                                                       << ".")
-  capacityConstraints.translate(solverModel);
+  capacityConstraints->translate(solverModel);
   TETRISCHED_DEBUG("Finished finalizing the CapacityConstraintMap for " << name
                                                                         << ".")
 
@@ -1513,7 +1513,7 @@ void LessThanExpression::addChild(ExpressionPtr child) {
 
 ParseResultPtr LessThanExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
-    CapacityConstraintMap& capacityConstraints, Time currentTime) {
+    CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
   TETRISCHED_SCOPE_TIMER("LessThanExpression::parse," +
                          std::to_string(currentTime) + "," + name + "," + id)
   // Sanity check the children.
@@ -1679,10 +1679,9 @@ ParseResultPtr LessThanExpression::parse(
 MinExpression::MinExpression(std::string name)
     : Expression(name, ExpressionType::EXPR_MIN) {}
 
-ParseResultPtr MinExpression::parse(SolverModelPtr solverModel,
-                                    Partitions availablePartitions,
-                                    CapacityConstraintMap& capacityConstraints,
-                                    Time currentTime) {
+ParseResultPtr MinExpression::parse(
+    SolverModelPtr solverModel, Partitions availablePartitions,
+    CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
   TETRISCHED_SCOPE_TIMER("MinExpression::parse," + std::to_string(currentTime) +
                          "," + name + "," + id)
   // Check that the Expression was parsed before
@@ -1914,10 +1913,9 @@ void MaxExpression::addChild(ExpressionPtr child) {
   Expression::addChild(child);
 }
 
-ParseResultPtr MaxExpression::parse(SolverModelPtr solverModel,
-                                    Partitions availablePartitions,
-                                    CapacityConstraintMap& capacityConstraints,
-                                    Time currentTime) {
+ParseResultPtr MaxExpression::parse(
+    SolverModelPtr solverModel, Partitions availablePartitions,
+    CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
   TETRISCHED_SCOPE_TIMER("MaxExpression::parse," + std::to_string(currentTime) +
                          "," + name + "," + id)
   // Check that the Expression was parsed before
@@ -2153,7 +2151,7 @@ void ScaleExpression::addChild(ExpressionPtr child) {
 
 ParseResultPtr ScaleExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
-    CapacityConstraintMap& capacityConstraints, Time currentTime) {
+    CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
   TETRISCHED_SCOPE_TIMER("ScaleExpression::parse," +
                          std::to_string(currentTime) + "," + name + "," + id)
   // Sanity check the children.

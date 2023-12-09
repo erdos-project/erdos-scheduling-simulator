@@ -147,6 +147,7 @@ class CapacityConstraintMap {
   /// The number of constraints in this map.
   size_t size() const;
 };
+typedef std::shared_ptr<CapacityConstraintMap> CapacityConstraintMapPtr;
 }  // namespace tetrisched
 
 #endif  // _TETRISCHED_CAPACITYCONSTRAINT_HPP_
