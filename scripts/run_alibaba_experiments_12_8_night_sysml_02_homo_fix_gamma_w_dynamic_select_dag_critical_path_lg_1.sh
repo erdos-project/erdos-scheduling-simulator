@@ -21,7 +21,7 @@ MIN_DEADLINE_VARIANCE=10
 NUM_INVOCATIONS=50
 SCHEDULER_LOG_TIMES=10
 SCHEDULER_RUNTIME=0
-LOG_LEVEL=info
+LOG_LEVEL=debug
 REPLAY_TRACE=alibaba
 WORKLOAD_PROFILE_PATH=./traces/alibaba-cluster-trace-v2018/alibaba_set_0_6600_dags.pkl
 EXECUTION_MODE=replay
@@ -46,12 +46,14 @@ execute_experiment () {
     echo "[x] Initiating the execution of ${LOG_BASE}"
     if [ ! -f "${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.csv" ]; then
 
-# --scheduler_log_to_file
+
     export TETRISCHED_LOGGING_DIR="${LOG_DIR}/${LOG_BASE}/"
     MYCONF="\
 --log_dir=${LOG_DIR}/${LOG_BASE}
 --log_file_name=${LOG_BASE}.log
 --csv_file_name=${LOG_BASE}.csv
+--scheduler_log_to_file
+--log_graphs
 --log_level=${LOG_LEVEL}
 --execution_mode=${EXECUTION_MODE}
 --replay_trace=${REPLAY_TRACE}
