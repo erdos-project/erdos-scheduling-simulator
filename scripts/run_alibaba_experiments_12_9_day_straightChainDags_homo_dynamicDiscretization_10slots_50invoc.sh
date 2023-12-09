@@ -18,7 +18,7 @@ WORKER_CONFIG=alibaba_cluster
 
 ERDOS_SIMULATOR_DIR="." # Change this to the directory where the simulator is located.
 MIN_DEADLINE_VARIANCE=10
-NUM_INVOCATIONS=100
+NUM_INVOCATIONS=50
 SCHEDULER_LOG_TIMES=10
 SCHEDULER_RUNTIME=0
 LOG_LEVEL=debug
@@ -149,7 +149,7 @@ for POISSON_ARRIVAL_RATE in ${POISSON_ARRIVAL_RATES[@]}; do
                             if [[ ${SCHEDULER} == TetriSched ]]; then
                                 LOG_BASE+="_scheduler_discretization_${SCHEDULER_TIME_DISCRETIZATION}"
                                 if [[ ${DYNAMIC_DISCRETIZATION} == 1 ]]; then
-                                    LOG_BASE+="_dynamic_max_occupancy_threshold_0.7_noCPOptPass"
+                                    LOG_BASE+="_dynamic_max_occupancy_threshold_0.7"
                                 fi
                             fi
 
