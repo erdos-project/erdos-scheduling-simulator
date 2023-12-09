@@ -33,7 +33,7 @@
 
 // Macros for timing.
 // Uncomment the following line to enable timing.
-#define TETRISCHED_TIMING_ENABLED
+// #define TETRISCHED_TIMING_ENABLED
 #define TETRISCHED_TIMING_FILE_NAME "libtetrisched_performance.csv"
 #ifdef TETRISCHED_TIMING_ENABLED
 #define TETRISCHED_SCOPE_TIMER(TIMER_NAME) \
