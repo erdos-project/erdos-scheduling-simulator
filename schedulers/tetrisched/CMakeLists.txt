@@ -11,6 +11,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++2a")
 # Include debug information.
 set(CMAKE_BUILD_TYPE Debug)
 
+set(INSTALL_GTEST OFF)
 include(FetchContent)
 FetchContent_Declare(
   googletest
@@ -98,6 +99,7 @@ endif()
 
 # Compile and link Intel TBB.
 set(INTEL_TBB_DIR "extern/tbb")
+set(TBB_INSTALL OFF)
 message("-- Using Intel TBB from: ${INTEL_TBB_DIR}")
 add_subdirectory(${INTEL_TBB_DIR})
 
