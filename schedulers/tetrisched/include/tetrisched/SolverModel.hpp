@@ -1,6 +1,7 @@
 #ifndef _TETRISCHED_SOLVERMODEL_HPP_
 #define _TETRISCHED_SOLVERMODEL_HPP_
 
+#include <atomic>
 #include <fstream>
 #include <memory>
 #include <optional>
@@ -29,7 +30,7 @@ template <typename T>
 class VariableT {
  private:
   /// Used to generate unique IDs for each Variable.
-  static uint32_t variableIdCounter;
+  static std::atomic_uint32_t variableIdCounter;
   /// The type of the variable (as supported by the underlying solver).
   VariableType variableType;
   /// The ID of the variable.
@@ -205,7 +206,7 @@ class ConstraintT {
   /// If True, the solvers should put it into the model.
   bool active;
   /// Used to generate unique IDs for each Constraint.
-  static uint32_t constraintIdCounter;
+  static std::atomic_uint32_t constraintIdCounter;
   /// The ID of this constraint.
   uint32_t constraintId;
   /// The name of this constraint.

@@ -9,7 +9,7 @@ namespace tetrisched {
 // Initialize the static counter for variable IDs.
 // This is required by compiler.
 template <typename T>
-uint32_t VariableT<T>::variableIdCounter = 0;
+std::atomic_uint32_t VariableT<T>::variableIdCounter = 0;
 
 template <typename T>
 VariableType VariableT<T>::isTypeValid(VariableType type) {
@@ -116,7 +116,7 @@ std::optional<T> VariableT<T>::getUpperBound() const {
 // Initialize the static counter for constraint IDs.
 // This is required by compiler.
 template <typename T>
-uint32_t ConstraintT<T>::constraintIdCounter = 0;
+std::atomic_uint32_t ConstraintT<T>::constraintIdCounter = 0;
 
 template <typename T>
 ConstraintT<T>::ConstraintT(std::string constraintName, ConstraintType type,
