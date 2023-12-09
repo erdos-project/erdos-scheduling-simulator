@@ -369,7 +369,7 @@ class Simulator(object):
 
         self.worker_pools = []
         self.tasks = []
-        self.scheduler_invocations = []
+        self.scheduler_invocations: list[Scheduler] = []
         self.task_graphs: dict[str, TaskGraph] = {}
 
     def update_finish(self, csv_reading: str):

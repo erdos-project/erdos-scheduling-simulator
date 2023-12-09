@@ -36,7 +36,7 @@ class CSVReader(object):
                     path_readings.append(line)
                 readings[csv_path] = path_readings
 
-        self._simulators = {}
+        self._simulators: dict[str, Simulator] = {}
         self.parse_events(readings)
 
     def parse_events(self, readings: Mapping[str, Sequence[str]]):
@@ -52,7 +52,7 @@ class CSVReader(object):
             tasks: dict[str, Task] = {}
             task_graphs: dict[str, TaskGraph] = {}
             worker_pools = {}
-            schedulers = []
+            schedulers: list[Scheduler] = []
             for reading in csv_readings:
                 try:
                     # TODO: This
@@ -120,18 +120,9 @@ class CSVReader(object):
                         tasks[reading[5]].update_placement(reading, worker_pools)
                     elif reading[1] == "TASK_CANCEL":
                         # Update the task with the placement event data.
-                        if reading[4] not in tasks:
-                            tasks[reading[4]] = Task(
-                                name=reading[2],
-                                task_graph=reading[5],
-                                timestamp=int(reading[3]),
-                                task_id=reading[4],
-                                intended_release_time=float("inf"),
-                                release_time=float("inf"),
-                                deadline=float("inf"),
-                            )
-                        tasks[reading[4]].cancelled = True
-                        tasks[reading[4]].cancelled_at = int(reading[0])
+                        if reading[4] in tasks:
+                            tasks[reading[4]].cancelled = True
+                            tasks[reading[4]].cancelled_at = int(reading[0])
                         task_graphs[reading[5]].cancelled = True
                         task_graphs[reading[5]].cancelled_at = int(reading[0])
                     elif reading[1] == "TASK_SKIP" and reading[4] in tasks:
