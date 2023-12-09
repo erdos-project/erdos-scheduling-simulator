@@ -96,6 +96,11 @@ else()
      message("-- Not adding OR-Tools")
 endif()
 
+# Compile and link Intel TBB.
+set(INTEL_TBB_DIR "extern/tbb")
+message("-- Using Intel TBB from: ${INTEL_TBB_DIR}")
+add_subdirectory(${INTEL_TBB_DIR})
+
 set(TETRISCHED_SOURCE
      "src/CapacityConstraint.cpp"
      "src/Expression.cpp"
@@ -123,6 +128,9 @@ target_include_directories(tetrisched PRIVATE ${SOLVER_BACKEND_INCLUDE_DIRS})
 target_link_directories(tetrisched PRIVATE ${SOLVER_BACKEND_LINK_DIRS})
 target_link_libraries(tetrisched PRIVATE ${SOLVER_BACKEND_LINK_LIBRARIES})
 
+# Link TBB.
+target_link_libraries(tetrisched PRIVATE TBB::tbb)
+
 # Define the target for tests.
 set(TETRISCHED_TESTS
      "test/test_expression.cpp"
@@ -143,6 +151,7 @@ target_link_libraries(
   GTest::gtest_main
   tetrisched
   ${SOLVER_BACKEND_LINK_LIBRARIES}
+  TBB::tbb
 )
 
 include(GoogleTest)
@@ -170,6 +179,7 @@ target_link_libraries(
   tetrisched_py
   PUBLIC
   tetrisched
+  TBB::tbb
 )
 
 # Generate an install Python target.
