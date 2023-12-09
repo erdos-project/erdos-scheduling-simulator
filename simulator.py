@@ -1451,7 +1451,7 @@ class Simulator(object):
             raise ValueError(f"TaskGraph {event.task_graph} not found in the Workload.")
         self._csv_logger.info(
             "%s,TASK_GRAPH_RELEASE,%s,%s,%s,%s",
-            0,
+            event.time.to(EventTime.Unit.US).time,
             task_graph.release_time.to(EventTime.Unit.US).time,
             task_graph.deadline.to(EventTime.Unit.US).time,
             task_graph.name,
