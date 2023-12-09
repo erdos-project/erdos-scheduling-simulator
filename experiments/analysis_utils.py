@@ -324,6 +324,7 @@ def smooth_data(y, window_size):
     return np.convolve(y, window, mode="same")
 
 
+# Obsolete
 def analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var(
     csv_reader,
     df,
@@ -438,7 +439,7 @@ def analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var(
     plt.show()
 
 
-# TODO: This needs some fix
+# Obsolete
 def analyze_resource_utilization_by_release_policy_and_max_deadline_var(
     csv_reader,
     df,
@@ -530,11 +531,132 @@ def analyze_resource_utilization_by_release_policy_and_max_deadline_var(
     plt.show()
 
 
-def plot_resource_utilization(base_dir: str, extra_title: str = ""):
-    # This function wraps analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var
-    csv_file_paths = find_all_file_paths(base_dir)
-    csv_reader = CSVReader(csv_file_paths)
+def analyze_resource_utilization_by_arrival_rate_and_cv2(
+    csv_reader,
+    df,
+    max_deadline_var,
+    figure_size=(20, 20),
+    axes_fontsize=16,
+    smoothing_window_size=10,  # Size of the moving average window
+    extra_title: str = "",
+):
+    # Unique values for variable_arrival_rate and cv2
+    arrival_rates = sorted(df["variable_arrival_rate"].unique().tolist())
+    cv2_values = sorted(df["cv2"].unique().tolist())
 
+    # Create a superplot grid
+    fig, axes = plt.subplots(
+        len(arrival_rates),
+        len(cv2_values),
+        figsize=figure_size,
+        sharex=True,
+        sharey=True,
+    )
+    for r, variable_arrival_rate in enumerate(arrival_rates):
+        for c, cv2 in enumerate(cv2_values):
+            if len(arrival_rates) == 1:
+                ax = axes[c]
+            else:
+                ax = axes[r, c]
+
+            # Filter the DataFrame for current variable_arrival_rate and cv2
+            filtered_df = df[
+                (df["variable_arrival_rate"] == variable_arrival_rate)
+                & (df["cv2"] == cv2)
+                & (df["max_deadline_variance"] == max_deadline_var)
+            ]
+
+            # Iterate over each scheduler in the filtered DataFrame
+            for index, row in filtered_df.iterrows():
+                # Worker Pool statistics
+                try:
+                    worker_pool_stats = csv_reader.get_worker_pool_utilizations(
+                        row["csv_file_path"]
+                    )
+                except Exception as e:
+                    print(
+                        f"Error while csv_reader.get_worker_pool_utilizations{row['csv_file_path']}: {e}"
+                    )
+                    continue
+
+                # Find all the resource types in the system.
+                resource_types: set[str] = set()
+                for wp_stats in worker_pool_stats:
+                    for resource in wp_stats.resource_utilizations.keys():
+                        resource_types.add(resource)
+                num_resource_type = len(resource_types)
+
+                # Calculate the heights of utilization for each resource, after
+                # normalization.
+                resource_used_heights = {
+                    resource: [
+                        stat.resource_utilizations[resource][0]
+                        / sum(stat.resource_utilizations[resource])
+                        for stat in worker_pool_stats
+                    ]
+                    for resource in resource_types
+                }
+
+                sim_times_sec = [
+                    stat.simulator_time / 1000000 for stat in worker_pool_stats
+                ]
+
+                # Combine all slots into a total "slot"
+                if "All_Slots" not in resource_types:
+                    resource_types.add("All_Slots")
+                    resource_used_heights["All_Slots"] = []
+                    for resource_type in resource_types:
+                        if resource_type.startswith("Slot"):
+                            for i, h in enumerate(resource_used_heights[resource_type]):
+                                if i >= len(resource_used_heights["All_Slots"]):
+                                    resource_used_heights["All_Slots"].append(h)
+                                else:
+                                    resource_used_heights["All_Slots"][i] += h
+
+                # Plotting for this scheduler
+                # for resource_type in resource_types:
+                smoothed_utilization = smooth_data(
+                    resource_used_heights["All_Slots"], smoothing_window_size
+                )
+                ax.plot(
+                    sim_times_sec,
+                    smoothed_utilization,
+                    # color=resource_color[resource_type],
+                    label=row["scheduler"],
+                )
+
+                # # Formatting the subplot
+                ax.set_ylim(0, num_resource_type + 0.01)
+                ax.legend()
+                # ax.set_title(f"{row['scheduler']}")
+
+                # Set subplot title or labels if necessary
+                ax.set_ylabel("Utilization", fontsize=axes_fontsize)
+                ax.set_xlabel("Time", fontsize=axes_fontsize)
+                ax.set_title(
+                    f'Arrival Rate: {variable_arrival_rate} v.s. {row["actual_arrival_rate"]:.3f}, CV2: {cv2} v.s. {row["actual_cv2"]:.3f}'
+                )
+
+    # Adjust layout
+    plt.tight_layout()
+    plt.subplots_adjust(top=0.93)
+
+    num_invocation = df["num_invocation"].unique()[0]
+    plt.suptitle(
+        f"Resource Utilization Analysis. {max_deadline_var=} {num_invocation=} {extra_title}"
+    )
+
+    # Display the plot
+    plt.show()
+
+
+def plot_resource_utilization(
+    base_dir: str, extra_title: str = "", figure_size=(20, 20)
+):
+    """
+    If you have just one row, figure_size=(15, 8) is a good size.
+    """
+    # This function wraps analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var
     df = extract_experiments_result(base_dir)
     df = df.sort_values(
         by=[
@@ -546,17 +668,16 @@ def plot_resource_utilization(base_dir: str, extra_title: str = ""):
             "max_deadline_variance",
         ]
     )
-    for cv2 in df["cv2"].unique():
-        for arrival_rate in df["variable_arrival_rate"].unique():
-            for max_deadline_variance in df["max_deadline_variance"].unique():
-                analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var(
-                    csv_reader,
-                    df,
-                    arrival_rate,
-                    cv2,
-                    max_deadline_variance,
-                    figure_size=(12, 8),
-                )
+    # Filter out csv files that hasn't been completed yet
+    csv_reader = CSVReader(df["csv_file_path"].tolist())
+    for max_deadline_variance in df["max_deadline_variance"].unique():
+        analyze_resource_utilization_by_arrival_rate_and_cv2(
+            csv_reader,
+            df,
+            max_deadline_variance,
+            figure_size=figure_size,
+            extra_title=extra_title,
+        )
 
 
 def plot_solver_time(
