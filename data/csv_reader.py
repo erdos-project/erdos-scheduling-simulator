@@ -153,6 +153,8 @@ class CSVReader(object):
                         task_graphs[reading[2]].deadline_miss_detected_at = int(
                             reading[0]
                         )
+                    elif reading[0] == "input_flag":
+                        continue
                     else:
                         print(f"[x] Unknown event type: {reading[1]}")
                 except Exception as e:
