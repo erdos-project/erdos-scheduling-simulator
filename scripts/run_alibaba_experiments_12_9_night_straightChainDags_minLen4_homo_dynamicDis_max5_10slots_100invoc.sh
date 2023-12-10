@@ -23,7 +23,7 @@ SCHEDULER_LOG_TIMES=10
 SCHEDULER_RUNTIME=0
 LOG_LEVEL=debug
 REPLAY_TRACE=alibaba
-WORKLOAD_PROFILE_PATH=./traces/alibaba-cluster-trace-v2018/alibaba_straight_chain_7K_dags_minLen4_set1.pkl.pkl
+WORKLOAD_PROFILE_PATH=./traces/alibaba-cluster-trace-v2018/alibaba_straight_chain_7K_dags_minLen4_set1.pkl
 EXECUTION_MODE=replay
 
 PARALLEL_FACTOR=2
