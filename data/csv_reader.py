@@ -77,6 +77,7 @@ class CSVReader(object):
                             intended_release_time=int(reading[4]),
                             release_time=int(reading[5]),
                             deadline=int(reading[6]),
+                            window_to_execute=int(reading[6]) - int(reading[5]),
                         )
                     elif reading[1] == "TASK_FINISHED":
                         # Update the task with the completion event data.
@@ -143,11 +144,16 @@ class CSVReader(object):
                             name=reading[4],
                             release_time=int(reading[2]),
                             deadline=int(reading[3]),
+                            num_tasks=int(reading[5]),
                         )
                     elif reading[1] == "TASK_GRAPH_FINISHED":
                         # Add the task to the last scheduler's invocation.
                         task_graphs[reading[2]].completion_time = int(reading[0])
                         task_graphs[reading[2]].cancelled = False
+                        task_graphs[reading[2]].slack = (
+                            task_graphs[reading[2]].deadline
+                            - task_graphs[reading[2]].completion_time
+                        )
                     elif reading[1] == "MISSED_TASK_GRAPH_DEADLINE":
                         # Add the task to the last scheduler's invocation.
                         task_graphs[reading[2]].deadline_miss_detected_at = int(
@@ -177,7 +183,7 @@ class CSVReader(object):
             assert simulator.missed_taskgraphs == missed_deadline_task_graphs_count
             assert simulator.dropped_taskgraphs == canceled_task_graphs_count
 
-            simulator.worker_pools = worker_pools.values()
+            simulator.worker_pools = list(worker_pools.values())
             simulator.tasks = list(
                 sorted(tasks.values(), key=attrgetter("release_time"))
             )
