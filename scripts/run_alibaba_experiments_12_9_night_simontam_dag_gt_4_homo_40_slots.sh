@@ -3,18 +3,18 @@
 
 # Scheduler runtimes in us.TetriSched
 SCHEDULERS=(EDF TetriSched)
-MAX_DEADLINE_VARIANCES=(25 200 50 100) # Keep deadline tight. Don't change this
+MAX_DEADLINE_VARIANCES=(200 25) # Keep deadline tight. Don't change this
 SCHEDULER_TIME_DISCRETIZATIONS=(1)
-GAMMA_COEFFICIENTS=(1 2 4) #cv2 don't change this
+GAMMA_COEFFICIENTS=(1 4) #cv2 don't change this
 RELEASE_POLICIES=(fixed_gamma)
-POISSON_ARRIVAL_RATES=(0.06 0.08) # Tune this
-BASE_ARRIVAL_RATES=(0.03 0.04) # Tune this
+POISSON_ARRIVAL_RATES=(0.06) # Tune this
+BASE_ARRIVAL_RATES=(0.03) # Tune this
 DAG_AWARENESS=(1) # False True
 TASK_CPU_DIVISOR=25
 
 DYNAMIC_DISCRETIZATION=1
 HETEROGENEOUS_RESOURCE=0
-WORKER_CONFIG=alibaba_cluster
+WORKER_CONFIG=alibaba_cluster_40_slots
 
 ERDOS_SIMULATOR_DIR="." # Change this to the directory where the simulator is located.
 MIN_DEADLINE_VARIANCE=10
@@ -46,14 +46,13 @@ execute_experiment () {
     echo "[x] Initiating the execution of ${LOG_BASE}"
     if [ ! -f "${LOG_DIR}/${LOG_BASE}/${LOG_BASE}.csv" ]; then
 
-
+# --scheduler_log_to_file
     export TETRISCHED_LOGGING_DIR="${LOG_DIR}/${LOG_BASE}/"
     MYCONF="\
 --log_dir=${LOG_DIR}/${LOG_BASE}
 --log_file_name=${LOG_BASE}.log
 --csv_file_name=${LOG_BASE}.csv
 --log_graphs
---scheduler_log_to_file
 --log_level=${LOG_LEVEL}
 --execution_mode=${EXECUTION_MODE}
 --replay_trace=${REPLAY_TRACE}
