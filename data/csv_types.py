@@ -247,6 +247,7 @@ class TaskGraph(object):
     release_time: int
     deadline: int
     num_tasks: int
+    window_to_execute: int = field(init=False)
 
     cancelled: bool = False
     cancelled_at: Optional[int] = None
@@ -255,6 +256,9 @@ class TaskGraph(object):
     completion_time: Optional[int] = None
     slack: Optional[int] = None
     deadline_miss_detected_at: Optional[int] = None
+
+    def __post_init__(self):
+        self.window_to_execute: int = self.deadline - self.release_time
 
     @property
     def was_completed(self):
