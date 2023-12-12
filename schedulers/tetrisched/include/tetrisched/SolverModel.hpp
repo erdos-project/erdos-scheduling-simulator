@@ -323,7 +323,7 @@ class ObjectiveFunctionT {
   // The objective is left hand side of the constraint
   std::shared_ptr<ConstraintT<T>> toConstraint(std::string constraintName,
                                                ConstraintType constraintType,
-                                               T rightHandSide);
+                                               T rightHandSide) const;
 
   /// Retrieve a string representation of this ObjectiveFunction.
   std::string toString() const;
@@ -368,6 +368,8 @@ class SolverModelT {
   std::unordered_map<std::string, T> solutionValueCache;
   /// The objective function in this model.
   std::shared_ptr<ObjectiveFunctionT<T>> objectiveFunction;
+  /// The lock used to ensure that the model is not modified concurrently.
+  std::mutex modelMutex;
 
   /// Generate a new solver model.
   /// Construct a Solver to get an instance of the Model.
@@ -377,9 +379,15 @@ class SolverModelT {
   /// Add a variable to the model.
   void addVariable(std::shared_ptr<VariableT<T>> variable);
 
+  /// Add a batch of variables to the model.
+  void addVariables(std::vector<std::shared_ptr<VariableT<T>>>& variables);
+
   /// Add a constraint to the model.
-  /// This method consumes the Constraint.
   void addConstraint(std::shared_ptr<ConstraintT<T>> constraint);
+
+  /// Add a batch of constraints to the model.
+  void addConstraints(
+      std::vector<std::shared_ptr<ConstraintT<T>>>& constraints);
 
   /// Set the objective function for the model.
   /// This method consumes the ObjectiveFunction.
