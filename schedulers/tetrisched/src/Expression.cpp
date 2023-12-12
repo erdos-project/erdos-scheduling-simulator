@@ -625,6 +625,7 @@ uint32_t WindowedChooseExpression::getResourceQuantity() const {
 ParseResultPtr WindowedChooseExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
+  std::lock_guard<std::mutex> lockGuard(expressionMutex);
   TETRISCHED_SCOPE_TIMER("WindowedChooseExpression::parse," +
                          std::to_string(currentTime) + "," + name + "," + id)
   // Check that the Expression was parsed before.
@@ -970,6 +971,7 @@ uint32_t MalleableChooseExpression::getResourceQuantity() const {
 ParseResultPtr MalleableChooseExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
+  std::lock_guard<std::mutex> lockGuard(expressionMutex);
   TETRISCHED_SCOPE_TIMER("MalleableChooseExpression::parse," +
                          std::to_string(currentTime) + "," + name + "," + id)
   // Check that the Expression was parsed before
@@ -1331,6 +1333,7 @@ void AllocationExpression::addChild(ExpressionPtr child) {
 ParseResultPtr AllocationExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
+  std::lock_guard<std::mutex> lockGuard(expressionMutex);
   TETRISCHED_SCOPE_TIMER("AllocationExpression::parse," +
                          std::to_string(currentTime) + "," + name + "," + id)
   // Check that the Expression was parsed before.
@@ -1352,9 +1355,9 @@ ParseResultPtr AllocationExpression::parse(
       std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
   (parsedResult->utility).value()->addTerm(1);
   for (const auto& [partition, allocation] : allocatedResources) {
-    capacityConstraints->registerUsageForDuration(shared_from_this(), *partition,
-                                                 startTime, duration, 1,
-                                                 allocation, std::nullopt);
+    capacityConstraints->registerUsageForDuration(
+        shared_from_this(), *partition, startTime, duration, 1, allocation,
+        std::nullopt);
   }
   TETRISCHED_DEBUG("Finished parsing AllocationExpression for "
                    << name << " to be placed starting at time " << startTime
@@ -1384,6 +1387,7 @@ ObjectiveExpression::ObjectiveExpression(std::string name)
 ParseResultPtr ObjectiveExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
+  std::lock_guard<std::mutex> lockGuard(expressionMutex);
   TETRISCHED_SCOPE_TIMER("ObjectiveExpression::parse," +
                          std::to_string(currentTime) + "," + name + "," + id)
   // Check that the Expression was parsed before
@@ -1514,6 +1518,7 @@ void LessThanExpression::addChild(ExpressionPtr child) {
 ParseResultPtr LessThanExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
+  std::lock_guard<std::mutex> lockGuard(expressionMutex);
   TETRISCHED_SCOPE_TIMER("LessThanExpression::parse," +
                          std::to_string(currentTime) + "," + name + "," + id)
   // Sanity check the children.
@@ -1682,6 +1687,7 @@ MinExpression::MinExpression(std::string name)
 ParseResultPtr MinExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
+  std::lock_guard<std::mutex> lockGuard(expressionMutex);
   TETRISCHED_SCOPE_TIMER("MinExpression::parse," + std::to_string(currentTime) +
                          "," + name + "," + id)
   // Check that the Expression was parsed before
@@ -1916,6 +1922,7 @@ void MaxExpression::addChild(ExpressionPtr child) {
 ParseResultPtr MaxExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
+  std::lock_guard<std::mutex> lockGuard(expressionMutex);
   TETRISCHED_SCOPE_TIMER("MaxExpression::parse," + std::to_string(currentTime) +
                          "," + name + "," + id)
   // Check that the Expression was parsed before
@@ -2152,6 +2159,7 @@ void ScaleExpression::addChild(ExpressionPtr child) {
 ParseResultPtr ScaleExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
+  std::lock_guard<std::mutex> lockGuard(expressionMutex);
   TETRISCHED_SCOPE_TIMER("ScaleExpression::parse," +
                          std::to_string(currentTime) + "," + name + "," + id)
   // Sanity check the children.

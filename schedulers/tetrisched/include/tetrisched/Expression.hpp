@@ -205,6 +205,9 @@ class Expression : public std::enable_shared_from_this<Expression> {
   SolutionResultPtr solution;
   /// The time bounds for this Expression.
   ExpressionTimeBounds timeBounds;
+  /// A mutex representing a lock on the parsing and population of results
+  /// from this Expression.
+  std::mutex expressionMutex;
 
   /// Adds a parent to this expression.
   void addParent(ExpressionPtr parent);
@@ -212,6 +215,10 @@ class Expression : public std::enable_shared_from_this<Expression> {
  public:
   /// Construct the Expression class of the given type.
   Expression(std::string name, ExpressionType type);
+
+  /// Prevent copies of the Expression class.
+  Expression(const Expression&) = delete;
+  Expression& operator=(const Expression&) = delete;
 
   /// Parses the expression into a set of variables and constraints for the
   /// Solver. Returns a ParseResult that contains the utility of the expression,
