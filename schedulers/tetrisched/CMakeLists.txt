@@ -112,7 +112,8 @@ set(TETRISCHED_SOURCE
      "src/OptimizationPasses.cpp"
      "src/Partition.cpp"
      "src/SolverModel.cpp"
-     "src/Scheduler.cpp")
+     "src/Scheduler.cpp"
+     "src/Types.cpp")
 
 if (EXISTS "${CPLEX_DIR}")
      LIST(APPEND TETRISCHED_SOURCE "src/CPLEXSolver.cpp")
