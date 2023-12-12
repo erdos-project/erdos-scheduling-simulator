@@ -56,7 +56,7 @@ execute_experiment () {
     --max_deadline_variance=${DEADLINE_VAR}
     --min_deadline_variance=50
     --workload_profile_path=${WORKLOAD_PROFILE_PATH}
-    --override_num_invocations=1
+    --override_num_invocations=50
     --randomize_start_time_max=100
     --worker_profile_path=profiles/workers/${WORKER_CONFIG}.yaml
     --scheduler_runtime=${SCHEDULER_RUNTIME}
