@@ -48,12 +48,15 @@ std::string generate_uuid() {
 /* Method definitions for Placement */
 Placement::Placement(std::string taskName, Time startTime, Time endTime)
     : taskName(taskName),
+      placed(true),
       startTime(startTime),
-      endTime(endTime),
-      placed(true) {}
+      endTime(endTime) {}
 
 Placement::Placement(std::string taskName)
-    : taskName(taskName), startTime(std::nullopt), placed(false) {}
+    : taskName(taskName),
+      placed(false),
+      startTime(std::nullopt),
+      endTime(std::nullopt) {}
 
 bool Placement::isPlaced() const {
   if (placed && (!startTime.has_value() || !endTime.has_value())) {
@@ -101,20 +104,20 @@ Placement::getPartitionAllocations() const {
 
 /* Method definitions for ExpressionTimeBounds */
 ExpressionTimeBounds::ExpressionTimeBounds()
-    : specified(false),
-      startTimeRange(
+    : startTimeRange(
           {std::numeric_limits<Time>::min(), std::numeric_limits<Time>::max()}),
       endTimeRange(
           {std::numeric_limits<Time>::min(), std::numeric_limits<Time>::max()}),
-      duration(0) {}
+      duration(0),
+      specified(false) {}
 
 ExpressionTimeBounds::ExpressionTimeBounds(TimeRange startTimeRange,
                                            TimeRange endTimeRange,
                                            Time duration)
-    : specified(true),
-      startTimeRange(startTimeRange),
+    : startTimeRange(startTimeRange),
       endTimeRange(endTimeRange),
-      duration(duration) {}
+      duration(duration),
+      specified(true) {}
 
 bool ExpressionTimeBounds::isSpecified() const { return specified; }
 
@@ -265,7 +268,7 @@ size_t Expression::getNumParents() const { return parents.size(); }
 
 std::vector<ExpressionPtr> Expression::getParents() const {
   std::vector<ExpressionPtr> returnParents;
-  for (int i = 0; i < parents.size(); i++) {
+  for (decltype(parents)::size_type i = 0; i < parents.size(); i++) {
     returnParents.push_back(parents[i].lock());
   }
   return returnParents;
@@ -437,7 +440,7 @@ ChooseExpression::ChooseExpression(std::string taskName,
                                     duration);
 }
 
-void ChooseExpression::addChild(ExpressionPtr child) {
+void ChooseExpression::addChild(ExpressionPtr /* child */) {
   throw tetrisched::exceptions::ExpressionConstructionException(
       "ChooseExpression cannot have a child.");
 }
@@ -449,8 +452,8 @@ uint32_t ChooseExpression::getResourceQuantity() const {
 ParseResultPtr ChooseExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
-  TETRISCHED_SCOPE_TIMER("ChooseExpression::parse," +
-                         std::to_string(currentTime) + "," + name + "," + id)
+  // TETRISCHED_SCOPE_TIMER("ChooseExpression::parse," +
+  //                        std::to_string(currentTime) + "," + name + "," + id)
   // Check that the Expression was parsed before
   if (parsedResult != nullptr) {
     // return the already parsed sub-tree from another parent
@@ -613,7 +616,7 @@ WindowedChooseExpression::WindowedChooseExpression(
       {startTime, endTime}, {endTimeLowerBound, endTimeUpperBound}, duration);
 }
 
-void WindowedChooseExpression::addChild(ExpressionPtr child) {
+void WindowedChooseExpression::addChild(ExpressionPtr /* child */) {
   throw tetrisched::exceptions::ExpressionConstructionException(
       "WindowedChooseExpression " + name + " cannot have a child.");
 }
@@ -946,8 +949,8 @@ MalleableChooseExpression::MalleableChooseExpression(
       startTime(startTime),
       endTime(endTime),
       granularity(granularity),
-      partitionVariables(),
-      utility(utility) {
+      utility(utility),
+      partitionVariables() {
   if (endTime < startTime) {
     throw tetrisched::exceptions::ExpressionConstructionException(
         "MalleableChooseExpression " + name +
@@ -959,7 +962,7 @@ MalleableChooseExpression::MalleableChooseExpression(
                                     endTime - startTime);
 }
 
-void MalleableChooseExpression::addChild(ExpressionPtr child) {
+void MalleableChooseExpression::addChild(ExpressionPtr /* child */) {
   throw tetrisched::exceptions::ExpressionConstructionException(
       "MalleableChooseExpression cannot have a child.");
 }
@@ -1325,13 +1328,13 @@ AllocationExpression::AllocationExpression(
                                     duration);
 }
 
-void AllocationExpression::addChild(ExpressionPtr child) {
+void AllocationExpression::addChild(ExpressionPtr /* child */) {
   throw tetrisched::exceptions::ExpressionConstructionException(
       "AllocationExpression cannot have a child.");
 }
 
 ParseResultPtr AllocationExpression::parse(
-    SolverModelPtr solverModel, Partitions availablePartitions,
+    SolverModelPtr /* solverModel */, Partitions /* availablePartitions */,
     CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
   std::lock_guard<std::mutex> lockGuard(expressionMutex);
   TETRISCHED_SCOPE_TIMER("AllocationExpression::parse," +
@@ -1738,7 +1741,7 @@ ParseResultPtr MinExpression::parse(
   // std::pair<double, double> endTimeRange =
   //     std::make_pair(std::numeric_limits<Time>::max(), 0);
 
-  for (int i = 0; i < numChildren; i++) {
+  for (size_t i = 0; i < numChildren; i++) {
     // Parse the Child.
     auto childParsedResult = children[i]->parse(
         solverModel, availablePartitions, capacityConstraints, currentTime);
@@ -1785,9 +1788,9 @@ ParseResultPtr MinExpression::parse(
       if (childStartTime.isVariable()) {
         auto childStartTimeVariable = childStartTime.get<VariablePtr>();
         minStartTimeConstraint->addTerm(1, childStartTimeVariable);
-        if (auto lowerBound = childStartTimeVariable->getLowerBound();
-            lowerBound.has_value()) {
-          auto lowerBoundValue = lowerBound.value();
+        // if (auto lowerBound = childStartTimeVariable->getLowerBound();
+        //     lowerBound.has_value()) {
+          // auto lowerBoundValue = lowerBound.value();
           // std::cout << "Lower bound for " <<
           // childStartTimeVariable->getName()
           //           << " is " << lowerBoundValue << std::endl;
@@ -1797,7 +1800,7 @@ ParseResultPtr MinExpression::parse(
           // if (lowerBoundValue > startTimeRange.second) {
           //   startTimeRange.second = lowerBoundValue;
           // }
-        }
+        // }
       } else {
         auto childStartTimeValue = childStartTime.get<Time>();
         minStartTimeConstraint->addTerm(childStartTimeValue);
@@ -1982,7 +1985,7 @@ ParseResultPtr MaxExpression::parse(
       std::make_pair(std::numeric_limits<Time>::max(), 0);
   TimeRange endTimeBounds = std::make_pair(std::numeric_limits<Time>::max(), 0);
   bool anyChildrenWithUtilities = false;
-  for (int i = 0; i < numChildren; i++) {
+  for (size_t i = 0; i < numChildren; i++) {
     auto childParsedResult = children[i]->parse(
         solverModel, availablePartitions, capacityConstraints, currentTime);
 
