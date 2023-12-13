@@ -6,11 +6,15 @@ project(tetrisched LANGUAGES CXX)
 # Set cmake -D CMAKE_CXX_COMPILER=/path/to/C++20/compatible/compiler.
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++2a")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++2a -Wall -Wextra")
 
-# Include debug information.
-set(CMAKE_BUILD_TYPE Debug)
+if (NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+set(CMAKE_CXX_FLAGS_DEBUG "-g")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
+set(INSTALL_GTEST OFF)
 include(FetchContent)
 FetchContent_Declare(
   googletest
@@ -96,13 +100,20 @@ else()
      message("-- Not adding OR-Tools")
 endif()
 
+# Compile and link Intel TBB.
+set(INTEL_TBB_DIR "extern/tbb")
+set(TBB_INSTALL OFF)
+message("-- Using Intel TBB from: ${INTEL_TBB_DIR}")
+add_subdirectory(${INTEL_TBB_DIR})
+
 set(TETRISCHED_SOURCE
      "src/CapacityConstraint.cpp"
      "src/Expression.cpp"
      "src/OptimizationPasses.cpp"
      "src/Partition.cpp"
      "src/SolverModel.cpp"
-     "src/Scheduler.cpp")
+     "src/Scheduler.cpp"
+     "src/Types.cpp")
 
 if (EXISTS "${CPLEX_DIR}")
      LIST(APPEND TETRISCHED_SOURCE "src/CPLEXSolver.cpp")
@@ -122,6 +133,9 @@ target_compile_features(tetrisched PRIVATE cxx_std_17)
 target_include_directories(tetrisched PRIVATE ${SOLVER_BACKEND_INCLUDE_DIRS})
 target_link_directories(tetrisched PRIVATE ${SOLVER_BACKEND_LINK_DIRS})
 target_link_libraries(tetrisched PRIVATE ${SOLVER_BACKEND_LINK_LIBRARIES})
+
+# Link TBB.
+target_link_libraries(tetrisched PRIVATE TBB::tbb)
 
 # Define the target for tests.
 set(TETRISCHED_TESTS
@@ -143,6 +157,7 @@ target_link_libraries(
   GTest::gtest_main
   tetrisched
   ${SOLVER_BACKEND_LINK_LIBRARIES}
+  TBB::tbb
 )
 
 include(GoogleTest)
@@ -170,6 +185,7 @@ target_link_libraries(
   tetrisched_py
   PUBLIC
   tetrisched
+  TBB::tbb
 )
 
 # Generate an install Python target.

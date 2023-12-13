@@ -205,6 +205,9 @@ class Expression : public std::enable_shared_from_this<Expression> {
   SolutionResultPtr solution;
   /// The time bounds for this Expression.
   ExpressionTimeBounds timeBounds;
+  /// A mutex representing a lock on the parsing and population of results
+  /// from this Expression.
+  std::mutex expressionMutex;
 
   /// Adds a parent to this expression.
   void addParent(ExpressionPtr parent);
@@ -213,13 +216,17 @@ class Expression : public std::enable_shared_from_this<Expression> {
   /// Construct the Expression class of the given type.
   Expression(std::string name, ExpressionType type);
 
+  /// Prevent copies of the Expression class.
+  Expression(const Expression&) = delete;
+  Expression& operator=(const Expression&) = delete;
+
   /// Parses the expression into a set of variables and constraints for the
   /// Solver. Returns a ParseResult that contains the utility of the expression,
   /// an indicator specifying if the expression was satisfied and variables that
   /// provide a start and end time bound on this Expression.
   virtual ParseResultPtr parse(SolverModelPtr solverModel,
                                Partitions availablePartitions,
-                               CapacityConstraintMap& capacityConstraints,
+                               CapacityConstraintMapPtr capacityConstraints,
                                Time currentTime) = 0;
 
   /// Adds a child to this epxression.
@@ -281,6 +288,11 @@ class Expression : public std::enable_shared_from_this<Expression> {
 
   /// Returns the resource quantity required by the Expression.
   virtual uint32_t getResourceQuantity() const;
+
+  /// Retrieves the ParsedResultPtr for this Expression.
+  /// The ParsedResultPtr is only available if `parse` has been called on
+  /// this Expression.
+  std::optional<ParseResultPtr> getParsedResult() const;
 };
 
 /// A `ChooseExpression` represents a choice of a required number of machines
@@ -312,7 +324,7 @@ class ChooseExpression : public Expression {
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
-                       CapacityConstraintMap& capacityConstraints,
+                       CapacityConstraintMapPtr capacityConstraints,
                        Time currentTime) override;
   SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
   std::string getDescriptiveName() const override;
@@ -355,7 +367,7 @@ class WindowedChooseExpression : public Expression {
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
-                       CapacityConstraintMap& capacityConstraints,
+                       CapacityConstraintMapPtr capacityConstraints,
                        Time currentTime) override;
   SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
   std::string getDescriptiveName() const override;
@@ -396,7 +408,7 @@ class MalleableChooseExpression : public Expression {
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
-                       CapacityConstraintMap& capacityConstraints,
+                       CapacityConstraintMapPtr capacityConstraints,
                        Time currentTime) override;
   SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
   std::string getDescriptiveName() const override;
@@ -425,7 +437,7 @@ class AllocationExpression : public Expression {
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
-                       CapacityConstraintMap& capacityConstraints,
+                       CapacityConstraintMapPtr capacityConstraints,
                        Time currentTime) override;
   SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
   std::string getDescriptiveName() const override;
@@ -438,7 +450,7 @@ class ObjectiveExpression : public Expression {
   ObjectiveExpression(std::string name);
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
-                       CapacityConstraintMap& capacityConstraints,
+                       CapacityConstraintMapPtr capacityConstraints,
                        Time currentTime) override;
   SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
 };
@@ -452,7 +464,7 @@ class MinExpression : public Expression {
   MinExpression(std::string name);
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
-                       CapacityConstraintMap& capacityConstraints,
+                       CapacityConstraintMapPtr capacityConstraints,
                        Time currentTime) override;
 };
 
@@ -464,7 +476,7 @@ class MaxExpression : public Expression {
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
-                       CapacityConstraintMap& capacityConstraints,
+                       CapacityConstraintMapPtr capacityConstraints,
                        Time currentTime) override;
 };
 
@@ -479,7 +491,7 @@ class ScaleExpression : public Expression {
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
-                       CapacityConstraintMap& capacityConstraints,
+                       CapacityConstraintMapPtr capacityConstraints,
                        Time currentTime) override;
 };
 
@@ -492,7 +504,7 @@ class LessThanExpression : public Expression {
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
-                       CapacityConstraintMap& capacityConstraints,
+                       CapacityConstraintMapPtr capacityConstraints,
                        Time currentTime) override;
 };
 }  // namespace tetrisched

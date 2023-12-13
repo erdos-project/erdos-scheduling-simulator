@@ -9,6 +9,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <string>
 
 // Macros for logging.
@@ -16,19 +17,23 @@
 #define TETRISCHED_LOGGING_DIR_ENV_NAME "TETRISCHED_LOGGING_DIR"
 #define TETRISCHED_LOG_FILE_NAME "libtetrisched.log"
 #define TETRISCHED_DEFAULT_LOG_LEVEL tetrisched::logging::INFO
-#define TETRISCHED_DEBUG(x)                                                   \
-  if (TETRISCHED_LOGGING_ENABLED &&                                           \
-      TETRISCHED_DEFAULT_LOG_LEVEL >= tetrisched::logging::DEBUG) {           \
-    auto sourceLocation = std::experimental::source_location::current();      \
-    tetrisched::logging::Logger::debug()                                      \
-        << "[DEBUG, " << sourceLocation.function_name() << "] " << x << "\n"; \
+#define TETRISCHED_DEBUG(x)                                              \
+  if (TETRISCHED_LOGGING_ENABLED &&                                      \
+      TETRISCHED_DEFAULT_LOG_LEVEL >= tetrisched::logging::DEBUG) {      \
+    auto sourceLocation = std::experimental::source_location::current(); \
+    auto& logger = tetrisched::logging::Logger::info();                  \
+    std::lock_guard<std::mutex> lock(logger.writeMutex);                 \
+    logger << "[DEBUG, " << sourceLocation.function_name() << "] " << x  \
+           << "\n";                                                      \
   }
-#define TETRISCHED_INFO(x)                                                   \
-  if (TETRISCHED_LOGGING_ENABLED &&                                          \
-      TETRISCHED_DEFAULT_LOG_LEVEL >= tetrisched::logging::INFO) {           \
-    auto sourceLocation = std::experimental::source_location::current();     \
-    tetrisched::logging::Logger::info()                                      \
-        << "[INFO, " << sourceLocation.function_name() << "] " << x << "\n"; \
+#define TETRISCHED_INFO(x)                                               \
+  if (TETRISCHED_LOGGING_ENABLED &&                                      \
+      TETRISCHED_DEFAULT_LOG_LEVEL >= tetrisched::logging::INFO) {       \
+    auto sourceLocation = std::experimental::source_location::current(); \
+    auto& logger = tetrisched::logging::Logger::info();                  \
+    std::lock_guard<std::mutex> lock(logger.writeMutex);                 \
+    logger << "[INFO, " << sourceLocation.function_name() << "] " << x   \
+           << "\n";                                                      \
   }
 
 // Macros for timing.
@@ -60,8 +65,8 @@ class ExpressionConstructionException : public std::exception {
   std::string message;
 
  public:
-  ExpressionConstructionException(std::string message) : message(message) {}
-  const char* what() const noexcept override { return message.c_str(); }
+  ExpressionConstructionException(std::string message);
+  const char* what() const noexcept override;
 };
 
 /// An exception that is thrown when solving of an Expression fails.
@@ -70,8 +75,8 @@ class ExpressionSolutionException : public std::exception {
   std::string message;
 
  public:
-  ExpressionSolutionException(std::string message) : message(message) {}
-  const char* what() const noexcept override { return message.c_str(); }
+  ExpressionSolutionException(std::string message);
+  const char* what() const noexcept override;
 };
 
 /// An exception that is thrown when the Solver is used incorrectly.
@@ -80,8 +85,8 @@ class SolverException : public std::exception {
   std::string message;
 
  public:
-  SolverException(std::string message) : message(message) {}
-  const char* what() const noexcept override { return message.c_str(); }
+  SolverException(std::string message);
+  const char* what() const noexcept override;
 };
 
 /// A general Runtime exception.
@@ -90,8 +95,8 @@ class RuntimeException : public std::exception {
   std::string message;
 
  public:
-  RuntimeException(std::string message) : message(message) {}
-  const char* what() const noexcept override { return message.c_str(); }
+  RuntimeException(std::string message);
+  const char* what() const noexcept override;
 };
 }  // namespace exceptions
 
@@ -110,50 +115,27 @@ class Logger {
   LogLevel logLevel;
 
  public:
-  Logger(std::ostream& outputStream = std::cout, LogLevel level = INFO)
-      : logLevel(level), outputStream(outputStream) {
-    outputStream << std::unitbuf;
-  }
+  // A mutex to ensure that the output stream is not corrupted.
+  std::mutex writeMutex;
 
+  /// Constructs a new Logger with the given output stream and log level.
+  Logger(std::ostream& outputStream = std::cout, LogLevel level = INFO);
+
+  /// Writes the given value to the output stream.
   template <typename T>
-  Logger& operator<<(const T& val) {
-    if (logLevel >= TETRISCHED_DEFAULT_LOG_LEVEL) {
-      outputStream << val;
-    }
-    return *this;
-  }
+  Logger& operator<<(const T& val);
 
-  ~Logger() { outputStream << std::endl << std::nounitbuf; }
+  /// Destructor for the Logger.
+  ~Logger();
 
-  void flush() { outputStream.flush(); }
+  /// Flushes the output stream.
+  void flush();
 
-  static Logger& debug() {
-    static std::filesystem::path outputDir =
-        std::getenv(TETRISCHED_LOGGING_DIR_ENV_NAME)
-            ? std::getenv(TETRISCHED_LOGGING_DIR_ENV_NAME)
-            : "./";
-    static std::filesystem::path outputFile =
-        outputDir / TETRISCHED_LOG_FILE_NAME;
-    static std::ofstream outputStream(outputFile,
-                                      std::ios::app | std::ios::out);
-    static Logger logger(outputStream.is_open() ? outputStream : std::cout,
-                         LogLevel::DEBUG);
-    return logger;
-  }
+  /// Returns a Logger with the DEBUG log level.
+  static Logger& debug();
 
-  static Logger& info() {
-    static std::filesystem::path outputDir =
-        std::getenv(TETRISCHED_LOGGING_DIR_ENV_NAME)
-            ? std::getenv(TETRISCHED_LOGGING_DIR_ENV_NAME)
-            : "./";
-    static std::filesystem::path outputFile =
-        outputDir / TETRISCHED_LOG_FILE_NAME;
-    static std::ofstream outputStream(outputFile,
-                                      std::ios::app | std::ios::out);
-    static Logger logger(outputStream.is_open() ? outputStream : std::cout,
-                         LogLevel::INFO);
-    return logger;
-  }
+  /// Returns a Logger with the INFO log level.
+  static Logger& info();
 };
 }  // namespace logging
 
@@ -163,46 +145,16 @@ class ScopeTimer {
  private:
   std::string scopeTimerName;
   std::chrono::high_resolution_clock::time_point startTime;
-  static std::ofstream& getOutputFileStream() {
-    static std::filesystem::path outputDir =
-        std::getenv("TETRISCHED_LOGGING_DIR_ENV_NAME")
-            ? std::getenv("TETRISCHED_LOGGING_DIR_ENV_NAME")
-            : "./";
-    static std::filesystem::path outputFile =
-        outputDir / TETRISCHED_TIMING_FILE_NAME;
-    static std::ofstream file(outputFile, std::ios::app | std::ios::out);
-    return file;
-  }
+  static std::ofstream& getOutputFileStream();
+
+  static std::mutex sharedLock;  // Shared lock for all ScopeTimer instances
 
  public:
-  ScopeTimer(std::string scopeTimerName) : scopeTimerName(scopeTimerName) {
-    startTime = std::chrono::high_resolution_clock::now();
-    getOutputFileStream()
-        << "BEGIN," << scopeTimerName << ","
-        << std::chrono::duration_cast<std::chrono::microseconds>(
-               startTime.time_since_epoch())
-               .count()
-        << std::endl;
-  }
+  /// Constructs a new ScopeTimer with the given name at the particular time.
+  ScopeTimer(std::string scopeTimerName);
 
-  ~ScopeTimer() {
-    auto endTime = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
-                        endTime - startTime)
-                        .count();
-
-    auto startTimeMicroseconds =
-        std::chrono::duration_cast<std::chrono::microseconds>(
-            startTime.time_since_epoch())
-            .count();
-    auto endtimeMicroseconds =
-        std::chrono::duration_cast<std::chrono::microseconds>(
-            endTime.time_since_epoch())
-            .count();
-    getOutputFileStream() << "END," << scopeTimerName << ","
-                          << startTimeMicroseconds << "," << endtimeMicroseconds
-                          << "," << duration << std::endl;
-  }
+  /// Destructor for the ScopeTimer.
+  ~ScopeTimer();
 };
 }  // namespace timing
 

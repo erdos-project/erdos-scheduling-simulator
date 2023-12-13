@@ -9,7 +9,7 @@ namespace tetrisched {
 // Initialize the static counter for variable IDs.
 // This is required by compiler.
 template <typename T>
-uint32_t VariableT<T>::variableIdCounter = 0;
+std::atomic_uint32_t VariableT<T>::variableIdCounter = 0;
 
 template <typename T>
 VariableType VariableT<T>::isTypeValid(VariableType type) {
@@ -116,16 +116,21 @@ std::optional<T> VariableT<T>::getUpperBound() const {
 // Initialize the static counter for constraint IDs.
 // This is required by compiler.
 template <typename T>
-uint32_t ConstraintT<T>::constraintIdCounter = 0;
+std::atomic_uint32_t ConstraintT<T>::constraintIdCounter = 0;
 
 template <typename T>
 ConstraintT<T>::ConstraintT(std::string constraintName, ConstraintType type,
-                            T rightHandSide)
+                            T rightHandSide, std::optional<size_t> numTerms)
     : active(true),
       constraintId(constraintIdCounter++),
       constraintName(constraintName),
-      constraintType(type),
-      rightHandSide(rightHandSide) {}
+      rightHandSide(rightHandSide),
+      constraintType(type) {
+  // If the number of terms were provided, reserve that much space.
+  if (numTerms.has_value()) {
+    terms.reserve(numTerms.value());
+  }
+}
 
 template <typename T>
 void ConstraintT<T>::addTerm(std::pair<T, std::shared_ptr<VariableT<T>>> term) {
@@ -280,7 +285,7 @@ void ObjectiveFunctionT<T>::addTerm(T constant) {
 template <typename T>
 std::shared_ptr<ConstraintT<T>> ObjectiveFunctionT<T>::toConstraint(
     std::string constraintName, ConstraintType constraintType,
-    T rightHandSide) {
+    T rightHandSide) const {
   auto constraint = std::make_shared<ConstraintT<T>>(
       constraintName, constraintType, rightHandSide);
   for (auto& term : terms) {
@@ -372,29 +377,61 @@ T ObjectiveFunctionT<T>::getValue() const {
 
 template <typename T>
 void SolverModelT<T>::addVariable(std::shared_ptr<VariableT<T>> variable) {
-  // Check if variable name exists in the solutionValueCache
-  auto it = solutionValueCache.find(variable->getName());
-  if (it != solutionValueCache.end()) {
-    // If it exists, use the value from the cache as a hint for the initial
-    // value of the variable
-    TETRISCHED_DEBUG("Found "
-                     << variable->getName()
-                     << " in solution value cache. Giving it initial value "
-                     << it->second);
-    variable->hint(it->second);
+  {
+    // Check if variable name exists in the solutionValueCache
+    typename decltype(solutionValueCache)::accessor solutionValueCacheAccessor;
+
+    const auto isFound = solutionValueCache.find(solutionValueCacheAccessor,
+                                                 variable->getName());
+    if (isFound) {
+      // If it exists, use the value from the cache as a hint for the initial
+      // value of the variable
+      TETRISCHED_DEBUG("Found "
+                       << variable->getName()
+                       << " in solution value cache. Giving it initial value "
+                       << solutionValueCacheAccessor->second);
+      variable->hint(solutionValueCacheAccessor->second);
+    }
   }
-  variables[variable->getId()] = variable;
+  {
+    // Insert the variable into the map.
+    typename decltype(modelVariables)::accessor modelVariablesAccessor;
+    modelVariables.insert(modelVariablesAccessor, variable->getId());
+    modelVariablesAccessor->second = variable;
+  }
+}
+
+template <typename T>
+void SolverModelT<T>::addVariables(
+    std::vector<std::shared_ptr<VariableT<T>>>& variables) {
+  for (auto& variable : variables) {
+    addVariable(variable);
+  }
 }
 
 template <typename T>
 void SolverModelT<T>::addConstraint(
     std::shared_ptr<ConstraintT<T>> constraint) {
-  constraints[constraint->getId()] = constraint;
+  {
+    // Add the Constraint to the model.
+    typename decltype(modelConstraints)::accessor modelConstraintsAccessor;
+    modelConstraints.insert(modelConstraintsAccessor, constraint->getId());
+    modelConstraintsAccessor->second = constraint;
+  }
+}
+
+template <typename T>
+void SolverModelT<T>::addConstraints(
+    std::vector<std::shared_ptr<ConstraintT<T>>>& constraints) {
+  for (auto& constraint : constraints) {
+    addConstraint(constraint);
+  }
 }
 
 template <typename T>
 void SolverModelT<T>::setObjectiveFunction(
     std::shared_ptr<ObjectiveFunctionT<T>> objectiveFunction) {
+  std::lock_guard<std::mutex> lock(modelMutex);
   this->objectiveFunction = objectiveFunction;
 }
 
@@ -404,9 +441,9 @@ std::string SolverModelT<T>::toString() const {
   if (objectiveFunction != nullptr) {
     modelString += objectiveFunction->toString() + "\n\n";
   }
-  if (constraints.size() > 0) {
+  if (modelConstraints.size() > 0) {
     modelString += "Constraints: \n";
-    for (auto& [_, constraint] : constraints) {
+    for (auto& [_, constraint] : modelConstraints) {
       modelString +=
           constraint->getName() + ": \t" + constraint->toString() + "\n";
     }
@@ -414,9 +451,9 @@ std::string SolverModelT<T>::toString() const {
   } else {
     modelString += "No Constraints Found!\n\n";
   }
-  if (variables.size() > 0) {
+  if (modelVariables.size() > 0) {
     modelString += "Variables: \n";
-    for (auto& [_, variable] : variables) {
+    for (auto& [_, variable] : modelVariables) {
       modelString += "\t" + variable->toString();
     }
   } else {
@@ -434,12 +471,12 @@ void SolverModelT<T>::exportModel(std::string filename) const {
 
 template <typename T>
 size_t SolverModelT<T>::numVariables() const {
-  return variables.size();
+  return modelVariables.size();
 }
 
 template <typename T>
 size_t SolverModelT<T>::numConstraints() const {
-  return constraints.size();
+  return modelConstraints.size();
 }
 
 template <typename T>
@@ -450,7 +487,7 @@ T SolverModelT<T>::getObjectiveValue() const {
 template <typename T>
 std::optional<std::shared_ptr<VariableT<T>>> SolverModelT<T>::getVariableByName(
     std::string variableName) const {
-  for (auto& [_, variable] : variables) {
+  for (auto& [_, variable] : modelVariables) {
     if (variable->getName() == variableName) {
       return variable;
     }
@@ -461,7 +498,7 @@ std::optional<std::shared_ptr<VariableT<T>>> SolverModelT<T>::getVariableByName(
 template <typename T>
 std::optional<std::shared_ptr<ConstraintT<T>>>
 SolverModelT<T>::getConstraintByName(std::string constraintName) const {
-  for (auto& [_, constraint] : constraints) {
+  for (auto& [_, constraint] : modelConstraints) {
     if (constraint->getName() == constraintName) {
       return constraint;
     }
@@ -475,19 +512,28 @@ void SolverModelT<T>::clear() {
   // As of now we only keep track of the solution value from the previous
   // invocation of the solver.
   solutionValueCache.clear();
+
   // For each variable, if it has a solution value, then save it to the solution
   // value cache.
-  for (auto const& [id, variable] : variables) {
+  for (auto const& [id, variable] : modelVariables) {
     if (variable->getValue().has_value()) {
       TETRISCHED_DEBUG("Caching solution value "
                        << variable->getValue().value() << " for variable "
                        << variable->getName() << "(" << id << ")");
-      solutionValueCache[variable->getName()] = variable->getValue().value();
+      typename decltype(solutionValueCache)::accessor
+          solutionValueCacheAccessor;
+      solutionValueCache.insert(solutionValueCacheAccessor,
+                                variable->getName());
+      solutionValueCacheAccessor->second = variable->getValue().value();
     }
   }
 
-  variables.clear();
-  constraints.clear();
-  objectiveFunction.reset();
+  {
+    // Clear the model now.
+    std::lock_guard<std::mutex> lock(modelMutex);
+    modelVariables.clear();
+    modelConstraints.clear();
+    objectiveFunction.reset();
+  }
 }
 }  // namespace tetrisched

@@ -6,12 +6,21 @@ namespace tetrisched {
 
 size_t PartitionTimePairHasher::operator()(
     const std::pair<uint32_t, Time>& pair) const {
+  return hash(pair);
+}
+
+size_t PartitionTimePairHasher::hash(const std::pair<uint32_t, Time>& pair) {
   auto partitionIdHash = std::hash<uint32_t>()(pair.first);
   auto timeHash = std::hash<Time>()(pair.second);
   if (partitionIdHash != timeHash) {
     return partitionIdHash ^ timeHash;
   }
   return partitionIdHash;
+}
+
+bool PartitionTimePairHasher::equal(const std::pair<uint32_t, Time>& pair1,
+                                    const std::pair<uint32_t, Time>& pair2) {
+  return pair1.first == pair2.first && pair1.second == pair2.second;
 }
 
 /* Method definitions for CapacityConstraint */
@@ -121,12 +130,13 @@ CapacityConstraintMap::CapacityConstraintMap(Time granularity,
 CapacityConstraintMap::CapacityConstraintMap(
     std::vector<std::pair<TimeRange, Time>> timeRangeToGranularities,
     bool useOverlapConstraints)
-    : timeRangeToGranularities(timeRangeToGranularities),
-      useOverlapConstraints(useOverlapConstraints),
-      useDynamicDiscretization(true) {
+    : useOverlapConstraints(useOverlapConstraints),
+      useDynamicDiscretization(true),
+      timeRangeToGranularities(timeRangeToGranularities) {
   // Check that the time ranges provided are non-overlapping and
   // monotonically increasing.
-  for (auto i = 0; i < timeRangeToGranularities.size(); i++) {
+  for (decltype(timeRangeToGranularities)::size_type i = 0;
+       i < timeRangeToGranularities.size(); i++) {
     if (i != timeRangeToGranularities.size() - 1) {
       if (timeRangeToGranularities[i + 1].first.first <
           timeRangeToGranularities[i].first.second) {
@@ -152,27 +162,35 @@ void CapacityConstraintMap::registerUsageAtTime(
 
   // Get or insert the Constraint corresponding to this partition and time.
   auto mapKey = std::make_pair(partition.getPartitionId(), time);
-  if (capacityConstraints.find(mapKey) == capacityConstraints.end()) {
-    capacityConstraints[mapKey] = std::make_shared<CapacityConstraint>(
-        partition, time, granularity, useOverlapConstraints);
-  }
+  {
+    decltype(capacityConstraints)::accessor capacityConstraintAccessor;
 
-  // Add the variable to the Constraint.
-  capacityConstraints[mapKey]->registerUsage(expression, usageIndicator,
-                                             usageVariable, duration);
+    const auto isFound =
+        capacityConstraints.find(capacityConstraintAccessor, mapKey);
+
+    if (!isFound) {
+      auto insertKeyVal = std::make_pair(
+          mapKey, std::make_shared<CapacityConstraint>(
+                      partition, time, granularity, useOverlapConstraints));
+      capacityConstraints.insert(capacityConstraintAccessor, insertKeyVal);
+    }
+
+    // Add the variable to the Constraint.
+    capacityConstraintAccessor->second->registerUsage(
+        expression, usageIndicator, usageVariable, duration);
+  }
 }
 
-void CapacityConstraintMap::setDynamicDiscretization(std::vector<std::pair<TimeRange, Time>> passedtimeRangeToGranularities)
-{
+void CapacityConstraintMap::setDynamicDiscretization(
+    std::vector<std::pair<TimeRange, Time>> passedtimeRangeToGranularities) {
   timeRangeToGranularities = passedtimeRangeToGranularities;
   useDynamicDiscretization = true;
 }
 
 void CapacityConstraintMap::registerUsageForDuration(
-    const ExpressionPtr expression, const Partition &partition,
+    const ExpressionPtr expression, const Partition& partition,
     const Time startTime, const Time duration, const IndicatorT usageIndicator,
-    const PartitionUsageT variable, std::optional<Time> granularity)
-{
+    const PartitionUsageT variable, std::optional<Time> granularity) {
   if (!useDynamicDiscretization) {
     // If we are not using dynamic discretization, then we can just
     // register the usage at the provided granularity.
