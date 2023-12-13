@@ -81,17 +81,12 @@ using CapacityConstraintPtr = std::shared_ptr<CapacityConstraint>;
 /// potential intent to use the Partition at a particular time.
 class CapacityConstraintMap {
  private:
+  /// The default granularity for the capacity constraints.
+  Time granularity;
   /// If True, the constraintMap will expend extra effort in ensuring
   /// overlaps are efficiently used. While this may increase scheduling
   /// performance, it may also increase the time it takes to solve the model.
   bool useOverlapConstraints;
-  /// A map from the Partition ID and the time to the
-  /// CapacityConstraint that enforces the resource usage for that time.
-  tbb::concurrent_hash_map<std::pair<uint32_t, Time>, CapacityConstraintPtr,
-                           PartitionTimePairHasher>
-      capacityConstraints;
-  /// The default granularity for the capacity constraints.
-  Time granularity;
   /// if True, dynamic discretization is enabled. In this mode, the
   /// CapacityConstraintMap has different CapacityConstraints that cover
   /// different times.
@@ -99,6 +94,11 @@ class CapacityConstraintMap {
   /// A sorted list of TimeRange to the granularity at which that time
   /// range needs to be discretized.
   std::vector<std::pair<TimeRange, Time>> timeRangeToGranularities;
+  /// A map from the Partition ID and the time to the
+  /// CapacityConstraint that enforces the resource usage for that time.
+  tbb::concurrent_hash_map<std::pair<uint32_t, Time>, CapacityConstraintPtr,
+                           PartitionTimePairHasher>
+      capacityConstraints;
 
   friend class CapacityConstraintMapPurgingOptimizationPass;
 

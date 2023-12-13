@@ -130,12 +130,13 @@ CapacityConstraintMap::CapacityConstraintMap(Time granularity,
 CapacityConstraintMap::CapacityConstraintMap(
     std::vector<std::pair<TimeRange, Time>> timeRangeToGranularities,
     bool useOverlapConstraints)
-    : timeRangeToGranularities(timeRangeToGranularities),
-      useOverlapConstraints(useOverlapConstraints),
-      useDynamicDiscretization(true) {
+    : useOverlapConstraints(useOverlapConstraints),
+      useDynamicDiscretization(true),
+      timeRangeToGranularities(timeRangeToGranularities) {
   // Check that the time ranges provided are non-overlapping and
   // monotonically increasing.
-  for (auto i = 0; i < timeRangeToGranularities.size(); i++) {
+  for (decltype(timeRangeToGranularities)::size_type i = 0;
+       i < timeRangeToGranularities.size(); i++) {
     if (i != timeRangeToGranularities.size() - 1) {
       if (timeRangeToGranularities[i + 1].first.first <
           timeRangeToGranularities[i].first.second) {
