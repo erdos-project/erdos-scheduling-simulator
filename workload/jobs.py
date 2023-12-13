@@ -283,7 +283,7 @@ class JobGraph(Graph[Job]):
                 )
             elif self._policy_type == JobGraph.ReleasePolicyType.POISSON:
                 inter_arrival_times = self._rng.poisson(
-                    self._variable_arrival_rate, self._fixed_invocation_nums - 1
+                    1 / self._variable_arrival_rate, self._fixed_invocation_nums - 1
                 )
                 current_release = self._start
                 releases.append(current_release)
@@ -792,8 +792,14 @@ class JobGraph(Graph[Job]):
         # TODO (Sukrit): Right now, this assumes that all Tasks in the TaskGraph come
         # with the same deadline. At some point, we will have to implement a
         # heuristic-based deadline splitting technique.
-        task_deadline = release_time + fuzz_time(
-            self.completion_time, deadline_variance
+        # Ray: Clip the min deadline to 5 time unit to prevent some small taks from
+        # having tight deadline.
+        task_deadline = release_time + min(
+            EventTime(
+                5,
+                self.completion_time.unit,
+            ),
+            fuzz_time(self.completion_time, deadline_variance),
         )
 
         # Generate all the `Task`s from the `Job`s in the graph.
