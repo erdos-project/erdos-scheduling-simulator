@@ -1444,8 +1444,13 @@ ParseResultPtr ObjectiveExpression::parse(
   // All the children have been parsed. Finalize the CapacityConstraintMap.
   TETRISCHED_DEBUG(
       "Finalizing the CapacityConstraintMap for ObjectiveExpression " << name
-                                                                      << ".")
-  capacityConstraints->translate(solverModel);
+                                                                      << ".");
+  {
+    TETRISCHED_SCOPE_TIMER(
+        "ObjectiveExpression::translateCapacityConstraints," +
+        std::to_string(currentTime) + "," + name + "," + id);
+    capacityConstraints->translate(solverModel);
+  }
   TETRISCHED_DEBUG("Finished finalizing the CapacityConstraintMap for " << name
                                                                         << ".")
 
@@ -1990,7 +1995,8 @@ ParseResultPtr MaxExpression::parse(
     CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
   std::lock_guard<std::mutex> lockGuard(expressionMutex);
   TETRISCHED_SCOPE_TIMER("MaxExpression::parse," + std::to_string(currentTime) +
-                         "," + name + "," + id)
+                         "," + name + "," + id + "," +
+                         std::to_string(this->getNumChildren()))
   // Check that the Expression was parsed before
   if (parsedResult != nullptr) {
     // return the already parsed sub-tree from another parent

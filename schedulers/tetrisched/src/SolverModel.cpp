@@ -423,7 +423,6 @@ void SolverModelT<T>::addConstraint(
 template <typename T>
 void SolverModelT<T>::addConstraints(
     std::vector<std::shared_ptr<ConstraintT<T>>>& constraints) {
-  std::lock_guard<std::mutex> lock(modelMutex);
   for (auto& constraint : constraints) {
     addConstraint(constraint);
   }
