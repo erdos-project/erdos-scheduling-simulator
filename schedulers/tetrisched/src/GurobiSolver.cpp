@@ -169,25 +169,33 @@ void GurobiSolver::translateModel() {
   gurobiModel = std::make_unique<GRBModel>(*gurobiEnv);
   setParameters(*gurobiModel);
 
-  // Generate all the variables and keep a cache of the variable indices
-  // to the Gurobi variables.
-  for (const auto& [variableId, variable] : solverModel->modelVariables) {
-    TETRISCHED_DEBUG("Adding variable " << variable->getName() << "("
-                                        << variableId << ") to Gurobi Model.");
-    gurobiVariables[variableId] = translateVariable(*gurobiModel, variable);
+  {
+    TETRISCHED_SCOPE_TIMER("GurobiSolver::translateModel::translateVariables")
+    // Generate all the variables and keep a cache of the variable indices
+    // to the Gurobi variables.
+    for (const auto& [variableId, variable] : solverModel->modelVariables) {
+      TETRISCHED_DEBUG("Adding variable " << variable->getName() << "("
+                                          << variableId
+                                          << ") to Gurobi Model.");
+      gurobiVariables[variableId] = translateVariable(*gurobiModel, variable);
+    }
   }
 
-  // Generate all the constraints.
-  for (const auto& [constraintId, constraint] : solverModel->modelConstraints) {
-    if (constraint->isActive()) {
-      TETRISCHED_DEBUG("Adding active Constraint " << constraint->getName()
-                                                   << "(" << constraintId
-                                                   << ") to Gurobi Model.");
-      translateConstraint(*gurobiModel, constraint);
-    } else {
-      TETRISCHED_DEBUG("Skipping the addition of inactive Constraint "
-                       << constraint->getName() << "(" << constraintId
-                       << ") to Gurobi Model.");
+  {
+    TETRISCHED_SCOPE_TIMER("GurobiSolver::translateModel::translateConstraints")
+    // Generate all the constraints.
+    for (const auto& [constraintId, constraint] :
+         solverModel->modelConstraints) {
+      if (constraint->isActive()) {
+        TETRISCHED_DEBUG("Adding active Constraint " << constraint->getName()
+                                                     << "(" << constraintId
+                                                     << ") to Gurobi Model.");
+        translateConstraint(*gurobiModel, constraint);
+      } else {
+        TETRISCHED_DEBUG("Skipping the addition of inactive Constraint "
+                         << constraint->getName() << "(" << constraintId
+                         << ") to Gurobi Model.");
+      }
     }
   }
 
