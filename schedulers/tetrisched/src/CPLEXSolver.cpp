@@ -176,14 +176,14 @@ void CPLEXSolver::translateModel() {
 
   // Generate all the variables and keep a cache of the variable indices
   // to the CPLEX variables.
-  for (const auto& [variableId, variable] : solverModel->variables) {
+  for (const auto& [variableId, variable] : solverModel->modelVariables) {
     TETRISCHED_DEBUG("Adding Variable " << variable->getName() << "("
                                         << variableId << ") to CPLEX Model.");
     cplexVariables[variableId] = translateVariable(variable);
   }
 
   // Generate all the constraints and add it to the model.
-  for (const auto& [constraintId, constraint] : solverModel->constraints) {
+  for (const auto& [constraintId, constraint] : solverModel->modelConstraints) {
     TETRISCHED_DEBUG("Adding Constraint " << constraint->getName() << "("
                                           << constraintId
                                           << ") to CPLEX Model.");
@@ -201,7 +201,7 @@ void CPLEXSolver::exportModel(const std::string& fname) {
   cplexInstance.exportModel(fname.c_str());
 }
 
-void CPLEXSolver::setLogFile(const std::string& fname) {
+void CPLEXSolver::setLogFile(const std::string& /* fname */) {
   throw tetrisched::exceptions::SolverException(
       "setLogFile() not implemented for CPLEXSolver.");
 }
@@ -242,7 +242,7 @@ SolverSolutionPtr CPLEXSolver::solveModel() {
   TETRISCHED_DEBUG("Finished solving the model using the CPLEX solver!")
 
   // Retrieve all the variables from the CPLEX model into the SolverModel.
-  for (const auto& [variableId, variable] : solverModel->variables) {
+  for (const auto& [variableId, variable] : solverModel->modelVariables) {
     if (cplexVariables.find(variableId) == cplexVariables.end()) {
       throw tetrisched::exceptions::SolverException(
           "Variable " + variable->getName() + " not found in CPLEX model.");
@@ -269,7 +269,7 @@ SolverSolutionPtr CPLEXSolver::solveModel() {
                      << variable->solutionValue.value());
   }
   TETRISCHED_DEBUG("Successfully populated the solution values for all "
-                   << solverModel->variables.size()
+                   << solverModel->modelVariables.size()
                    << " variables from CPLEX to SolverModel.");
 
   return solverSolution;

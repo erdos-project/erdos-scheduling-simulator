@@ -11,6 +11,7 @@
 #include <variant>
 #include <vector>
 
+#include "tbb/concurrent_hash_map.h"
 #include "tetrisched/Types.hpp"
 
 namespace tetrisched {
@@ -361,11 +362,12 @@ template <typename T>
 class SolverModelT {
  private:
   /// The variables in this model.
-  std::unordered_map<uint32_t, std::shared_ptr<VariableT<T>>> variables;
+  tbb::concurrent_hash_map<uint32_t, std::shared_ptr<VariableT<T>>> modelVariables;
   /// The constraints in this model.
-  std::unordered_map<uint32_t, std::shared_ptr<ConstraintT<T>>> constraints;
+  tbb::concurrent_hash_map<uint32_t, std::shared_ptr<ConstraintT<T>>>
+      modelConstraints;
   /// Cache for the solution values from previous invocations of the solver.
-  std::unordered_map<std::string, T> solutionValueCache;
+  tbb::concurrent_hash_map<std::string, T> solutionValueCache;
   /// The objective function in this model.
   std::shared_ptr<ObjectiveFunctionT<T>> objectiveFunction;
   /// The lock used to ensure that the model is not modified concurrently.

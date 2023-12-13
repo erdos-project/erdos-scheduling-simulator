@@ -142,7 +142,7 @@ GRBConstr GurobiSolver::translateConstraint(
 }
 
 GRBLinExpr GurobiSolver::translateObjectiveFunction(
-    GRBModel& gurobiModel,
+    GRBModel& /* gurobiModel */,
     const ObjectiveFunctionPtr& objectiveFunction) const {
   // TODO (Sukrit): We are currently assuming that all constraints and objective
   // functions are linear. We may need to support quadratic constraints.
@@ -171,19 +171,19 @@ void GurobiSolver::translateModel() {
 
   // Generate all the variables and keep a cache of the variable indices
   // to the Gurobi variables.
-  for (const auto& [variableId, variable] : solverModel->variables) {
+  for (const auto& [variableId, variable] : solverModel->modelVariables) {
     TETRISCHED_DEBUG("Adding variable " << variable->getName() << "("
                                         << variableId << ") to Gurobi Model.");
     gurobiVariables[variableId] = translateVariable(*gurobiModel, variable);
   }
 
   // Generate all the constraints.
-  for (const auto& [constraintId, constraint] : solverModel->constraints) {
+  for (const auto& [constraintId, constraint] : solverModel->modelConstraints) {
     if (constraint->isActive()) {
       TETRISCHED_DEBUG("Adding active Constraint " << constraint->getName()
                                                    << "(" << constraintId
                                                    << ") to Gurobi Model.");
-      auto _ = translateConstraint(*gurobiModel, constraint);
+      translateConstraint(*gurobiModel, constraint);
     } else {
       TETRISCHED_DEBUG("Skipping the addition of inactive Constraint "
                        << constraint->getName() << "(" << constraintId
@@ -257,7 +257,7 @@ SolverSolutionPtr GurobiSolver::solveModel() {
                    << "to solve the model.");
 
   // Retrieve all the variables from the Gurobi model into the SolverModel.
-  for (const auto& [variableId, variable] : solverModel->variables) {
+  for (const auto& [variableId, variable] : solverModel->modelVariables) {
     if (gurobiVariables.find(variableId) == gurobiVariables.end()) {
       throw tetrisched::exceptions::SolverException(
           "Variable " + variable->getName() +
