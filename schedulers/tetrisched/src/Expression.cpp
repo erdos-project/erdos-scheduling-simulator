@@ -7,6 +7,7 @@
 #include <sstream>
 #include <stack>
 
+#include "tbb/parallel_for.h"
 #include "tbb/task_group.h"
 
 namespace tetrisched {
@@ -1417,6 +1418,71 @@ ParseResultPtr ObjectiveExpression::parse(
   }
   TETRISCHED_DEBUG("Parsing ObjectiveExpression with name " << name << ".")
 
+  // Find all the leaf Expressions in this tree and parse them all in parallel
+  // first.
+  std::vector<ExpressionPtr> leafExpressions;
+  {
+    TETRISCHED_SCOPE_TIMER("ObjectiveExpression::parse::findLeafExpressions," +
+                           std::to_string(currentTime) + "," + name + "," + id)
+    std::stack<ExpressionPtr> expressionStack;
+    std::unordered_set<ExpressionPtr> visitedExpressions;
+    expressionStack.push(shared_from_this());
+
+    while (!expressionStack.empty()) {
+      auto currentExpression = expressionStack.top();
+      expressionStack.pop();
+
+      if (visitedExpressions.find(currentExpression) !=
+          visitedExpressions.end()) {
+        // We have already visited this Expression.
+        continue;
+      }
+      visitedExpressions.insert(currentExpression);
+
+      if (currentExpression->getNumChildren() == 0) {
+        // This is a leaf Expression. Save it.
+        leafExpressions.push_back(currentExpression);
+        continue;
+      }
+
+      // This is not a leaf Expression. Add its children to the stack.
+      for (auto& child : currentExpression->getChildren()) {
+        expressionStack.push(child);
+      }
+    }
+  }
+
+  // Parse all the leaf Expressions in parallel.
+  {
+    TETRISCHED_SCOPE_TIMER("ObjectiveExpression::parse::parseLeafExpressions," +
+                           std::to_string(currentTime) + "," + name + "," + id)
+
+    // const size_t numThreads = std::thread::hardware_concurrency();
+    // const size_t chunkSize = leafExpressions.size() / numThreads +
+    //                          (leafExpressions.size() % numThreads != 0);
+    // tbb::task_group leafExpressionParsingGroup;
+    // for (size_t i = 0; i < leafExpressions.size(); i += chunkSize) {
+    //   leafExpressionParsingGroup.run([&, i] {
+    //     for (size_t j = i; j < std::min(i + chunkSize,
+    //     leafExpressions.size());
+    //          j++) {
+    //       leafExpressions[j]->parse(solverModel, availablePartitions,
+    //                                 capacityConstraints, currentTime);
+    //     }
+    //   });
+    // }
+    // leafExpressionParsingGroup.wait();
+
+    tbb::parallel_for(tbb::blocked_range<size_t>(0, leafExpressions.size()),
+                      [&](const tbb::blocked_range<size_t>& range) {
+                        for (size_t i = range.begin(); i != range.end(); ++i) {
+                          leafExpressions[i]->parse(
+                              solverModel, availablePartitions,
+                              capacityConstraints, currentTime);
+                        }
+                      });
+  }
+
   // Create and save the ParseResult.
   parsedResult = std::make_shared<ParseResult>();
   parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
@@ -1991,8 +2057,8 @@ void MaxExpression::addChild(ExpressionPtr child) {
 }
 
 ParseResultPtr MaxExpression::parse(
-    SolverModelPtr solverModel, Partitions availablePartitions,
-    CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
+    SolverModelPtr solverModel, Partitions /* availablePartitions */,
+    CapacityConstraintMapPtr /* capacityConstraints */, Time currentTime) {
   std::lock_guard<std::mutex> lockGuard(expressionMutex);
   TETRISCHED_SCOPE_TIMER("MaxExpression::parse," + std::to_string(currentTime) +
                          "," + name + "," + id + "," +
@@ -2058,8 +2124,13 @@ ParseResultPtr MaxExpression::parse(
   TimeRange endTimeBounds = std::make_pair(std::numeric_limits<Time>::max(), 0);
   bool anyChildrenWithUtilities = false;
   for (size_t i = 0; i < numChildren; i++) {
-    auto childParsedResult = children[i]->parse(
-        solverModel, availablePartitions, capacityConstraints, currentTime);
+    auto childParsedResultOption = children[i]->getParsedResult();
+    if (!childParsedResultOption.has_value()) {
+      throw tetrisched::exceptions::ExpressionConstructionException(
+          name + " child-" + std::to_string(i) + " (" + children[i]->getName() +
+          ") does not have a parsed result.");
+    }
+    auto childParsedResult = childParsedResultOption.value();
 
     if (childParsedResult->type != ParseResultType::EXPRESSION_UTILITY) {
       TETRISCHED_DEBUG(name + " child-" + std::to_string(i) +
