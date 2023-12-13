@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "tbb/concurrent_hash_map.h"
+#include "tbb/concurrent_vector.h"
 #include "tetrisched/Types.hpp"
 
 namespace tetrisched {
@@ -214,7 +215,7 @@ class ConstraintT {
   std::string constraintName;
   /// The terms in this constraint.
   /// Note that a nullptr Variable indicates a constant term.
-  std::vector<std::pair<T, std::shared_ptr<VariableT<T>>>> terms;
+  tbb::concurrent_vector<std::pair<T, std::shared_ptr<VariableT<T>>>> terms;
   /// The right hand side of this constraint.
   T rightHandSide;
   /// The operation between the terms and the right hand side.
