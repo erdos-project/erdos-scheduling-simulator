@@ -7,6 +7,8 @@
 #include <sstream>
 #include <stack>
 
+#include "tbb/task_group.h"
+
 namespace tetrisched {
 
 // UUID Generation. Copied from
@@ -1715,6 +1717,16 @@ ParseResultPtr MinExpression::parse(
     throw tetrisched::exceptions::ExpressionSolutionException(
         "Number of children should be >=1 for MIN");
   }
+
+  // Run parsing of all the children in parallel.
+  tbb::task_group minChildrenParsing;
+  for (auto& child : children) {
+    minChildrenParsing.run([&] {
+      child->parse(solverModel, availablePartitions, capacityConstraints,
+                   currentTime);
+    });
+  }
+  minChildrenParsing.wait();
 
   // Indicator for MIN.
   VariablePtr minIndicator = std::make_shared<Variable>(
