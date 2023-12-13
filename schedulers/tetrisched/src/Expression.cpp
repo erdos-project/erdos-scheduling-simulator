@@ -268,6 +268,7 @@ size_t Expression::getNumParents() const { return parents.size(); }
 
 std::vector<ExpressionPtr> Expression::getParents() const {
   std::vector<ExpressionPtr> returnParents;
+  returnParents.reserve(parents.size());
   for (decltype(parents)::size_type i = 0; i < parents.size(); i++) {
     returnParents.push_back(parents[i].lock());
   }
@@ -501,7 +502,7 @@ ParseResultPtr ChooseExpression::parse(
 
   ConstraintPtr fulfillsDemandConstraint = std::make_shared<Constraint>(
       name + "_fulfills_demand_at_" + std::to_string(startTime) + "_for_" + id,
-      ConstraintType::CONSTR_EQ, 0);
+      ConstraintType::CONSTR_EQ, 0, schedulablePartitions.size() + 1);
   for (PartitionPtr& partition : schedulablePartitions.getPartitions()) {
     // For each partition, generate an integer that represents how many
     // resources were taken from this partition.
@@ -714,7 +715,7 @@ ParseResultPtr WindowedChooseExpression::parse(
     ConstraintPtr fulfillsDemandConstraint = std::make_shared<Constraint>(
         name + "_fulfills_demand_at_" + std::to_string(chooseTime) + "_for_" +
             id,
-        ConstraintType::CONSTR_EQ, 0);
+        ConstraintType::CONSTR_EQ, 0, schedulablePartitions.size() + 1);
     for (PartitionPtr& partition : schedulablePartitions.getPartitions()) {
       // For each partition, we generate an integer that represents how many
       // resources were taken from this partition at this particular time.
@@ -770,20 +771,23 @@ ParseResultPtr WindowedChooseExpression::parse(
       VariableType::VAR_INTEGER, name + "_start_time");
   solverModel->addVariable(windowStartTime);
   ConstraintPtr windowStartTimeConstraint = std::make_shared<Constraint>(
-      name + "_start_time_constraint", ConstraintType::CONSTR_GE, 0);
+      name + "_start_time_constraint", ConstraintType::CONSTR_GE, 0,
+      placementTimeVariables.size() + 3);
 
   VariablePtr windowEndTime =
       std::make_shared<Variable>(VariableType::VAR_INTEGER, name + "_end_time");
   solverModel->addVariable(windowEndTime);
   ConstraintPtr windowEndTimeConstraint = std::make_shared<Constraint>(
-      name + "_end_time_constraint", ConstraintType::CONSTR_LE, 0);
+      name + "_end_time_constraint", ConstraintType::CONSTR_LE, 0,
+      placementTimeVariables.size() + 1);
 
   // Add a constraint that forces only one choice to be allowed.
   VariablePtr windowIndicator = std::make_shared<Variable>(
       VariableType::VAR_INDICATOR, name + "_window_indicator");
   solverModel->addVariable(windowIndicator);
   ConstraintPtr chooseOneConstraint = std::make_shared<Constraint>(
-      name + "_choose_one_constraint", ConstraintType::CONSTR_EQ, 0);
+      name + "_choose_one_constraint", ConstraintType::CONSTR_EQ, 0,
+      placementTimeVariables.size() + 1);
 
   // Construct the Utility function for this ChooseExpression.
   auto utilityFunction =
@@ -848,11 +852,6 @@ ParseResultPtr WindowedChooseExpression::parse(
   solverModel->addConstraint(std::move(windowEndTimeConstraint));
   TETRISCHED_DEBUG("Setting bounds for end time "
                    << name << " to [0, " << endTimeBounds.second << "].")
-
-  // Construct the Utility function for this ChooseExpression.
-  // auto utilityFunction =
-  //     std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
-  // utilityFunction->addTerm(utility, windowIndicator);
 
   // Construct and return the ParseResult.
   parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
@@ -1022,7 +1021,7 @@ ParseResultPtr MalleableChooseExpression::parse(
   ConstraintPtr fulfillsDemandConstraint = std::make_shared<Constraint>(
       name + "_fulfills_demand_from_" + std::to_string(startTime) + "_to_" +
           std::to_string(endTime),
-      ConstraintType::CONSTR_EQ, 0);
+      ConstraintType::CONSTR_EQ, 0, schedulablePartitions.size() + 1);
 
   // For each partition, and each time unit, generate an integer that
   // represents how many resources were taken from this partition at
@@ -1098,7 +1097,7 @@ ParseResultPtr MalleableChooseExpression::parse(
         timeToLowerBoundConstraint.end()) {
       ConstraintPtr lowerBoundConstraint = std::make_shared<Constraint>(
           name + "_lower_bound_occupation_at_" + std::to_string(time),
-          ConstraintType::CONSTR_LE, 0);
+          ConstraintType::CONSTR_LE, 0, 1);
       solverModel->addConstraint(lowerBoundConstraint);
       lowerBoundConstraint->addTerm(1, timeToOccupationIndicator[time]);
       timeToLowerBoundConstraint[time] = lowerBoundConstraint;
@@ -1110,7 +1109,7 @@ ParseResultPtr MalleableChooseExpression::parse(
         timeToUpperBoundConstraint.end()) {
       ConstraintPtr upperBoundConstraint = std::make_shared<Constraint>(
           name + "_upper_bound_occupation_at_" + std::to_string(time),
-          ConstraintType::CONSTR_LE, 0);
+          ConstraintType::CONSTR_LE, 0, 1);
       solverModel->addConstraint(upperBoundConstraint);
       upperBoundConstraint->addTerm(
           -1 * static_cast<TETRISCHED_ILP_TYPE>(resourceTimeSlots),
@@ -1138,7 +1137,8 @@ ParseResultPtr MalleableChooseExpression::parse(
   // Add a constraint that forces only one phase shift to be allowed.
   ConstraintPtr startTimePhaseShiftGUBConstraint = std::make_shared<Constraint>(
       name + "_phase_shift_start_time_gub_constraint",
-      ConstraintType::CONSTR_LE, 1);
+      ConstraintType::CONSTR_LE, 1,
+      timeToPhaseShiftIndicatorForStartTime.size());
   for (auto& [time, variable] : timeToPhaseShiftIndicatorForStartTime) {
     startTimePhaseShiftGUBConstraint->addTerm(variable);
   }
@@ -1150,7 +1150,7 @@ ParseResultPtr MalleableChooseExpression::parse(
     ConstraintPtr phaseShiftLowerBoundConstraint = std::make_shared<Constraint>(
         name + "_phase_shift_start_time_constraint_lower_bounded_at_" +
             std::to_string(time),
-        ConstraintType::CONSTR_LE, 0);
+        ConstraintType::CONSTR_LE, 0, 2);
     phaseShiftLowerBoundConstraint->addTerm(variable);
     phaseShiftLowerBoundConstraint->addTerm(-1,
                                             timeToOccupationIndicator[time]);
@@ -1166,7 +1166,8 @@ ParseResultPtr MalleableChooseExpression::parse(
     ConstraintPtr phaseShiftConstraint = std::make_shared<Constraint>(
         name + "_phase_shift_start_time_constraint_at_" +
             std::to_string(allocationTime),
-        ConstraintType::CONSTR_LE, 0);
+        ConstraintType::CONSTR_LE, 0,
+        timeToPhaseShiftIndicatorForStartTime.size() + 1);
     phaseShiftConstraint->addTerm(occupationIndicator);
     for (auto& [phaseShiftTime, phaseShiftIndicator] :
          timeToPhaseShiftIndicatorForStartTime) {
@@ -1184,7 +1185,8 @@ ParseResultPtr MalleableChooseExpression::parse(
       VariableType::VAR_INTEGER, name + "_start_time", 0, endTime);
   solverModel->addVariable(startTimeVariable);
   ConstraintPtr startTimeConstraint = std::make_shared<Constraint>(
-      name + "_start_time_constraint", ConstraintType::CONSTR_EQ, 0);
+      name + "_start_time_constraint", ConstraintType::CONSTR_EQ, 0,
+      timeToPhaseShiftIndicatorForStartTime.size() + 1);
   for (auto& [time, phaseShiftIndicator] :
        timeToPhaseShiftIndicatorForStartTime) {
     startTimeConstraint->addTerm(time, phaseShiftIndicator);
@@ -1206,7 +1208,7 @@ ParseResultPtr MalleableChooseExpression::parse(
   // Only one of the end time phase shifts is allowed.
   ConstraintPtr endTimePhaseShiftGUBConstraint = std::make_shared<Constraint>(
       name + "_phase_shift_end_time_gub_constraint", ConstraintType::CONSTR_LE,
-      1);
+      1, timeToPhaseShiftIndicatorForEndTime.size());
   for (auto& [time, variable] : timeToPhaseShiftIndicatorForEndTime) {
     endTimePhaseShiftGUBConstraint->addTerm(variable);
   }
@@ -1218,7 +1220,7 @@ ParseResultPtr MalleableChooseExpression::parse(
     ConstraintPtr phaseShiftLowerBoundConstraint = std::make_shared<Constraint>(
         name + "_phase_shift_end_time_constraint_lower_bounded_at_" +
             std::to_string(time),
-        ConstraintType::CONSTR_LE, 0);
+        ConstraintType::CONSTR_LE, 0, 2);
     phaseShiftLowerBoundConstraint->addTerm(variable);
     phaseShiftLowerBoundConstraint->addTerm(-1,
                                             timeToOccupationIndicator[time]);
@@ -1232,7 +1234,8 @@ ParseResultPtr MalleableChooseExpression::parse(
     ConstraintPtr phaseShiftConstraint = std::make_shared<Constraint>(
         name + "_phase_shift_end_time_constraint_at_" +
             std::to_string(allocationTime),
-        ConstraintType::CONSTR_LE, 0);
+        ConstraintType::CONSTR_LE, 0,
+        timeToPhaseShiftIndicatorForEndTime.size() + 1);
     phaseShiftConstraint->addTerm(occupationIndicator);
     for (auto& [phaseShiftTime, phaseShiftIndicator] :
          timeToPhaseShiftIndicatorForEndTime) {
@@ -1250,7 +1253,8 @@ ParseResultPtr MalleableChooseExpression::parse(
       VariableType::VAR_INTEGER, name + "_end_time", 0, endTime);
   solverModel->addVariable(endTimeVariable);
   ConstraintPtr endTimeConstraint = std::make_shared<Constraint>(
-      name + "_end_time_constraint", ConstraintType::CONSTR_EQ, 0);
+      name + "_end_time_constraint", ConstraintType::CONSTR_EQ, 0,
+      timeToPhaseShiftIndicatorForEndTime.size() + 1);
   for (auto& [time, phaseShiftIndicator] :
        timeToPhaseShiftIndicatorForEndTime) {
     endTimeConstraint->addTerm(time, phaseShiftIndicator);
@@ -1619,8 +1623,9 @@ ParseResultPtr LessThanExpression::parse(
 
     // Ensure that both of the children of the LessThanExpression can be
     // enforced.
-    ConstraintPtr lessThanIndicatorConstraint = std::make_shared<Constraint>(
-        name + "_less_than_indicator_constraint", ConstraintType::CONSTR_EQ, 0);
+    ConstraintPtr lessThanIndicatorConstraint =
+        std::make_shared<Constraint>(name + "_less_than_indicator_constraint",
+                                     ConstraintType::CONSTR_EQ, 0, 3);
     double numEnforceableChildren = 0;
 
     if (!firstChildResult->indicator || !secondChildResult->indicator) {
@@ -1655,7 +1660,7 @@ ParseResultPtr LessThanExpression::parse(
     // Add a constraint that the first child must occur before the second.
     auto happensBeforeConstraintName = name + "_happens_before_constraint";
     ConstraintPtr happensBeforeConstraint = std::make_shared<Constraint>(
-        happensBeforeConstraintName, ConstraintType::CONSTR_LE, 0);
+        happensBeforeConstraintName, ConstraintType::CONSTR_LE, 0, 2);
     happensBeforeConstraint->addTerm(firstChildResult->endTime.value());
     happensBeforeConstraint->addTerm(-1, secondChildResult->startTime.value());
     solverModel->addConstraint(std::move(happensBeforeConstraint));
@@ -1728,7 +1733,8 @@ ParseResultPtr MinExpression::parse(
 
   // Constraint to ensure that all children of the MIN operator are satisfied.
   ConstraintPtr minIndicatorConstraint = std::make_shared<Constraint>(
-      name + "_min_enforce_all_children", ConstraintType::CONSTR_EQ, 0);
+      name + "_min_enforce_all_children", ConstraintType::CONSTR_EQ, 0,
+      numChildren + 1);
   double numEnforceableChildren = 0;
 
   // Utility of MIN.
@@ -1741,7 +1747,7 @@ ParseResultPtr MinExpression::parse(
   // std::pair<double, double> endTimeRange =
   //     std::make_pair(std::numeric_limits<Time>::max(), 0);
 
-  for (size_t i = 0; i < numChildren; i++) {
+  for (size_t i = 0; i < numChildren; ++i) {
     // Parse the Child.
     auto childParsedResult = children[i]->parse(
         solverModel, availablePartitions, capacityConstraints, currentTime);
@@ -1782,7 +1788,7 @@ ParseResultPtr MinExpression::parse(
     // Ensure that the MIN's start time is <= the start time of this child.
     ConstraintPtr minStartTimeConstraint = std::make_shared<Constraint>(
         name + "_min_start_time_constr_child_" + std::to_string(i),
-        ConstraintType::CONSTR_GE, 0);  // minStartTime < childStartTime
+        ConstraintType::CONSTR_GE, 0, 2);  // minStartTime < childStartTime
     if (childParsedResult->startTime.has_value()) {
       auto childStartTime = childParsedResult->startTime.value();
       if (childStartTime.isVariable()) {
@@ -1790,16 +1796,16 @@ ParseResultPtr MinExpression::parse(
         minStartTimeConstraint->addTerm(1, childStartTimeVariable);
         // if (auto lowerBound = childStartTimeVariable->getLowerBound();
         //     lowerBound.has_value()) {
-          // auto lowerBoundValue = lowerBound.value();
-          // std::cout << "Lower bound for " <<
-          // childStartTimeVariable->getName()
-          //           << " is " << lowerBoundValue << std::endl;
-          // if (lowerBoundValue < startTimeRange.first) {
-          //   startTimeRange.first = lowerBoundValue;
-          // }
-          // if (lowerBoundValue > startTimeRange.second) {
-          //   startTimeRange.second = lowerBoundValue;
-          // }
+        // auto lowerBoundValue = lowerBound.value();
+        // std::cout << "Lower bound for " <<
+        // childStartTimeVariable->getName()
+        //           << " is " << lowerBoundValue << std::endl;
+        // if (lowerBoundValue < startTimeRange.first) {
+        //   startTimeRange.first = lowerBoundValue;
+        // }
+        // if (lowerBoundValue > startTimeRange.second) {
+        //   startTimeRange.second = lowerBoundValue;
+        // }
         // }
       } else {
         auto childStartTimeValue = childStartTime.get<Time>();
@@ -1824,7 +1830,7 @@ ParseResultPtr MinExpression::parse(
     // Ensure that the MIN's end time is >= the end time of this child.
     ConstraintPtr minEndTimeConstraint = std::make_shared<Constraint>(
         name + "_min_end_time_constr_child_" + std::to_string(i),
-        ConstraintType::CONSTR_LE, 0);
+        ConstraintType::CONSTR_LE, 0, 2);
     if (childParsedResult->endTime.has_value()) {
       auto childEndTime = childParsedResult->endTime.value();
       if (childEndTime.isVariable()) {
@@ -1966,17 +1972,20 @@ ParseResultPtr MaxExpression::parse(
   // Constraint to allow only one sub-expression to have indicator = 1
   // Sum(child_indicator) - max_indicator <= 0
   ConstraintPtr maxChildSubexprConstraint = std::make_shared<Constraint>(
-      name + "_max_child_subexpr_constr", ConstraintType::CONSTR_EQ, 0);
+      name + "_max_child_subexpr_constr", ConstraintType::CONSTR_EQ, 0,
+      numChildren + 1);
 
   // Constraint to set startTime of MAX
   // Sum(Indicator * child_start) >= maxStartTime
   ConstraintPtr maxStartTimeConstraint = std::make_shared<Constraint>(
-      name + "_max_start_time_constr", ConstraintType::CONSTR_GE, 0);
+      name + "_max_start_time_constr", ConstraintType::CONSTR_GE, 0,
+      numChildren + 3);
 
   // Constraint to set endTime of MAX
   // Sum(Indicator * child_end) <= maxEndTime
   ConstraintPtr maxEndTimeConstraint = std::make_shared<Constraint>(
-      name + "_max_end_time_constr", ConstraintType::CONSTR_LE, 0);
+      name + "_max_end_time_constr", ConstraintType::CONSTR_LE, 0,
+      numChildren + 1);
 
   // Parse each of the children and constrain the MaxExpression's start time,
   // end time and utility as a function of the children's start time, end time

@@ -224,8 +224,10 @@ class ConstraintT {
 
  public:
   /// Generate a new constraint with the given type and right hand side.
+  /// Optionally, it is recommended to provide the number of terms in the
+  /// constraint to avoid resizing the vector.
   ConstraintT(std::string constraintName, ConstraintType constraintType,
-              T rightHandSide);
+              T rightHandSide, std::optional<size_t> numTerms = std::nullopt);
 
   /// Adds a term to the left-hand side constraint.
   void addTerm(std::pair<T, std::shared_ptr<VariableT<T>>> term);
@@ -362,7 +364,8 @@ template <typename T>
 class SolverModelT {
  private:
   /// The variables in this model.
-  tbb::concurrent_hash_map<uint32_t, std::shared_ptr<VariableT<T>>> modelVariables;
+  tbb::concurrent_hash_map<uint32_t, std::shared_ptr<VariableT<T>>>
+      modelVariables;
   /// The constraints in this model.
   tbb::concurrent_hash_map<uint32_t, std::shared_ptr<ConstraintT<T>>>
       modelConstraints;

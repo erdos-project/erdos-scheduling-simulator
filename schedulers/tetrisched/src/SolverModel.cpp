@@ -120,12 +120,17 @@ std::atomic_uint32_t ConstraintT<T>::constraintIdCounter = 0;
 
 template <typename T>
 ConstraintT<T>::ConstraintT(std::string constraintName, ConstraintType type,
-                            T rightHandSide)
+                            T rightHandSide, std::optional<size_t> numTerms)
     : active(true),
       constraintId(constraintIdCounter++),
       constraintName(constraintName),
       rightHandSide(rightHandSide),
-      constraintType(type) {}
+      constraintType(type) {
+  // If the number of terms were provided, reserve that much space.
+  if (numTerms.has_value()) {
+    terms.reserve(numTerms.value());
+  }
+}
 
 template <typename T>
 void ConstraintT<T>::addTerm(std::pair<T, std::shared_ptr<VariableT<T>>> term) {
