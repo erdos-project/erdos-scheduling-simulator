@@ -310,7 +310,7 @@ template <typename T>
 class ObjectiveFunctionT {
  private:
   /// The terms in this objective function.
-  std::vector<std::pair<T, std::shared_ptr<VariableT<T>>>> terms;
+  tbb::concurrent_vector<std::pair<T, std::shared_ptr<VariableT<T>>>> terms;
   /// The type of the objective function.
   ObjectiveType objectiveType;
 

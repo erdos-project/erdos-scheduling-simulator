@@ -288,6 +288,11 @@ class Expression : public std::enable_shared_from_this<Expression> {
 
   /// Returns the resource quantity required by the Expression.
   virtual uint32_t getResourceQuantity() const;
+
+  /// Retrieves the ParsedResultPtr for this Expression.
+  /// The ParsedResultPtr is only available if `parse` has been called on
+  /// this Expression.
+  std::optional<ParseResultPtr> getParsedResult() const;
 };
 
 /// A `ChooseExpression` represents a choice of a required number of machines
