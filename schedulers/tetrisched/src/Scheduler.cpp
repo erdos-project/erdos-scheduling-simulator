@@ -14,8 +14,8 @@ namespace tetrisched {
 Scheduler::Scheduler(Time discretization, SolverBackendType solverBackend,
                      std::string logDir, bool enableDynamicDiscretization,
                      Time maxDiscretization, float maxOccupancyThreshold)
-    : discretization(discretization),
-      solverBackend(solverBackend),
+    : solverBackend(solverBackend),
+      discretization(discretization),
       logDir(logDir) {
   // Initialize the solver backend.
   switch (solverBackend) {
@@ -170,7 +170,8 @@ void Scheduler::exportLastSolverModel(const std::string &fileName) const {
   solver->exportModel(fileName);
 }
 
-void Scheduler::exportLastSolverSolution(const std::string &fileName) const {
+void Scheduler::exportLastSolverSolution(
+    const std::string & /* fileName */) const {
   if (!solverSolution.has_value()) {
     throw exceptions::ExpressionSolutionException(
         "No solution has been computed yet. Please invoke schedule() first.");

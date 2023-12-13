@@ -142,7 +142,7 @@ void GoogleCPSolver::translateModel() {
     TETRISCHED_DEBUG("Adding constraint " << constraint->getName() << "("
                                           << constraint->getId()
                                           << ") to ORTools model.");
-    auto _ = translateConstraint(constraint);
+    translateConstraint(constraint);
   }
 
   // Translate the objective function.

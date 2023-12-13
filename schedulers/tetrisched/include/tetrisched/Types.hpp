@@ -118,17 +118,23 @@ class Logger {
   // A mutex to ensure that the output stream is not corrupted.
   std::mutex writeMutex;
 
+  /// Constructs a new Logger with the given output stream and log level.
   Logger(std::ostream& outputStream = std::cout, LogLevel level = INFO);
 
+  /// Writes the given value to the output stream.
   template <typename T>
   Logger& operator<<(const T& val);
 
+  /// Destructor for the Logger.
   ~Logger();
 
+  /// Flushes the output stream.
   void flush();
 
+  /// Returns a Logger with the DEBUG log level.
   static Logger& debug();
 
+  /// Returns a Logger with the INFO log level.
   static Logger& info();
 };
 }  // namespace logging
@@ -144,8 +150,10 @@ class ScopeTimer {
   static std::mutex sharedLock;  // Shared lock for all ScopeTimer instances
 
  public:
+  /// Constructs a new ScopeTimer with the given name at the particular time.
   ScopeTimer(std::string scopeTimerName);
 
+  /// Destructor for the ScopeTimer.
   ~ScopeTimer();
 };
 }  // namespace timing

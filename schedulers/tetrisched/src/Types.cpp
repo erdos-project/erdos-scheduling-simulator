@@ -94,16 +94,8 @@ std::ofstream& ScopeTimer::getOutputFileStream() {
 }
 
 ScopeTimer::ScopeTimer(std::string scopeTimerName)
-    : scopeTimerName(scopeTimerName) {
-  // std::lock_guard<std::mutex> lock(sharedLock);  // Acquire the shared lock
-  startTime = std::chrono::high_resolution_clock::now();
-  // getOutputFileStream()
-  //     << "BEGIN," << scopeTimerName << ","
-  //     << std::chrono::duration_cast<std::chrono::microseconds>(
-  //            startTime.time_since_epoch())
-  //            .count()
-  //     << std::endl;
-}
+    : scopeTimerName(scopeTimerName),
+      startTime(std::chrono::high_resolution_clock::now()) {}
 
 ScopeTimer::~ScopeTimer() {
   auto endTime = std::chrono::high_resolution_clock::now();
