@@ -1556,16 +1556,34 @@ ParseResultPtr LessThanExpression::parse(
   TETRISCHED_DEBUG("Parsing LessThanExpression with name " << name << ".")
 
   // Parse both the children.
-  auto firstChildResult = children[0]->parse(solverModel, availablePartitions,
-                                             capacityConstraints, currentTime);
-  auto secondChildResult = children[1]->parse(solverModel, availablePartitions,
-                                              capacityConstraints, currentTime);
+  tbb::task_group lessThanExpressionChildParsing;
+  lessThanExpressionChildParsing.run([&] {
+    children[0]->parse(solverModel, availablePartitions, capacityConstraints,
+                       currentTime);
+  });
+  lessThanExpressionChildParsing.run([&] {
+    children[1]->parse(solverModel, availablePartitions, capacityConstraints,
+                       currentTime);
+  });
+  lessThanExpressionChildParsing.wait();
   TETRISCHED_DEBUG(
       "Finished parsing the children for LessThanExpression with name " << name
                                                                         << ".")
 
+  auto firstChildParsedResult = children[0]->getParsedResult();
+  auto secondChildParsedResult = children[1]->getParsedResult();
+
+  if (!firstChildParsedResult.has_value() ||
+      !secondChildParsedResult.has_value()) {
+    throw tetrisched::exceptions::ExpressionConstructionException(
+        "LessThanExpression with name " + name +
+        " was parsed without any children.");
+  }
+
   // Generate the result of parsing the expression.
   parsedResult = std::make_shared<ParseResult>();
+  auto firstChildResult = firstChildParsedResult.value();
+  auto secondChildResult = secondChildParsedResult.value();
 
   // If either of the children cannot be satisfied, then this expression cannot
   // be satisfied.
