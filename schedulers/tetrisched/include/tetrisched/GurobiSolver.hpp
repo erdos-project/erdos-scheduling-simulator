@@ -13,9 +13,6 @@ class GurobiSolver : public Solver {
   std::unique_ptr<GRBModel> gurobiModel;
   /// The SolverModel instance associated with this GurobiSolver.
   SolverModelPtr solverModel;
-  /// A map from the ID of the SolverModel variables to internal Gurobi
-  /// variables.
-  std::unordered_map<uint32_t, GRBVar> gurobiVariables;
   /// The name of the log file for the Gurobi solving.
   std::string logFileName;
 

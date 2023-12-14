@@ -462,8 +462,8 @@ TEST(Expression, TestAllocationExpressionFailsChoice) {
 
   auto result = objectiveExpression->populateResults(solverModelPtr);
   EXPECT_TRUE(result->utility) << "Result should have some utility.";
-  EXPECT_EQ(0, result->utility.value())
-      << "The utility for the Expressions should be 0";
+  EXPECT_EQ(result->placements.find("task2"), result->placements.end())
+      << "task2 should not be placed";
 }
 #endif
 
