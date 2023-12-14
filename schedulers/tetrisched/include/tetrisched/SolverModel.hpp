@@ -15,6 +15,10 @@
 #include "tbb/concurrent_vector.h"
 #include "tetrisched/Types.hpp"
 
+#ifdef _TETRISCHED_WITH_GUROBI_
+#include "gurobi_c++.h"
+#endif
+
 namespace tetrisched {
 
 /// A `VariableType` enumeration represents the types of variable that we allow
@@ -51,6 +55,12 @@ class VariableT {
   /// An optional solution value for the variable.
   /// If unspecified, the solver has not found a solution for this problem yet.
   std::optional<T> solutionValue;
+#ifdef _TETRISCHED_WITH_GUROBI_
+  /// An optional Gurobi variable for this variable.
+  /// Populated by the GurobiSolver. Provided to prevent lookups.
+  std::optional<GRBVar> gurobiVariable;
+#endif
+
   /// Checks if the VariableType is valid.
   /// Throws an exception if the VariableType is invalid.
   /// Returns the type if it is valid.

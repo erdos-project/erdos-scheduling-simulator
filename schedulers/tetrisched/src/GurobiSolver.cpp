@@ -89,14 +89,13 @@ GRBConstr GurobiSolver::translateConstraint(
   // Construct all the terms.
   for (const auto& [coefficient, variable] : constraint->terms) {
     if (variable) {
-      try {
-        auto gurobiVariable = gurobiVariables.at(variable->getId());
-        constraintExpr += coefficient * gurobiVariable;
-      } catch (std::exception& e) {
+      auto gurobiVariable = variable->gurobiVariable;
+      if (!gurobiVariable.has_value()) {
         throw tetrisched::exceptions::SolverException(
             "Variable " + variable->getName() +
             " was not found in the Gurobi model.");
       }
+      constraintExpr += coefficient * gurobiVariable.value();
     } else {
       constraintExpr += coefficient;
     }
@@ -151,7 +150,13 @@ GRBLinExpr GurobiSolver::translateObjectiveFunction(
   // Construct all the terms.
   for (const auto& [coefficient, variable] : objectiveFunction->terms) {
     if (variable) {
-      objectiveExpr += coefficient * gurobiVariables.at(variable->getId());
+      auto gurobiVariable = variable->gurobiVariable;
+      if (!gurobiVariable.has_value()) {
+        throw tetrisched::exceptions::SolverException(
+            "Variable " + variable->getName() +
+            " was not found in the Gurobi model.");
+      }
+      objectiveExpr += coefficient * gurobiVariable.value();
     } else {
       objectiveExpr += coefficient;
     }
@@ -177,7 +182,7 @@ void GurobiSolver::translateModel() {
       TETRISCHED_DEBUG("Adding variable " << variable->getName() << "("
                                           << variableId
                                           << ") to Gurobi Model.");
-      gurobiVariables[variableId] = translateVariable(*gurobiModel, variable);
+      variable->gurobiVariable = translateVariable(*gurobiModel, variable);
     }
   }
 
@@ -266,15 +271,15 @@ SolverSolutionPtr GurobiSolver::solveModel() {
 
   // Retrieve all the variables from the Gurobi model into the SolverModel.
   for (const auto& [variableId, variable] : solverModel->modelVariables) {
-    if (gurobiVariables.find(variableId) == gurobiVariables.end()) {
+    if (!variable->gurobiVariable.has_value()) {
       throw tetrisched::exceptions::SolverException(
           "Variable " + variable->getName() +
           " was not found in the Gurobi model.");
     }
+    auto gurobiVariable = variable->gurobiVariable.value();
     switch (variable->variableType) {
       case tetrisched::VariableType::VAR_CONTINUOUS: {
-        double variableValue =
-            gurobiVariables.at(variableId).get(GRB_DoubleAttr_X);
+        double variableValue = gurobiVariable.get(GRB_DoubleAttr_X);
         TETRISCHED_DEBUG("Variable " << variable->getName() << "(" << variableId
                                      << ") has solved value " << variableValue);
         variable->solutionValue = variableValue;
@@ -284,8 +289,7 @@ SolverSolutionPtr GurobiSolver::solveModel() {
       case tetrisched::VariableType::VAR_INDICATOR: {
         // If this is an integer or an indicator variable, we round it to
         // nearest integer value.
-        double variableValue =
-            std::round(gurobiVariables.at(variableId).get(GRB_DoubleAttr_X));
+        double variableValue = std::round(gurobiVariable.get(GRB_DoubleAttr_X));
         TETRISCHED_DEBUG("Variable " << variable->getName() << "(" << variableId
                                      << ") has solved value " << variableValue);
         variable->solutionValue = variableValue;
