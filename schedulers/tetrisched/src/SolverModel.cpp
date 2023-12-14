@@ -145,7 +145,9 @@ void ConstraintT<T>::addTerm(T coefficient,
 
 template <typename T>
 void ConstraintT<T>::addTerm(T constant) {
-  this->addTerm(std::make_pair(constant, nullptr));
+  // Add the -1 * constant to the right hand side.
+  std::lock_guard<std::mutex> lock(constraintMutex);
+  rightHandSide -= constant;
 }
 
 template <typename T>

@@ -232,6 +232,8 @@ class ConstraintT {
   ConstraintType constraintType;
   /// The attributes registered with this Constraint.
   std::unordered_set<ConstraintAttribute> attributes;
+  /// A lock for changing the constraint values.
+  std::mutex constraintMutex;
 
  public:
   /// Generate a new constraint with the given type and right hand side.
