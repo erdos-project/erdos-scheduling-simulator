@@ -82,11 +82,12 @@ GRBVar GurobiSolver::translateVariable(GRBModel& gurobiModel,
 
 GRBConstr GurobiSolver::translateConstraint(
     GRBModel& gurobiModel, const ConstraintPtr& constraint) const {
-  // TODO (Sukrit): We are currently assuming that all constraints and objective
-  // functions are linear. We may need to support quadratic constraints.
-  GRBLinExpr constraintExpr;
-
   // Construct all the terms.
+  std::vector<TETRISCHED_ILP_TYPE> coefficients;
+  std::vector<GRBVar> variables;
+  coefficients.reserve(constraint->terms.size());
+  variables.reserve(constraint->terms.size());
+
   for (const auto& [coefficient, variable] : constraint->terms) {
     if (variable) {
       auto gurobiVariable = variable->gurobiVariable;
@@ -95,11 +96,18 @@ GRBConstr GurobiSolver::translateConstraint(
             "Variable " + variable->getName() +
             " was not found in the Gurobi model.");
       }
-      constraintExpr += coefficient * gurobiVariable.value();
+      coefficients.push_back(coefficient);
+      variables.push_back(gurobiVariable.value());
     } else {
-      constraintExpr += coefficient;
+      throw tetrisched::exceptions::SolverException(
+          "Constant terms in LHS are not supported in Gurobi.");
     }
   }
+
+  // Construct the LHS of the Constraint.
+  GRBLinExpr constraintExpr = 0;
+  constraintExpr.addTerms(&coefficients[0], &variables[0],
+                          constraint->terms.size());
 
   // Translate the constraint.
   GRBConstr gurobiConstraint;
