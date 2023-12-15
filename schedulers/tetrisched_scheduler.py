@@ -574,7 +574,7 @@ class TetriSchedScheduler(BaseScheduler):
                             partition.associatedWorker.resources.get_total_quantity(
                                 resource
                             )
-                            > quantity
+                            >= quantity
                         ):
                             placement_execution_strategy_for_this_task = (
                                 execution_strategy
