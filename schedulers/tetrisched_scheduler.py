@@ -369,7 +369,9 @@ class TetriSchedScheduler(BaseScheduler):
                     zip(
                         placement_reward_discretizations,
                         np.interp(
-                            map(lambda x: x.time, placement_reward_discretizations),
+                            list(
+                                map(lambda x: x.time, placement_reward_discretizations)
+                            ),
                             (
                                 min(placement_reward_discretizations).time,
                                 max(placement_reward_discretizations).time,
