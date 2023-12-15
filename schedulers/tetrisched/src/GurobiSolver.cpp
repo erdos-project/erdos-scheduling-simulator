@@ -5,6 +5,40 @@
 #include <thread>
 
 namespace tetrisched {
+
+/**
+ * Methods for GurobiInterruptOptimizationCallback.
+ */
+GurobiSolver::GurobiInterruptOptimizationCallback::
+    GurobiInterruptOptimizationCallback(GurobiInterruptParams params)
+    : params(params), startTime(std::chrono::steady_clock::now()) {}
+
+void GurobiSolver::GurobiInterruptOptimizationCallback::callback() {
+  try {
+    auto currentTime = std::chrono::steady_clock::now();
+    if (where == GRB_CB_POLLING) {
+      auto elapsedTimeMs =
+          std::chrono::duration_cast<std::chrono::milliseconds>(currentTime -
+                                                                startTime)
+              .count();
+
+      if (elapsedTimeMs > params.timeLimitMs) {
+        abort();
+      }
+    }
+  } catch (GRBException& e) {
+    std::cout << "Gurobi Solver failed with error code: " << e.getErrorCode()
+              << std::endl;
+    std::cout << "The error message was: " << e.getMessage() << std::endl;
+  } catch (...) {
+    std::cout << "Error during GurobiInterruptOptimizationCallback::callback()"
+              << std::endl;
+  }
+}
+
+/**
+ * Methods for GurobiSolver.
+ */
 GurobiSolver::GurobiSolver()
     : gurobiEnv(new GRBEnv()),
       gurobiModel(new GRBModel(*gurobiEnv)),
