@@ -794,7 +794,7 @@ class JobGraph(Graph[Job]):
         # heuristic-based deadline splitting technique.
         # Ray: Clip the min deadline to 5 time unit to prevent some small taks from
         # having tight deadline.
-        task_deadline = release_time + min(
+        task_deadline = release_time + max(
             EventTime(
                 5,
                 self.completion_time.unit,
