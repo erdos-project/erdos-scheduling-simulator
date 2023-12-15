@@ -257,13 +257,14 @@ class AlibabaLoader(BaseWorkloadLoader):
                 )
 
             # For now, we try randomizing the duration of the tasks.
+            random_task_duration = round(
+                self._sample_normal_distribution_random(1, 50, 15)[0]
+            )
+            # Use this if we want middle heavy distribution of task durations
             # if i == 0 or i == len(job_tasks) - 1:
             #     random_task_duration = round(self._sample_normal_distribution_random(1, 10, 5)[0])
             # else:
             #     random_task_duration = round(self._sample_normal_distribution_random(1, 50, 15)[0])
-            random_task_duration = round(
-                self._sample_normal_distribution_random(1, 50, 15)[0]
-            )
 
             job_name = task.name.split("_")[0]
             job_runtime_1 = EventTime(
