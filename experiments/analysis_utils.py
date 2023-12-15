@@ -150,7 +150,10 @@ def extract_experiments_result(base_dir: str) -> pd.DataFrame:
                 cancelled_task_graphs,
                 missed_task_graph_deadlines,
             ) = last_line.split(",")
+
             row = extract_variables_from_filename_v2(csv_file_path)
+            # row = extract_variables_from_filename(file_name)
+
             # Analyze SLO attainment and goodput
             slo_attainment = (
                 int(finished_task_graphs) - int(missed_task_graph_deadlines)
@@ -197,7 +200,7 @@ def extract_experiments_result(base_dir: str) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def plot_slo_attainments(data: pd.DataFrame, extra_title: str = ""):
+def plot_slo_attainments(data: pd.DataFrame, extra_title: str = "", figsize=(20, 15)):
     # Define your unique values for the grid
     cv2_values = sorted(data["cv2"].unique())
     variable_arrival_rate_values = sorted(data["variable_arrival_rate"].unique())
@@ -218,7 +221,7 @@ def plot_slo_attainments(data: pd.DataFrame, extra_title: str = ""):
     fig, axes = plt.subplots(
         len(variable_arrival_rate_values),
         len(cv2_values),
-        figsize=(20, 15),
+        figsize=figsize,
         sharey=True,
     )
 
@@ -233,7 +236,9 @@ def plot_slo_attainments(data: pd.DataFrame, extra_title: str = ""):
     # Iterate over each subplot and plot the data
     for i, variable_arrival_rate in enumerate(variable_arrival_rate_values):
         for j, cv2 in enumerate(cv2_values):
-            if len(variable_arrival_rate_values) == 1:
+            if len(variable_arrival_rate_values) == 1 and len(cv2_values) == 1:
+                ax = axes
+            elif len(variable_arrival_rate_values) == 1:
                 ax = axes[j]
             else:
                 ax = axes[i][j]
@@ -293,7 +298,7 @@ def plot_slo_attainments(data: pd.DataFrame, extra_title: str = ""):
     # Adjust layout and add a super title
     plt.tight_layout()
     plt.subplots_adjust(
-        top=0.9
+        top=0.88
     )  # Adjust the bottom parameter to make space for the legend
 
     handles, labels = ax.get_legend_handles_labels()
@@ -330,7 +335,7 @@ def analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var(
     df,
     variable_arrival_rate,
     cv2,
-    max_deadline_var,
+    max_deadline_variance,
     figure_size=(20, 20),
     axes_fontsize=16,
     smoothing_window_size=10,  # Size of the moving average window
@@ -341,7 +346,7 @@ def analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var(
     filtered_df = df[
         (df["variable_arrival_rate"] == variable_arrival_rate)
         & (df["cv2"] == cv2)
-        & (df["max_deadline_variance"] == max_deadline_var)
+        & (df["max_deadline_variance"] == max_deadline_variance)
     ]
     num_schedulers = filtered_df["scheduler"].nunique()
 
@@ -432,7 +437,7 @@ def analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var(
     plt.tight_layout()
     fig.subplots_adjust(top=0.93)
     plt.suptitle(
-        f"Resource Utilization for {variable_arrival_rate=}, {cv2=},  max deadline variance={max_deadline_var}. Num invocations={num_invocation} {extra_title}"
+        f"Resource Utilization for {variable_arrival_rate=}, {cv2=},  max deadline variance={max_deadline_variance}. Num invocations={num_invocation} {extra_title}"
     )
 
     # Display the plot
@@ -554,7 +559,9 @@ def analyze_resource_utilization_by_arrival_rate_and_cv2(
     )
     for r, variable_arrival_rate in enumerate(arrival_rates):
         for c, cv2 in enumerate(cv2_values):
-            if len(arrival_rates) == 1:
+            if len(arrival_rates) == 1 and len(cv2_values) == 1:
+                ax = axes
+            elif len(arrival_rates) == 1:
                 ax = axes[c]
             else:
                 ax = axes[r, c]
@@ -651,12 +658,12 @@ def analyze_resource_utilization_by_arrival_rate_and_cv2(
 
 
 def plot_resource_utilization(
-    base_dir: str, extra_title: str = "", figure_size=(20, 20)
+    base_dir: str, extra_title: str = "", figure_size=(20, 20), packed: bool = True
 ):
     """
     If you have just one row, figure_size=(15, 8) is a good size.
     """
-    # This function wraps analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var
+    # This function wraps analyze_resource_utilization_by_arrival_rate_and_cv2
     df = extract_experiments_result(base_dir)
     df = df.sort_values(
         by=[
@@ -670,14 +677,29 @@ def plot_resource_utilization(
     )
     # Filter out csv files that hasn't been completed yet
     csv_reader = CSVReader(df["csv_file_path"].tolist())
-    for max_deadline_variance in df["max_deadline_variance"].unique():
-        analyze_resource_utilization_by_arrival_rate_and_cv2(
-            csv_reader,
-            df,
-            max_deadline_variance,
-            figure_size=figure_size,
-            extra_title=extra_title,
-        )
+
+    if packed:
+        for max_deadline_variance in df["max_deadline_variance"].unique():
+            analyze_resource_utilization_by_arrival_rate_and_cv2(
+                csv_reader,
+                df,
+                max_deadline_variance,
+                figure_size=figure_size,
+                extra_title=extra_title,
+            )
+    else:
+        for variable_arrival_rate in df["variable_arrival_rate"].unique():
+            for cv2 in df["cv2"].unique():
+                for max_deadline_variance in df["max_deadline_variance"].unique():
+                    analyze_resource_utilization_by_arrival_rate_and_cv2_and_max_deadline_var(
+                        csv_reader,
+                        df,
+                        variable_arrival_rate=variable_arrival_rate,
+                        cv2=cv2,
+                        max_deadline_variance=max_deadline_variance,
+                        figure_size=figure_size,
+                        extra_title=extra_title,
+                    )
 
 
 def plot_solver_time(
@@ -743,3 +765,21 @@ def plot_solver_time(
     plt.ylabel("Solver Time Microseconds")
     plt.title(super_title)
     plt.show()
+
+
+def extract_solver_time(base_dir: str):
+    log_file_paths = find_all_file_paths(base_dir, ".log")
+    solver_times = []
+    for log_file_path in log_file_paths:
+        if "TetriSched" not in os.path.basename(log_file_path):
+            continue
+        with open(log_file_path, "r") as f:
+            lines = f.readlines()
+            for line in lines:
+                match = re.search(r"solverTimeMicroseconds=(\d+)", line)
+                if match:
+                    solver_time_microseconds = match.group(1)
+                    solver_times.append(int(solver_time_microseconds))
+
+    for p in range(0, 105, 5):
+        print(f"{p}% percentile: {(np.percentile(solver_times, p) / 1e6):.2f} seconds")
