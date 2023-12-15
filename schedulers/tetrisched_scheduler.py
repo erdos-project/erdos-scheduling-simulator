@@ -217,6 +217,7 @@ class TetriSchedScheduler(BaseScheduler):
             self._max_discretization.time,
             max_occupancy_threshold,
         )
+        self._previously_placed_reward_scale_factor = 1.0
 
         # A cache for the STRLs generated for individual tasks.
         # This is used to avoid generating the same STRL multiple times, and so that
@@ -277,9 +278,7 @@ class TetriSchedScheduler(BaseScheduler):
             f"{t.deadline})"
             for t in tasks_to_be_scheduled
         ]
-        task_graph_names: Set[TaskGraph] = {
-            task.task_graph for task in tasks_to_be_scheduled
-        }
+        task_graph_names: Set[str] = {task.task_graph for task in tasks_to_be_scheduled}
         self._logger.debug(
             f"[{sim_time.time}] The scheduler received {len(tasks_to_be_scheduled)} "
             f"tasks to be scheduled from {len(task_graph_names)} TaskGraphs. "
@@ -305,6 +304,15 @@ class TetriSchedScheduler(BaseScheduler):
             f"[{sim_time.time}] The scheduler is also considering the following "
             f"{len(previously_placed_tasks)} for their effects on the current "
             f"placements: {[task.unique_name for task in previously_placed_tasks]}."
+        )
+        previously_placed_task_graphs: Set[str] = {
+            task.task_graph for task in previously_placed_tasks
+        }
+        self._logger.debug(
+            f"[{sim_time.time}] The previously placed tasks being considered for their "
+            f"effects on the current placements were from the following "
+            f"{len(previously_placed_task_graphs)} TaskGraphs: "
+            f"{previously_placed_task_graphs}."
         )
 
         # Construct the STRL expression.
@@ -402,6 +410,8 @@ class TetriSchedScheduler(BaseScheduler):
                         tasks_to_be_scheduled=tasks_to_be_scheduled
                         + previously_placed_tasks,
                         task_strls=task_strls,
+                        previously_placed=task_graph_name
+                        in previously_placed_task_graphs,
                     )
                     if task_graph_strl is not None:
                         objective_strl.addChild(task_graph_strl)
@@ -929,9 +939,7 @@ class TetriSchedScheduler(BaseScheduler):
                             f"[{current_time.time}] Generated "
                             f"{len(choice_placement_times_and_rewards)} "
                             f"ChooseExpressions for {task.unique_name} with deadline "
-                            f"{task.deadline} and strategy {execution_strategy}"
-                            f"for times "
-                            f"{[t for t, _ in choice_placement_times_and_rewards]} for "
+                            f"{task.deadline} and strategy {execution_strategy} for "
                             f"{quantity} slots for {execution_strategy.runtime}."
                         )
                     task_execution_strategy_strls.extend(task_choose_expressions)
@@ -1131,6 +1139,7 @@ class TetriSchedScheduler(BaseScheduler):
         placement_times_and_rewards: List[Tuple[EventTime, float]],
         tasks_to_be_scheduled: Optional[List[Task]] = None,
         task_strls: Optional[Mapping[str, tetrisched.strl.Expression]] = None,
+        previously_placed: Optional[bool] = False,
     ) -> tetrisched.strl.Expression:
         """Constructs the STRL expression subtree for a given TaskGraph.
 
@@ -1142,6 +1151,8 @@ class TetriSchedScheduler(BaseScheduler):
             tasks_to_be_scheduled (`Optional[List[Task]]`): The list of Tasks that are
                 to be scheduled. If `None`, then all the Tasks in the TaskGraph are
                 considered. Defaults to `None`.
+            previously_placed (`Optional[bool]`): Whether the TaskGraph has been
+                previously placed. Defaults to `False`.
         """
         # Maintain a cache to be used across the construction of the TaskGraph to make
         # it DAG-aware, if not provided.
@@ -1178,12 +1189,13 @@ class TetriSchedScheduler(BaseScheduler):
             else:
                 root_task_strls[root_task_strl.id] = root_task_strl
 
+        task_graph_strl = None
         if len(root_task_strls) == 0 or not strl_construction_success:
             # No roots, possibly empty TaskGraph, return None.
             return None
         elif len(root_task_strls) == 1:
             # Single root, reduce constraints and just bubble this up.
-            return next(iter(root_task_strls.values()))
+            task_graph_strl = next(iter(root_task_strls.values()))
         else:
             # Construct a MinExpression to order the roots of the TaskGraph.
             self._logger.debug(
@@ -1196,4 +1208,19 @@ class TetriSchedScheduler(BaseScheduler):
             )
             for root_task_strl in root_task_strls.values():
                 min_expression_task_graph.addChild(root_task_strl)
-            return min_expression_task_graph
+            task_graph_strl = min_expression_task_graph
+
+        # If the TaskGraph has been previously placed, then we scale the reward.
+        if previously_placed and self._previously_placed_reward_scale_factor > 1.0:
+            self._logger.debug(
+                f"[{current_time.time}] Scaling the STRL for {task_graph.name} by "
+                f"the factor {self._previously_placed_reward_scale_factor}."
+            )
+            scale_expression = tetrisched.strl.ScaleExpression(
+                f"{task_graph.name}_previous_placement_scale",
+                self._previously_placed_reward_scale_factor,
+            )
+            scale_expression.addChild(task_graph_strl)
+            return scale_expression
+        else:
+            return task_graph_strl
