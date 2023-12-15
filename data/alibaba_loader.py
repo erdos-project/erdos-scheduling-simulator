@@ -73,7 +73,6 @@ class AlibabaLoader(BaseWorkloadLoader):
             )
 
             self._task_cpu_divisor = int(self._flags.alibaba_loader_task_cpu_divisor)
-            self._task_duration_multipler = self._flags.alibaba_task_duration_multiplier
         else:
             self._csv_logger = setup_csv_logging(
                 name=self.__class__.__name__, log_file=None
@@ -192,6 +191,14 @@ class AlibabaLoader(BaseWorkloadLoader):
 
         return job_data_generator()
 
+    def _sample_normal_distribution_random(self, n, mean, std, min_val=0, max_val=100):
+        samples = []
+        while len(samples) < n:
+            sample = self._rng.normalvariate(mean, std)
+            if min_val <= sample <= max_val:
+                samples.append(sample)
+        return samples
+
     def _convert_job_data_to_job_graph(
         self, job_graph_name: str, job_tasks: List[str]
     ) -> JobGraph:
@@ -203,7 +210,7 @@ class AlibabaLoader(BaseWorkloadLoader):
         """
         # Create the individual Job instances corresponding to each Task.
         task_name_to_simulator_job_mapping = {}
-        for task in job_tasks:
+        for i, task in enumerate(job_tasks):
             job_resources_1 = Resources(
                 resource_vector={
                     # Note: We divide the CPU by some self._task_cpu_divisor instead
@@ -227,15 +234,24 @@ class AlibabaLoader(BaseWorkloadLoader):
                 }
             )
 
+            # For now, we try randomizing the duration of the tasks.
+            # if i == 0 or i == len(job_tasks) - 1:
+            #     random_task_duration = round(self._sample_normal_distribution_random(1, 10, 5)[0])
+            # else:
+            #     random_task_duration = round(self._sample_normal_distribution_random(1, 50, 15)[0])
+            random_task_duration = round(
+                self._sample_normal_distribution_random(1, 50, 15)[0]
+            )
+
             job_name = task.name.split("_")[0]
             job_runtime_1 = EventTime(
-                int(math.ceil(task.duration * self._task_duration_multipler)),
+                int(math.ceil(random_task_duration)),
                 EventTime.Unit.US,
             )
             # This is used when self._heterogeneous is True
             # to support another execution strategy where it runs faster.
             job_runtime_2 = EventTime(
-                int(math.ceil(task.duration * self._task_duration_multipler * 0.8)),
+                int(math.ceil(random_task_duration * 0.8)),
                 EventTime.Unit.US,
             )
 
