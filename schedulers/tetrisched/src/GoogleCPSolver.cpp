@@ -130,7 +130,7 @@ void GoogleCPSolver::translateModel() {
 
   // Generate all the variables and keep a cache of the variable indices
   // to the ORTools variables.
-  for (const auto& [variableId, variable] : solverModel->variables) {
+  for (const auto& [variableId, variable] : solverModel->modelVariables) {
     TETRISCHED_DEBUG("Adding variable " << variable->getName() << "("
                                         << variable->getId()
                                         << ") to ORTools model.");
@@ -138,11 +138,11 @@ void GoogleCPSolver::translateModel() {
   }
 
   // Generate all the constraints.
-  for (const auto& [constraintId, constraint] : solverModel->constraints) {
+  for (const auto& [constraintId, constraint] : solverModel->modelConstraints) {
     TETRISCHED_DEBUG("Adding constraint " << constraint->getName() << "("
                                           << constraint->getId()
                                           << ") to ORTools model.");
-    auto _ = translateConstraint(constraint);
+    translateConstraint(constraint);
   }
 
   // Translate the objective function.
@@ -166,7 +166,7 @@ void GoogleCPSolver::exportModel(const std::string& fileName) {
   cpModel->ExportToFile(fileName);
 }
 
-void GoogleCPSolver::setLogFile(const std::string& fname) {
+void GoogleCPSolver::setLogFile(const std::string& /* fname */) {
   throw tetrisched::exceptions::SolverException(
       "setLogFile() not implemented for GoogleCPSolver.");
 }

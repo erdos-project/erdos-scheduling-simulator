@@ -24,27 +24,21 @@ def main(argv):
 
     processed_event_count = 0
     with open(FLAGS.csv_file, "r") as csv_file:
-        event_stack = []
+        # event_stack = []
         for line in csv.reader(csv_file):
             try:
-                if line[0] == "BEGIN":
-                    event_stack.append(line)
-                elif line[0] == "END":
-                    begin_event = event_stack.pop()
-                    if begin_event[1] != line[1] or begin_event[-1] != line[-3]:
-                        raise RuntimeError(
-                            f"Mismatched events: {begin_event} and {line}"
-                        )
-
+                if line[0] == "END":
                     trace_event = {
-                        "name": begin_event[1],
+                        "name": line[1],
                         "ph": "X",
-                        "ts": begin_event[-1],
-                        "dur": int(line[-2]) - int(begin_event[-1]),
+                        "ts": line[-3],
+                        "dur": int(line[-2]) - int(line[-3]),
                         "pid": "libtetrisched",
                         "args": {
-                            "function": begin_event[1],
-                            "simulator_time": begin_event[2],
+                            "function": line[1],
+                            "simulator_time": line[2],
+                            "expression_name": line[3],
+                            "expression_id": line[4],
                         },
                     }
                     trace["traceEvents"].append(trace_event)
@@ -53,7 +47,6 @@ def main(argv):
                     raise RuntimeError(f"Invalid first column: {line[0]}")
             except Exception as e:
                 print(f"Error processing line: {line}")
-                print(f"The last event in stack is: {event_stack[-1]}")
                 raise e
     print(
         "[x] Processed {} events from: {}".format(processed_event_count, FLAGS.csv_file)

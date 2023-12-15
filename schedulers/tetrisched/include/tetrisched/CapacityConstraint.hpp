@@ -1,6 +1,7 @@
 #ifndef _TETRISCHED_CAPACITYCONSTRAINT_HPP_
 #define _TETRISCHED_CAPACITYCONSTRAINT_HPP_
 
+#include "tbb/concurrent_hash_map.h"
 #include "tetrisched/Partition.hpp"
 #include "tetrisched/SolverModel.hpp"
 #include "tetrisched/Types.hpp"
@@ -11,6 +12,9 @@ namespace tetrisched {
 /// and Time. This is used to hash the key for the CapacityConstraintMap.
 struct PartitionTimePairHasher {
   size_t operator()(const std::pair<uint32_t, Time>& pair) const;
+  static size_t hash(const std::pair<uint32_t, Time>& pair);
+  static bool equal(const std::pair<uint32_t, Time>& pair1,
+                    const std::pair<uint32_t, Time>& pair2);
 };
 
 /// A `CapacityConstraint` is a constraint that enforces the resource usage
@@ -77,17 +81,12 @@ using CapacityConstraintPtr = std::shared_ptr<CapacityConstraint>;
 /// potential intent to use the Partition at a particular time.
 class CapacityConstraintMap {
  private:
+  /// The default granularity for the capacity constraints.
+  Time granularity;
   /// If True, the constraintMap will expend extra effort in ensuring
   /// overlaps are efficiently used. While this may increase scheduling
   /// performance, it may also increase the time it takes to solve the model.
   bool useOverlapConstraints;
-  /// A map from the Partition ID and the time to the
-  /// CapacityConstraint that enforces the resource usage for that time.
-  std::unordered_map<std::pair<uint32_t, Time>, CapacityConstraintPtr,
-                     PartitionTimePairHasher>
-      capacityConstraints;
-  /// The default granularity for the capacity constraints.
-  Time granularity;
   /// if True, dynamic discretization is enabled. In this mode, the
   /// CapacityConstraintMap has different CapacityConstraints that cover
   /// different times.
@@ -95,6 +94,11 @@ class CapacityConstraintMap {
   /// A sorted list of TimeRange to the granularity at which that time
   /// range needs to be discretized.
   std::vector<std::pair<TimeRange, Time>> timeRangeToGranularities;
+  /// A map from the Partition ID and the time to the
+  /// CapacityConstraint that enforces the resource usage for that time.
+  tbb::concurrent_hash_map<std::pair<uint32_t, Time>, CapacityConstraintPtr,
+                           PartitionTimePairHasher>
+      capacityConstraints;
 
   friend class CapacityConstraintMapPurgingOptimizationPass;
 
@@ -118,9 +122,11 @@ class CapacityConstraintMap {
                            const Partition& partition, const Time time,
                            const Time granularity,
                            const IndicatorT usageIndicator,
-                           const PartitionUsageT usageVariable, const Time duration);
+                           const PartitionUsageT usageVariable,
+                           const Time duration);
   /// Sets dynamic discretization for capacity contraint map
-  void setDynamicDiscretization(std::vector<std::pair<TimeRange, Time>> passedtimeRangeToGranularities);
+  void setDynamicDiscretization(
+      std::vector<std::pair<TimeRange, Time>> passedtimeRangeToGranularities);
 
   /// Registers the usage by the Expression for the Partition in the
   /// time range starting from startTime and lasting for duration as
@@ -128,8 +134,9 @@ class CapacityConstraintMap {
   /// Optionally, a step granularity can be provided. The default granularity
   /// is the one that the CapacityConstraintMap was initialized with.
   void registerUsageForDuration(const ExpressionPtr expression,
-                                const Partition& partition, const Time startTime,
-                                const Time duration, const IndicatorT usageIndicator,
+                                const Partition& partition,
+                                const Time startTime, const Time duration,
+                                const IndicatorT usageIndicator,
                                 const PartitionUsageT usageVariable,
                                 std::optional<Time> granularity);
 
@@ -140,6 +147,7 @@ class CapacityConstraintMap {
   /// The number of constraints in this map.
   size_t size() const;
 };
+typedef std::shared_ptr<CapacityConstraintMap> CapacityConstraintMapPtr;
 }  // namespace tetrisched
 
 #endif  // _TETRISCHED_CAPACITYCONSTRAINT_HPP_

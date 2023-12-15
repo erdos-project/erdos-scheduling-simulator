@@ -175,7 +175,8 @@ TEST(Expression, TestLessThanEnforcesOrdering) {
   auto solverModelPtr = cplexSolver.getModel();
 
   // Construct a CapacityConstraintMap and parse the expression tree.
-  tetrisched::CapacityConstraintMap capacityConstraintMap;
+  tetrisched::CapacityConstraintMapPtr capacityConstraintMap =
+      std::make_shared<tetrisched::CapacityConstraintMap>();
 
   auto _ = objectiveExpression->parse(solverModelPtr, partitions,
                                       capacityConstraintMap, 0);
@@ -253,7 +254,8 @@ TEST(Expression, TestMaxExpressionEnforcesSingleChoice) {
   auto solverModelPtr = cplexSolver.getModel();
 
   // Construct a CapacityConstraintMap and parse the expression tree.
-  tetrisched::CapacityConstraintMap capacityConstraintMap;
+  tetrisched::CapacityConstraintMapPtr capacityConstraintMap =
+      std::make_shared<tetrisched::CapacityConstraintMap>();
   auto _ = objectiveExpression->parse(solverModelPtr, partitions,
                                       capacityConstraintMap, 0);
   solverModelPtr->exportModel("testMaxExpressionEnforcesSingleChoice.lp");
@@ -300,7 +302,8 @@ TEST(Expression, TestMinExpressionEnforcesAllChildrenSatisfied) {
   auto solverModelPtr = cplexSolver.getModel();
 
   // Construct a CapacityConstraintMap and parse the expression tree.
-  tetrisched::CapacityConstraintMap capacityConstraintMap;
+  tetrisched::CapacityConstraintMapPtr capacityConstraintMap =
+      std::make_shared<tetrisched::CapacityConstraintMap>();
   auto _ = objectiveExpression->parse(solverModelPtr, partitions,
                                       capacityConstraintMap, 0);
   solverModelPtr->exportModel(
@@ -351,7 +354,8 @@ TEST(Expression, TestMinExpressionEnforcesNoneSatisfied) {
   auto solverModelPtr = cplexSolver.getModel();
 
   // Construct a CapacityConstraintMap and parse the expression tree.
-  tetrisched::CapacityConstraintMap capacityConstraintMap;
+  tetrisched::CapacityConstraintMapPtr capacityConstraintMap =
+      std::make_shared<tetrisched::CapacityConstraintMap>();
   auto _ = objectiveExpression->parse(solverModelPtr, partitions,
                                       capacityConstraintMap, 0);
   solverModelPtr->exportModel("testMinExpressionEnforcesNoneSatisfied.lp");
@@ -394,7 +398,8 @@ TEST(Expression, TestScaleExpressionDoublesUtility) {
   auto solverModelPtr = cplexSolver.getModel();
 
   // Construct a CapacityConstraintMap and parse the expression tree.
-  tetrisched::CapacityConstraintMap capacityConstraintMap;
+  tetrisched::CapacityConstraintMapPtr capacityConstraintMap =
+      std::make_shared<tetrisched::CapacityConstraintMap>();
   auto _ = objectiveExpression->parse(solverModelPtr, partitions,
                                       capacityConstraintMap, 0);
 
@@ -445,7 +450,8 @@ TEST(Expression, TestAllocationExpressionFailsChoice) {
   auto solverModelPtr = cplexSolver.getModel();
 
   // Construct a CapacityConstraintMap and parse the expression tree.
-  tetrisched::CapacityConstraintMap capacityConstraintMap(10);
+  tetrisched::CapacityConstraintMapPtr capacityConstraintMap =
+      std::make_shared<tetrisched::CapacityConstraintMap>(10);
   auto _ = objectiveExpression->parse(solverModelPtr, partitions,
                                       capacityConstraintMap, 0);
 
@@ -456,8 +462,8 @@ TEST(Expression, TestAllocationExpressionFailsChoice) {
 
   auto result = objectiveExpression->populateResults(solverModelPtr);
   EXPECT_TRUE(result->utility) << "Result should have some utility.";
-  EXPECT_EQ(0, result->utility.value())
-      << "The utility for the Expressions should be 0";
+  EXPECT_EQ(result->placements.find("task2"), result->placements.end())
+      << "task2 should not be placed";
 }
 #endif
 
@@ -488,7 +494,8 @@ TEST(Expression, TestMalleableChooseExpressionConstruction) {
   auto solverModelPtr = gurobiSolver.getModel();
 
   // Construct a CapacityConstraintMap and parse the expression tree.
-  tetrisched::CapacityConstraintMap capacityConstraintMap;
+  tetrisched::CapacityConstraintMapPtr capacityConstraintMap =
+      std::make_shared<tetrisched::CapacityConstraintMap>();
   auto _ = objectiveExpression->parse(solverModelPtr, partitions,
                                       capacityConstraintMap, 0);
   solverModelPtr->exportModel("testMalleableChooseExpression.lp");
@@ -527,7 +534,8 @@ TEST(Expression, TestMalleableChooseExpressionConstructsVariableRectangles) {
   auto solverModelPtr = gurobiSolver.getModel();
 
   // Construct a CapacityConstraintMap and parse the expression tree.
-  tetrisched::CapacityConstraintMap capacityConstraintMap(2);
+  tetrisched::CapacityConstraintMapPtr capacityConstraintMap =
+      std::make_shared<tetrisched::CapacityConstraintMap>(2);
   auto _ = objectiveExpression->parse(solverModelPtr, partitions,
                                       capacityConstraintMap, 0);
   solverModelPtr->exportModel("testMalleableChooseVariableRectangle.lp");
@@ -582,7 +590,8 @@ TEST(Expression, TestNonOverlappingChooseIsAllowed) {
   auto solverModelPtr = gurobiSolver.getModel();
 
   // Construct a CapacityConstraintMap and parse the expression tree.
-  tetrisched::CapacityConstraintMap capacityConstraintMap(100, true);
+  tetrisched::CapacityConstraintMapPtr capacityConstraintMap =
+      std::make_shared<tetrisched::CapacityConstraintMap>(100, true);
   auto _ = objectiveExpression->parse(solverModelPtr, partitions,
                                       capacityConstraintMap, 0);
   solverModelPtr->exportModel("testNonOverlappingChooseIsAllowed.lp");
@@ -627,7 +636,8 @@ TEST(Expression, TestWindowedChoosedExpressionCorrect) {
   auto solverModelPtr = gurobiSolver.getModel();
 
   // Construct a CapacityConstraintMap and parse the expression tree.
-  tetrisched::CapacityConstraintMap capacityConstraintMap;
+  tetrisched::CapacityConstraintMapPtr capacityConstraintMap =
+      std::make_shared<tetrisched::CapacityConstraintMap>();
   auto _ = objectiveExpression->parse(solverModelPtr, partitions,
                                       capacityConstraintMap, 0);
 
@@ -636,7 +646,8 @@ TEST(Expression, TestWindowedChoosedExpressionCorrect) {
       solverModelPtr->getConstraintByName("task1_choose_one_constraint");
   ASSERT_TRUE(windowConstraint.has_value());
   EXPECT_EQ(windowConstraint.value()->size(), 12)
-      << "There should be 11 ChooseExpressions in the WindowedChooseExpression, "
+      << "There should be 11 ChooseExpressions in the "
+         "WindowedChooseExpression, "
          "but constraint was: "
       << windowConstraint.value()->toString();
   solverModelPtr->exportModel("testWindowedChooseExpressionCorrect.lp");

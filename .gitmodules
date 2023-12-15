@@ -2,3 +2,6 @@
 	path = schedulers/tetrisched/extern/pybind11
 	url = https://github.com/pybind/pybind11
 	branch = stable
+[submodule "schedulers/tetrisched/extern/tbb"]
+	path = schedulers/tetrisched/extern/tbb
+	url = https://github.com/oneapi-src/oneTBB.git

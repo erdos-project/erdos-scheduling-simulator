@@ -1,6 +1,7 @@
 #ifndef _TETRISCHED_SOLVERMODEL_HPP_
 #define _TETRISCHED_SOLVERMODEL_HPP_
 
+#include <atomic>
 #include <fstream>
 #include <memory>
 #include <optional>
@@ -10,7 +11,13 @@
 #include <variant>
 #include <vector>
 
+#include "tbb/concurrent_hash_map.h"
+#include "tbb/concurrent_vector.h"
 #include "tetrisched/Types.hpp"
+
+#ifdef _TETRISCHED_WITH_GUROBI_
+#include "gurobi_c++.h"
+#endif
 
 namespace tetrisched {
 
@@ -29,7 +36,7 @@ template <typename T>
 class VariableT {
  private:
   /// Used to generate unique IDs for each Variable.
-  static uint32_t variableIdCounter;
+  static std::atomic_uint32_t variableIdCounter;
   /// The type of the variable (as supported by the underlying solver).
   VariableType variableType;
   /// The ID of the variable.
@@ -48,6 +55,12 @@ class VariableT {
   /// An optional solution value for the variable.
   /// If unspecified, the solver has not found a solution for this problem yet.
   std::optional<T> solutionValue;
+#ifdef _TETRISCHED_WITH_GUROBI_
+  /// An optional Gurobi variable for this variable.
+  /// Populated by the GurobiSolver. Provided to prevent lookups.
+  std::optional<GRBVar> gurobiVariable;
+#endif
+
   /// Checks if the VariableType is valid.
   /// Throws an exception if the VariableType is invalid.
   /// Returns the type if it is valid.
@@ -205,25 +218,29 @@ class ConstraintT {
   /// If True, the solvers should put it into the model.
   bool active;
   /// Used to generate unique IDs for each Constraint.
-  static uint32_t constraintIdCounter;
+  static std::atomic_uint32_t constraintIdCounter;
   /// The ID of this constraint.
   uint32_t constraintId;
   /// The name of this constraint.
   std::string constraintName;
   /// The terms in this constraint.
   /// Note that a nullptr Variable indicates a constant term.
-  std::vector<std::pair<T, std::shared_ptr<VariableT<T>>>> terms;
+  tbb::concurrent_vector<std::pair<T, std::shared_ptr<VariableT<T>>>> terms;
   /// The right hand side of this constraint.
   T rightHandSide;
   /// The operation between the terms and the right hand side.
   ConstraintType constraintType;
   /// The attributes registered with this Constraint.
   std::unordered_set<ConstraintAttribute> attributes;
+  /// A lock for changing the constraint values.
+  std::mutex constraintMutex;
 
  public:
   /// Generate a new constraint with the given type and right hand side.
+  /// Optionally, it is recommended to provide the number of terms in the
+  /// constraint to avoid resizing the vector.
   ConstraintT(std::string constraintName, ConstraintType constraintType,
-              T rightHandSide);
+              T rightHandSide, std::optional<size_t> numTerms = std::nullopt);
 
   /// Adds a term to the left-hand side constraint.
   void addTerm(std::pair<T, std::shared_ptr<VariableT<T>>> term);
@@ -305,7 +322,7 @@ template <typename T>
 class ObjectiveFunctionT {
  private:
   /// The terms in this objective function.
-  std::vector<std::pair<T, std::shared_ptr<VariableT<T>>>> terms;
+  tbb::concurrent_vector<std::pair<T, std::shared_ptr<VariableT<T>>>> terms;
   /// The type of the objective function.
   ObjectiveType objectiveType;
 
@@ -322,7 +339,7 @@ class ObjectiveFunctionT {
   // The objective is left hand side of the constraint
   std::shared_ptr<ConstraintT<T>> toConstraint(std::string constraintName,
                                                ConstraintType constraintType,
-                                               T rightHandSide);
+                                               T rightHandSide) const;
 
   /// Retrieve a string representation of this ObjectiveFunction.
   std::string toString() const;
@@ -360,13 +377,17 @@ template <typename T>
 class SolverModelT {
  private:
   /// The variables in this model.
-  std::unordered_map<uint32_t, std::shared_ptr<VariableT<T>>> variables;
+  tbb::concurrent_hash_map<uint32_t, std::shared_ptr<VariableT<T>>>
+      modelVariables;
   /// The constraints in this model.
-  std::unordered_map<uint32_t, std::shared_ptr<ConstraintT<T>>> constraints;
+  tbb::concurrent_hash_map<uint32_t, std::shared_ptr<ConstraintT<T>>>
+      modelConstraints;
   /// Cache for the solution values from previous invocations of the solver.
-  std::unordered_map<std::string, T> solutionValueCache;
+  tbb::concurrent_hash_map<std::string, T> solutionValueCache;
   /// The objective function in this model.
   std::shared_ptr<ObjectiveFunctionT<T>> objectiveFunction;
+  /// The lock used to ensure that the model is not modified concurrently.
+  std::mutex modelMutex;
 
   /// Generate a new solver model.
   /// Construct a Solver to get an instance of the Model.
@@ -376,9 +397,15 @@ class SolverModelT {
   /// Add a variable to the model.
   void addVariable(std::shared_ptr<VariableT<T>> variable);
 
+  /// Add a batch of variables to the model.
+  void addVariables(std::vector<std::shared_ptr<VariableT<T>>>& variables);
+
   /// Add a constraint to the model.
-  /// This method consumes the Constraint.
   void addConstraint(std::shared_ptr<ConstraintT<T>> constraint);
+
+  /// Add a batch of constraints to the model.
+  void addConstraints(
+      std::vector<std::shared_ptr<ConstraintT<T>>>& constraints);
 
   /// Set the objective function for the model.
   /// This method consumes the ObjectiveFunction.

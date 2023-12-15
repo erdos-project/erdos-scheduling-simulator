@@ -1458,6 +1458,9 @@ class Simulator(object):
             task_graph.name,
             len(task_graph.get_nodes()),
         )
+        if self._log_task_graphs:
+            # Log a DOT representation of the TaskGraph, if requested.
+            task_graph.to_dot(os.path.join(self._log_dir, f"{task_graph.name}.dot"))
 
     def __handle_update_workload(self, event: Event) -> None:
         """Handles an Event of type `UPDATE_WORKLOAD`.
