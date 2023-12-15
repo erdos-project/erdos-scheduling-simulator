@@ -126,9 +126,10 @@ class CSVReader(object):
                             tasks[reading[4]].cancelled_at = int(reading[0])
                         task_graphs[reading[5]].cancelled = True
                         task_graphs[reading[5]].cancelled_at = int(reading[0])
-                    elif reading[1] == "TASK_SKIP" and reading[4] in tasks:
-                        # Update the task with the skip data.
-                        tasks[reading[4]].update_skip(reading)
+                    elif reading[1] == "TASK_SKIP":
+                        if reading[4] in tasks:
+                            # Update the task with the skip data.
+                            tasks[reading[4]].update_skip(reading)
                     elif reading[1] == "TASK_PREEMPT":
                         # Update the placement with the preemption time.
                         tasks[reading[4]].update_preempt(reading)
