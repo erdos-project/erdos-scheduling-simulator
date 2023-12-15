@@ -1088,7 +1088,8 @@ class Simulator(object):
             f"{event.task.release_time.to(EventTime.Unit.US).time},"
             f"{event.task.deadline.to(EventTime.Unit.US).time},{event.task.id},"
             f"{event.task.task_graph},"
-            f"{slowest_execution_strategy.runtime.to(EventTime.Unit.US).time}"
+            f"{slowest_execution_strategy.runtime.to(EventTime.Unit.US).time},"
+            f"{slowest_execution_strategy.resources}"
         )
 
         # If we are not in the midst of a scheduler invocation, and the task hasn't

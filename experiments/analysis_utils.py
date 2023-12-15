@@ -294,6 +294,7 @@ def plot_slo_attainments(data: pd.DataFrame, extra_title: str = "", figsize=(20,
 
             ax.set_xlabel("Max Deadline Variance")
             ax.set_ylabel("SLO Attainment")
+            ax.set_ylim(top=1.01, bottom=0.0)
 
     # Adjust layout and add a super title
     plt.tight_layout()
