@@ -33,7 +33,11 @@ enum SolutionType {
   /// The Solver returned an unbounded solution.
   UNBOUNDED = 3,
   /// The Solver returned an unknown solution.
-  UNKNOWN = 4
+  UNKNOWN = 4,
+  /// The Solver returned no solution.
+  /// This usually occurs when the Solver is interrupted before it has
+  /// found a solution.
+  NO_SOLUTION = 5,
 };
 
 /// The SolverSolution structure represents the information that we
@@ -66,6 +70,8 @@ struct SolverSolution {
         return "UNBOUNDED";
       case SolutionType::UNKNOWN:
         return "UNKNOWN";
+      case SolutionType::NO_SOLUTION:
+        return "NO_SOLUTION";
       default:
         return "NOTIMPLEMENTED";
     }

@@ -285,6 +285,11 @@ void ObjectiveFunctionT<T>::addTerm(T constant) {
 }
 
 template <typename T>
+void ObjectiveFunctionT<T>::setUpperBound(T upperBound) {
+  this->upperBound = upperBound;
+}
+
+template <typename T>
 std::shared_ptr<ConstraintT<T>> ObjectiveFunctionT<T>::toConstraint(
     std::string constraintName, ConstraintType constraintType,
     T rightHandSide) const {
