@@ -4,6 +4,8 @@
 #include <cmath>
 #include <thread>
 
+#define TETRISCHED_SOLUTION_UPPER_BOUND_DELTA 0.1
+
 namespace tetrisched {
 
 /**
@@ -16,13 +18,19 @@ GurobiSolver::GurobiInterruptOptimizationCallback::
 void GurobiSolver::GurobiInterruptOptimizationCallback::callback() {
   try {
     auto currentTime = std::chrono::steady_clock::now();
-    if (where == GRB_CB_POLLING) {
+    if (where == GRB_CB_POLLING && params.timeLimitMs.has_value()) {
       auto elapsedTimeMs =
           std::chrono::duration_cast<std::chrono::milliseconds>(currentTime -
                                                                 startTime)
               .count();
 
-      if (elapsedTimeMs > params.timeLimitMs) {
+      if (elapsedTimeMs > params.timeLimitMs.value()) {
+        abort();
+      }
+    } else if (where == GRB_CB_MIPSOL && params.utilityUpperBound.has_value()) {
+      if (getDoubleInfo(GRB_CB_MIPSOL_OBJ) >=
+          params.utilityUpperBound.value() -
+              TETRISCHED_SOLUTION_UPPER_BOUND_DELTA) {
         abort();
       }
     }
@@ -42,9 +50,7 @@ void GurobiSolver::GurobiInterruptOptimizationCallback::callback() {
 GurobiSolver::GurobiSolver()
     : gurobiEnv(new GRBEnv()),
       gurobiModel(new GRBModel(*gurobiEnv)),
-      logFileName("") {
-  setParameters(*gurobiModel);
-}
+      logFileName("") {}
 
 SolverModelPtr GurobiSolver::getModel() {
   if (!solverModel) {
@@ -261,6 +267,12 @@ void GurobiSolver::translateModel() {
           "Invalid objective type: " +
           std::to_string(solverModel->objectiveFunction->objectiveType));
   }
+
+  // Construct the Interrupt parameters.
+  if (solverModel->objectiveFunction->upperBound.has_value()) {
+    interruptParams.utilityUpperBound =
+        solverModel->objectiveFunction->upperBound.value();
+  }
 }
 
 void GurobiSolver::exportModel(const std::string& fileName) {
@@ -274,6 +286,10 @@ void GurobiSolver::setLogFile(const std::string& fileName) {
 SolverSolutionPtr GurobiSolver::solveModel() {
   // Create the result object.
   SolverSolutionPtr solverSolution = std::make_shared<SolverSolution>();
+
+  // Construct the Interrupt callback, and register it with the model.
+  GurobiInterruptOptimizationCallback interruptCallback(interruptParams);
+  gurobiModel->setCallback(&interruptCallback);
 
   // Solve the model.
   auto solverStartTime = std::chrono::high_resolution_clock::now();
@@ -297,6 +313,16 @@ SolverSolutionPtr GurobiSolver::solveModel() {
     case GRB_INFEASIBLE:
       solverSolution->solutionType = SolutionType::INFEASIBLE;
       return solverSolution;
+    case GRB_INTERRUPTED: {
+      auto solutionCount = gurobiModel->get(GRB_IntAttr_SolCount);
+      if (solutionCount > 0) {
+        solverSolution->solutionType = SolutionType::FEASIBLE;
+        break;
+      } else {
+        solverSolution->solutionType = SolutionType::NO_SOLUTION;
+        return solverSolution;
+      }
+    }
     case GRB_INF_OR_UNBD:
     case GRB_UNBOUNDED:
       solverSolution->solutionType = SolutionType::UNBOUNDED;

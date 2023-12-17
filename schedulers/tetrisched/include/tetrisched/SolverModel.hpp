@@ -325,6 +325,8 @@ class ObjectiveFunctionT {
   tbb::concurrent_vector<std::pair<T, std::shared_ptr<VariableT<T>>>> terms;
   /// The type of the objective function.
   ObjectiveType objectiveType;
+  /// The upper bound of the utility function, if provided.
+  std::optional<T> upperBound;
 
  public:
   ObjectiveFunctionT(const ObjectiveFunctionT& other) = default;
@@ -335,6 +337,9 @@ class ObjectiveFunctionT {
   /// Adds a term to the left-hand side constraint.
   void addTerm(T coefficient, std::shared_ptr<VariableT<T>> variable);
   void addTerm(T constant);
+
+  /// Sets the uppper bound of the utility value.
+  void setUpperBound(T upperBound);
 
   // The objective is left hand side of the constraint
   std::shared_ptr<ConstraintT<T>> toConstraint(std::string constraintName,

@@ -1542,6 +1542,7 @@ ParseResultPtr ObjectiveExpression::parse(
   parsedResult->endTime = std::numeric_limits<Time>::max();
   if (useUtilityBound) {
     parsedResult->utilityBound = utilityBound;
+    utility->setUpperBound(utilityBound);
   }
 
   // Add the utility to the SolverModel.

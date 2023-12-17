@@ -8,36 +8,13 @@ namespace tetrisched {
 
 class GurobiSolver : public Solver {
  private:
-  /// The environment variable for this instance of Gurobi.
-  std::unique_ptr<GRBEnv> gurobiEnv;
-  /// The model being used by this solver.
-  std::unique_ptr<GRBModel> gurobiModel;
-  /// The SolverModel instance associated with this GurobiSolver.
-  SolverModelPtr solverModel;
-  /// The name of the log file for the Gurobi solving.
-  std::string logFileName;
-
-  /// Set the defaults for parameters on the model.
-  void setParameters(GRBModel& gurobiModel);
-
-  /// Translate the variable to a Gurobi variable.
-  GRBVar translateVariable(GRBModel& gurobiModel,
-                           const VariablePtr& variable) const;
-
-  /// Translate the Constraint into a Gurobi expression.
-  GRBConstr translateConstraint(GRBModel& gurobiModel,
-                                const ConstraintPtr& constraint) const;
-
-  /// Translate the ObjectiveFunction into a Gurobi expression.
-  GRBLinExpr translateObjectiveFunction(
-      GRBModel& gurobiModel,
-      const ObjectiveFunctionPtr& objectiveFunction) const;
-
   /// A structure representing the parameters that the interrupt callback
   /// can use to determine when to interrupt the computation.
   struct GurobiInterruptParams {
     /// The time limit for the optimization (in milliseconds).
-    Time timeLimitMs;
+    std::optional<Time> timeLimitMs;
+    /// The upper bound of the utility (if available).
+    std::optional<TETRISCHED_ILP_TYPE> utilityUpperBound;
   };
 
   /// Callback class for Gurobi to use to interrupt the optimization.
@@ -57,6 +34,33 @@ class GurobiSolver : public Solver {
     /// optimization.
     void callback();
   };
+
+  /// The environment variable for this instance of Gurobi.
+  std::unique_ptr<GRBEnv> gurobiEnv;
+  /// The model being used by this solver.
+  std::unique_ptr<GRBModel> gurobiModel;
+  /// The SolverModel instance associated with this GurobiSolver.
+  SolverModelPtr solverModel;
+  /// The name of the log file for the Gurobi solving.
+  std::string logFileName;
+  /// The interrupt parameters for the current iteration of the optimization.
+  GurobiInterruptParams interruptParams;
+
+  /// Set the defaults for parameters on the model.
+  void setParameters(GRBModel& gurobiModel);
+
+  /// Translate the variable to a Gurobi variable.
+  GRBVar translateVariable(GRBModel& gurobiModel,
+                           const VariablePtr& variable) const;
+
+  /// Translate the Constraint into a Gurobi expression.
+  GRBConstr translateConstraint(GRBModel& gurobiModel,
+                                const ConstraintPtr& constraint) const;
+
+  /// Translate the ObjectiveFunction into a Gurobi expression.
+  GRBLinExpr translateObjectiveFunction(
+      GRBModel& gurobiModel,
+      const ObjectiveFunctionPtr& objectiveFunction) const;
 
  public:
   /// Create a new GurobiSolver.
