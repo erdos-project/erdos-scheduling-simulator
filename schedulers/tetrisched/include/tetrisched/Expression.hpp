@@ -39,6 +39,8 @@ struct ParseResult {
   /// The utility associated with the parsed result.
   /// The utility is positive if the expression was satisfied, and 0 otherwise.
   std::optional<ObjectiveFunctionPtr> utility;
+  /// A bound on the utility of the Expression (if available).
+  std::optional<TETRISCHED_ILP_TYPE> utilityBound;
   /// The indicator associated with the parsed result.
   /// Can be either 1 or 0 based on wether the expression was satisfied or not.
   std::optional<IndicatorT> indicator;
