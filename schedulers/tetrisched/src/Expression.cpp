@@ -1351,7 +1351,7 @@ void AllocationExpression::addChild(ExpressionPtr /* child */) {
 
 ParseResultPtr AllocationExpression::parse(
     SolverModelPtr /* solverModel */, Partitions /* availablePartitions */,
-    CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
+    CapacityConstraintMapPtr capacityConstraints, [[maybe_unused]] Time currentTime) {
   std::lock_guard<std::mutex> lockGuard(expressionMutex);
   TETRISCHED_SCOPE_TIMER("AllocationExpression::parse," +
                          std::to_string(currentTime) + "," + name + "," + id)
@@ -2058,7 +2058,7 @@ void MaxExpression::addChild(ExpressionPtr child) {
 
 ParseResultPtr MaxExpression::parse(
     SolverModelPtr solverModel, Partitions /* availablePartitions */,
-    CapacityConstraintMapPtr /* capacityConstraints */, Time currentTime) {
+    CapacityConstraintMapPtr /* capacityConstraints */, [[maybe_unused]] Time currentTime) {
   std::lock_guard<std::mutex> lockGuard(expressionMutex);
   TETRISCHED_SCOPE_TIMER("MaxExpression::parse," + std::to_string(currentTime) +
                          "," + name + "," + id + "," +
