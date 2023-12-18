@@ -1,11 +1,11 @@
-from collections import namedtuple
 from dataclasses import dataclass, field
-from functools import total_ordering
 from typing import List, Mapping, Optional, Sequence
 
-WorkerPoolStats = namedtuple(
-    "WorkerPoolStats", ["simulator_time", "resource_utilizations"]
-)
+
+@dataclass
+class WorkerPoolStats:
+    simulator_time: int
+    resource_utilizations: dict[str, tuple[float, float]]
 
 
 @dataclass
@@ -16,6 +16,9 @@ class Resource:
 
     def __post_init__(self):
         self.quantity = float(self.quantity)
+
+    def __repr__(self) -> str:
+        return f"Resource(name={self.name}, id={self.id}, quantity={self.quantity})"
 
 
 @dataclass

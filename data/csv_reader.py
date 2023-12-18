@@ -269,7 +269,7 @@ class CSVReader(object):
             worker_pool_stats.append(
                 WorkerPoolStats(
                     simulator_time=simulator_time,
-                    resource_utilizations=resource_utilizations,
+                    resource_utilizations=dict(resource_utilizations),
                 )
             )
         return worker_pool_stats
