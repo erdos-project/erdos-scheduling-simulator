@@ -2,8 +2,10 @@
 STRL primitives for the TetriSched Python API.
 """
 from __future__ import annotations
-import tetrisched_py
+
 import typing
+
+import tetrisched_py
 
 __all__ = [
     "AllocationExpression",

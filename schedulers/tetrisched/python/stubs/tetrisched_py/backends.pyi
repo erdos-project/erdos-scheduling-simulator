@@ -2,8 +2,10 @@
 Solver backends for the TetriSched Python API.
 """
 from __future__ import annotations
-import tetrisched_py.model
+
 import typing
+
+import tetrisched_py.model
 
 __all__ = [
     "CPLEXSolver",

@@ -2,6 +2,7 @@
 Modelling primitives for the TetriSched Python API.
 """
 from __future__ import annotations
+
 import typing
 
 __all__ = [
