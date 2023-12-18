@@ -3,22 +3,35 @@ from dataclasses import dataclass, field
 from functools import total_ordering
 from typing import List, Mapping, Optional, Sequence
 
-Resource = namedtuple("Resource", ["name", "id", "quantity"])
 WorkerPoolStats = namedtuple(
     "WorkerPoolStats", ["simulator_time", "resource_utilizations"]
 )
-WorkerPoolUtilization = namedtuple(
-    "WorkerPoolUtilization",
-    ["simulator_time", "resource_name", "allocated_quantity", "available_quantity"],
-)
 
 
-class WorkerPool(object):
-    def __init__(self, name: str, id: str, resources: Sequence[Resource]):
-        self.name = name
-        self.id = id
-        self.resources = resources
-        self.utilizations: Sequence[WorkerPoolUtilization] = []
+@dataclass
+class Resource:
+    name: str
+    id: str
+    quantity: float
+
+    def __post_init__(self):
+        self.quantity = float(self.quantity)
+
+
+@dataclass
+class WorkerPoolUtilization:
+    simulator_time: int
+    resource_name: str
+    allocated_quantity: float
+    available_quantity: float
+
+
+@dataclass
+class WorkerPool:
+    name: str
+    id: str
+    resources: Sequence[Resource] = field(default_factory=list)
+    utilizations: Sequence[WorkerPoolUtilization] = field(default_factory=list)
 
 
 @dataclass
@@ -41,11 +54,14 @@ class Task:
     task_graph: str
     timestamp: int
     task_id: str
-    intended_release_time: int
-    release_time: int
-    deadline: int
-    window_to_execute: int
+    intended_release_time: Optional[int]
+    release_time: Optional[int]
+    deadline: Optional[int]
+    window_to_execute: Optional[int]
+    # The runtime of the slowest execution strategy
+    slowest_execution_time: Optional[int] = None
 
+    # The actual task runtime when it get placed
     runtime: Optional[int] = None
     placements: list[Placement] = field(init=False, default_factory=list)
     start_time: Optional[int] = None
@@ -215,6 +231,10 @@ class Task:
     @property
     def was_completed(self):
         return self.completion_time is not None
+
+    @property
+    def release_time_compare_key(self):
+        return self.release_time if self.release_time is not None else float("inf")
 
     def __str__(self):
         return f"Task(name={self.name}, timestamp={self.timestamp})"

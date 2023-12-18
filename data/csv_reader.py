@@ -78,6 +78,7 @@ class CSVReader(object):
                             release_time=int(reading[5]),
                             deadline=int(reading[6]),
                             window_to_execute=int(reading[6]) - int(reading[5]),
+                            slowest_execution_time=int(reading[9]),
                         )
                     elif reading[1] == "TASK_FINISHED":
                         # Update the task with the completion event data.
@@ -121,9 +122,23 @@ class CSVReader(object):
                         tasks[reading[5]].update_placement(reading, worker_pools)
                     elif reading[1] == "TASK_CANCEL":
                         # Update the task with the placement event data.
-                        if reading[4] in tasks:
-                            tasks[reading[4]].cancelled = True
-                            tasks[reading[4]].cancelled_at = int(reading[0])
+                        if reading[4] not in tasks:
+                            tasks[reading[4]] = Task(
+                                name=reading[2],
+                                task_graph=reading[5],
+                                timestamp=int(reading[3]),
+                                task_id=reading[4],
+                                intended_release_time=None,
+                                release_time=None,
+                                deadline=None,
+                                window_to_execute=None,
+                                # Checking if len(reading) > 6 is for backward compatibility
+                                slowest_execution_time=int(reading[6])
+                                if len(reading) > 6
+                                else None,
+                            )
+                        tasks[reading[4]].cancelled = True
+                        tasks[reading[4]].cancelled_at = int(reading[0])
                         task_graphs[reading[5]].cancelled = True
                         task_graphs[reading[5]].cancelled_at = int(reading[0])
                     elif reading[1] == "TASK_SKIP":
@@ -186,7 +201,7 @@ class CSVReader(object):
 
             simulator.worker_pools = list(worker_pools.values())
             simulator.tasks = list(
-                sorted(tasks.values(), key=attrgetter("release_time"))
+                sorted(tasks.values(), key=lambda x: x.release_time_compare_key)
             )
             simulator.scheduler_invocations = schedulers
             simulator.task_graphs = task_graphs
