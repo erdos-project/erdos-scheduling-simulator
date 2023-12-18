@@ -1,0 +1,80 @@
+graphs:
+  - name: G1
+    graph:
+      - name: A
+        work_profile: AProfile
+        children: ["B"]
+      - name: B
+        work_profile: BProfile
+        children: ["C"]
+      - name: C
+        work_profile: CProfile
+    release_policy: fixed
+    period: 0
+    invocations: 1
+    deadline_variance: [64,64]
+
+  - name: G2
+    graph:
+      - name: D
+        work_profile: DProfile
+    release_policy: fixed
+    period: 0
+    invocations: 1
+    deadline_variance: [34,34]
+
+  - name: G3
+    graph:
+      - name: E
+        work_profile: EProfile
+    release_policy: fixed
+    period: 0
+    invocations: 1
+    deadline_variance: [659,659]
+
+  - name: G4
+    graph:
+      - name: F
+        work_profile: FProfile
+    release_policy: fixed
+    period: 0
+    invocations: 1
+    deadline_variance: [1167,1167]
+
+profiles:
+  - name: AProfile
+    execution_strategies:
+      - batch_size: 1
+        runtime: 5
+        resource_requirements:
+          Slot:any: 4
+  - name: BProfile
+    execution_strategies:
+      - batch_size: 1
+        runtime: 15
+        resource_requirements:
+          Slot:any: 2
+  - name: CProfile
+    execution_strategies:
+      - batch_size: 1
+        runtime: 2
+        resource_requirements:
+          Slot:any: 1
+  - name: DProfile
+    execution_strategies:
+      - batch_size: 1
+        runtime: 15
+        resource_requirements:
+          Slot:any: 8
+  - name: EProfile
+    execution_strategies:
+      - batch_size: 1
+        runtime: 5
+        resource_requirements:
+          Slot:any: 9
+  - name: FProfile
+    execution_strategies:
+      - batch_size: 1
+        runtime: 3
+        resource_requirements:
+          Slot:any: 9

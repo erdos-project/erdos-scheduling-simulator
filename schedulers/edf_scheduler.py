@@ -35,6 +35,7 @@ class EDFScheduler(BaseScheduler):
             enforce_deadlines=enforce_deadlines,
             _flags=_flags,
         )
+        self._drop_skipped_tasks = _flags.drop_skipped_tasks if _flags else False
 
     def schedule(
         self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools
@@ -103,12 +104,14 @@ class EDFScheduler(BaseScheduler):
             )
 
             # If we are enforcing deadlines, and the Task is past its deadline, then
-            # we should create a cancellation for it.
+            # we should create a cancellation for it. This is only applicable if the
+            # user wants the tasks that cannot meet their deadline to be dropped.
             if (
                 self.enforce_deadlines
                 and task.deadline
                 < sim_time
                 + task.available_execution_strategies.get_fastest_strategy().runtime
+                and self._drop_skipped_tasks
             ):
                 placements.append(Placement.create_task_cancellation(task=task))
                 self._logger.debug(

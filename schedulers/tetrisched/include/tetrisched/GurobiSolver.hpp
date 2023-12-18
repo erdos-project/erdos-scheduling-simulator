@@ -5,8 +5,36 @@
 #include "tetrisched/Solver.hpp"
 
 namespace tetrisched {
+
 class GurobiSolver : public Solver {
  private:
+  /// A structure representing the parameters that the interrupt callback
+  /// can use to determine when to interrupt the computation.
+  struct GurobiInterruptParams {
+    /// The time limit for the optimization (in milliseconds).
+    std::optional<Time> timeLimitMs;
+    /// The upper bound of the utility (if available).
+    std::optional<TETRISCHED_ILP_TYPE> utilityUpperBound;
+  };
+
+  /// Callback class for Gurobi to use to interrupt the optimization.
+  class GurobiInterruptOptimizationCallback : public GRBCallback {
+   private:
+    /// The interrupt parameters for the callback.
+    GurobiInterruptParams params;
+    /// The start time of the optimization.
+    std::chrono::steady_clock::time_point startTime;
+
+   public:
+    /// Create a new GurobiInterruptOptimizationCallback.
+    GurobiInterruptOptimizationCallback(GurobiInterruptParams params);
+
+   protected:
+    /// Callback function for Gurobi to call when it wants to interrupt the
+    /// optimization.
+    void callback();
+  };
+
   /// The environment variable for this instance of Gurobi.
   std::unique_ptr<GRBEnv> gurobiEnv;
   /// The model being used by this solver.
@@ -15,6 +43,8 @@ class GurobiSolver : public Solver {
   SolverModelPtr solverModel;
   /// The name of the log file for the Gurobi solving.
   std::string logFileName;
+  /// The interrupt parameters for the current iteration of the optimization.
+  GurobiInterruptParams interruptParams;
 
   /// Set the defaults for parameters on the model.
   void setParameters(GRBModel& gurobiModel);

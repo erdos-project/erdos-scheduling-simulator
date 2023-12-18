@@ -11,7 +11,8 @@ void defineSolverSolution(py::module_& tetrisched_m) {
       .value("OPTIMAL", tetrisched::SolutionType::OPTIMAL)
       .value("INFEASIBLE", tetrisched::SolutionType::INFEASIBLE)
       .value("UNBOUNDED", tetrisched::SolutionType::UNBOUNDED)
-      .value("UNKNOWN", tetrisched::SolutionType::UNKNOWN);
+      .value("UNKNOWN", tetrisched::SolutionType::UNKNOWN)
+      .value("NO_SOLUTION", tetrisched::SolutionType::NO_SOLUTION);
 
   // Define the backend type enum.
   py::enum_<tetrisched::SolverBackendType>(tetrisched_m, "SolverBackendType")

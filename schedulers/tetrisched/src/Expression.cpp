@@ -465,8 +465,8 @@ uint32_t ChooseExpression::getResourceQuantity() const {
 ParseResultPtr ChooseExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
-  // TETRISCHED_SCOPE_TIMER("ChooseExpression::parse," +
-  //                        std::to_string(currentTime) + "," + name + "," + id)
+  TETRISCHED_SCOPE_TIMER("ChooseExpression::parse," +
+                         std::to_string(currentTime) + "," + name + "," + id)
   // Check that the Expression was parsed before
   if (parsedResult != nullptr) {
     // return the already parsed sub-tree from another parent
@@ -557,8 +557,9 @@ ParseResultPtr ChooseExpression::parse(
   parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
   parsedResult->startTime = startTime;
   parsedResult->endTime = endTime;
-  parsedResult->indicator = isSatisfiedVar;
   parsedResult->utility = std::move(utilityFunction);
+  parsedResult->utilityBound = utility;
+  parsedResult->indicator = isSatisfiedVar;
   return parsedResult;
 }
 
@@ -815,7 +816,6 @@ ParseResultPtr WindowedChooseExpression::parse(
     windowEndTimeConstraint->addTerm(placementTime + duration,
                                      placementVariable);
     chooseOneConstraint->addTerm(placementVariable);
-    utilityFunction->addTerm(utility, placementVariable);
 
     if (placementTime < startTimeBounds.first) {
       startTimeBounds.first = placementTime;
@@ -835,6 +835,7 @@ ParseResultPtr WindowedChooseExpression::parse(
   // are satisfied.
   chooseOneConstraint->addTerm(-1, windowIndicator);
   solverModel->addConstraint(std::move(chooseOneConstraint));
+  utilityFunction->addTerm(utility, windowIndicator);
 
   // Constrain the start time to be less than the or equal to
   // start time of the placement choice that is satisfied.
@@ -869,8 +870,9 @@ ParseResultPtr WindowedChooseExpression::parse(
   parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
   parsedResult->startTime = windowStartTime;
   parsedResult->endTime = windowEndTime;
-  parsedResult->indicator = windowIndicator;
   parsedResult->utility = std::move(utilityFunction);
+  parsedResult->utilityBound = utility;
+  parsedResult->indicator = windowIndicator;
   return parsedResult;
 }
 
@@ -1283,8 +1285,9 @@ ParseResultPtr MalleableChooseExpression::parse(
   parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
   parsedResult->startTime = startTimeVariable;
   parsedResult->endTime = endTimeVariable;
-  parsedResult->indicator = isSatisfiedVar;
   parsedResult->utility = std::move(utilityFunction);
+  parsedResult->utilityBound = utility;
+  parsedResult->indicator = isSatisfiedVar;
   return parsedResult;
 }
 
@@ -1351,7 +1354,8 @@ void AllocationExpression::addChild(ExpressionPtr /* child */) {
 
 ParseResultPtr AllocationExpression::parse(
     SolverModelPtr /* solverModel */, Partitions /* availablePartitions */,
-    CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
+    CapacityConstraintMapPtr capacityConstraints,
+    [[maybe_unused]] Time currentTime) {
   std::lock_guard<std::mutex> lockGuard(expressionMutex);
   TETRISCHED_SCOPE_TIMER("AllocationExpression::parse," +
                          std::to_string(currentTime) + "," + name + "," + id)
@@ -1365,14 +1369,18 @@ ParseResultPtr AllocationExpression::parse(
   TETRISCHED_DEBUG("Parsing AllocationExpression for "
                    << name << " to be placed starting at time " << startTime
                    << " and ending at " << endTime << ".")
+
   parsedResult = std::make_shared<ParseResult>();
   parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
   parsedResult->startTime = startTime;
   parsedResult->endTime = endTime;
-  parsedResult->indicator = 1;
   parsedResult->utility =
       std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
   (parsedResult->utility).value()->addTerm(1);
+  parsedResult->utilityBound = 1;
+  parsedResult->indicator = 1;
+
+  // Add the allocation variables to the CapacityConstraintMap.
   for (const auto& [partition, allocation] : allocatedResources) {
     capacityConstraints->registerUsageForDuration(
         shared_from_this(), *partition, startTime, duration, 1, allocation,
@@ -1487,9 +1495,11 @@ ParseResultPtr ObjectiveExpression::parse(
   parsedResult = std::make_shared<ParseResult>();
   parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
 
-  // Construct the overall utility of this expression.
+  // Construct the overall utility and its bound for this expression.
   auto utility =
       std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
+  TETRISCHED_ILP_TYPE utilityBound = 0;
+  bool useUtilityBound = true;
 
   // Parse the children and collect the utiltiies.
   for (auto& child : children) {
@@ -1502,6 +1512,12 @@ ParseResultPtr ObjectiveExpression::parse(
             " was supposed to provide utility, but doesn't.");
       }
       (*utility) += *(result->utility.value());
+
+      if (result->utilityBound.has_value()) {
+        utilityBound += result->utilityBound.value();
+      } else {
+        useUtilityBound = false;
+      }
     }
   }
   TETRISCHED_DEBUG("Finished parsing the children for ObjectiveExpression with "
@@ -1524,6 +1540,10 @@ ParseResultPtr ObjectiveExpression::parse(
   parsedResult->utility = std::make_shared<ObjectiveFunction>(*utility);
   parsedResult->startTime = std::numeric_limits<Time>::min();
   parsedResult->endTime = std::numeric_limits<Time>::max();
+  if (useUtilityBound) {
+    parsedResult->utilityBound = utilityBound;
+    utility->setUpperBound(utilityBound);
+  }
 
   // Add the utility to the SolverModel.
   solverModel->setObjectiveFunction(std::move(utility));
@@ -1783,6 +1803,13 @@ ParseResultPtr LessThanExpression::parse(
 
   parsedResult->utility = std::move(utility);
 
+  // Construct the utility bound, if available.
+  if (firstChildResult->utilityBound.has_value() &&
+      secondChildResult->utilityBound.has_value()) {
+    parsedResult->utilityBound = firstChildResult->utilityBound.value() +
+                                 secondChildResult->utilityBound.value();
+  }
+
   // Return the result.
   return parsedResult;
 }
@@ -1981,17 +2008,46 @@ ParseResultPtr MinExpression::parse(
   }
   minChildrenParsing.wait();
 
+  // Check that all the children provided a utility.
+  bool allChildrenProvidedUtilities = true;
+  TETRISCHED_ILP_TYPE utilityBound = 0;
+  bool useUtilityBound = true;
+  for (auto& child : children) {
+    auto childParsedResult = child->getParsedResult();
+    if (!childParsedResult.has_value()) {
+      throw tetrisched::exceptions::ExpressionConstructionException(
+          "Child " + child->getName() + " of MIN " + name +
+          " does not have a parsed result.");
+    }
+    auto childParsedResultValue = childParsedResult.value();
+    if (childParsedResultValue->type != ParseResultType::EXPRESSION_UTILITY) {
+      allChildrenProvidedUtilities = false;
+      break;
+    }
+
+    // Set the utility bound, if available.
+    if (childParsedResultValue->utilityBound.has_value()) {
+      utilityBound += childParsedResultValue->utilityBound.value();
+    } else {
+      useUtilityBound = false;
+    }
+  }
+
   // Ensure that MIN satisfies all of its children.
   if (numEnforceableChildren == 0) {
     // All the children have been trivially satisfied.
     parsedResult->indicator = 1;
     minUtility->addTerm(1);
+    parsedResult->utilityBound = 1;
   } else {
     minIndicatorConstraint->addTerm(
         -1 * static_cast<TETRISCHED_ILP_TYPE>(numEnforceableChildren),
         minIndicator);
     solverModel->addConstraint(std::move(minIndicatorConstraint));
     parsedResult->indicator = minIndicator;
+    if (useUtilityBound) {
+      parsedResult->utilityBound = utilityBound;
+    }
 
     // Set the lower and upper bounds for times.
     // std::cout << "Setting bounds for " << name << " to " <<
@@ -2011,28 +2067,12 @@ ParseResultPtr MinExpression::parse(
     // }
   }
 
-  // Check that all the children provided a utility.
-  bool allChildrenProvidedUtilities = true;
-  for (auto& child : children) {
-    auto childParsedResult = child->getParsedResult();
-    if (!childParsedResult.has_value()) {
-      throw tetrisched::exceptions::ExpressionConstructionException(
-          "Child " + child->getName() + " of MIN " + name +
-          " does not have a parsed result.");
-    }
-    auto childParsedResultValue = childParsedResult.value();
-    if (childParsedResultValue->type != ParseResultType::EXPRESSION_UTILITY) {
-      allChildrenProvidedUtilities = false;
-      break;
-    }
-  }
-
   // Construct and return the ParsedResult.
   if (allChildrenProvidedUtilities) {
     parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
-    parsedResult->utility = std::move(minUtility);
     parsedResult->startTime = minStartTime;
     parsedResult->endTime = minEndTime;
+    parsedResult->utility = std::move(minUtility);
   } else {
     parsedResult->type = ParseResultType::EXPRESSION_NO_UTILITY;
   }
@@ -2058,7 +2098,8 @@ void MaxExpression::addChild(ExpressionPtr child) {
 
 ParseResultPtr MaxExpression::parse(
     SolverModelPtr solverModel, Partitions /* availablePartitions */,
-    CapacityConstraintMapPtr /* capacityConstraints */, Time currentTime) {
+    CapacityConstraintMapPtr /* capacityConstraints */,
+    [[maybe_unused]] Time currentTime) {
   std::lock_guard<std::mutex> lockGuard(expressionMutex);
   TETRISCHED_SCOPE_TIMER("MaxExpression::parse," + std::to_string(currentTime) +
                          "," + name + "," + id + "," +
@@ -2123,6 +2164,8 @@ ParseResultPtr MaxExpression::parse(
       std::make_pair(std::numeric_limits<Time>::max(), 0);
   TimeRange endTimeBounds = std::make_pair(std::numeric_limits<Time>::max(), 0);
   bool anyChildrenWithUtilities = false;
+  TETRISCHED_ILP_TYPE utilityBound = 0;
+  bool useUtilityBound = true;
   for (size_t i = 0; i < numChildren; i++) {
     auto childParsedResultOption = children[i]->getParsedResult();
     if (!childParsedResultOption.has_value()) {
@@ -2237,6 +2280,14 @@ ParseResultPtr MaxExpression::parse(
     // Add the utility of the child to the MaxExpression's utility.
     auto childUtility = childParsedResult->utility.value();
     (*maxObjectiveFunction) += (*childUtility);
+
+    // Set the utility bound for the MaxExpression.
+    if (childParsedResult->utilityBound.has_value()) {
+      utilityBound =
+          std::max(utilityBound, childParsedResult->utilityBound.value());
+    } else {
+      useUtilityBound = false;
+    }
   }
 
   if (!anyChildrenWithUtilities) {
@@ -2283,6 +2334,9 @@ ParseResultPtr MaxExpression::parse(
   parsedResult->startTime = std::move(maxStartTime);
   parsedResult->endTime = std::move(maxEndTime);
   parsedResult->utility = std::move(maxObjectiveFunction);
+  if (useUtilityBound) {
+    parsedResult->utilityBound = utilityBound;
+  }
   parsedResult->indicator = std::move(maxIndicator);
   TETRISCHED_DEBUG("Finished parsing MaxExpression with name " << name << ".")
   return parsedResult;
@@ -2341,6 +2395,10 @@ ParseResultPtr ScaleExpression::parse(
     }
     if (childParseResult->indicator) {
       parsedResult->indicator.emplace(childParseResult->indicator.value());
+    }
+    if (childParseResult->utilityBound) {
+      parsedResult->utilityBound.emplace(
+          scaleFactor * childParseResult->utilityBound.value());
     }
     return parsedResult;
   } else {
