@@ -104,7 +104,9 @@ flags.DEFINE_integer(
     "loop_timeout", sys.maxsize, "Timeout for the Simulator loop (in us)."
 )
 flags.DEFINE_integer(
-    "random_seed", 42, "The seed to be used for random number generation."
+    "random_seed",
+    random.randint(0, sys.maxsize),
+    "The seed to be used for random number generation. Defaults to a random number.",
 )
 flags.DEFINE_bool(
     "resolve_conditionals_at_submission",
