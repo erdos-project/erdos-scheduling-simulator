@@ -2,7 +2,6 @@
 *.pyc
 
 # Configuration files
-.pre-commit-config.yaml
 .DS_store
 .vscode
 
@@ -24,6 +23,7 @@ env
 *.sol
 
 # Ignore build of tetrisched
+build/*
 schedulers/tetrisched/build/*
 
 experiments/*

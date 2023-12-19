@@ -11,3 +11,4 @@ matplotlib
 docplex
 pyyaml
 cplex
+pre-commit
