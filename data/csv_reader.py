@@ -156,23 +156,25 @@ class CSVReader(object):
                         # Add the task to the last scheduler's invocation.
                         schedulers[-1].update_task_schedule(reading)
                     elif reading[1] == "TASK_GRAPH_RELEASE":
-                        # Add the task to the last scheduler's invocation.
                         task_graphs[reading[4]] = TaskGraph(
                             name=reading[4],
                             release_time=int(reading[2]),
                             deadline=int(reading[3]),
                             num_tasks=int(reading[5]),
+                            # Checking if len(reading) > 6
+                            # is for backward compatibility
+                            critical_path_time=int(reading[6])
+                            if len(reading) > 6
+                            else None,
                         )
                     elif reading[1] == "TASK_GRAPH_FINISHED":
-                        # Add the task to the last scheduler's invocation.
-                        task_graphs[reading[2]].completion_time = int(reading[0])
+                        task_graphs[reading[2]].completion_at = int(reading[0])
                         task_graphs[reading[2]].cancelled = False
                         task_graphs[reading[2]].slack = (
                             task_graphs[reading[2]].deadline
-                            - task_graphs[reading[2]].completion_time
+                            - task_graphs[reading[2]].completion_at
                         )
                     elif reading[1] == "MISSED_TASK_GRAPH_DEADLINE":
-                        # Add the task to the last scheduler's invocation.
                         task_graphs[reading[2]].deadline_miss_detected_at = int(
                             reading[0]
                         )
