@@ -1,14 +1,14 @@
-from collections import defaultdict, namedtuple
-from dataclasses import dataclass
 import pickle
 import sys
+from collections import defaultdict, namedtuple
+from dataclasses import dataclass
 
 import altair as alt
-from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
 import streamlit as st
-from streamlit_agraph import agraph, Node, Edge, Config
+from matplotlib import pyplot as plt
+from streamlit_agraph import Config, Edge, Node, agraph
 
 sys.path.append("..")
 from data.csv_reader import CSVReader

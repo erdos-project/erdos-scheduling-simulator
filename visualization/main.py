@@ -1,5 +1,4 @@
 import streamlit as st
-
 from component.utils import *
 
 st.set_page_config(layout="wide")
