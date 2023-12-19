@@ -1,11 +1,11 @@
 import streamlit as st
 from component.utils import (
+    Task,
     get_csv_data,
     get_original_trace_data,
     plot_resource_utilization_timeline_chart,
     plot_task_placement_timeline_chart,
     visualize_task_graph,
-    Task,
 )
 
 st.set_page_config(layout="wide")
