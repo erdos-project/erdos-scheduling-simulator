@@ -242,7 +242,7 @@ def fuzz_time(time: EventTime, variance: Tuple[int, int]) -> EventTime:
     """
     min_variance, max_variance = variance
     return EventTime(
-        int(
+        round(
             _rng.uniform(
                 time.time + (time.time * abs(min_variance) / 100.0),
                 time.time + (time.time * abs(max_variance) / 100.0),

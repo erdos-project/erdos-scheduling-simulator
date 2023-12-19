@@ -73,14 +73,16 @@ class AlibabaLoader(BaseWorkloadLoader):
             )
 
             self._task_cpu_divisor = int(self._flags.alibaba_loader_task_cpu_divisor)
-            self._task_duration_multipler = self._flags.alibaba_task_duration_multiplier
+            self._task_max_pow2_slots = int(
+                self._flags.alibaba_loader_task_max_pow2_slots
+            )
         else:
             self._csv_logger = setup_csv_logging(
                 name=self.__class__.__name__, log_file=None
             )
             self._log_dir = os.getcwd()
             self._task_cpu_divisor = 25
-            self._task_duration_multipler = 1
+            self._task_max_pow2_slots = 0  # default behaviour: use task.cpu from trace
 
     def _construct_release_times(self):
         """Construct the release times of the jobs in the workload.
@@ -192,6 +194,14 @@ class AlibabaLoader(BaseWorkloadLoader):
 
         return job_data_generator()
 
+    def _sample_normal_distribution_random(self, n, mean, std, min_val=0, max_val=100):
+        samples = []
+        while len(samples) < n:
+            sample = self._rng.normalvariate(mean, std)
+            if min_val <= sample <= max_val:
+                samples.append(sample)
+        return samples
+
     def _convert_job_data_to_job_graph(
         self, job_graph_name: str, job_tasks: List[str]
     ) -> JobGraph:
@@ -204,38 +214,66 @@ class AlibabaLoader(BaseWorkloadLoader):
         # Create the individual Job instances corresponding to each Task.
         task_name_to_simulator_job_mapping = {}
         for task in job_tasks:
-            job_resources_1 = Resources(
-                resource_vector={
-                    # Note: We divide the CPU by some self._task_cpu_divisor instead
-                    # of 100 because this would intorduce more variance into the
-                    # resource/slots usage.
-                    # We used to divide by 100, but the majority of the tasks
-                    # would end up using 1 slot, which is not very interesting and
-                    # makes no chance for DAG_Sched to do effective packing that
-                    # would beat EDF by a significant margin.
-                    Resource(name="Slot_1", _id="any"): int(
-                        math.ceil(task.cpu / self._task_cpu_divisor)
-                    ),
-                }
-            )
+            if self._task_max_pow2_slots == 0:
+                # This code will use the cpu requirements from the alibaba trace and adjust slots
+                job_resources_1 = Resources(
+                    resource_vector={
+                        # Note: We divide the CPU by some self._task_cpu_divisor instead
+                        # of 100 because this would intorduce more variance into the
+                        # resource/slots usage.
+                        # We used to divide by 100, but the majority of the tasks
+                        # would end up using 1 slot, which is not very interesting and
+                        # makes no chance for DAG_Sched to do effective packing that
+                        # would beat EDF by a significant margin.
+                        Resource(name="Slot_1", _id="any"): int(
+                            math.ceil(task.cpu / self._task_cpu_divisor)
+                        ),
+                    }
+                )
 
-            job_resources_2 = Resources(
-                resource_vector={
-                    Resource(name="Slot_2", _id="any"): int(
-                        math.ceil(task.cpu / self._task_cpu_divisor)
-                    ),
-                }
-            )
+                job_resources_2 = Resources(
+                    resource_vector={
+                        Resource(name="Slot_2", _id="any"): int(
+                            math.ceil(task.cpu / self._task_cpu_divisor)
+                        ),
+                    }
+                )
+            else:
+                # This code will override cpu requirements from the alibaba trace and assign
+                # random number of slots in powers of 2 upto a limit of self._task_max_pow2_slots
+                max_pow2_for_slot = math.log2(self._task_max_pow2_slots)
+                slots_for_task = 2 ** (self._rng.randint(0, max_pow2_for_slot))
+                job_resources_1 = Resources(
+                    resource_vector={
+                        Resource(name="Slot_1", _id="any"): slots_for_task,
+                    }
+                )
+
+                job_resources_2 = Resources(
+                    resource_vector={
+                        Resource(name="Slot_2", _id="any"): slots_for_task,
+                    }
+                )
+
+            # If we want to try randomizing the duration of the tasks.
+            # random_task_duration = round(
+            #     self._sample_normal_distribution_random(1, 50, 15)[0]
+            # )
+            # Use this if we want middle heavy distribution of task durations
+            # if i == 0 or i == len(job_tasks) - 1:
+            #     random_task_duration = round(self._sample_normal_distribution_random(1, 10, 5)[0])
+            # else:
+            #     random_task_duration = round(self._sample_normal_distribution_random(1, 50, 15)[0])
 
             job_name = task.name.split("_")[0]
             job_runtime_1 = EventTime(
-                int(math.ceil(task.duration * self._task_duration_multipler)),
+                int(task.duration),
                 EventTime.Unit.US,
             )
             # This is used when self._heterogeneous is True
             # to support another execution strategy where it runs faster.
             job_runtime_2 = EventTime(
-                int(math.ceil(task.duration * self._task_duration_multipler * 0.8)),
+                int(math.ceil(task.duration * 0.8)),
                 EventTime.Unit.US,
             )
 

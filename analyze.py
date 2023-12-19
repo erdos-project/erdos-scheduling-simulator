@@ -479,7 +479,7 @@ def analyze_scheduler_runtime(
 
 
 def analyze_task_placement(
-    csv_reader,
+    csv_reader: CSVReader,
     scheduler_csv_file,
     scheduler_name,
     output,
@@ -503,11 +503,11 @@ def analyze_task_placement(
 
     # Calculate the heights of placed and unplaced tasks.
     placed_task_heights = [
-        scheduler_invocation.placed_tasks
+        scheduler_invocation.num_placed_tasks
         for scheduler_invocation in scheduler_invocations
     ]
     unplaced_task_heights = [
-        scheduler_invocation.unplaced_tasks
+        scheduler_invocation.num_unplaced_tasks
         for scheduler_invocation in scheduler_invocations
     ]
 

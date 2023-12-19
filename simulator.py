@@ -450,7 +450,7 @@ class Simulator(object):
                     task_graph.deadline,
                     task_graph.job_graph.completion_time,
                 )
-                self._csv_logger.debug(
+                self._csv_logger.info(
                     "%s,TASK_GRAPH_RELEASE,%s,%s,%s,%s",
                     0,
                     task_graph.release_time.to(EventTime.Unit.US).time,
@@ -1052,7 +1052,8 @@ class Simulator(object):
         )
         self._csv_logger.debug(
             f"{event.time.to(EventTime.Unit.US).time},TASK_CANCEL,{event.task.name},"
-            f"{event.task.timestamp},{event.task.id},{event.task.task_graph}"
+            f"{event.task.timestamp},{event.task.id},{event.task.task_graph},"
+            f"{event.task.available_execution_strategies.get_slowest_strategy().runtime.time}"
         )
 
         # If the task already had a placement, we remove the placement from our queue.
@@ -1088,7 +1089,8 @@ class Simulator(object):
             f"{event.task.release_time.to(EventTime.Unit.US).time},"
             f"{event.task.deadline.to(EventTime.Unit.US).time},{event.task.id},"
             f"{event.task.task_graph},"
-            f"{slowest_execution_strategy.runtime.to(EventTime.Unit.US).time}"
+            f"{slowest_execution_strategy.runtime.to(EventTime.Unit.US).time},"
+            f"{slowest_execution_strategy.resources}"
         )
 
         # If we are not in the midst of a scheduler invocation, and the task hasn't
@@ -1449,7 +1451,7 @@ class Simulator(object):
         task_graph: TaskGraph = self._workload.get_task_graph(event.task_graph)
         if task_graph is None:
             raise ValueError(f"TaskGraph {event.task_graph} not found in the Workload.")
-        self._csv_logger.debug(
+        self._csv_logger.info(
             "%s,TASK_GRAPH_RELEASE,%s,%s,%s,%s",
             event.time.to(EventTime.Unit.US).time,
             task_graph.release_time.to(EventTime.Unit.US).time,

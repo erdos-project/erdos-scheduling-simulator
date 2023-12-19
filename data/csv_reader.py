@@ -36,7 +36,7 @@ class CSVReader(object):
                     path_readings.append(line)
                 readings[csv_path] = path_readings
 
-        self._simulators = {}
+        self._simulators: dict[str, Simulator] = {}
         self.parse_events(readings)
 
     def parse_events(self, readings: Mapping[str, Sequence[str]]):
@@ -52,7 +52,7 @@ class CSVReader(object):
             tasks: dict[str, Task] = {}
             task_graphs: dict[str, TaskGraph] = {}
             worker_pools = {}
-            schedulers = []
+            schedulers: list[Scheduler] = []
             for reading in csv_readings:
                 try:
                     # TODO: This
@@ -77,6 +77,8 @@ class CSVReader(object):
                             intended_release_time=int(reading[4]),
                             release_time=int(reading[5]),
                             deadline=int(reading[6]),
+                            window_to_execute=int(reading[6]) - int(reading[5]),
+                            slowest_execution_time=int(reading[9]),
                         )
                     elif reading[1] == "TASK_FINISHED":
                         # Update the task with the completion event data.
@@ -126,17 +128,23 @@ class CSVReader(object):
                                 task_graph=reading[5],
                                 timestamp=int(reading[3]),
                                 task_id=reading[4],
-                                intended_release_time=float("inf"),
-                                release_time=float("inf"),
-                                deadline=float("inf"),
+                                intended_release_time=None,
+                                release_time=None,
+                                deadline=None,
+                                window_to_execute=None,
+                                # Checking if len(reading) > 6 is for backward compatibility
+                                slowest_execution_time=int(reading[6])
+                                if len(reading) > 6
+                                else None,
                             )
                         tasks[reading[4]].cancelled = True
                         tasks[reading[4]].cancelled_at = int(reading[0])
                         task_graphs[reading[5]].cancelled = True
                         task_graphs[reading[5]].cancelled_at = int(reading[0])
-                    elif reading[1] == "TASK_SKIP" and reading[4] in tasks:
-                        # Update the task with the skip data.
-                        tasks[reading[4]].update_skip(reading)
+                    elif reading[1] == "TASK_SKIP":
+                        if reading[4] in tasks:
+                            # Update the task with the skip data.
+                            tasks[reading[4]].update_skip(reading)
                     elif reading[1] == "TASK_PREEMPT":
                         # Update the placement with the preemption time.
                         tasks[reading[4]].update_preempt(reading)
@@ -152,16 +160,23 @@ class CSVReader(object):
                             name=reading[4],
                             release_time=int(reading[2]),
                             deadline=int(reading[3]),
+                            num_tasks=int(reading[5]),
                         )
                     elif reading[1] == "TASK_GRAPH_FINISHED":
                         # Add the task to the last scheduler's invocation.
                         task_graphs[reading[2]].completion_time = int(reading[0])
                         task_graphs[reading[2]].cancelled = False
+                        task_graphs[reading[2]].slack = (
+                            task_graphs[reading[2]].deadline
+                            - task_graphs[reading[2]].completion_time
+                        )
                     elif reading[1] == "MISSED_TASK_GRAPH_DEADLINE":
                         # Add the task to the last scheduler's invocation.
                         task_graphs[reading[2]].deadline_miss_detected_at = int(
                             reading[0]
                         )
+                    elif reading[0] == "input_flag":
+                        continue
                     else:
                         print(f"[x] Unknown event type: {reading[1]}")
                 except Exception as e:
@@ -184,9 +199,9 @@ class CSVReader(object):
             assert simulator.missed_taskgraphs == missed_deadline_task_graphs_count
             assert simulator.dropped_taskgraphs == canceled_task_graphs_count
 
-            simulator.worker_pools = worker_pools.values()
+            simulator.worker_pools = list(worker_pools.values())
             simulator.tasks = list(
-                sorted(tasks.values(), key=attrgetter("release_time"))
+                sorted(tasks.values(), key=lambda x: x.release_time_compare_key)
             )
             simulator.scheduler_invocations = schedulers
             simulator.task_graphs = task_graphs
@@ -254,7 +269,7 @@ class CSVReader(object):
             worker_pool_stats.append(
                 WorkerPoolStats(
                     simulator_time=simulator_time,
-                    resource_utilizations=resource_utilizations,
+                    resource_utilizations=dict(resource_utilizations),
                 )
             )
         return worker_pool_stats

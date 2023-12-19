@@ -1,90 +1,81 @@
-from collections import namedtuple
-from dataclasses import dataclass
-from functools import total_ordering
+from dataclasses import dataclass, field
 from typing import List, Mapping, Optional, Sequence
 
-Resource = namedtuple("Resource", ["name", "id", "quantity"])
-WorkerPoolStats = namedtuple(
-    "WorkerPoolStats", ["simulator_time", "resource_utilizations"]
-)
-WorkerPoolUtilization = namedtuple(
-    "WorkerPoolUtilization",
-    ["simulator_time", "resource_name", "allocated_quantity", "available_quantity"],
-)
+
+@dataclass
+class WorkerPoolStats:
+    simulator_time: int
+    resource_utilizations: dict[str, tuple[float, float]]
 
 
-class WorkerPool(object):
-    def __init__(self, name: str, id: str, resources: Sequence[Resource]):
-        self.name = name
-        self.id = id
-        self.resources = resources
-        self.utilizations: Sequence[WorkerPoolUtilization] = []
+@dataclass
+class Resource:
+    name: str
+    id: str
+    quantity: float
+
+    def __post_init__(self):
+        self.quantity = float(self.quantity)
+
+    def __repr__(self) -> str:
+        return f"Resource(name={self.name}, id={self.id}, quantity={self.quantity})"
 
 
-class Placement(object):
-    def __init__(
-        self,
-        name: str,
-        timestamp: int,
-        task_id: str,
-        task_graph: str,
-        placement_time: int,
-        deadline: int,
-        worker_pool: WorkerPool,
-        resources_used: Sequence[Resource] = [],
-        completion_time: Optional[int] = None,
-    ):
-        self.task_name = name
-        self.timestamp = timestamp
-        self.id = task_id
-        self.task_graph = task_graph
-        self.placement_time = placement_time
-        self.deadline = deadline
-        self.worker_pool = worker_pool
-        self.resources_used = resources_used
-        self.completion_time = completion_time
+@dataclass
+class WorkerPoolUtilization:
+    simulator_time: int
+    resource_name: str
+    allocated_quantity: float
+    available_quantity: float
 
 
-@total_ordering
-class Task(object):
-    def __init__(
-        self,
-        name: str,
-        task_graph: str,
-        timestamp: int,
-        task_id: str,
-        intended_release_time: int,
-        release_time: int,
-        deadline: int,
-    ):
-        self.name = name
-        self.task_graph = task_graph
-        self.timestamp = timestamp
-        self.id = task_id
-        # All times are in microseconds.
-        self.intended_release_time = intended_release_time
-        self.release_time = release_time
-        self.runtime = None
-        self.deadline = deadline
+@dataclass
+class WorkerPool:
+    name: str
+    id: str
+    resources: Sequence[Resource] = field(default_factory=list)
+    utilizations: Sequence[WorkerPoolUtilization] = field(default_factory=list)
 
-        # Values updated from the TASK_PLACEMENT events.
-        self.placements = []
-        self.start_time = None
-        self.placement_time = None
 
-        # Values updated from the TASK_SKIP event.
-        self.skipped_times = []
+@dataclass
+class Placement:
+    task_name: str
+    timestamp: int
+    task_id: str
+    task_graph: str
+    placement_time: int
+    deadline: int
+    worker_pool: WorkerPool
+    resources_used: Sequence[Resource] = field(default_factory=list)
+    completion_time: Optional[int] = None
 
-        # Values updated from the TASK_FINISHED event.
-        self.completion_time = None
 
-        # Values updated from the MISSED_DEADLINE event.
-        self.missed_deadline = False
-        self.deadline_miss_detected_at = None
+@dataclass
+# @total_ordering
+class Task:
+    name: str
+    task_graph: str
+    timestamp: int
+    task_id: str
+    intended_release_time: Optional[int]
+    release_time: Optional[int]
+    deadline: Optional[int]
+    window_to_execute: Optional[int]
+    # The runtime of the slowest execution strategy
+    slowest_execution_time: Optional[int] = None
 
-        # Values updated from the TASK_CANCEL event.
-        self.cancelled: bool = False
-        self.cancelled_at: Optional[int] = None
+    # The actual task runtime when it get placed
+    runtime: Optional[int] = None
+    placements: list[Placement] = field(init=False, default_factory=list)
+    start_time: Optional[int] = None
+    placement_time: Optional[int] = None
+    skipped_times: List = field(init=False, default_factory=list)
+    completion_time: Optional[int] = None
+    slack: Optional[int] = None
+    missed_deadline: bool = False
+    deadline_miss_detected_at: Optional[int] = None
+    cancelled: bool = False
+    cancelled_at: Optional[int] = None
 
     def get_deadline_delay(self) -> int:
         """Retrieve the deadline delay in microseconds.
@@ -138,9 +129,9 @@ class Task(object):
 
         placement_time = int(csv_reading[0])
         placement = Placement(
-            name=self.name,
+            task_name=self.name,
             timestamp=self.timestamp,
-            task_id=self.id,
+            task_id=self.task_id,
             task_graph=self.task_graph,
             deadline=self.deadline,
             placement_time=placement_time,
@@ -221,6 +212,7 @@ class Task(object):
             csv_reading[1] == "TASK_FINISHED"
         ), f"The event {csv_reading[1]} was not of type TASK_FINISHED."
         self.completion_time = int(csv_reading[5])
+        self.slack = self.deadline - self.completion_time
         self.placements[-1].completion_time = int(csv_reading[5])
 
     def update_missed_deadline(self, csv_reading: str):
@@ -243,13 +235,17 @@ class Task(object):
     def was_completed(self):
         return self.completion_time is not None
 
+    @property
+    def release_time_compare_key(self):
+        return self.release_time if self.release_time is not None else float("inf")
+
     def __str__(self):
         return f"Task(name={self.name}, timestamp={self.timestamp})"
 
     def __repr__(self):
         return str(self)
 
-    def __lt__(self, other):
+    def __lt__(self, other: "Task"):
         if self == other:
             return False
         if self.timestamp > other.timestamp:
@@ -273,13 +269,19 @@ class TaskGraph(object):
     name: str
     release_time: int
     deadline: int
+    num_tasks: int
+    window_to_execute: int = field(init=False)
 
     cancelled: bool = False
     cancelled_at: Optional[int] = None
 
     # Values updated from the TASK_GRAPH_FINISHED event.
     completion_time: Optional[int] = None
+    slack: Optional[int] = None
     deadline_miss_detected_at: Optional[int] = None
+
+    def __post_init__(self):
+        self.window_to_execute: int = self.deadline - self.release_time
 
     @property
     def was_completed(self):
@@ -288,6 +290,9 @@ class TaskGraph(object):
     @property
     def missed_deadline(self):
         return self.completion_time is not None and self.completion_time > self.deadline
+
+    def __str__(self) -> str:
+        return f"TaskGraph(name={self.name}, num_tasks={self.num_tasks}, release_time={self.release_time}, deadline={self.deadline}), completion_time={self.completion_time}, slack={self.slack}, cancelled={self.cancelled}, cancelled_at={self.cancelled_at}, completion_time={self.completion_time}, deadline_miss_detected_at={self.deadline_miss_detected_at}"
 
 
 class Scheduler(object):
@@ -339,7 +344,7 @@ class Scheduler(object):
         ), f"Event {csv_reading[1]} is not of type TASK_SCHEDULED."
         self.task_placements.append(
             Placement(
-                name=csv_reading[2],
+                task_name=csv_reading[2],
                 timestamp=int(csv_reading[4]),
                 task_id=csv_reading[5],
                 task_graph=csv_reading[3],
@@ -368,8 +373,8 @@ class Simulator(object):
         self.goodput_taskgraphs = None
 
         self.worker_pools = []
-        self.tasks = []
-        self.scheduler_invocations = []
+        self.tasks: list[WorkerPool] = []
+        self.scheduler_invocations: list[Scheduler] = []
         self.task_graphs: dict[str, TaskGraph] = {}
 
     def update_finish(self, csv_reading: str):
