@@ -660,17 +660,10 @@ class JobGraph(Graph[Job]):
         super().__init__(jobs)
         self._name = name
         self._release_policy = release_policy
-        self._completion_time = (
-            completion_time
-            if completion_time or len(self) == 0
-            else sum(
-                (
-                    job.execution_strategies.get_slowest_strategy().runtime
-                    for job in self.get_longest_path()
-                ),
-                start=EventTime.zero(),
-            )
-        )
+        # If completion_time is None, we'll calculate it at:
+        # @property
+        # def completion_time(self):
+        self._completion_time = completion_time
         self._deadline_variance = deadline_variance
         self._remaining_task_graphs = sys.maxsize
         self._task_graph_index = 0
