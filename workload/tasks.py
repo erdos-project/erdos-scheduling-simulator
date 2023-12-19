@@ -7,7 +7,7 @@ from enum import Enum
 from functools import cached_property, total_ordering
 from typing import Mapping, Optional, Sequence, Tuple, Union
 
-from utils import EventTime, fuzz_time, setup_logging
+from utils import EventTime, setup_logging
 
 from . import BranchPredictionPolicy
 from .graph import Graph
@@ -253,7 +253,7 @@ class Task(object):
                 "creating the Task or when starting it."
             )
 
-        remaining_time = fuzz_time(self._remaining_time, (0, variance))
+        remaining_time = self._remaining_time.fuzz((0, variance))
         self._logger.debug(
             f"[{time.to(EventTime.Unit.US).time}] Transitioning {self} to "
             f"{TaskState.RUNNING} with the remaining time {remaining_time}."

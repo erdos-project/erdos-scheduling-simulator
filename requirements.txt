@@ -12,3 +12,5 @@ docplex
 pyyaml
 cplex
 pre-commit
+black
+isort

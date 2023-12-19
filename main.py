@@ -185,9 +185,19 @@ flags.DEFINE_bool(
     "to execute.",
 )
 flags.DEFINE_integer(
+    "min_deadline",
+    0,
+    "The minimum deadline to assign to a task (in µs).",
+)
+flags.DEFINE_integer(
     "min_deadline_variance",
     0,
     "The minimum % variance to allocate to the assigned deadline for each task.",
+)
+flags.DEFINE_integer(
+    "max_deadline",
+    sys.maxsize,
+    "The maximum deadline to assign to a task (in µs).",
 )
 flags.DEFINE_integer(
     "max_deadline_variance",

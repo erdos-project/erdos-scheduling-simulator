@@ -8,7 +8,7 @@ from typing import List, Mapping, Optional, Sequence, Tuple
 import absl
 import numpy as np
 
-from utils import EventTime, fuzz_time, setup_logging
+from utils import EventTime, setup_logging
 
 from .graph import Graph
 from .profile import WorkProfile
@@ -769,6 +769,7 @@ class JobGraph(Graph[Job]):
                 )
             else:
                 deadline_variance = self._deadline_variance
+            deadline_bounds = (_flags.min_deadline, _flags.max_deadline)
             use_branch_predicated_deadlines = _flags.use_branch_predicated_deadlines
             resolve_conditionals = _flags.resolve_conditionals_at_submission
             task_logger = setup_logging(
@@ -784,6 +785,7 @@ class JobGraph(Graph[Job]):
                 if self._deadline_variance is not None
                 else (0, 0)
             )
+            deadline_bounds = (0, sys.maxsize)
             use_branch_predicated_deadlines = False
             resolve_conditionals = False
             task_logger = setup_logging(name="Task")
@@ -792,14 +794,8 @@ class JobGraph(Graph[Job]):
         # TODO (Sukrit): Right now, this assumes that all Tasks in the TaskGraph come
         # with the same deadline. At some point, we will have to implement a
         # heuristic-based deadline splitting technique.
-        # Ray: Clip the min deadline to 5 time unit to prevent some small taks from
-        # having tight deadline.
-        task_deadline = release_time + max(
-            EventTime(
-                5,
-                self.completion_time.unit,
-            ),
-            fuzz_time(self.completion_time, deadline_variance),
+        task_deadline = release_time + self.completion_time.fuzz(
+            deadline_variance, deadline_bounds
         )
 
         # Generate all the `Task`s from the `Job`s in the graph.
@@ -870,8 +866,8 @@ class JobGraph(Graph[Job]):
         else:
             weighted_task_graph_length = self.__get_completion_time()
 
-        task_graph_deadline = release_time + fuzz_time(
-            weighted_task_graph_length, deadline_variance
+        task_graph_deadline = release_time + weighted_task_graph_length.fuzz(
+            deadline_variance, deadline_bounds
         )
         for task in task_graph.get_nodes():
             task.update_deadline(task_graph_deadline)
