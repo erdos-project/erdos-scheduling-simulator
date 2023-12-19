@@ -71,7 +71,8 @@ def get_original_trace_data(trace_file_path):
 @st.cache_data(experimental_allow_widgets=True)
 def visualize_task_graph(task_graph_id, df_tasks, trace_data):
     st.write(
-        "Green means 'Finished.' Red means 'Cancelled.' Orange means 'Finished but missed deadline.'"
+        "Green means 'Finished.' Red means 'Cancelled.' \
+        Orange means 'Finished but missed deadline.'"
     )
     if task_graph_id.split("@")[0] not in trace_data:
         st.write(f'Task Graph "{task_graph_id}" not found in trace data')
@@ -107,7 +108,8 @@ def visualize_task_graph(task_graph_id, df_tasks, trace_data):
             Node(
                 id=task_name,
                 # title get displayed when you hover over the node
-                title=f"release={row['release_time'].item()}, place={row['placement_time'].item()}",
+                title=f"release={row['release_time'].item()}, \
+                        place={row['placement_time'].item()}",
                 label=f"{task_name}, runtime={row['runtime'].item()}",
                 size=25,
                 shape="dot",
@@ -141,13 +143,9 @@ def plot_task_placement_timeline_chart(
     df_worker_pools: pd.DataFrame, df_tasks: pd.DataFrame
 ):
     st.write("### Task Placement Timeline")
-    # Instead of keep tracking of slot usage, count the max number of concurrent tasks and
-    # use that as the y axis. Otherwise intractible to visualize 40+ slots
-    # Need to have separarate chart for each worker pool
     for i, worker_pool in df_worker_pools.iterrows():
         st.write(f"#### {worker_pool['name']}")
         task_placements = []
-        resource_usage = {}  # resource name -> time -> resource usage
         time_to_task_count = defaultdict(int)
         for i, task in df_tasks[df_tasks["start_time"].notnull()].iterrows():
             for placement in task["placements"]:
