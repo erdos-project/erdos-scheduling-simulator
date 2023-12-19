@@ -71,7 +71,7 @@ def get_original_trace_data(trace_file_path):
 @st.cache_data(experimental_allow_widgets=True)
 def visualize_task_graph(task_graph_id, df_tasks, trace_data):
     st.write(
-        "Green -> Finished. Red -> Cancelled. Orange -> Finished but missed deadline"
+        "Green means 'Finished.' Red means 'Cancelled.' Orange means 'Finished but missed deadline.'"
     )
     if task_graph_id.split("@")[0] not in trace_data:
         st.write(f'Task Graph "{task_graph_id}" not found in trace data')
@@ -198,14 +198,14 @@ def plot_task_placement_timeline_chart(
 
 @st.cache_data
 def plot_resource_utilization_timeline_chart(
-    worker_pool_stats: dict[str, tuple[float, float]]
+    worker_pool_stats: dict[str, tuple[float, float]],
+    smoothing_window_size=10,
 ):
     def smooth_data(y, window_size):
         """Applies a moving average filter to smooth the data."""
         window = np.ones(window_size) / window_size
         return np.convolve(y, window, mode="same")
 
-    smoothing_window_size = 10
     resource_color = {
         "GPU": "red",
         "CPU": "green",
