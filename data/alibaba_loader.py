@@ -83,7 +83,6 @@ class AlibabaLoader(BaseWorkloadLoader):
             self._log_dir = os.getcwd()
             self._task_cpu_divisor = 25
             self._task_max_pow2_slots = 0  # default behaviour: use task.cpu from trace
-            self._task_duration_multipler = 1
 
     def _construct_release_times(self):
         """Construct the release times of the jobs in the workload.
@@ -256,10 +255,10 @@ class AlibabaLoader(BaseWorkloadLoader):
                     }
                 )
 
-            # For now, we try randomizing the duration of the tasks.
-            random_task_duration = round(
-                self._sample_normal_distribution_random(1, 50, 15)[0]
-            )
+            # If we want to try randomizing the duration of the tasks.
+            # random_task_duration = round(
+            #     self._sample_normal_distribution_random(1, 50, 15)[0]
+            # )
             # Use this if we want middle heavy distribution of task durations
             # if i == 0 or i == len(job_tasks) - 1:
             #     random_task_duration = round(self._sample_normal_distribution_random(1, 10, 5)[0])
@@ -268,13 +267,13 @@ class AlibabaLoader(BaseWorkloadLoader):
 
             job_name = task.name.split("_")[0]
             job_runtime_1 = EventTime(
-                int(math.ceil(random_task_duration)),
+                int(task.duration),
                 EventTime.Unit.US,
             )
             # This is used when self._heterogeneous is True
             # to support another execution strategy where it runs faster.
             job_runtime_2 = EventTime(
-                int(math.ceil(random_task_duration * 0.8)),
+                int(math.ceil(task.duration * 0.8)),
                 EventTime.Unit.US,
             )
 
