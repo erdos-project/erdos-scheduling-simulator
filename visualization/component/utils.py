@@ -1,3 +1,4 @@
+import os
 import pickle
 import sys
 from collections import defaultdict, namedtuple
@@ -10,8 +11,10 @@ import streamlit as st
 from matplotlib import pyplot as plt
 from streamlit_agraph import Config, Edge, Node, agraph
 
+
 sys.path.append("..")
 from data.csv_reader import CSVReader
+from utils import DisjointedIntervals
 
 
 @dataclass
@@ -43,9 +46,56 @@ def get_csv_data(csv_file_path):
         csv_file_path
     )
 
+    df_task_graphs = pd.DataFrame(task_graphs)
+    df_tasks = pd.DataFrame(tasks)
+
+    # Add a new column "task_graph_miss_deadline" in df_tasks that joins
+    # df_tasks["task_graph"] on df_task_graphs["name"] and use the value of
+    # df_task_graphs["deadline_miss_detected_at"].notnull()
+    df_task_graphs_renamed = df_task_graphs.rename(
+        columns={
+            "name": "task_graph_name",
+            "deadline_miss_detected_at": "task_graph_deadline_miss_detected_at",
+        }
+    )
+    df_tasks = df_tasks.merge(
+        df_task_graphs_renamed[
+            ["task_graph_name", "task_graph_deadline_miss_detected_at"]
+        ],
+        how="left",
+        left_on="task_graph",
+        right_on="task_graph_name",
+    )
+    df_tasks["task_graph_miss_deadline"] = df_tasks[
+        "task_graph_deadline_miss_detected_at"
+    ].notnull()
+    df_tasks.drop(["task_graph_name"], axis=1, inplace=True)
+
     return CSV_Data(
-        df_task_graphs=pd.DataFrame(task_graphs),
-        df_tasks=pd.DataFrame(tasks),
+        df_task_graphs=df_task_graphs,
+        df_tasks=df_tasks.drop(["timestamp", "task_id"], axis=1)[
+            [
+                "task_graph",
+                "name",
+                "release_time",
+                "deadline",
+                "window_to_execute",
+                "runtime",
+                "slowest_execution_time",
+                "placement_time",
+                "completion_time",
+                "slack",
+                "start_time",
+                "cancelled",
+                "cancelled_at",
+                "missed_deadline",
+                "deadline_miss_detected_at",
+                "task_graph_miss_deadline",
+                "task_graph_deadline_miss_detected_at",
+                "skipped_times",
+                "placements",
+            ]
+        ],
         df_worker_pools=pd.DataFrame(worker_pools),
         worker_pool_stats=worker_pool_stats,
         completed_task_graph_run_time=sum(completed_task_graph_run_time.values()),
@@ -109,7 +159,8 @@ def visualize_task_graph(task_graph_id, df_tasks, trace_data):
                 id=task_name,
                 # title get displayed when you hover over the node
                 title=f"release={row['release_time'].item()}, \
-                        place={row['placement_time'].item()}",
+                        place={row['placement_time'].item()}, \
+                        slowest_exec_time={row['slowest_execution_time'].item()}",
                 label=f"{task_name}, runtime={row['runtime'].item()}",
                 size=25,
                 shape="dot",
@@ -145,29 +196,57 @@ def plot_task_placement_timeline_chart(
     st.write("### Task Placement Timeline")
     for i, worker_pool in df_worker_pools.iterrows():
         st.write(f"#### {worker_pool['name']}")
+        # disjoint_intervals_pools is a list of DisjointedIntervals
+        # Think of each DisjointedIntervals as a horizontal line where
+        # non-overlapping tasks can be drawn. When there are tasks being
+        # run concurrently, we need multiple horizontal lines to draw them.
+        disjoint_intervals_pools = [DisjointedIntervals()]
         task_placements = []
-        time_to_task_count = defaultdict(int)
         for i, task in df_tasks[df_tasks["start_time"].notnull()].iterrows():
             for placement in task["placements"]:
                 for resource in placement["resources_used"]:
+                    # Find the y_index to place this task on the timeline chart
+                    y_index = 0
+                    for j, disjoint_intervals in enumerate(disjoint_intervals_pools):
+                        if not disjoint_intervals.overlap(
+                            (task["start_time"], task["start_time"] + task["runtime"])
+                        ):
+                            disjoint_intervals.add(
+                                (
+                                    task["start_time"],
+                                    task["start_time"] + task["runtime"] - 1,
+                                )
+                            )
+                            y_index = j
+                            break
+                    else:
+                        disjoint_intervals_pools.append(DisjointedIntervals())
+                        disjoint_intervals_pools[-1].add(
+                            (
+                                task["start_time"],
+                                task["start_time"] + task["runtime"] - 1,
+                            )
+                        )
+                        y_index = len(disjoint_intervals_pools) - 1
+
                     task_placements.append(
                         {
-                            "y_index": str(time_to_task_count[task["start_time"]]),
+                            "y_index": str(y_index),
                             "task": task["name"],
                             "task_graph": task["task_graph"],
+                            "release": task["release_time"],
+                            "deadline": task["deadline"],
                             "start": task["start_time"],
                             "end": task["start_time"] + task["runtime"],
                             "runtime": task["runtime"],
                             "resource": f'{resource["name"]}, {resource["quantity"]}',
                             "cancelled": task["cancelled"],
                             "missed_deadline": task["missed_deadline"],
+                            "task_graph_miss_deadline": task[
+                                "task_graph_miss_deadline"
+                            ],
                         }
                     )
-                    for time in range(
-                        int(task["start_time"]),
-                        int(task["start_time"] + task["runtime"]),
-                    ):
-                        time_to_task_count[time] += 1
 
         source = pd.DataFrame(task_placements)
 
@@ -181,12 +260,15 @@ def plot_task_placement_timeline_chart(
                 detail=[
                     "task",
                     "task_graph",
+                    "release",
+                    "deadline",
                     "runtime",
                     "resource",
                     "cancelled",
                     "missed_deadline",
+                    "task_graph_miss_deadline",
                 ],
-                color="y_index",
+                color="task_graph",
             )
             .interactive()
         )

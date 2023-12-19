@@ -24,16 +24,18 @@ if csv_file_path == "" or workload_file_path == "":
     st.stop()
 
 csv_data = get_csv_data(csv_file_path)
+df_task_graphs = csv_data.df_task_graphs
+df_tasks = csv_data.df_tasks
 
 # Separate Dataframe for completed, cancelled, miss deadline task graphs
-df_meet_deadline_task_graphs = csv_data.df_task_graphs[
-    (~csv_data.df_task_graphs["cancelled"])
-    & (csv_data.df_task_graphs["deadline_miss_detected_at"].isnull())
+df_meet_deadline_task_graphs = df_task_graphs[
+    (~df_task_graphs["cancelled"])
+    & (df_task_graphs["deadline_miss_detected_at"].isnull())
 ]
-df_cancelled_task_graphs = csv_data.df_task_graphs[csv_data.df_task_graphs["cancelled"]]
-df_miss_deadline_task_graphs = csv_data.df_task_graphs[
-    (~csv_data.df_task_graphs["cancelled"])
-    & (csv_data.df_task_graphs["deadline_miss_detected_at"].notnull())
+df_cancelled_task_graphs = df_task_graphs[df_task_graphs["cancelled"]]
+df_miss_deadline_task_graphs = df_task_graphs[
+    (~df_task_graphs["cancelled"])
+    & (df_task_graphs["deadline_miss_detected_at"].notnull())
 ]
 length_total_task_graphs = (
     len(df_meet_deadline_task_graphs)
@@ -42,14 +44,12 @@ length_total_task_graphs = (
 )
 
 # Separate Dataframe for completed, cancelled, miss deadline tasks
-df_meet_deadline_tasks = csv_data.df_tasks[
-    (~csv_data.df_tasks["cancelled"])
-    & (csv_data.df_tasks["deadline_miss_detected_at"].isnull())
+df_meet_deadline_tasks = df_tasks[
+    (~df_tasks["cancelled"]) & (df_tasks["deadline_miss_detected_at"].isnull())
 ]
-df_cancelled_tasks = csv_data.df_tasks[csv_data.df_tasks["cancelled"]]
-df_miss_deadline_tasks = csv_data.df_tasks[
-    (~csv_data.df_tasks["cancelled"])
-    & (csv_data.df_tasks["deadline_miss_detected_at"].notnull())
+df_cancelled_tasks = df_tasks[df_tasks["cancelled"]]
+df_miss_deadline_tasks = df_tasks[
+    (~df_tasks["cancelled"]) & (df_tasks["deadline_miss_detected_at"].notnull())
 ]
 
 # Metrics Row
@@ -93,7 +93,7 @@ st.dataframe(csv_data.df_worker_pools.drop(["utilizations"], axis=1))
 st.write("### Task Graphs Stats")
 tab1, tab2, tab3, tab4 = st.tabs(["All", "Meet Deadline", "Cancelled", "Miss Deadline"])
 with tab1:
-    st.write(csv_data.df_task_graphs.describe(include="all").fillna("").astype("str"))
+    st.write(df_task_graphs.describe(include="all").fillna("").astype("str"))
 with tab2:
     st.write(
         df_meet_deadline_task_graphs.describe(include="all").fillna("").astype("str")
@@ -106,37 +106,31 @@ with tab4:
     )
 
 st.write("### Tasks Stats")
-df_tasks_with_cols_useful_for_stats = csv_data.df_tasks.drop(
-    ["timestamp", "task_id", "name", "task_graph"], axis=1
-)
 tab1, tab2, tab3, tab4 = st.tabs(["All", "Meet Deadline", "Cancelled", "Miss Deadline"])
 with tab1:
     st.write(
-        df_tasks_with_cols_useful_for_stats.describe(include="all")
+        df_tasks.drop(["name", "task_graph"], axis=1)
+        .describe(include="all")
         .fillna("")
         .astype("str")
     )
 with tab2:
     st.write(
-        df_meet_deadline_tasks.drop(
-            ["timestamp", "task_id", "name", "task_graph"], axis=1
-        )
+        df_meet_deadline_tasks.drop(["name", "task_graph"], axis=1)
         .describe(include="all")
         .fillna("")
         .astype("str")
     )
 with tab3:
     st.write(
-        df_cancelled_tasks.drop(["timestamp", "task_id", "name", "task_graph"], axis=1)
+        df_cancelled_tasks.drop(["name", "task_graph"], axis=1)
         .describe(include="all")
         .fillna("")
         .astype("str")
     )
 with tab4:
     st.write(
-        df_miss_deadline_tasks.drop(
-            ["timestamp", "task_id", "name", "task_graph"], axis=1
-        )
+        df_miss_deadline_tasks.drop(["name", "task_graph"], axis=1)
         .describe(include="all")
         .fillna("")
         .astype("str")
@@ -145,7 +139,7 @@ with tab4:
 st.write("### Task Graphs Table")
 tab1, tab2, tab3, tab4 = st.tabs(["All", "Meet Deadline", "Cancelled", "Miss Deadline"])
 with tab1:
-    st.write(csv_data.df_task_graphs.fillna("").astype("str"))
+    st.write(df_task_graphs.fillna("").astype("str"))
 with tab2:
     st.write(df_meet_deadline_task_graphs.fillna("").astype("str"))
 with tab3:
@@ -153,18 +147,22 @@ with tab3:
 with tab4:
     st.write(df_miss_deadline_task_graphs.fillna("").astype("str"))
 
-st.write("### Tasks Table")
-tab1, tab2, tab3, tab4 = st.tabs(["All", "Meet Deadline", "Cancelled", "Miss Deadline"])
-with tab1:
-    st.write(csv_data.df_tasks.fillna("").astype("str"))
-with tab2:
-    st.write(df_meet_deadline_tasks.fillna("").astype("str"))
-with tab3:
-    st.write(df_cancelled_tasks.fillna("").astype("str"))
-with tab4:
-    st.write(df_miss_deadline_tasks.fillna("").astype("str"))
 
-plot_task_placement_timeline_chart(csv_data.df_worker_pools, csv_data.df_tasks)
+if st.toggle("Display Tasks Table"):
+    st.write("### Tasks Table")
+    tab1, tab2, tab3, tab4 = st.tabs(
+        ["All", "Meet Deadline", "Cancelled", "Miss Deadline"]
+    )
+    with tab1:
+        st.write(df_tasks.fillna("").astype("str"))
+    with tab2:
+        st.write(df_meet_deadline_tasks.fillna("").astype("str"))
+    with tab3:
+        st.write(df_cancelled_tasks.fillna("").astype("str"))
+    with tab4:
+        st.write(df_miss_deadline_tasks.fillna("").astype("str"))
+
+plot_task_placement_timeline_chart(csv_data.df_worker_pools, df_tasks)
 
 # Visualize DAG
 trace_data = get_original_trace_data(workload_file_path)
@@ -173,5 +171,5 @@ task_graph_id = st.text_input(
     "Enter the Task Graph ID you want to lookup (e.g. j_523717@1)"
 )
 if task_graph_id != "":
-    visualize_task_graph(task_graph_id, csv_data.df_tasks, trace_data)
+    visualize_task_graph(task_graph_id, df_tasks, trace_data)
 # Finish Visualize DAG
