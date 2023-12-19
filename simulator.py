@@ -1050,10 +1050,13 @@ class Simulator(object):
             self._cancelled_tasks,
             event.task,
         )
+        slowest_strategy = (
+            event.task.available_execution_strategies.get_slowest_strategy()
+        )
         self._csv_logger.debug(
             f"{event.time.to(EventTime.Unit.US).time},TASK_CANCEL,{event.task.name},"
             f"{event.task.timestamp},{event.task.id},{event.task.task_graph},"
-            f"{event.task.available_execution_strategies.get_slowest_strategy().runtime.time}"
+            f"{slowest_strategy.runtime.time}"
         )
 
         # If the task already had a placement, we remove the placement from our queue.

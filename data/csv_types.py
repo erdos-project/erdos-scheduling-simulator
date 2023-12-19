@@ -292,7 +292,14 @@ class TaskGraph(object):
         return self.completion_time is not None and self.completion_time > self.deadline
 
     def __str__(self) -> str:
-        return f"TaskGraph(name={self.name}, num_tasks={self.num_tasks}, release_time={self.release_time}, deadline={self.deadline}), completion_time={self.completion_time}, slack={self.slack}, cancelled={self.cancelled}, cancelled_at={self.cancelled_at}, completion_time={self.completion_time}, deadline_miss_detected_at={self.deadline_miss_detected_at}"
+        return (
+            f"TaskGraph(name={self.name}, num_tasks={self.num_tasks},"
+            + f"release_time={self.release_time}, deadline={self.deadline}),"
+            + f"completion_time={self.completion_time}, slack={self.slack},"
+            + f"cancelled={self.cancelled}, cancelled_at={self.cancelled_at},"
+            + f"completion_time={self.completion_time},"
+            + f"deadline_miss_detected_at={self.deadline_miss_detected_at}"
+        )
 
 
 class Scheduler(object):

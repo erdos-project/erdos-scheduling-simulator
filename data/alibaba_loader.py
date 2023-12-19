@@ -215,7 +215,8 @@ class AlibabaLoader(BaseWorkloadLoader):
         task_name_to_simulator_job_mapping = {}
         for task in job_tasks:
             if self._task_max_pow2_slots == 0:
-                # This code will use the cpu requirements from the alibaba trace and adjust slots
+                # This code will use the cpu requirements from
+                # the alibaba trace and adjust slots
                 job_resources_1 = Resources(
                     resource_vector={
                         # Note: We divide the CPU by some self._task_cpu_divisor instead
@@ -239,8 +240,9 @@ class AlibabaLoader(BaseWorkloadLoader):
                     }
                 )
             else:
-                # This code will override cpu requirements from the alibaba trace and assign
-                # random number of slots in powers of 2 upto a limit of self._task_max_pow2_slots
+                # This code will override cpu requirements from
+                # the alibaba trace and assign random number of slots
+                # in powers of 2 upto a limit of self._task_max_pow2_slots
                 max_pow2_for_slot = math.log2(self._task_max_pow2_slots)
                 slots_for_task = 2 ** (self._rng.randint(0, max_pow2_for_slot))
                 job_resources_1 = Resources(
@@ -256,24 +258,26 @@ class AlibabaLoader(BaseWorkloadLoader):
                 )
 
             # If we want to try randomizing the duration of the tasks.
-            # random_task_duration = round(
-            #     self._sample_normal_distribution_random(1, 50, 15)[0]
-            # )
+            random_task_duration = round(
+                self._sample_normal_distribution_random(1, 50, 15)[0]
+            )
             # Use this if we want middle heavy distribution of task durations
             # if i == 0 or i == len(job_tasks) - 1:
-            #     random_task_duration = round(self._sample_normal_distribution_random(1, 10, 5)[0])
+            #     random_task_duration =
+            #       round(self._sample_normal_distribution_random(1, 10, 5)[0])
             # else:
-            #     random_task_duration = round(self._sample_normal_distribution_random(1, 50, 15)[0])
+            #     random_task_duration =
+            #       round(self._sample_normal_distribution_random(1, 50, 15)[0])
 
             job_name = task.name.split("_")[0]
             job_runtime_1 = EventTime(
-                int(task.duration),
+                int(random_task_duration),
                 EventTime.Unit.US,
             )
             # This is used when self._heterogeneous is True
             # to support another execution strategy where it runs faster.
             job_runtime_2 = EventTime(
-                int(math.ceil(task.duration * 0.8)),
+                int(math.ceil(random_task_duration * 0.8)),
                 EventTime.Unit.US,
             )
 

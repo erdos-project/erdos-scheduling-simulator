@@ -132,7 +132,8 @@ class CSVReader(object):
                                 release_time=None,
                                 deadline=None,
                                 window_to_execute=None,
-                                # Checking if len(reading) > 6 is for backward compatibility
+                                # Checking if len(reading) > 6
+                                # is for backward compatibility
                                 slowest_execution_time=int(reading[6])
                                 if len(reading) > 6
                                 else None,
