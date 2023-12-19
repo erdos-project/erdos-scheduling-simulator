@@ -1447,8 +1447,17 @@ ParseResultPtr ObjectiveExpression::parse(
       }
       visitedExpressions.insert(currentExpression);
 
-      if (currentExpression->getNumChildren() == 0) {
+      if (currentExpression->getNumChildren() == 0 &&
+          (currentExpression->getType() == ExpressionType::EXPR_ALLOCATION ||
+           currentExpression->getType() ==
+               ExpressionType::EXPR_MALLEABLE_CHOOSE ||
+           currentExpression->getType() ==
+               ExpressionType::EXPR_WINDOWED_CHOOSE ||
+           currentExpression->getType() == ExpressionType::EXPR_CHOOSE)) {
         // This is a leaf Expression. Save it.
+        // Note that we only save the leaf expressions that must be parallely parsed.
+        // This is to prevent a bug where we're given an empty STRL DAG and we deadlock
+        // since ObjectiveExpression itself becomes a leaf expression.
         leafExpressions.push_back(currentExpression);
         continue;
       }
@@ -1459,6 +1468,8 @@ ParseResultPtr ObjectiveExpression::parse(
       }
     }
   }
+  TETRISCHED_DEBUG("Finished finding the leaf Expressions for "
+                   << name << " with size " << leafExpressions.size() << ".")
 
   // Parse all the leaf Expressions in parallel.
   {
@@ -1481,15 +1492,19 @@ ParseResultPtr ObjectiveExpression::parse(
     // }
     // leafExpressionParsingGroup.wait();
 
-    tbb::parallel_for(tbb::blocked_range<size_t>(0, leafExpressions.size()),
-                      [&](const tbb::blocked_range<size_t>& range) {
-                        for (size_t i = range.begin(); i != range.end(); ++i) {
-                          leafExpressions[i]->parse(
-                              solverModel, availablePartitions,
-                              capacityConstraints, currentTime);
-                        }
-                      });
+    tbb::parallel_for(
+        tbb::blocked_range<size_t>(0, leafExpressions.size()),
+        [&](const tbb::blocked_range<size_t>& range) {
+          for (size_t i = range.begin(); i != range.end(); ++i) {
+            TETRISCHED_DEBUG("Parsing leaf Expression "
+                             << i << " with name "
+                             << leafExpressions[i]->getName() << ".")
+            leafExpressions[i]->parse(solverModel, availablePartitions,
+                                      capacityConstraints, currentTime);
+          }
+        });
   }
+  TETRISCHED_DEBUG("Finished parsing the leaf Expressions for " << name << ".")
 
   // Create and save the ParseResult.
   parsedResult = std::make_shared<ParseResult>();
@@ -1502,6 +1517,8 @@ ParseResultPtr ObjectiveExpression::parse(
   bool useUtilityBound = true;
 
   // Parse the children and collect the utiltiies.
+  TETRISCHED_DEBUG("Parsing the children for ObjectiveExpression with name "
+                   << name << ".")
   for (auto& child : children) {
     auto result = child->parse(solverModel, availablePartitions,
                                capacityConstraints, currentTime);
