@@ -5,6 +5,7 @@ from component.utils import (
     plot_resource_utilization_timeline_chart,
     plot_task_placement_timeline_chart,
     visualize_task_graph,
+    Task,
 )
 
 st.set_page_config(layout="wide")
@@ -18,18 +19,20 @@ workload_file_path = st.text_input(
     "Workload file path relative to visualization/main.py",
 )
 
+if csv_file_path == "" or workload_file_path == "":
+    st.write("Please enter the CSV file path and workload file path")
+    st.stop()
+
 csv_data = get_csv_data(csv_file_path)
 
 # Separate Dataframe for completed, cancelled, miss deadline task graphs
 df_meet_deadline_task_graphs = csv_data.df_task_graphs[
-    (csv_data.df_task_graphs["cancelled"] is False)
+    (~csv_data.df_task_graphs["cancelled"])
     & (csv_data.df_task_graphs["deadline_miss_detected_at"].isnull())
 ]
-df_cancelled_task_graphs = csv_data.df_task_graphs[
-    (csv_data.df_task_graphs["cancelled"] is True)
-]
+df_cancelled_task_graphs = csv_data.df_task_graphs[csv_data.df_task_graphs["cancelled"]]
 df_miss_deadline_task_graphs = csv_data.df_task_graphs[
-    (csv_data.df_task_graphs["cancelled"] is False)
+    (~csv_data.df_task_graphs["cancelled"])
     & (csv_data.df_task_graphs["deadline_miss_detected_at"].notnull())
 ]
 length_total_task_graphs = (
@@ -40,12 +43,12 @@ length_total_task_graphs = (
 
 # Separate Dataframe for completed, cancelled, miss deadline tasks
 df_meet_deadline_tasks = csv_data.df_tasks[
-    (csv_data.df_tasks["cancelled"] is False)
+    (~csv_data.df_tasks["cancelled"])
     & (csv_data.df_tasks["deadline_miss_detected_at"].isnull())
 ]
-df_cancelled_tasks = csv_data.df_tasks[(csv_data.df_tasks["cancelled"] is True)]
+df_cancelled_tasks = csv_data.df_tasks[csv_data.df_tasks["cancelled"]]
 df_miss_deadline_tasks = csv_data.df_tasks[
-    (csv_data.df_tasks["cancelled"] is False)
+    (~csv_data.df_tasks["cancelled"])
     & (csv_data.df_tasks["deadline_miss_detected_at"].notnull())
 ]
 
