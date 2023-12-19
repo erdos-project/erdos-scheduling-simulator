@@ -1,3 +1,4 @@
+import bisect
 import logging
 import os
 import random
@@ -317,3 +318,39 @@ def generate_monotonically_increasing_intervals(
         intervals.extend([next_interval] * repetitions)
         repetitions = max(1, repetitions // 2)  # Decrease repetitions by half
     return intervals
+
+
+class DisjointedIntervals:
+    """
+    This class keeps track of a list of close intervals.
+    It supports adding new intervals and checking if a new interval
+    overlaps with any of the existing intervals.
+
+    """
+
+    def __init__(self):
+        self._intervals = []
+
+    def add(self, new_interval: tuple[int, int]) -> None:
+        if self.overlap(new_interval):
+            raise ValueError(f"Overlap detected for {new_interval}")
+        bisect.insort(self._intervals, new_interval)
+
+    def overlap(self, new_interval: tuple[int, int]) -> bool:
+        if not self._intervals:
+            return False
+
+        i = bisect.bisect_left(self._intervals, new_interval)
+        if i >= len(self._intervals):
+            return new_interval[0] <= self._intervals[-1][1]
+        elif i == 0:
+            if new_interval[1] < self._intervals[i][0]:
+                return False
+            return True
+        else:
+            if (
+                new_interval[0] > self._intervals[i - 1][1]
+                and new_interval[1] < self._intervals[i][0]
+            ):
+                return False
+            return True
