@@ -123,7 +123,12 @@ class Logger {
 
   /// Writes the given value to the output stream.
   template <typename T>
-  Logger& operator<<(const T& val);
+  Logger& operator<<(const T& value) {
+    if (logLevel >= TETRISCHED_DEFAULT_LOG_LEVEL) {
+      outputStream << value;
+    }
+    return *this;
+  }
 
   /// Destructor for the Logger.
   ~Logger();
