@@ -151,7 +151,7 @@ flags.DEFINE_integer(
 flags.DEFINE_integer(
     "alibaba_loader_task_max_pow2_slots",
     0,
-    "Used IFF value not equal to 0. The max number of slots a task can use for alibaba " 
+    "Used IFF value not equal to 0. The max number of slots a task can use for alibaba "
     "trace. Num slots will be in powers of 2 and picked at random from "
     "[1, alibaba_loader_task_max_pow2_slots].",
 )
