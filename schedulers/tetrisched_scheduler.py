@@ -202,6 +202,7 @@ class TetriSchedScheduler(BaseScheduler):
         self._goal = goal
         self._time_discretization = time_discretization.to(EventTime.Unit.US)
         self._plan_ahead = plan_ahead.to(EventTime.Unit.US)
+
         # Values for STRL generation.
         self._use_windowed_choose = False
         self._dynamic_discretization = dynamic_discretization
@@ -218,6 +219,9 @@ class TetriSchedScheduler(BaseScheduler):
             max_occupancy_threshold,
         )
         self._previously_placed_reward_scale_factor = 1.0
+        self._enable_optimization_passes = (
+            _flags.scheduler_enable_optimization_pass if _flags else False
+        )
 
         # A cache for the STRLs generated for individual tasks.
         # This is used to avoid generating the same STRL multiple times, and so that
@@ -469,7 +473,7 @@ class TetriSchedScheduler(BaseScheduler):
                     objective_strl,
                     partitions.partitions,
                     sim_time.time,
-                    self._flags.scheduler_enable_optimization_pass,
+                    self._enable_optimization_passes,
                     start_end_time_list,
                 )
                 solver_start_time = time.time()
