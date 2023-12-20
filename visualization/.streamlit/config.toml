@@ -1,2 +1,3 @@
 [server]
 maxMessageSize = 500
+address = "localhost"

@@ -66,3 +66,15 @@ def test_overlap_more_than_one_intervals():
     assert di.overlap((3, 10)) is True
     assert di.overlap((4, 11)) is True
     assert di.overlap((2, 14)) is True
+
+
+def test_placement_gap_with_left_interval():
+    di = DisjointedIntervals()
+    di.add((3, 5))
+    di.add((10, 13))
+
+    assert di.placement_gap_with_left_interval((1, 2)) == 0
+    assert di.placement_gap_with_left_interval((6, 7)) == 1
+    assert di.placement_gap_with_left_interval((7, 7)) == 2
+    assert di.placement_gap_with_left_interval((8, 9)) == 3
+    assert di.placement_gap_with_left_interval((15, 18)) == 2
