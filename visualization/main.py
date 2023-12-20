@@ -5,6 +5,7 @@ from component.utils import (
     get_original_trace_data,
     plot_resource_utilization_timeline_chart,
     plot_task_placement_timeline_chart,
+    plot_task_placement_per_slot_timeline_chart,
     visualize_task_graph,
 )
 
@@ -55,20 +56,19 @@ df_miss_deadline_tasks = df_tasks[
 # Metrics Row
 col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
 col1.metric(
-    "%SLO",
-    str((len(df_meet_deadline_task_graphs) / length_total_task_graphs) * 100) + "%",
+    "%SLO", f"{len(df_meet_deadline_task_graphs) / length_total_task_graphs * 100:.2f}%"
 )
 col2.metric(
     "Meet Deadline Task Graphs",
-    str((len(df_meet_deadline_task_graphs) / length_total_task_graphs) * 100) + "%",
+    f"{len(df_meet_deadline_task_graphs) / length_total_task_graphs * 100:.2f}%",
 )
 col3.metric(
     "Canceled Task Graphs",
-    str((len(df_cancelled_task_graphs) / length_total_task_graphs) * 100) + "%",
+    f"{len(df_cancelled_task_graphs) / length_total_task_graphs * 100:.2f}%",
 )
 col4.metric(
     "Missed Deadline Task Graphs",
-    str((len(df_miss_deadline_task_graphs) / length_total_task_graphs) * 100) + "%",
+    f"{len(df_miss_deadline_task_graphs) / length_total_task_graphs * 100:.2f}%",
 )
 col5.metric(
     "Time spent meet deadline task graphs",
@@ -88,7 +88,7 @@ plot_resource_utilization_timeline_chart(
 )
 
 st.write("### Worker Pools")
-st.dataframe(csv_data.df_worker_pools.drop(["utilizations"], axis=1))
+st.dataframe(csv_data.df_worker_pools.drop(["utilizations", "resources"], axis=1))
 
 st.write("### Task Graphs Stats")
 tab1, tab2, tab3, tab4 = st.tabs(["All", "Meet Deadline", "Cancelled", "Miss Deadline"])
@@ -163,6 +163,7 @@ if st.toggle("Display Tasks Table"):
         st.write(df_miss_deadline_tasks)
 
 plot_task_placement_timeline_chart(csv_data.df_worker_pools, df_tasks)
+plot_task_placement_per_slot_timeline_chart(csv_data.df_worker_pools, df_tasks)
 
 # Visualize DAG
 trace_data = get_original_trace_data(workload_file_path)
