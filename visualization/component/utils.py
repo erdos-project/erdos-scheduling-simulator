@@ -160,8 +160,10 @@ def visualize_task_graph(task_graph_id, df_tasks, trace_data):
                 # title get displayed when you hover over the node
                 title=f"release={row['release_time'].item()}, \
                         place={row['placement_time'].item()}, \
-                        slowest_exec_time={row['slowest_execution_time'].item()}",
-                label=f"{task_name}, runtime={row['runtime'].item()}",
+                        actual_runtime={row['runtime'].item()}, \
+                        slowest_runtime={row['slowest_execution_time'].item()}",
+                label=f"{task_name},"
+                + f"slowest_runtime={row['slowest_execution_time'].item()}",
                 size=25,
                 shape="dot",
                 color="red"
