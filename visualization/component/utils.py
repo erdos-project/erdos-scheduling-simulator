@@ -1,7 +1,6 @@
-import os
 import pickle
 import sys
-from collections import defaultdict, namedtuple
+from collections import namedtuple
 from dataclasses import dataclass
 
 import altair as alt
@@ -10,7 +9,6 @@ import pandas as pd
 import streamlit as st
 from matplotlib import pyplot as plt
 from streamlit_agraph import Config, Edge, Node, agraph
-
 
 sys.path.append("..")
 from data.csv_reader import CSVReader
