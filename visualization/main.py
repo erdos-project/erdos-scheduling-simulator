@@ -139,13 +139,13 @@ with tab4:
 st.write("### Task Graphs Table")
 tab1, tab2, tab3, tab4 = st.tabs(["All", "Meet Deadline", "Cancelled", "Miss Deadline"])
 with tab1:
-    st.write(df_task_graphs.fillna("").astype("str"))
+    st.write(df_task_graphs)
 with tab2:
-    st.write(df_meet_deadline_task_graphs.fillna("").astype("str"))
+    st.write(df_meet_deadline_task_graphs)
 with tab3:
-    st.write(df_cancelled_task_graphs.fillna("").astype("str"))
+    st.write(df_cancelled_task_graphs)
 with tab4:
-    st.write(df_miss_deadline_task_graphs.fillna("").astype("str"))
+    st.write(df_miss_deadline_task_graphs)
 
 
 if st.toggle("Display Tasks Table"):
@@ -154,13 +154,13 @@ if st.toggle("Display Tasks Table"):
         ["All", "Meet Deadline", "Cancelled", "Miss Deadline"]
     )
     with tab1:
-        st.write(df_tasks.fillna("").astype("str"))
+        st.write(df_tasks)
     with tab2:
-        st.write(df_meet_deadline_tasks.fillna("").astype("str"))
+        st.write(df_meet_deadline_tasks)
     with tab3:
-        st.write(df_cancelled_tasks.fillna("").astype("str"))
+        st.write(df_cancelled_tasks)
     with tab4:
-        st.write(df_miss_deadline_tasks.fillna("").astype("str"))
+        st.write(df_miss_deadline_tasks)
 
 plot_task_placement_timeline_chart(csv_data.df_worker_pools, df_tasks)
 
