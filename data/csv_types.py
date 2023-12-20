@@ -270,13 +270,14 @@ class TaskGraph(object):
     release_time: int
     deadline: int
     num_tasks: int
+    critical_path_time: Optional[int] = None
     window_to_execute: int = field(init=False)
 
     cancelled: bool = False
     cancelled_at: Optional[int] = None
 
     # Values updated from the TASK_GRAPH_FINISHED event.
-    completion_time: Optional[int] = None
+    completion_at: Optional[int] = None
     slack: Optional[int] = None
     deadline_miss_detected_at: Optional[int] = None
 
@@ -285,19 +286,19 @@ class TaskGraph(object):
 
     @property
     def was_completed(self):
-        return self.completion_time is not None
+        return self.completion_at is not None
 
     @property
     def missed_deadline(self):
-        return self.completion_time is not None and self.completion_time > self.deadline
+        return self.completion_at is not None and self.completion_at > self.deadline
 
     def __str__(self) -> str:
         return (
             f"TaskGraph(name={self.name}, num_tasks={self.num_tasks},"
             + f"release_time={self.release_time}, deadline={self.deadline}),"
-            + f"completion_time={self.completion_time}, slack={self.slack},"
+            + f"critical_path_time={self.critical_path_time}, slack={self.slack},"
             + f"cancelled={self.cancelled}, cancelled_at={self.cancelled_at},"
-            + f"completion_time={self.completion_time},"
+            + f"completion_at={self.completion_at},"
             + f"deadline_miss_detected_at={self.deadline_miss_detected_at}"
         )
 
