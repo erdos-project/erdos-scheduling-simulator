@@ -413,6 +413,9 @@ class Simulator(object):
             sched_start_event,
         )
 
+    def _get_available_exec_strategies(self, task: Task):
+        return task.available_execution_strategies
+
     def dry_run(self) -> None:
         """Displays the order in which the TaskGraphs will be released."""
         start_time = EventTime.zero()
@@ -458,7 +461,7 @@ class Simulator(object):
                     task_graph.name,
                     len(task_graph.get_nodes()),
                     task_graph.get_longest_path(
-                        weights=lambda task: task.available_execution_strategies
+                        lambda t: self._get_available_exec_strategies(t)
                         .get_slowest_strategy()
                         .runtime.to(EventTime.Unit.US)
                         .time
@@ -1468,7 +1471,7 @@ class Simulator(object):
             task_graph.name,
             len(task_graph.get_nodes()),
             task_graph.get_longest_path(
-                weights=lambda task: task.available_execution_strategies
+                weights=lambda t: self._get_available_exec_strategies(t)
                 .get_slowest_strategy()
                 .runtime.to(EventTime.Unit.US)
                 .time
