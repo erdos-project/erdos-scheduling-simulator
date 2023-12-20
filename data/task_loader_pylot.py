@@ -8,7 +8,7 @@ import absl  # noqa: F401
 import numpy as np
 
 from data import TaskLoader
-from utils import EventTime, fuzz_time, log_statistics, setup_logging
+from utils import EventTime, log_statistics, setup_logging
 from workload import (
     ExecutionStrategies,
     ExecutionStrategy,
@@ -241,8 +241,8 @@ class TaskLoaderPylot(TaskLoader):
             offset = first_task[entry["name"]]
 
             # All times are in microseconds.
-            runtime_deadline = fuzz_time(
-                EventTime(entry["dur"], EventTime.Unit.US), deadline_variance
+            runtime_deadline = EventTime(entry["dur"], EventTime.Unit.US).fuzz(
+                deadline_variance
             )
             deadline = EventTime(entry["ts"], EventTime.Unit.US) + runtime_deadline
             tasks.append(

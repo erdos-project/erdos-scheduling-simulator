@@ -160,6 +160,7 @@ def test_tetrisched_task_choice_strl_generation_with_single_strategy():
         time_discretization=EventTime(10, EventTime.Unit.US),
         enforce_deadlines=True,
     )
+    scheduler._use_windowed_choose = True
     partitions = Partitions(worker_pools=worker_pools)
     task_strl = scheduler.construct_task_strl(
         current_time=EventTime.zero(),
@@ -175,7 +176,7 @@ def test_tetrisched_task_choice_strl_generation_with_single_strategy():
 
     # Ensure that the type and number of choices are correct.
     assert (
-        task_strl.getType() == tetrisched.strl.EXPR_WINDOWED_CHOOSE
+        task_strl.getType() == tetrisched.strl.ExpressionType.EXPR_WINDOWED_CHOOSE
     ), f"Incorrect type of the root of STRL subtree: {task_strl.getType()}"
     assert task_strl.getNumChildren() == 0, "Incorrect number of children in STRL."
 
@@ -226,6 +227,7 @@ def test_tetrisched_task_choice_strl_generation_with_multiple_strategies():
         time_discretization=EventTime(5, EventTime.Unit.US),
         enforce_deadlines=True,
     )
+    scheduler._use_windowed_choose = True
     partitions = Partitions(worker_pools=worker_pools)
     task_strl = scheduler.construct_task_strl(
         current_time=EventTime.zero(),
@@ -238,12 +240,12 @@ def test_tetrisched_task_choice_strl_generation_with_multiple_strategies():
 
     # Ensure that the type and number of choices are correct.
     assert (
-        task_strl.getType() == tetrisched.strl.EXPR_MAX
+        task_strl.getType() == tetrisched.strl.ExpressionType.EXPR_MAX
     ), f"Incorrect type of the root of STRL subtree: {task_strl.getType()}"
     assert task_strl.getNumChildren() == 2, "Incorrect number of children in STRL."
     for child in task_strl.getChildren():
         assert (
-            child.getType() == tetrisched.strl.EXPR_WINDOWED_CHOOSE
+            child.getType() == tetrisched.strl.ExpressionType.EXPR_WINDOWED_CHOOSE
         ), f"Incorrect type of the child of STRL subtree: {child.getType()}"
         assert (
             child.getNumChildren() == 0
@@ -281,6 +283,7 @@ def test_tetrisched_task_graph_strl_generation_simple():
         time_discretization=EventTime(10, EventTime.Unit.US),
         enforce_deadlines=True,
     )
+    scheduler._use_windowed_choose = True
     partitions = Partitions(worker_pools=worker_pools)
 
     # Construct the STRL expression for the TaskGraph.
@@ -304,18 +307,18 @@ def test_tetrisched_task_graph_strl_generation_simple():
 
     # Ensure that the generated STRL expression is correct.
     assert (
-        task_graph_strl.getType() == tetrisched.strl.EXPR_LESSTHAN
+        task_graph_strl.getType() == tetrisched.strl.ExpressionType.EXPR_LESSTHAN
     ), f"Incorrect type of the root of STRL subtree: {task_graph_strl.getType()}"
     assert (
         task_graph_strl.getNumChildren() == 2
     ), "Incorrect number of children in STRL."
     task_one_strl, task_two_strl = task_graph_strl.getChildren()
     assert (
-        task_one_strl.getType() == tetrisched.strl.EXPR_WINDOWED_CHOOSE
+        task_one_strl.getType() == tetrisched.strl.ExpressionType.EXPR_WINDOWED_CHOOSE
     ), f"Incorrect type: {task_one_strl.getType()}"
     assert task_one_strl.getNumChildren() == 0, "Incorrect number of children in STRL."
     assert (
-        task_two_strl.getType() == tetrisched.strl.EXPR_WINDOWED_CHOOSE
+        task_two_strl.getType() == tetrisched.strl.ExpressionType.EXPR_WINDOWED_CHOOSE
     ), f"Incorrect type: {task_two_strl.getType()}"
     assert task_two_strl.getNumChildren() == 0, "Incorrect number of children in STRL."
 

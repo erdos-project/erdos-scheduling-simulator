@@ -37,14 +37,6 @@ Logger::Logger(std::ostream& outputStream, LogLevel logLevel)
   outputStream << std::unitbuf;
 }
 
-template <typename T>
-Logger& Logger::operator<<(const T& value) {
-  if (logLevel >= TETRISCHED_DEFAULT_LOG_LEVEL) {
-    outputStream << value;
-  }
-  return *this;
-}
-
 Logger::~Logger() { outputStream << std::endl << std::nounitbuf; }
 
 void Logger::flush() { outputStream.flush(); }

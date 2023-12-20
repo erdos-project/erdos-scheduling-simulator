@@ -5,7 +5,7 @@ from typing import Mapping, Optional, Sequence, Tuple
 import absl  # noqa: F401
 
 from data import TaskLoader
-from utils import EventTime, fuzz_time, setup_logging
+from utils import EventTime, setup_logging
 from workload import (
     ExecutionStrategies,
     ExecutionStrategy,
@@ -460,14 +460,13 @@ class TaskLoaderSynthetic(TaskLoader):
             if use_end_to_end_deadlines:
                 job_name = f"e2e-{timestamp}"
                 if job_name not in deadlines:
-                    deadlines[job_name] = fuzz_time(
-                        self._job_graph.completion_time, deadline_variance
+                    deadlines[job_name] = self._job_graph.completion_time.fuzz(
+                        deadline_variance
                     )
                 return deadlines[job_name]
             else:
-                return fuzz_time(
-                    EventTime(int(deadlines[job.name]), EventTime.Unit.US),
-                    deadline_variance,
+                return EventTime(int(deadlines[job.name]), EventTime.Unit.US).fuzz(
+                    deadline_variance
                 )
 
         tasks = {}

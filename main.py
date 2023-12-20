@@ -104,7 +104,9 @@ flags.DEFINE_integer(
     "loop_timeout", sys.maxsize, "Timeout for the Simulator loop (in us)."
 )
 flags.DEFINE_integer(
-    "random_seed", 42, "The seed to be used for random number generation."
+    "random_seed",
+    random.randint(0, sys.maxsize),
+    "The seed to be used for random number generation. Defaults to a random number.",
 )
 flags.DEFINE_bool(
     "resolve_conditionals_at_submission",
@@ -183,9 +185,19 @@ flags.DEFINE_bool(
     "to execute.",
 )
 flags.DEFINE_integer(
+    "min_deadline",
+    0,
+    "The minimum deadline to assign to a task (in µs).",
+)
+flags.DEFINE_integer(
     "min_deadline_variance",
     0,
     "The minimum % variance to allocate to the assigned deadline for each task.",
+)
+flags.DEFINE_integer(
+    "max_deadline",
+    sys.maxsize,
+    "The maximum deadline to assign to a task (in µs).",
 )
 flags.DEFINE_integer(
     "max_deadline_variance",

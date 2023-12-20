@@ -8,6 +8,7 @@ from functools import partial, total_ordering
 from typing import Optional, Sequence, Tuple, Union
 
 import numpy as np
+from absl import flags
 
 try:
     from tabulate import tabulate
@@ -29,9 +30,6 @@ STATS_FUNCTIONS = {
     "p99": (partial(np.percentile, q=99), "Percentile (99th)"),
     "p99.9": (partial(np.percentile, q=99.9), "Percentile (99.9th)"),
 }
-
-# TODO (Dhruv): remove the hardcoding for rng seed
-_rng = random.Random(42)
 
 
 @total_ordering
@@ -67,6 +65,7 @@ class EventTime:
             return self.value / other.value
 
     __slots__ = ("_time", "_unit")
+    _rng = None
 
     def __init__(self, time: int, unit: Unit) -> None:
         if type(unit) != EventTime.Unit:
@@ -76,6 +75,11 @@ class EventTime:
 
         self._time = time
         self._unit = unit
+        if type(self)._rng is None:
+            if hasattr(flags.FLAGS, "random_seed"):
+                type(self)._rng = random.Random(flags.FLAGS.random_seed)
+            else:
+                type(self)._rng = random.Random(42)
 
     def to(self, unit: Unit) -> "EventTime":
         if unit > self.unit:
@@ -87,6 +91,33 @@ class EventTime:
 
     def to_unchecked(self, unit: Unit) -> Tuple[float, Unit]:
         return self.time * self.unit.to(unit), unit
+
+    def fuzz(
+        self, variance: Tuple[int, int], bounds: Tuple[int, int] = (0, sys.maxsize)
+    ) -> "EventTime":
+        """Fuzz the time according to the provided `variance` and within the bounds.
+
+        Args:
+            variance (`Tuple[int, int]`): The (minimum, maximum) % variance to fuzz by.
+            bounds (`Tuple[int, int]`): The (minimum, maximum) bounds to fuzz within.
+
+        Returns:
+            The fuzzed time according to the given variance.
+        """
+        min_variance, max_variance = variance
+        min_bound, max_bound = bounds
+        fuzzed_time = max(
+            min_bound,
+            min(
+                max_bound,
+                type(self)._rng.uniform(
+                    self.time * abs(min_variance) / 100.0,
+                    self.time * abs(max_variance) / 100.0,
+                ),
+            ),
+        )
+
+        return EventTime(round(self.time + fuzzed_time), self.unit)
 
     def __str__(self) -> str:
         return f"{self.time}{self.unit}"
@@ -227,29 +258,6 @@ def setup_csv_logging(
         log_dir=log_dir,
         log_file=log_file,
         log_level="debug",
-    )
-
-
-def fuzz_time(time: EventTime, variance: Tuple[int, int]) -> EventTime:
-    """Fuzz the given `time` according to the provided `variance`.
-
-    Args:
-        time (`EventTime`): The time to fuzz.
-        variance (`Tuple[int, int]`): The (minimum, maximum) % variance to fuzz
-            `time` by.
-
-    Returns:
-        The fuzzed time according to the given variance.
-    """
-    min_variance, max_variance = variance
-    return EventTime(
-        round(
-            _rng.uniform(
-                time.time + (time.time * abs(min_variance) / 100.0),
-                time.time + (time.time * abs(max_variance) / 100.0),
-            )
-        ),
-        time.unit,
     )
 
 
