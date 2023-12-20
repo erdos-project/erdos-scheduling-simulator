@@ -161,11 +161,6 @@ class CSVReader(object):
                             release_time=int(reading[2]),
                             deadline=int(reading[3]),
                             num_tasks=int(reading[5]),
-                            # Checking if len(reading) > 6
-                            # is for backward compatibility
-                            critical_path_time=int(reading[6])
-                            if len(reading) > 6
-                            else None,
                         )
                     elif reading[1] == "TASK_GRAPH_FINISHED":
                         task_graphs[reading[2]].completion_at = int(reading[0])

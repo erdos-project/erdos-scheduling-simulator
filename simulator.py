@@ -413,9 +413,6 @@ class Simulator(object):
             sched_start_event,
         )
 
-    def _get_available_exec_strategies(self, task: Task):
-        return task.available_execution_strategies
-
     def dry_run(self) -> None:
         """Displays the order in which the TaskGraphs will be released."""
         start_time = EventTime.zero()
@@ -454,18 +451,12 @@ class Simulator(object):
                     task_graph.job_graph.completion_time,
                 )
                 self._csv_logger.info(
-                    "%s,TASK_GRAPH_RELEASE,%s,%s,%s,%s,%s",
+                    "%s,TASK_GRAPH_RELEASE,%s,%s,%s,%s",
                     0,
                     task_graph.release_time.to(EventTime.Unit.US).time,
                     task_graph.deadline.to(EventTime.Unit.US).time,
                     task_graph.name,
                     len(task_graph.get_nodes()),
-                    task_graph.get_longest_path(
-                        lambda t: self._get_available_exec_strategies(t)
-                        .get_slowest_strategy()
-                        .runtime.to(EventTime.Unit.US)
-                        .time
-                    ),  # This is the critical path time
                 )
                 if self._log_task_graphs:
                     # Log a DOT representation of the TaskGraph, if requested.
@@ -1464,18 +1455,12 @@ class Simulator(object):
         if task_graph is None:
             raise ValueError(f"TaskGraph {event.task_graph} not found in the Workload.")
         self._csv_logger.info(
-            "%s,TASK_GRAPH_RELEASE,%s,%s,%s,%s,%s",
+            "%s,TASK_GRAPH_RELEASE,%s,%s,%s,%s",
             event.time.to(EventTime.Unit.US).time,
             task_graph.release_time.to(EventTime.Unit.US).time,
             task_graph.deadline.to(EventTime.Unit.US).time,
             task_graph.name,
             len(task_graph.get_nodes()),
-            task_graph.get_longest_path(
-                weights=lambda t: self._get_available_exec_strategies(t)
-                .get_slowest_strategy()
-                .runtime.to(EventTime.Unit.US)
-                .time
-            ),  # This is the critical path time
         )
         if self._log_task_graphs:
             # Log a DOT representation of the TaskGraph, if requested.

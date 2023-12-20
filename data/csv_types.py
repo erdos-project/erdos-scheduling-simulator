@@ -270,7 +270,6 @@ class TaskGraph(object):
     release_time: int
     deadline: int
     num_tasks: int
-    critical_path_time: Optional[int] = None
     window_to_execute: int = field(init=False)
 
     cancelled: bool = False
