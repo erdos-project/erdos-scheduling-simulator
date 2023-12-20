@@ -374,6 +374,11 @@ def plot_task_placement_per_slot_timeline_chart(
 def find_placement_slot_candidates(
     disjoint_intervals_per_resource, interval, resource_used, quantity
 ):
+    """
+    This function finds the placement slot candidates for a task. We
+    want the placement to be as packed as possible.
+    See https://leetcode.com/problems/k-closest-points-to-origin/
+    """
     placement_candidates = []
     for slot_id, disjoint_intervals in enumerate(
         disjoint_intervals_per_resource[resource_used["name"]]
