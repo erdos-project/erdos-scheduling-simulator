@@ -171,15 +171,8 @@ def extract_experiments_result(base_dir: str) -> pd.DataFrame:
                 #     event_time, _, task_name, _, task_intended_release_time, task_release_time, task_deadline, task_id, task_graph = line.strip().split(",")
 
                 if "TASK_GRAPH_RELEASE" in line:
-                    (
-                        event_time,
-                        _,
-                        release_time,
-                        deadline,
-                        task_graph_name,
-                        number_of_nodes,
-                    ) = line.strip().split(",")
-                    release_times.append(int(release_time))
+                    items = line.strip().split(",")
+                    release_times.append(int(items[2]))
 
             actual_arrival_rate, actual_cv2 = calculate_arrival_rate_and_cv2(
                 release_times
