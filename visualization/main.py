@@ -4,8 +4,8 @@ from component.utils import (
     get_csv_data,
     get_original_trace_data,
     plot_resource_utilization_timeline_chart,
-    plot_task_placement_timeline_chart,
     plot_task_placement_per_slot_timeline_chart,
+    plot_task_placement_timeline_chart,
     visualize_task_graph,
 )
 
