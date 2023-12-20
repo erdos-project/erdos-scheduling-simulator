@@ -460,11 +460,18 @@ class Simulator(object):
                     task_graph.deadline.to(EventTime.Unit.US).time,
                     task_graph.name,
                     len(task_graph.get_nodes()),
-                    task_graph.get_longest_path(
-                        lambda t: self._get_available_exec_strategies(t)
-                        .get_slowest_strategy()
-                        .runtime.to(EventTime.Unit.US)
-                        .time
+                    sum(
+                        [
+                            self._get_available_exec_strategies(t)
+                            .get_slowest_strategy()
+                            .runtime.time
+                            for t in task_graph.get_longest_path(
+                                lambda t: self._get_available_exec_strategies(t)
+                                .get_slowest_strategy()
+                                .runtime.to(EventTime.Unit.US)
+                                .time
+                            )
+                        ]
                     ),  # This is the critical path time
                 )
                 if self._log_task_graphs:
@@ -1470,11 +1477,18 @@ class Simulator(object):
             task_graph.deadline.to(EventTime.Unit.US).time,
             task_graph.name,
             len(task_graph.get_nodes()),
-            task_graph.get_longest_path(
-                weights=lambda t: self._get_available_exec_strategies(t)
-                .get_slowest_strategy()
-                .runtime.to(EventTime.Unit.US)
-                .time
+            sum(
+                [
+                    self._get_available_exec_strategies(t)
+                    .get_slowest_strategy()
+                    .runtime.time
+                    for t in task_graph.get_longest_path(
+                        lambda t: self._get_available_exec_strategies(t)
+                        .get_slowest_strategy()
+                        .runtime.to(EventTime.Unit.US)
+                        .time
+                    )
+                ]
             ),  # This is the critical path time
         )
         if self._log_task_graphs:
