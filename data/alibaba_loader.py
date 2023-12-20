@@ -271,7 +271,7 @@ class AlibabaLoader(BaseWorkloadLoader):
 
             job_name = task.name.split("_")[0]
             job_runtime_1 = EventTime(
-                int(math.ceil((task.duration))),
+                int(math.ceil(task.duration)),
                 EventTime.Unit.US,
             )
             # This is used when self._heterogeneous is True
