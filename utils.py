@@ -340,11 +340,15 @@ class DisjointedIntervals:
         self._intervals = []
 
     def add(self, new_interval: tuple[int, int]) -> None:
+        if new_interval[0] > new_interval[1]:
+            raise ValueError(f"Invalid interval {new_interval}")
         if self.overlap(new_interval):
             raise ValueError(f"Overlap detected for {new_interval}")
         bisect.insort(self._intervals, new_interval)
 
     def overlap(self, new_interval: tuple[int, int]) -> bool:
+        if new_interval[0] > new_interval[1]:
+            raise ValueError(f"Invalid interval {new_interval}")
         if not self._intervals:
             return False
 
@@ -362,3 +366,27 @@ class DisjointedIntervals:
             ):
                 return False
             return True
+
+    def placement_gap_with_left_interval(
+        self,
+        new_interval: tuple[int, int],
+    ) -> int:
+        """
+        If the new interval can be added, find the gap between
+        the new interval and right most existing interval
+        that is to the left of this new interval.
+        """
+        if new_interval[0] > new_interval[1]:
+            raise ValueError(f"Invalid interval {new_interval}")
+        if self.overlap(new_interval):
+            raise ValueError(f"Overlap detected for {new_interval}")
+        if not self._intervals:
+            return 0
+
+        i = bisect.bisect_left(self._intervals, new_interval)
+        if i >= len(self._intervals):
+            return new_interval[0] - self._intervals[-1][1]
+        elif i == 0:
+            return 0
+        else:
+            return new_interval[0] - self._intervals[i - 1][1]
