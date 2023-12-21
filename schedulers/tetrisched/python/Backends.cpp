@@ -43,6 +43,13 @@ void defineSolverSolution(py::module_& tetrisched_m) {
           },
           "The objective value of the solution (if available).")
       .def_property_readonly(
+          "objectiveValueBound",
+          [](const tetrisched::SolverSolution& solution) {
+            return solution.objectiveValueBound;
+          },
+          "The objective value of the bound retrieved from STRL (if "
+          "available).")
+      .def_property_readonly(
           "solverTimeMicroseconds",
           [](const tetrisched::SolverSolution& solution) {
             return solution.solverTimeMicroseconds;
@@ -55,6 +62,10 @@ void defineSolverSolution(py::module_& tetrisched_m) {
                ", objectiveValue=" +
                (solution.objectiveValue.has_value()
                     ? std::to_string(solution.objectiveValue.value())
+                    : "None") +
+               ", objectiveValueBound=" +
+               (solution.objectiveValueBound.has_value()
+                    ? std::to_string(solution.objectiveValueBound.value())
                     : "None") +
                ", solverTimeMicroseconds=" +
                std::to_string(solution.solverTimeMicroseconds) + ">";

@@ -48,6 +48,8 @@ struct SolverSolution {
   SolutionType solutionType;
   /// The objective value of the solution.
   std::optional<double> objectiveValue;
+  /// The maximum possible objective value retrieved from the STRL.
+  std::optional<double> objectiveValueBound;
   /// The time taken by the solver to find the solution (in microseconds).
   uint64_t solverTimeMicroseconds;
 

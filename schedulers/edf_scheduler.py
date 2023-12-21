@@ -1,7 +1,6 @@
 import os
 import time
 from copy import copy, deepcopy
-from operator import attrgetter
 from typing import Optional
 
 import absl  # noqa: F401
