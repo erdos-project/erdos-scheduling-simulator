@@ -1,3 +1,4 @@
+import heapq
 import pickle
 import sys
 from collections import namedtuple
@@ -30,9 +31,13 @@ class CSV_Data:
 @st.cache_data
 def get_csv_data(csv_file_path):
     csv_reader = CSVReader([csv_file_path])
+
     worker_pools = csv_reader.get_worker_pools(csv_file_path)
-    for worker_pool in worker_pools:
-        worker_pool.resources = str(worker_pool.resources)
+    df_worker_pools = pd.DataFrame(worker_pools)
+    df_worker_pools["resources_str"] = [
+        str(resources) for resources in df_worker_pools["resources"]
+    ]
+
     worker_pool_stats = csv_reader.get_worker_pool_utilizations(csv_file_path)
     task_graphs = csv_reader.get_task_graph(csv_file_path).values()
     tasks = csv_reader.get_tasks(csv_file_path)
@@ -94,7 +99,7 @@ def get_csv_data(csv_file_path):
                 "placements",
             ]
         ],
-        df_worker_pools=pd.DataFrame(worker_pools),
+        df_worker_pools=df_worker_pools,
         worker_pool_stats=worker_pool_stats,
         completed_task_graph_run_time=sum(completed_task_graph_run_time.values()),
         canceled_task_graph_run_time=sum(canceled_task_graph_run_time.values()),
@@ -124,6 +129,9 @@ def visualize_task_graph(task_graph_id, df_tasks, trace_data):
     )
     if task_graph_id.split("@")[0] not in trace_data:
         st.write(f'Task Graph "{task_graph_id}" not found in trace data')
+        return
+    if len(df_tasks[df_tasks["task_graph"] == task_graph_id]) == 0:
+        st.write(f'Task Graph "{task_graph_id}" not found in this run')
         return
 
     tasks = trace_data[task_graph_id.split("@")[0]]
@@ -203,30 +211,21 @@ def plot_task_placement_timeline_chart(
         disjoint_intervals_pools = [DisjointedIntervals()]
         task_placements = []
         for i, task in df_tasks[df_tasks["start_time"].notnull()].iterrows():
+            start_time = task["placement_time"]
+            runtime = task["runtime"]
+            interval = (start_time, start_time + runtime - 1)
             for placement in task["placements"]:
                 for resource in placement["resources_used"]:
                     # Find the y_index to place this task on the timeline chart
                     y_index = 0
                     for j, disjoint_intervals in enumerate(disjoint_intervals_pools):
-                        if not disjoint_intervals.overlap(
-                            (task["start_time"], task["start_time"] + task["runtime"])
-                        ):
-                            disjoint_intervals.add(
-                                (
-                                    task["start_time"],
-                                    task["start_time"] + task["runtime"] - 1,
-                                )
-                            )
+                        if not disjoint_intervals.overlap(interval):
+                            disjoint_intervals.add(interval)
                             y_index = j
                             break
                     else:
                         disjoint_intervals_pools.append(DisjointedIntervals())
-                        disjoint_intervals_pools[-1].add(
-                            (
-                                task["start_time"],
-                                task["start_time"] + task["runtime"] - 1,
-                            )
-                        )
+                        disjoint_intervals_pools[-1].add(interval)
                         y_index = len(disjoint_intervals_pools) - 1
 
                     task_placements.append(
@@ -236,9 +235,9 @@ def plot_task_placement_timeline_chart(
                             "task_graph": task["task_graph"],
                             "release": task["release_time"],
                             "deadline": task["deadline"],
-                            "start": task["start_time"],
-                            "end": task["start_time"] + task["runtime"],
-                            "runtime": task["runtime"],
+                            "start": start_time,
+                            "end": start_time + runtime,
+                            "runtime": runtime,
                             "resource": f'{resource["name"]}, {resource["quantity"]}',
                             "cancelled": task["cancelled"],
                             "missed_deadline": task["missed_deadline"],
@@ -274,6 +273,138 @@ def plot_task_placement_timeline_chart(
         )
 
         st.altair_chart(chart, theme="streamlit", use_container_width=True)
+
+
+@st.cache_data
+def plot_task_placement_per_slot_timeline_chart(
+    df_worker_pools: pd.DataFrame, df_tasks: pd.DataFrame
+):
+    st.write("### Task Slots Placement Timeline")
+    for _, worker_pool in df_worker_pools.iterrows():
+        st.write(f"#### {worker_pool['name']}")
+
+        disjoint_intervals_per_resource = {}
+        for resource in worker_pool["resources"]:
+            disjoint_intervals_per_resource[resource["name"]] = [
+                DisjointedIntervals() for _ in range(int(resource["quantity"]))
+            ]
+
+        task_placements = []
+        df_tasks = df_tasks[df_tasks["placement_time"].notnull()]
+        df_tasks = df_tasks.sort_values(by=["placement_time"])
+        for _, task in df_tasks.iterrows():
+            start_time = task["placement_time"]
+            runtime = task["runtime"]
+            interval = (start_time, start_time + runtime - 1)
+            for placement in task["placements"]:
+                for resource_used in placement["resources_used"]:
+                    # Assume that quantity is discrete integer for slots
+                    quantity = int(resource_used["quantity"])
+
+                    # Find the disjoint_intervals such that the gap after
+                    # inserted the new interval and its left interval
+                    # are the smallest.
+
+                    # A maxheap of (-gap, slot_id)
+                    placement_candidates = find_placement_slot_candidates(
+                        disjoint_intervals_per_resource,
+                        interval,
+                        resource_used,
+                        quantity,
+                    )
+
+                    if len(placement_candidates) < quantity:
+                        raise Exception(
+                            f"Not enough slots for {task['name']} "
+                            f"from {task['task_graph']}. {start_time=}, {runtime=}"
+                        )
+
+                    for _, slot_id in placement_candidates:
+                        disjoint_intervals_per_resource[resource["name"]][slot_id].add(
+                            interval
+                        )
+                        task_placements.append(
+                            {
+                                "slot_id": f"{resource_used['name']}-{slot_id}",
+                                "task": task["name"],
+                                "task_graph": task["task_graph"],
+                                "release": task["release_time"],
+                                "deadline": task["deadline"],
+                                "start": task["start_time"],
+                                "end": task["start_time"] + task["runtime"],
+                                "runtime": task["runtime"],
+                                "resource": f'{resource_used["name"]},'
+                                + f'{resource_used["quantity"]}',
+                                "cancelled": task["cancelled"],
+                                "missed_deadline": task["missed_deadline"],
+                                "task_graph_miss_deadline": task[
+                                    "task_graph_miss_deadline"
+                                ],
+                            }
+                        )
+
+        source = pd.DataFrame(task_placements)
+
+        chart = (
+            alt.Chart(source)
+            .mark_bar()
+            .encode(
+                x="start",
+                x2="end",
+                y="slot_id",
+                detail=[
+                    "task",
+                    "task_graph",
+                    "release",
+                    "deadline",
+                    "runtime",
+                    "resource",
+                    "cancelled",
+                    "missed_deadline",
+                    "task_graph_miss_deadline",
+                ],
+                color="task_graph",
+            )
+            .interactive()
+        )
+
+        st.altair_chart(chart, theme="streamlit", use_container_width=True)
+
+
+def find_placement_slot_candidates(
+    disjoint_intervals_per_resource, interval, resource_used, quantity
+):
+    """
+    This function finds the placement slot candidates for a task. We
+    want the placement to be as packed as possible.
+    See https://leetcode.com/problems/k-closest-points-to-origin/
+    """
+    placement_candidates = []
+    for slot_id, disjoint_intervals in enumerate(
+        disjoint_intervals_per_resource[resource_used["name"]]
+    ):
+        if not disjoint_intervals.overlap(interval):
+            if len(placement_candidates) < quantity:
+                heapq.heappush(
+                    placement_candidates,
+                    (
+                        -disjoint_intervals.placement_gap_with_left_interval(interval),
+                        slot_id,
+                    ),
+                )
+            elif (
+                disjoint_intervals.placement_gap_with_left_interval(interval)
+                < -placement_candidates[0][0]
+            ):
+                heapq.heappushpop(
+                    placement_candidates,
+                    (
+                        -disjoint_intervals.placement_gap_with_left_interval(interval),
+                        slot_id,
+                    ),
+                )
+
+    return placement_candidates
 
 
 @st.cache_data

@@ -1101,6 +1101,12 @@ class Simulator(object):
         slowest_execution_strategy = (
             event.task.available_execution_strategies.get_slowest_strategy()
         )
+        resources_str = ",".join(
+            [
+                ",".join((resource.name, resource.id, str(quantity)))
+                for resource, quantity in slowest_execution_strategy.resources.resources
+            ]
+        )
         self._csv_logger.debug(
             f"{event.time.time},TASK_RELEASE,{event.task.name},"
             f"{event.task.timestamp},"
@@ -1109,7 +1115,7 @@ class Simulator(object):
             f"{event.task.deadline.to(EventTime.Unit.US).time},{event.task.id},"
             f"{event.task.task_graph},"
             f"{slowest_execution_strategy.runtime.to(EventTime.Unit.US).time},"
-            f"{slowest_execution_strategy.resources}"
+            f"{resources_str}"
         )
 
         # If we are not in the midst of a scheduler invocation, and the task hasn't
