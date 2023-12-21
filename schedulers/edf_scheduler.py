@@ -35,7 +35,6 @@ class EDFScheduler(BaseScheduler):
             enforce_deadlines=enforce_deadlines,
             _flags=_flags,
         )
-        self._drop_skipped_tasks = _flags.drop_skipped_tasks if _flags else False
 
     def schedule(
         self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools
@@ -111,11 +110,11 @@ class EDFScheduler(BaseScheduler):
                 and task.deadline
                 < sim_time
                 + task.available_execution_strategies.get_fastest_strategy().runtime
-                and self._drop_skipped_tasks
             ):
                 placements.append(Placement.create_task_cancellation(task=task))
                 self._logger.debug(
-                    "[%s] Task %s has a deadline of %s, which has been missed. ",
+                    "[%s] Task %s has a deadline of %s, which has been missed. "
+                    "Cancelling the task.",
                     sim_time.to(EventTime.Unit.US).time,
                     task,
                     task.deadline.to(EventTime.Unit.US).time,
@@ -158,8 +157,10 @@ class EDFScheduler(BaseScheduler):
                     )
             else:
                 self._logger.debug(
-                    f"[{sim_time}] Failed to place {task} because no worker pool "
-                    f"could accomodate the resource requirements."
+                    "[%s] Failed to place %s because no worker pool "
+                    "could accomodate the resource requirements.",
+                    sim_time.to(EventTime.Unit.US).time,
+                    task,
                 )
                 placements.append(Placement.create_task_placement(task=task))
 

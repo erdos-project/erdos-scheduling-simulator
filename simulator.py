@@ -757,7 +757,7 @@ class Simulator(object):
                 self._logger.debug(
                     "[%s] Scheduling the Task %s for the first time to be "
                     "executed on WorkerPool %s at %s.",
-                    event_time.to(EventTime.Unit.US),
+                    event_time.to(EventTime.Unit.US).time,
                     placement.task,
                     placement.worker_pool_id,
                     placement.placement_time,
