@@ -904,6 +904,7 @@ class TetriSchedScheduler(BaseScheduler):
                     task_choose_expressions.append(
                         tetrisched.strl.ChooseExpression(
                             task.unique_name,
+                            str(hash(execution_strategy)),
                             partitions_for_this_execution_strategy,
                             quantity,
                             placement_time.to(EventTime.Unit.US).time,
