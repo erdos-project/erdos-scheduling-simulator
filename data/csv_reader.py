@@ -547,7 +547,7 @@ class CSVReader(object):
                             "args": {
                                 "name": task.name,
                                 "task_graph": task.task_graph,
-                                "id": str(task.id),
+                                "id": str(task.task_id),
                                 "timestamp": task.timestamp,
                                 "intended_release_time": task.intended_release_time,
                                 "release_time": task.release_time,
@@ -629,7 +629,7 @@ class CSVReader(object):
                                 "args": {
                                     "name": task.name,
                                     "task_graph": task.task_graph,
-                                    "id": str(task.id),
+                                    "id": str(task.task_id),
                                     "timestamp": task.timestamp,
                                     "intended_release_time": task.intended_release_time,
                                     "release_time": task.release_time,

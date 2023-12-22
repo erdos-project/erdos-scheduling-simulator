@@ -287,6 +287,12 @@ SolverSolutionPtr GurobiSolver::solveModel() {
   // Create the result object.
   SolverSolutionPtr solverSolution = std::make_shared<SolverSolution>();
 
+  // Add the information from the interrupt parameters to the solution.
+  if (interruptParams.utilityUpperBound.has_value()) {
+    solverSolution->objectiveValueBound =
+        interruptParams.utilityUpperBound.value();
+  }
+
   // Construct the Interrupt callback, and register it with the model.
   GurobiInterruptOptimizationCallback interruptCallback(interruptParams);
   gurobiModel->setCallback(&interruptCallback);

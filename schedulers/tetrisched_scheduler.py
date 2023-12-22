@@ -1,7 +1,7 @@
 import os
 import time
 from collections import defaultdict
-from typing import Any, List, Mapping, Optional, Set, Tuple
+from typing import List, Mapping, Optional, Set, Tuple
 
 import absl  # noqa: F401
 import numpy as np
