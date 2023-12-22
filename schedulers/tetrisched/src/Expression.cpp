@@ -438,10 +438,12 @@ std::optional<ParseResultPtr> Expression::getParsedResult() const {
 /* Method definitions for ChooseExpression */
 
 ChooseExpression::ChooseExpression(std::string taskName,
+                                   std::string strategyName,
                                    Partitions resourcePartitions,
                                    uint32_t numRequiredMachines, Time startTime,
                                    Time duration, TETRISCHED_ILP_TYPE utility)
     : Expression(taskName, ExpressionType::EXPR_CHOOSE),
+      strategyName(strategyName),
       resourcePartitions(resourcePartitions),
       numRequiredMachines(numRequiredMachines),
       startTime(startTime),
@@ -452,6 +454,13 @@ ChooseExpression::ChooseExpression(std::string taskName,
   timeBounds = ExpressionTimeBounds({startTime, startTime}, {endTime, endTime},
                                     duration);
 }
+
+ChooseExpression::ChooseExpression(std::string taskName,
+                                   Partitions resourcePartitions,
+                                   uint32_t numRequiredMachines, Time startTime,
+                                   Time duration, TETRISCHED_ILP_TYPE utility)
+    : ChooseExpression(taskName, "", resourcePartitions, numRequiredMachines,
+                       startTime, duration, utility) {}
 
 void ChooseExpression::addChild(ExpressionPtr /* child */) {
   throw tetrisched::exceptions::ExpressionConstructionException(
@@ -508,12 +517,14 @@ ParseResultPtr ChooseExpression::parse(
   // We generate an Indicator variable for the Choose expression signifying
   // if this expression was satisfied.
   VariablePtr isSatisfiedVar = std::make_shared<Variable>(
-      VariableType::VAR_INDICATOR,
-      name + "_placed_at_" + std::to_string(startTime) + "_for_" + id);
+      VariableType::VAR_INDICATOR, name + "_placed_at_" +
+                                       std::to_string(startTime) + "_for_" +
+                                       strategyName);
   solverModel->addVariable(isSatisfiedVar);
 
   ConstraintPtr fulfillsDemandConstraint = std::make_shared<Constraint>(
-      name + "_fulfills_demand_at_" + std::to_string(startTime) + "_for_" + id,
+      name + "_fulfills_demand_at_" + std::to_string(startTime) + "_for_" +
+          strategyName,
       ConstraintType::CONSTR_EQ, 0, schedulablePartitions.size() + 1);
   for (PartitionPtr& partition : schedulablePartitions.getPartitions()) {
     // For each partition, generate an integer that represents how many
@@ -1455,9 +1466,10 @@ ParseResultPtr ObjectiveExpression::parse(
                ExpressionType::EXPR_WINDOWED_CHOOSE ||
            currentExpression->getType() == ExpressionType::EXPR_CHOOSE)) {
         // This is a leaf Expression. Save it.
-        // Note that we only save the leaf expressions that must be parallely parsed.
-        // This is to prevent a bug where we're given an empty STRL DAG and we deadlock
-        // since ObjectiveExpression itself becomes a leaf expression.
+        // Note that we only save the leaf expressions that must be parallely
+        // parsed. This is to prevent a bug where we're given an empty STRL DAG
+        // and we deadlock since ObjectiveExpression itself becomes a leaf
+        // expression.
         leafExpressions.push_back(currentExpression);
         continue;
       }

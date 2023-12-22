@@ -302,6 +302,8 @@ class Expression : public std::enable_shared_from_this<Expression> {
 /// provided start_time.
 class ChooseExpression : public Expression {
  private:
+  /// The name of the strategy that this ChooseExpression is using.
+  std::string strategyName;
   /// The Resource partitions that the ChooseExpression is being asked to
   /// choose resources from.
   Partitions resourcePartitions;
@@ -320,6 +322,9 @@ class ChooseExpression : public Expression {
   std::unordered_map<uint32_t, VariablePtr> partitionVariables;
 
  public:
+  ChooseExpression(std::string taskName, std::string strategyName,
+                   Partitions resourcePartitions, uint32_t numRequiredMachines,
+                   Time startTime, Time duration, TETRISCHED_ILP_TYPE utility);
   ChooseExpression(std::string taskName, Partitions resourcePartitions,
                    uint32_t numRequiredMachines, Time startTime, Time duration,
                    TETRISCHED_ILP_TYPE utility);
