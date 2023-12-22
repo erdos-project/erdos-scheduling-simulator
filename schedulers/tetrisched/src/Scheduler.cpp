@@ -48,6 +48,7 @@ void Scheduler::registerSTRL(
   TETRISCHED_INFO("Registering the STRL expression: " << expression->getName()
                                                       << " for time "
                                                       << currentTime << ".")
+
   // Clear the previously saved expressions in the SolverModel.
   solverModel->clear();
 

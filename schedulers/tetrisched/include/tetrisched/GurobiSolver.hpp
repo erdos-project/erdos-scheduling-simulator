@@ -45,6 +45,10 @@ class GurobiSolver : public Solver {
   std::string logFileName;
   /// The interrupt parameters for the current iteration of the optimization.
   GurobiInterruptParams interruptParams;
+  /// The number of cached variables for the current model.
+  mutable uint64_t numCachedVariables;
+  /// The number of uncached variables for the current model.
+  mutable uint64_t numUncachedVariables;
 
   /// Set the defaults for parameters on the model.
   void setParameters(GRBModel& gurobiModel);

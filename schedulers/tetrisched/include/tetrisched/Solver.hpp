@@ -46,6 +46,18 @@ enum SolutionType {
 struct SolverSolution {
   /// The type of the solution.
   SolutionType solutionType;
+  /// The number of variables in the model.
+  std::optional<uint64_t> numVariables;
+  /// The number of variables that were cached before.
+  std::optional<uint64_t> numCachedVariables;
+  /// The number of variables that were not cached before.
+  std::optional<uint64_t> numUncachedVariables;
+  /// The number of constraints in the model.
+  std::optional<uint64_t> numConstraints;
+  /// The number of non-zero coefficients in the model.
+  std::optional<uint64_t> numNonZeroCoefficients;
+  /// The number of solutions found by the solver.
+  std::optional<uint64_t> numSolutions;
   /// The objective value of the solution.
   std::optional<double> objectiveValue;
   /// The maximum possible objective value retrieved from the STRL.

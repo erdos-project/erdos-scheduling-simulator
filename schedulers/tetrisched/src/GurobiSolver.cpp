@@ -50,7 +50,9 @@ void GurobiSolver::GurobiInterruptOptimizationCallback::callback() {
 GurobiSolver::GurobiSolver()
     : gurobiEnv(new GRBEnv()),
       gurobiModel(new GRBModel(*gurobiEnv)),
-      logFileName("") {}
+      logFileName(""),
+      numCachedVariables(0),
+      numUncachedVariables(0) {}
 
 SolverModelPtr GurobiSolver::getModel() {
   if (!solverModel) {
@@ -112,10 +114,13 @@ GRBVar GurobiSolver::translateVariable(GRBModel& gurobiModel,
   }
   // Give the Gurobi variable an initial solution value if it is available.
   if (variable->initialValue.has_value()) {
+    ++numCachedVariables;
     var.set(GRB_DoubleAttr_Start, variable->initialValue.value());
     TETRISCHED_DEBUG("Setting start value of variable "
                      << variable->getName() << "(" << variable->getId()
                      << ") to " << variable->initialValue.value());
+  } else {
+    ++numUncachedVariables;
   }
   return var;
 }
@@ -287,11 +292,22 @@ SolverSolutionPtr GurobiSolver::solveModel() {
   // Create the result object.
   SolverSolutionPtr solverSolution = std::make_shared<SolverSolution>();
 
-  // Add the information from the interrupt parameters to the solution.
+  // Update the model.
+  gurobiModel->update();
+
+  // Add the required information to the result object.
   if (interruptParams.utilityUpperBound.has_value()) {
     solverSolution->objectiveValueBound =
         interruptParams.utilityUpperBound.value();
   }
+  solverSolution->numCachedVariables = numCachedVariables;
+  numCachedVariables = 0;
+  solverSolution->numUncachedVariables = numUncachedVariables;
+  numUncachedVariables = 0;
+  solverSolution->numVariables = gurobiModel->get(GRB_IntAttr_NumVars);
+  solverSolution->numConstraints = gurobiModel->get(GRB_IntAttr_NumConstrs);
+  solverSolution->numNonZeroCoefficients = gurobiModel->get(GRB_IntAttr_NumNZs);
+
 
   // Construct the Interrupt callback, and register it with the model.
   GurobiInterruptOptimizationCallback interruptCallback(interruptParams);
@@ -311,18 +327,22 @@ SolverSolutionPtr GurobiSolver::solveModel() {
     case GRB_OPTIMAL:
       solverSolution->solutionType = SolutionType::OPTIMAL;
       solverSolution->objectiveValue = gurobiModel->get(GRB_DoubleAttr_ObjVal);
+      solverSolution->numSolutions = gurobiModel->get(GRB_IntAttr_SolCount);
       break;
     case GRB_SUBOPTIMAL:
       solverSolution->solutionType = SolutionType::FEASIBLE;
       solverSolution->objectiveValue = gurobiModel->get(GRB_DoubleAttr_ObjVal);
+      solverSolution->numSolutions = gurobiModel->get(GRB_IntAttr_SolCount);
       break;
     case GRB_INFEASIBLE:
       solverSolution->solutionType = SolutionType::INFEASIBLE;
       return solverSolution;
     case GRB_INTERRUPTED: {
       auto solutionCount = gurobiModel->get(GRB_IntAttr_SolCount);
+      solverSolution->numSolutions = solutionCount;
       if (solutionCount > 0) {
         solverSolution->solutionType = SolutionType::FEASIBLE;
+        solverSolution->objectiveValue = gurobiModel->get(GRB_DoubleAttr_ObjVal);
         break;
       } else {
         solverSolution->solutionType = SolutionType::NO_SOLUTION;

@@ -37,6 +37,42 @@ void defineSolverSolution(py::module_& tetrisched_m) {
           },
           "The type of solution returned by the solver.")
       .def_property_readonly(
+          "numVariables",
+          [](const tetrisched::SolverSolution& solution) {
+            return solution.numVariables;
+          },
+          "The number of variables in the model.")
+      .def_property_readonly(
+          "numCachedVariables",
+          [](const tetrisched::SolverSolution& solution) {
+            return solution.numCachedVariables;
+          },
+          "The number of variables that were cached before.")
+      .def_property_readonly(
+          "numUncachedVariables",
+          [](const tetrisched::SolverSolution& solution) {
+            return solution.numUncachedVariables;
+          },
+          "The number of variables that were not cached before.")
+      .def_property_readonly(
+          "numConstraints",
+          [](const tetrisched::SolverSolution& solution) {
+            return solution.numConstraints;
+          },
+          "The number of constraints in the model.")
+      .def_property_readonly(
+          "numNonZeroCoefficients",
+          [](const tetrisched::SolverSolution& solution) {
+            return solution.numNonZeroCoefficients;
+          },
+          "The number of non-zero coefficients in the model.")
+      .def_property_readonly(
+          "numSolutions",
+          [](const tetrisched::SolverSolution& solution) {
+            return solution.numSolutions;
+          },
+          "The number of solutions found by the solver.")
+      .def_property_readonly(
           "objectiveValue",
           [](const tetrisched::SolverSolution& solution) {
             return solution.objectiveValue;
@@ -58,17 +94,48 @@ void defineSolverSolution(py::module_& tetrisched_m) {
       .def("isValid", &tetrisched::SolverSolution::isValid,
            "Check if the solution was valid.")
       .def("__str__", [](const tetrisched::SolverSolution& solution) {
-        return "SolverSolution<type=" + solution.getSolutionTypeStr() +
-               ", objectiveValue=" +
-               (solution.objectiveValue.has_value()
-                    ? std::to_string(solution.objectiveValue.value())
-                    : "None") +
-               ", objectiveValueBound=" +
-               (solution.objectiveValueBound.has_value()
-                    ? std::to_string(solution.objectiveValueBound.value())
-                    : "None") +
-               ", solverTimeMicroseconds=" +
-               std::to_string(solution.solverTimeMicroseconds) + ">";
+        std::string solutionTypeStr =
+            "SolverSolution<type=" + solution.getSolutionTypeStr();
+        if (solution.numVariables.has_value()) {
+          solutionTypeStr +=
+              ", numVariables=" + std::to_string(solution.numVariables.value());
+        }
+        if (solution.numCachedVariables.has_value()) {
+          solutionTypeStr +=
+              ", numCachedVariables=" +
+              std::to_string(solution.numCachedVariables.value());
+        }
+        if (solution.numUncachedVariables.has_value()) {
+          solutionTypeStr +=
+              ", numUncachedVariables=" +
+              std::to_string(solution.numUncachedVariables.value());
+        }
+        if (solution.numConstraints.has_value()) {
+          solutionTypeStr += ", numConstraints=" +
+                             std::to_string(solution.numConstraints.value());
+        }
+        if (solution.numNonZeroCoefficients.has_value()) {
+          solutionTypeStr +=
+              ", numNonZeroCoefficients=" +
+              std::to_string(solution.numNonZeroCoefficients.value());
+        }
+        if (solution.numSolutions.has_value()) {
+          solutionTypeStr +=
+              ", numSolutions=" + std::to_string(solution.numSolutions.value());
+        }
+        if (solution.objectiveValue.has_value()) {
+          solutionTypeStr += ", objectiveValue=" +
+                             std::to_string(solution.objectiveValue.value());
+        }
+        if (solution.objectiveValueBound.has_value()) {
+          solutionTypeStr +=
+              ", objectiveValueBound=" +
+              std::to_string(solution.objectiveValueBound.value());
+        }
+        solutionTypeStr += ", solverTimeMicroseconds=" +
+                           std::to_string(solution.solverTimeMicroseconds) +
+                           ">";
+        return solutionTypeStr;
       });
 }
 
