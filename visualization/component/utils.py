@@ -198,86 +198,83 @@ def visualize_task_graph(task_graph_id, df_tasks, trace_data):
 
 
 @st.cache_data
-def plot_task_placement_timeline_chart(
-    df_worker_pools: pd.DataFrame, df_tasks: pd.DataFrame
-):
-    for i, worker_pool in df_worker_pools.iterrows():
-        st.write(f"#### {worker_pool['name']}")
-        # disjoint_intervals_pools is a list of DisjointedIntervals
-        # Think of each DisjointedIntervals as a horizontal line where
-        # non-overlapping tasks can be drawn. When there are tasks being
-        # run concurrently, we need multiple horizontal lines to draw them.
-        disjoint_intervals_pools = [DisjointedIntervals()]
-        task_placements = []
-        for i, task in df_tasks[df_tasks["start_time"].notnull()].iterrows():
-            start_time = task["placement_time"]
-            runtime = task["runtime"]
-            interval = (start_time, start_time + runtime - 1)
-            for placement in task["placements"]:
-                for resource in placement["resources_used"]:
-                    # Find the y_index to place this task on the timeline chart
-                    y_index = 0
-                    for j, disjoint_intervals in enumerate(disjoint_intervals_pools):
-                        if not disjoint_intervals.overlap(interval):
-                            disjoint_intervals.add(interval)
-                            y_index = j
-                            break
-                    else:
-                        disjoint_intervals_pools.append(DisjointedIntervals())
-                        disjoint_intervals_pools[-1].add(interval)
-                        y_index = len(disjoint_intervals_pools) - 1
+def plot_task_placement_timeline_chart(df_tasks: pd.DataFrame):
+    # disjoint_intervals_pools is a list of DisjointedIntervals
+    # Think of each DisjointedIntervals as a horizontal line where
+    # non-overlapping tasks can be drawn. When there are tasks being
+    # run concurrently, we need multiple horizontal lines to draw them.
+    disjoint_intervals_pools = [DisjointedIntervals()]
+    task_placements = []
+    for i, task in df_tasks[df_tasks["start_time"].notnull()].iterrows():
+        start_time = task["placement_time"]
+        runtime = task["runtime"]
+        interval = (start_time, start_time + runtime - 1)
+        for placement in task["placements"]:
+            for resource in placement["resources_used"]:
+                # Find the y_index to place this task on the timeline chart
+                y_index = 0
+                for j, disjoint_intervals in enumerate(disjoint_intervals_pools):
+                    if not disjoint_intervals.overlap(interval):
+                        disjoint_intervals.add(interval)
+                        y_index = j
+                        break
+                else:
+                    disjoint_intervals_pools.append(DisjointedIntervals())
+                    disjoint_intervals_pools[-1].add(interval)
+                    y_index = len(disjoint_intervals_pools) - 1
 
-                    task_placements.append(
-                        {
-                            "y_index": str(y_index),
-                            "task": task["name"],
-                            "task_graph": task["task_graph"],
-                            "release": task["release_time"],
-                            "deadline": task["deadline"],
-                            "start": start_time,
-                            "end": start_time + runtime,
-                            "runtime": runtime,
-                            "resource": f'{resource["name"]}, {resource["quantity"]}',
-                            "cancelled": task["cancelled"],
-                            "missed_deadline": task["missed_deadline"],
-                            "task_graph_miss_deadline": task[
-                                "task_graph_miss_deadline"
-                            ],
-                        }
-                    )
+                task_placements.append(
+                    {
+                        "y_index": str(y_index),
+                        "task": task["name"],
+                        "task_graph": task["task_graph"],
+                        "release": task["release_time"],
+                        "deadline": task["deadline"],
+                        "start": start_time,
+                        "end": start_time + runtime,
+                        "runtime": runtime,
+                        "resource": f'{resource["name"]}, {resource["quantity"]}',
+                        "cancelled": task["cancelled"],
+                        "missed_deadline": task["missed_deadline"],
+                        "task_graph_miss_deadline": task["task_graph_miss_deadline"],
+                    }
+                )
 
-        source = pd.DataFrame(task_placements)
+    source = pd.DataFrame(task_placements)
 
-        chart = (
-            alt.Chart(source)
-            .mark_bar()
-            .encode(
-                x="start",
-                x2="end",
-                y="y_index",
-                detail=[
-                    "task",
-                    "task_graph",
-                    "release",
-                    "deadline",
-                    "runtime",
-                    "resource",
-                    "cancelled",
-                    "missed_deadline",
-                    "task_graph_miss_deadline",
-                ],
-                color="task_graph",
-            )
-            .interactive()
+    chart = (
+        alt.Chart(source)
+        .mark_bar()
+        .encode(
+            x="start",
+            x2="end",
+            y="y_index",
+            detail=[
+                "task",
+                "task_graph",
+                "release",
+                "deadline",
+                "runtime",
+                "resource",
+                "cancelled",
+                "missed_deadline",
+                "task_graph_miss_deadline",
+            ],
+            color="task_graph",
         )
+        .interactive()
+    )
 
-        st.altair_chart(chart, theme="streamlit", use_container_width=True)
+    st.altair_chart(chart, theme="streamlit", use_container_width=True)
 
 
 @st.cache_data
 def plot_task_placement_per_slot_timeline_chart(
     df_worker_pools: pd.DataFrame, df_tasks: pd.DataFrame
 ):
+    # TODO: Refactor the code to separate the loop that loops over df_worker_pools
+    # and df_tasks
+
     for _, worker_pool in df_worker_pools.iterrows():
         st.write(f"#### {worker_pool['name']}")
 
@@ -295,6 +292,8 @@ def plot_task_placement_per_slot_timeline_chart(
             runtime = task["runtime"]
             interval = (start_time, start_time + runtime - 1)
             for placement in task["placements"]:
+                if placement["worker_pool"]["name"] != worker_pool["name"]:
+                    continue
                 for resource_used in placement["resources_used"]:
                     # Assume that quantity is discrete integer for slots
                     quantity = int(resource_used["quantity"])

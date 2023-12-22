@@ -166,7 +166,7 @@ if st.toggle("Display Tasks Table"):
         st.write(df_miss_deadline_tasks)
 
 st.write("### Task Placement Timeline")
-plot_task_placement_timeline_chart(csv_data.df_worker_pools, df_tasks)
+plot_task_placement_timeline_chart(df_tasks)
 
 st.write("### Task Slots Placement Timeline")
 plot_task_placement_per_slot_timeline_chart(csv_data.df_worker_pools, df_tasks)
