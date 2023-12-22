@@ -5,6 +5,7 @@ from component.utils import (
     get_original_trace_data,
     plot_resource_utilization_timeline_chart,
     plot_task_placement_per_slot_timeline_chart,
+    plot_task_placement_slots_distribution,
     plot_task_placement_timeline_chart,
     visualize_task_graph,
 )
@@ -87,6 +88,8 @@ plot_resource_utilization_timeline_chart(
     csv_data.worker_pool_stats, smoothing_window_size
 )
 
+plot_task_placement_slots_distribution(df_tasks)
+
 st.write("### Worker Pools")
 st.dataframe(csv_data.df_worker_pools.drop(["utilizations", "resources"], axis=1))
 
@@ -162,7 +165,10 @@ if st.toggle("Display Tasks Table"):
     with tab4:
         st.write(df_miss_deadline_tasks)
 
-plot_task_placement_timeline_chart(csv_data.df_worker_pools, df_tasks)
+st.write("### Task Placement Timeline")
+plot_task_placement_timeline_chart(df_tasks)
+
+st.write("### Task Slots Placement Timeline")
 plot_task_placement_per_slot_timeline_chart(csv_data.df_worker_pools, df_tasks)
 
 # Visualize DAG
