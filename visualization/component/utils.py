@@ -1,7 +1,7 @@
 import heapq
 import pickle
 import sys
-from collections import namedtuple
+from collections import defaultdict, namedtuple
 from dataclasses import dataclass
 
 import altair as alt
@@ -201,7 +201,6 @@ def visualize_task_graph(task_graph_id, df_tasks, trace_data):
 def plot_task_placement_timeline_chart(
     df_worker_pools: pd.DataFrame, df_tasks: pd.DataFrame
 ):
-    st.write("### Task Placement Timeline")
     for i, worker_pool in df_worker_pools.iterrows():
         st.write(f"#### {worker_pool['name']}")
         # disjoint_intervals_pools is a list of DisjointedIntervals
@@ -279,7 +278,6 @@ def plot_task_placement_timeline_chart(
 def plot_task_placement_per_slot_timeline_chart(
     df_worker_pools: pd.DataFrame, df_tasks: pd.DataFrame
 ):
-    st.write("### Task Slots Placement Timeline")
     for _, worker_pool in df_worker_pools.iterrows():
         st.write(f"#### {worker_pool['name']}")
 
@@ -301,11 +299,6 @@ def plot_task_placement_per_slot_timeline_chart(
                     # Assume that quantity is discrete integer for slots
                     quantity = int(resource_used["quantity"])
 
-                    # Find the disjoint_intervals such that the gap after
-                    # inserted the new interval and its left interval
-                    # are the smallest.
-
-                    # A maxheap of (-gap, slot_id)
                     placement_candidates = find_placement_slot_candidates(
                         disjoint_intervals_per_resource,
                         interval,
@@ -320,9 +313,9 @@ def plot_task_placement_per_slot_timeline_chart(
                         )
 
                     for _, slot_id in placement_candidates:
-                        disjoint_intervals_per_resource[resource["name"]][slot_id].add(
-                            interval
-                        )
+                        disjoint_intervals_per_resource[resource_used["name"]][
+                            slot_id
+                        ].add(interval)
                         task_placements.append(
                             {
                                 "slot_id": f"{resource_used['name']}-{slot_id}",
@@ -379,6 +372,11 @@ def find_placement_slot_candidates(
     want the placement to be as packed as possible.
     See https://leetcode.com/problems/k-closest-points-to-origin/
     """
+    # Find the disjoint_intervals such that the gap after
+    # inserted the new interval and its left interval
+    # are the smallest.
+
+    # A maxheap of (-gap, slot_id)
     placement_candidates = []
     for slot_id, disjoint_intervals in enumerate(
         disjoint_intervals_per_resource[resource_used["name"]]
@@ -466,11 +464,28 @@ def plot_resource_utilization_timeline_chart(
             sim_times_sec,
             smoothed_utilization,
             color=resource_color[resource_type],
-            label=f"{resource_type}" if i == 0 else "",
+            label=f"{resource_type}",
         )
 
     # Formatting the subplot
     ax.set_ylabel("Utilization", fontsize=16)
     ax.set_ylim(0, num_resource_type + 0.01)
     ax.set_title("Resource Utilization")
+    ax.legend()
     st.pyplot(fig)
+
+
+@st.cache_data
+def plot_task_placement_slots_distribution(df_tasks: pd.DataFrame):
+    resources_used = defaultdict(list)
+    for i, task in df_tasks[df_tasks["start_time"].notnull()].iterrows():
+        for placement in task["placements"]:
+            for resource in placement["resources_used"]:
+                resources_used[resource["name"]].append(resource["quantity"])
+    for resource_name, slots in sorted(list(resources_used.items())):
+        fig, ax = plt.subplots(figsize=(10, 2))
+        ax.hist(slots, density=True)
+        ax.set_xlabel("Slots")
+        ax.set_ylabel("Density")
+        ax.set_title(f"Task Placement {resource_name} Distribution")
+        st.pyplot(fig)
