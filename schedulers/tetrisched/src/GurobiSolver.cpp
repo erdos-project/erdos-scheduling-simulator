@@ -274,9 +274,9 @@ void GurobiSolver::translateModel() {
   }
 
   // Construct the Interrupt parameters.
-  if (solverModel->objectiveFunction->upperBound.has_value()) {
-    interruptParams.utilityUpperBound =
-        solverModel->objectiveFunction->upperBound.value();
+  auto objectiveUpperBound = solverModel->objectiveFunction->getUpperBound();
+  if (objectiveUpperBound.has_value()) {
+    interruptParams.utilityUpperBound = objectiveUpperBound.value();
   }
 }
 
@@ -307,7 +307,6 @@ SolverSolutionPtr GurobiSolver::solveModel() {
   solverSolution->numVariables = gurobiModel->get(GRB_IntAttr_NumVars);
   solverSolution->numConstraints = gurobiModel->get(GRB_IntAttr_NumConstrs);
   solverSolution->numNonZeroCoefficients = gurobiModel->get(GRB_IntAttr_NumNZs);
-
 
   // Construct the Interrupt callback, and register it with the model.
   GurobiInterruptOptimizationCallback interruptCallback(interruptParams);
@@ -342,7 +341,8 @@ SolverSolutionPtr GurobiSolver::solveModel() {
       solverSolution->numSolutions = solutionCount;
       if (solutionCount > 0) {
         solverSolution->solutionType = SolutionType::FEASIBLE;
-        solverSolution->objectiveValue = gurobiModel->get(GRB_DoubleAttr_ObjVal);
+        solverSolution->objectiveValue =
+            gurobiModel->get(GRB_DoubleAttr_ObjVal);
         break;
       } else {
         solverSolution->solutionType = SolutionType::NO_SOLUTION;

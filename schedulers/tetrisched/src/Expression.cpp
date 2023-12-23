@@ -563,13 +563,13 @@ ParseResultPtr ChooseExpression::parse(
   auto utilityFunction =
       std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
   utilityFunction->addTerm(utility, isSatisfiedVar);
+  utilityFunction->setUpperBound(utility);
 
   // Construct the return value.
   parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
   parsedResult->startTime = startTime;
   parsedResult->endTime = endTime;
   parsedResult->utility = std::move(utilityFunction);
-  parsedResult->utilityBound = utility;
   parsedResult->indicator = isSatisfiedVar;
   return parsedResult;
 }
@@ -847,6 +847,7 @@ ParseResultPtr WindowedChooseExpression::parse(
   chooseOneConstraint->addTerm(-1, windowIndicator);
   solverModel->addConstraint(std::move(chooseOneConstraint));
   utilityFunction->addTerm(utility, windowIndicator);
+  utilityFunction->setUpperBound(utility);
 
   // Constrain the start time to be less than the or equal to
   // start time of the placement choice that is satisfied.
@@ -882,7 +883,6 @@ ParseResultPtr WindowedChooseExpression::parse(
   parsedResult->startTime = windowStartTime;
   parsedResult->endTime = windowEndTime;
   parsedResult->utility = std::move(utilityFunction);
-  parsedResult->utilityBound = utility;
   parsedResult->indicator = windowIndicator;
   return parsedResult;
 }
@@ -1291,13 +1291,13 @@ ParseResultPtr MalleableChooseExpression::parse(
   auto utilityFunction =
       std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
   utilityFunction->addTerm(utility, isSatisfiedVar);
+  utilityFunction->setUpperBound(utility);
 
   // Construct the return value.
   parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
   parsedResult->startTime = startTimeVariable;
   parsedResult->endTime = endTimeVariable;
   parsedResult->utility = std::move(utilityFunction);
-  parsedResult->utilityBound = utility;
   parsedResult->indicator = isSatisfiedVar;
   return parsedResult;
 }
@@ -1388,7 +1388,7 @@ ParseResultPtr AllocationExpression::parse(
   parsedResult->utility =
       std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
   (parsedResult->utility).value()->addTerm(1);
-  parsedResult->utilityBound = 1;
+  (parsedResult->utility).value()->setUpperBound(1);
   parsedResult->indicator = 1;
 
   // Add the allocation variables to the CapacityConstraintMap.
@@ -1542,8 +1542,9 @@ ParseResultPtr ObjectiveExpression::parse(
       }
       (*utility) += *(result->utility.value());
 
-      if (result->utilityBound.has_value()) {
-        utilityBound += result->utilityBound.value();
+      auto resultUtilityUpperBound = result->utility.value()->getUpperBound();
+      if (resultUtilityUpperBound.has_value()) {
+        utilityBound += resultUtilityUpperBound.value();
       } else {
         useUtilityBound = false;
       }
@@ -1570,7 +1571,6 @@ ParseResultPtr ObjectiveExpression::parse(
   parsedResult->startTime = std::numeric_limits<Time>::min();
   parsedResult->endTime = std::numeric_limits<Time>::max();
   if (useUtilityBound) {
-    parsedResult->utilityBound = utilityBound;
     utility->setUpperBound(utilityBound);
   }
 
@@ -1830,14 +1830,18 @@ ParseResultPtr LessThanExpression::parse(
   (*utility) += *(firstChildResult->utility.value());
   (*utility) += *(secondChildResult->utility.value());
 
-  parsedResult->utility = std::move(utility);
-
   // Construct the utility bound, if available.
-  if (firstChildResult->utilityBound.has_value() &&
-      secondChildResult->utilityBound.has_value()) {
-    parsedResult->utilityBound = firstChildResult->utilityBound.value() +
-                                 secondChildResult->utilityBound.value();
+  auto firstChildUtilityUpperBound =
+      firstChildResult->utility.value()->getUpperBound();
+  auto secondChildUtilityUpperBound =
+      secondChildResult->utility.value()->getUpperBound();
+
+  if (firstChildUtilityUpperBound.has_value() &&
+      secondChildUtilityUpperBound.has_value()) {
+    utility->setUpperBound(firstChildUtilityUpperBound.value() +
+                           secondChildUtilityUpperBound.value());
   }
+  parsedResult->utility = std::move(utility);
 
   // Return the result.
   return parsedResult;
@@ -2054,9 +2058,17 @@ ParseResultPtr MinExpression::parse(
       break;
     }
 
-    // Set the utility bound, if available.
-    if (childParsedResultValue->utilityBound.has_value()) {
-      utilityBound += childParsedResultValue->utilityBound.value();
+    if (!childParsedResultValue->utility.has_value()) {
+      throw tetrisched::exceptions::ExpressionConstructionException(
+          "Child " + child->getName() + " of MIN " + name +
+          " does not have a utility.");
+    }
+
+    auto childUtilityUpperBound =
+        childParsedResultValue->utility.value()->getUpperBound();
+
+    if (childUtilityUpperBound.has_value()) {
+      utilityBound += childUtilityUpperBound.value();
     } else {
       useUtilityBound = false;
     }
@@ -2067,7 +2079,7 @@ ParseResultPtr MinExpression::parse(
     // All the children have been trivially satisfied.
     parsedResult->indicator = 1;
     minUtility->addTerm(1);
-    parsedResult->utilityBound = 1;
+    minUtility->setUpperBound(1);
   } else {
     minIndicatorConstraint->addTerm(
         -1 * static_cast<TETRISCHED_ILP_TYPE>(numEnforceableChildren),
@@ -2075,7 +2087,7 @@ ParseResultPtr MinExpression::parse(
     solverModel->addConstraint(std::move(minIndicatorConstraint));
     parsedResult->indicator = minIndicator;
     if (useUtilityBound) {
-      parsedResult->utilityBound = utilityBound;
+      minUtility->setUpperBound(utilityBound);
     }
 
     // Set the lower and upper bounds for times.
@@ -2311,9 +2323,9 @@ ParseResultPtr MaxExpression::parse(
     (*maxObjectiveFunction) += (*childUtility);
 
     // Set the utility bound for the MaxExpression.
-    if (childParsedResult->utilityBound.has_value()) {
-      utilityBound =
-          std::max(utilityBound, childParsedResult->utilityBound.value());
+    auto childUtilityUpperBound = childUtility->getUpperBound();
+    if (childUtilityUpperBound.has_value()) {
+      utilityBound = std::max(utilityBound, childUtilityUpperBound.value());
     } else {
       useUtilityBound = false;
     }
@@ -2362,10 +2374,10 @@ ParseResultPtr MaxExpression::parse(
   parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
   parsedResult->startTime = std::move(maxStartTime);
   parsedResult->endTime = std::move(maxEndTime);
-  parsedResult->utility = std::move(maxObjectiveFunction);
   if (useUtilityBound) {
-    parsedResult->utilityBound = utilityBound;
+    maxObjectiveFunction->setUpperBound(utilityBound);
   }
+  parsedResult->utility = std::move(maxObjectiveFunction);
   parsedResult->indicator = std::move(maxIndicator);
   TETRISCHED_DEBUG("Finished parsing MaxExpression with name " << name << ".")
   return parsedResult;
@@ -2425,9 +2437,12 @@ ParseResultPtr ScaleExpression::parse(
     if (childParseResult->indicator) {
       parsedResult->indicator.emplace(childParseResult->indicator.value());
     }
-    if (childParseResult->utilityBound) {
-      parsedResult->utilityBound.emplace(
-          scaleFactor * childParseResult->utilityBound.value());
+    auto childUtilityUpperBound =
+        childParseResult->utility.value()->getUpperBound();
+    if (childUtilityUpperBound.has_value()) {
+      (parsedResult->utility)
+          .value()
+          ->setUpperBound(childUtilityUpperBound.value() * scaleFactor);
     }
     return parsedResult;
   } else {

@@ -341,6 +341,9 @@ class ObjectiveFunctionT {
   /// Sets the uppper bound of the utility value.
   void setUpperBound(T upperBound);
 
+  /// Gets the upper bound of the utility value.
+  std::optional<T> getUpperBound() const;
+
   // The objective is left hand side of the constraint
   std::shared_ptr<ConstraintT<T>> toConstraint(std::string constraintName,
                                                ConstraintType constraintType,
