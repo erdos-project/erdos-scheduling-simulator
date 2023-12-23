@@ -387,10 +387,6 @@ void CriticalPathOptimizationPass::purgeNodes(ExpressionPtr expression) {
                 newTimeBounds.endTimeRange.first ||
             originalTimeBounds.endTimeRange.second >
                 newTimeBounds.endTimeRange.second) {
-          // Remove the node from all its parents.
-          for (auto &parent : currentExpression->getParents()) {
-            parent->removeChild(currentExpression);
-          }
           purgedExpressions.insert(currentExpression);
           TETRISCHED_DEBUG("[" << name << "] Purging node "
                                << currentExpression->getId() << " ("
@@ -406,11 +402,7 @@ void CriticalPathOptimizationPass::purgeNodes(ExpressionPtr expression) {
         if (newTimeBounds.startTimeRange.first >
             newTimeBounds.endTimeRange.second) {
           // The expression is being asked to start after it can finish at the
-          // earliest. This can definitely be purged. Remove the node from all
-          // its parents.
-          for (auto &parent : currentExpression->getParents()) {
-            parent->removeChild(currentExpression);
-          }
+          // earliest. This can definitely be purged.
           purgedExpressions.insert(currentExpression);
           TETRISCHED_DEBUG("[" << name << "] Purging node "
                                << currentExpression->getId() << "("
@@ -420,30 +412,30 @@ void CriticalPathOptimizationPass::purgeNodes(ExpressionPtr expression) {
         }
       }
     } else {
-      // This is not a leaf node, we purge it depending on the type of
-      // the node.
+      // This is not a leaf node, we purge it if its children have been
+      // affected.
+      std::vector<ExpressionPtr> savedChildren;
+      savedChildren.reserve(currentExpression->getNumChildren());
+      for (auto &child : currentExpression->getChildren()) {
+        if (purgedExpressions.find(child) == purgedExpressions.end()) {
+          savedChildren.push_back(child);
+        }
+      }
+
       if (currentExpression->getType() == ExpressionType::EXPR_MAX) {
-        if (currentExpression->getNumChildren() == 0) {
+        if (savedChildren.size() == 0) {
           purgedExpressions.insert(currentExpression);
+          TETRISCHED_DEBUG("[" << name << "] Purging node "
+                               << currentExpression->getId() << "("
+                               << currentExpression->getName() << ")")
+        } else {
+          currentExpression->replaceChildren(std::move(savedChildren));
         }
       } else if (currentExpression->getType() ==
                      ExpressionType::EXPR_LESSTHAN ||
                  currentExpression->getType() == ExpressionType::EXPR_MIN) {
-        // Purge these nodes if any of the children have been purged.
-        bool shouldPurgeNode = false;
-        for (auto &child : currentExpression->getChildren()) {
-          if (purgedExpressions.find(child) != purgedExpressions.end()) {
-            shouldPurgeNode = true;
-            break;
-          }
-        }
-
-        // If this node needs to be purged, remove it from all of its parents
-        // and add it to the set of purged nodes.
-        if (shouldPurgeNode) {
-          for (auto &parent : currentExpression->getParents()) {
-            parent->removeChild(currentExpression);
-          }
+        if (savedChildren.size() != currentExpression->getNumChildren()) {
+          // Some children have been purged, we purge this node as well.
           purgedExpressions.insert(currentExpression);
           TETRISCHED_DEBUG("[" << name << "] Purging node "
                                << currentExpression->getId() << "("

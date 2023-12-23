@@ -237,6 +237,9 @@ class Expression : public std::enable_shared_from_this<Expression> {
   /// Removes a child from this Expression.
   void removeChild(ExpressionPtr child);
 
+  /// Replaces the children of this node with the given children.
+  void replaceChildren(std::vector<ExpressionPtr> children);
+
   /// Returns the name of this Expression.
   std::string getName() const;
 

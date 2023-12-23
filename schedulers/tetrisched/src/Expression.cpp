@@ -166,6 +166,10 @@ void Expression::removeChild(ExpressionPtr child) {
   });
 }
 
+void Expression::replaceChildren(std::vector<ExpressionPtr> children) {
+  this->children = children;
+}
+
 ExpressionType Expression::getType() const { return type; }
 
 std::string Expression::getTypeString() const {
