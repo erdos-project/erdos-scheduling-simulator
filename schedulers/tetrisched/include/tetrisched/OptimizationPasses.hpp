@@ -26,6 +26,12 @@ class OptimizationPass {
   /// The type of the optimization pass.
   OptimizationPassType type;
 
+  /// A helper method to compute the post-order traversal of the Expression
+  /// graph.
+  typedef std::deque<ExpressionPtr> ExpressionPostOrderTraversal;
+  ExpressionPostOrderTraversal computePostOrderTraversal(
+      ExpressionPtr expression);
+
  public:
   /// Construct the base OptimizationPass class.
   OptimizationPass(std::string name, OptimizationPassType type);
@@ -49,17 +55,10 @@ class OptimizationPass {
 using OptimizationPassPtr = std::shared_ptr<OptimizationPass>;
 
 class CriticalPathOptimizationPass : public OptimizationPass {
-  typedef std::deque<ExpressionPtr> ExpressionPostOrderTraversal;
-
  private:
   /// A map from an Expression to the valid time bounds for it.
   std::unordered_map<ExpressionPtr, ExpressionTimeBounds>
       expressionTimeBoundMap;
-
-  /// A helper method to compute the post-order traversal of the Expression
-  /// graph.
-  ExpressionPostOrderTraversal computePostOrderTraversal(
-      ExpressionPtr expression);
 
   /// A helper method to recursively compute the time bounds for an Expression.
   void computeTimeBounds(

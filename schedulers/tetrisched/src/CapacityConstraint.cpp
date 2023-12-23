@@ -86,7 +86,9 @@ void CapacityConstraint::registerUsage(const ExpressionPtr expression,
   // Add the usage variable to the capacity constraint so that if there
   // is an overlap, we can ensure that it is never violated.
   capacityConstraint->addTerm(usageVariable);
-  usageVector.emplace_back(expression, usageVariable);
+  if (usageVariable.isVariable()) {
+    usageVector.emplace_back(expression, usageVariable);
+  }
 }
 
 void CapacityConstraint::translate(SolverModelPtr solverModel) {
@@ -258,8 +260,8 @@ void CapacityConstraintMap::registerUsageForDuration(
 
       if (currentTime >=
           timeRangeToGranularities[granularityIndex].first.second) {
-        // We have passed the interval. We need to skip to the next interval, if
-        // possible.
+        // We have passed the interval. We need to skip to the next interval,
+        // if possible.
         if (granularityIndex != timeRangeToGranularities.size() - 1) {
           granularityIndex++;
         }

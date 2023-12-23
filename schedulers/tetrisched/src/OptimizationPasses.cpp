@@ -9,18 +9,8 @@ namespace tetrisched {
 OptimizationPass::OptimizationPass(std::string name, OptimizationPassType type)
     : name(name), type(type) {}
 
-OptimizationPassType OptimizationPass::getType() const { return type; }
-
-std::string OptimizationPass::getName() const { return name; }
-
-/* Methods for CriticalPathOptimizationPass */
-CriticalPathOptimizationPass::CriticalPathOptimizationPass()
-    : OptimizationPass("CriticalPathOptimizationPass",
-                       OptimizationPassType::PRE_TRANSLATION_PASS) {}
-
-CriticalPathOptimizationPass::ExpressionPostOrderTraversal
-CriticalPathOptimizationPass::computePostOrderTraversal(
-    ExpressionPtr expression) {
+OptimizationPass::ExpressionPostOrderTraversal
+OptimizationPass::computePostOrderTraversal(ExpressionPtr expression) {
   TETRISCHED_SCOPE_TIMER(
       "CriticalPathOptimizationPass::computePostOrderTraversal");
   /* Do a Post-Order Traversal of the DAG. */
@@ -44,6 +34,15 @@ CriticalPathOptimizationPass::computePostOrderTraversal(
 
   return postOrderTraversal;
 }
+
+OptimizationPassType OptimizationPass::getType() const { return type; }
+
+std::string OptimizationPass::getName() const { return name; }
+
+/* Methods for CriticalPathOptimizationPass */
+CriticalPathOptimizationPass::CriticalPathOptimizationPass()
+    : OptimizationPass("CriticalPathOptimizationPass",
+                       OptimizationPassType::PRE_TRANSLATION_PASS) {}
 
 void CriticalPathOptimizationPass::computeTimeBounds(
     const ExpressionPostOrderTraversal &postOrderTraversal) {
