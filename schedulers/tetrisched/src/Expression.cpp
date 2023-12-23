@@ -1485,25 +1485,9 @@ ParseResultPtr ObjectiveExpression::parse(
 
   // Parse all the leaf Expressions in parallel.
   {
-    TETRISCHED_SCOPE_TIMER("ObjectiveExpression::parse::parseLeafExpressions," +
+    TETRISCHED_SCOPE_TIMER("ObjectiveExpression::parse::parseLeafExpressions" +
+                           std::to_string(leafExpressions.size()) + "," +
                            std::to_string(currentTime) + "," + name + "," + id)
-
-    // const size_t numThreads = std::thread::hardware_concurrency();
-    // const size_t chunkSize = leafExpressions.size() / numThreads +
-    //                          (leafExpressions.size() % numThreads != 0);
-    // tbb::task_group leafExpressionParsingGroup;
-    // for (size_t i = 0; i < leafExpressions.size(); i += chunkSize) {
-    //   leafExpressionParsingGroup.run([&, i] {
-    //     for (size_t j = i; j < std::min(i + chunkSize,
-    //     leafExpressions.size());
-    //          j++) {
-    //       leafExpressions[j]->parse(solverModel, availablePartitions,
-    //                                 capacityConstraints, currentTime);
-    //     }
-    //   });
-    // }
-    // leafExpressionParsingGroup.wait();
-
     tbb::parallel_for(
         tbb::blocked_range<size_t>(0, leafExpressions.size()),
         [&](const tbb::blocked_range<size_t>& range) {

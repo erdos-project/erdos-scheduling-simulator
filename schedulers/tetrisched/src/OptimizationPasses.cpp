@@ -41,7 +41,7 @@ void CriticalPathOptimizationPass::computeTimeBounds(ExpressionPtr expression) {
 
   // A Post-Order Traversal will now be the order in which
   // the expressions are popped from the second stack.
-  std::set<std::string> visitedExpressions;
+  std::unordered_set<std::string> visitedExpressions;
   while (!secondStack.empty()) {
     auto currentExpression = secondStack.top();
     secondStack.pop();
@@ -332,14 +332,14 @@ void CriticalPathOptimizationPass::purgeNodes(ExpressionPtr expression) {
 
   // A Post-Order Traversal will now be the order in which
   // the expressions are popped from the second stack.
-  std::set<std::string> visitedExpressions;
-  std::set<std::string> purgedExpressions;
+  std::unordered_set<ExpressionPtr> visitedExpressions;
+  std::unordered_set<ExpressionPtr> purgedExpressions;
   while (!secondStack.empty()) {
     auto currentExpression = secondStack.top();
     secondStack.pop();
-    if (visitedExpressions.find(currentExpression->getId()) ==
+    if (visitedExpressions.find(currentExpression) ==
         visitedExpressions.end()) {
-      visitedExpressions.insert(currentExpression->getId());
+      visitedExpressions.insert(currentExpression);
     } else {
       continue;
     }
@@ -379,7 +379,7 @@ void CriticalPathOptimizationPass::purgeNodes(ExpressionPtr expression) {
                 newTimeBounds.endTimeRange.first ||
             originalTimeBounds.endTimeRange.second >
                 newTimeBounds.endTimeRange.second) {
-          purgedExpressions.insert(currentExpression->getId());
+          purgedExpressions.insert(currentExpression);
           TETRISCHED_DEBUG("[" << name << "] Purging node "
                                << currentExpression->getId() << " ("
                                << currentExpression->getName() << ")")
@@ -395,7 +395,7 @@ void CriticalPathOptimizationPass::purgeNodes(ExpressionPtr expression) {
             newTimeBounds.endTimeRange.second) {
           // The expression is being asked to start after it can finish at the
           // earliest. This can definitely be purged.
-          purgedExpressions.insert(currentExpression->getId());
+          purgedExpressions.insert(currentExpression);
           TETRISCHED_DEBUG("[" << name << "] Purging node "
                                << currentExpression->getId() << "("
                                << currentExpression->getName() << ")")
@@ -408,7 +408,7 @@ void CriticalPathOptimizationPass::purgeNodes(ExpressionPtr expression) {
       // need to be purged.
       std::vector<ExpressionPtr> purgedChildrens;
       for (auto &child : currentExpression->getChildren()) {
-        if (purgedExpressions.find(child->getId()) != purgedExpressions.end()) {
+        if (purgedExpressions.find(child) != purgedExpressions.end()) {
           purgedChildrens.push_back(child);
         }
       }
@@ -421,7 +421,7 @@ void CriticalPathOptimizationPass::purgeNodes(ExpressionPtr expression) {
            currentExpression->getType() == ExpressionType::EXPR_LESSTHAN) ||
           (purgedChildrens.size() > 0 &&
            currentExpression->getType() == ExpressionType::EXPR_MIN)) {
-        purgedExpressions.insert(currentExpression->getId());
+        purgedExpressions.insert(currentExpression);
         TETRISCHED_DEBUG("[" << name << "] Purging node "
                              << currentExpression->getId() << "("
                              << currentExpression->getName() << ")")
@@ -435,15 +435,26 @@ void CriticalPathOptimizationPass::runPass(
     std::optional<std::string> debugFile) {
   /* Phase 1: We first do a bottom-up traversal of the tree to compute
   a tight bound for each node in the STRL tree. */
-  computeTimeBounds(strlExpression);
+  {
+    TETRISCHED_SCOPE_TIMER(
+        "CriticalPathOptimizationPass::runPass::computeTimeBounds");
+    computeTimeBounds(strlExpression);
+  }
 
   /* Phase 2: The previous phase computes the tight bounds but does not
   push them down necessarily. In this phase, we push the bounds down. */
-  pushDownTimeBounds(strlExpression);
+  {
+    TETRISCHED_SCOPE_TIMER(
+        "CriticalPathOptimizationPass::runPass::pushDownTimeBounds");
+    pushDownTimeBounds(strlExpression);
+  }
 
   /* Phase 3: The bounds have been pushed down now, we can do a bottom-up
   traversal and start purging nodes that cannot be satisfied. */
-  purgeNodes(strlExpression);
+  {
+    TETRISCHED_SCOPE_TIMER("CriticalPathOptimizationPass::runPass::purgeNodes");
+    purgeNodes(strlExpression);
+  }
 }
 
 void CriticalPathOptimizationPass::clean() { expressionTimeBoundMap.clear(); }
@@ -721,7 +732,7 @@ void CapacityConstraintMapPurgingOptimizationPass::computeCliques(
     ExpressionPtr expression) {
   /* Do a Depth-First Search of the DAG and match Max -> {Leaves} */
   std::stack<ExpressionPtr> expressionStack;
-  std::set<std::string> visitedExpressions;
+  std::unordered_set<std::string> visitedExpressions;
   expressionStack.push(expression);
 
   while (!expressionStack.empty()) {
