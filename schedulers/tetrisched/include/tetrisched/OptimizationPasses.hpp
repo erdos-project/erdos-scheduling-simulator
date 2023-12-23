@@ -2,6 +2,7 @@
 #define _TETRISCHED_OPTIMIZATION_PASSES_HPP_
 
 #include <cmath>
+#include <deque>
 #include <string>
 
 #include "tetrisched/Expression.hpp"
@@ -48,19 +49,28 @@ class OptimizationPass {
 using OptimizationPassPtr = std::shared_ptr<OptimizationPass>;
 
 class CriticalPathOptimizationPass : public OptimizationPass {
+  typedef std::deque<ExpressionPtr> ExpressionPostOrderTraversal;
+
  private:
   /// A map from an Expression to the valid time bounds for it.
   std::unordered_map<ExpressionPtr, ExpressionTimeBounds>
       expressionTimeBoundMap;
 
+  /// A helper method to compute the post-order traversal of the Expression
+  /// graph.
+  ExpressionPostOrderTraversal computePostOrderTraversal(
+      ExpressionPtr expression);
+
   /// A helper method to recursively compute the time bounds for an Expression.
-  void computeTimeBounds(ExpressionPtr expression);
+  void computeTimeBounds(
+      const ExpressionPostOrderTraversal& postOrderTraversal);
 
   /// A helper method to push down the time bounds into the Expression tree.
-  void pushDownTimeBounds(ExpressionPtr expression);
+  void pushDownTimeBounds(
+      const ExpressionPostOrderTraversal& postOrderTraversal);
 
   /// A helper method to purge the nodes that do not fit their time bounds.
-  void purgeNodes(ExpressionPtr expression);
+  void purgeNodes(const ExpressionPostOrderTraversal& postOrderTraversal);
 
  public:
   /// Instantiate the Critical Path optimization pass.
