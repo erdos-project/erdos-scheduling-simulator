@@ -59,28 +59,28 @@ void CriticalPathOptimizationPass::computeTimeBounds(ExpressionPtr expression) {
     // If this is an ordering expression, we can cut some time bounds here.
     if (currentExpression->getType() == ExpressionType::EXPR_LESSTHAN) {
       auto leftChild = currentExpression->getChildren()[0];
-      if (expressionTimeBoundMap.find(leftChild->getId()) ==
+      if (expressionTimeBoundMap.find(leftChild) ==
           expressionTimeBoundMap.end()) {
         throw exceptions::RuntimeException(
             "[" + name + "] Left child " + leftChild->getId() + "(" +
             leftChild->getName() + ") of " + currentExpression->getId() + "(" +
             currentExpression->getName() + ") does not have time bounds.");
       }
-      auto &leftChildTimeBounds = expressionTimeBoundMap[leftChild->getId()];
+      auto &leftChildTimeBounds = expressionTimeBoundMap[leftChild];
       TETRISCHED_DEBUG("[" << name << "] Left child " << leftChild->getId()
                            << " (" << leftChild->getName()
                            << ") has time bounds: "
                            << leftChildTimeBounds.toString())
 
       auto rightChild = currentExpression->getChildren()[1];
-      if (expressionTimeBoundMap.find(rightChild->getId()) ==
+      if (expressionTimeBoundMap.find(rightChild) ==
           expressionTimeBoundMap.end()) {
         throw exceptions::RuntimeException(
             "[" + name + "] Right child " + rightChild->getId() + " (" +
             rightChild->getName() + ") of " + currentExpression->getId() + "(" +
             currentExpression->getName() + ") does not have time bounds.");
       }
-      auto &rightChildTimeBounds = expressionTimeBoundMap[rightChild->getId()];
+      auto &rightChildTimeBounds = expressionTimeBoundMap[rightChild];
       TETRISCHED_DEBUG("[" << name << "] Right child " << rightChild->getId()
                            << " (" << rightChild->getName()
                            << ") has time bounds: "
@@ -119,12 +119,12 @@ void CriticalPathOptimizationPass::computeTimeBounds(ExpressionPtr expression) {
       }
     }
     // Assign the bounds of the Expression.
-    expressionTimeBoundMap[currentExpression->getId()] =
+    expressionTimeBoundMap[currentExpression] =
         currentExpression->getTimeBounds();
     TETRISCHED_DEBUG(
         "[" << name << "] The time bound for " << currentExpression->getId()
             << " (" << currentExpression->getName() << ") is "
-            << expressionTimeBoundMap[currentExpression->getId()].toString())
+            << expressionTimeBoundMap[currentExpression].toString())
   }
 }
 
@@ -155,14 +155,14 @@ void CriticalPathOptimizationPass::pushDownTimeBounds(
     auto currentExpression = traversalQueue.front();
     traversalQueue.pop();
 
-    if (expressionTimeBoundMap.find(currentExpression->getId()) ==
+    if (expressionTimeBoundMap.find(currentExpression) ==
         expressionTimeBoundMap.end()) {
       throw exceptions::RuntimeException(
           "[" + name + "] Expression " + currentExpression->getId() + "(" +
           currentExpression->getName() + ") does not have time bounds.");
     }
 
-    auto expressionBounds = expressionTimeBoundMap[currentExpression->getId()];
+    auto expressionBounds = expressionTimeBoundMap[currentExpression];
     TETRISCHED_DEBUG("[" << name << "] Pushing down bounds for "
                          << currentExpression->getId() << " ("
                          << currentExpression->getName()
@@ -170,28 +170,28 @@ void CriticalPathOptimizationPass::pushDownTimeBounds(
 
     if (currentExpression->getType() == ExpressionType::EXPR_LESSTHAN) {
       auto leftChild = currentExpression->getChildren()[0];
-      if (expressionTimeBoundMap.find(leftChild->getId()) ==
+      if (expressionTimeBoundMap.find(leftChild) ==
           expressionTimeBoundMap.end()) {
         throw exceptions::RuntimeException(
             "[" + name + "] Left child " + leftChild->getId() + " (" +
             leftChild->getName() + ") of " + currentExpression->getId() + "(" +
             currentExpression->getName() + ") does not have time bounds.");
       }
-      auto &leftChildTimeBounds = expressionTimeBoundMap[leftChild->getId()];
+      auto &leftChildTimeBounds = expressionTimeBoundMap[leftChild];
       TETRISCHED_DEBUG("[" << name << "] Left child " << leftChild->getId()
                            << " (" << leftChild->getName()
                            << ") has time bounds: "
                            << leftChildTimeBounds.toString())
 
       auto rightChild = currentExpression->getChildren()[1];
-      if (expressionTimeBoundMap.find(rightChild->getId()) ==
+      if (expressionTimeBoundMap.find(rightChild) ==
           expressionTimeBoundMap.end()) {
         throw exceptions::RuntimeException(
             "[" + name + "] Right child " + rightChild->getId() + "(" +
             rightChild->getName() + ") of " + currentExpression->getId() + "(" +
             currentExpression->getName() + ") does not have time bounds.");
       }
-      auto &rightChildTimeBounds = expressionTimeBoundMap[rightChild->getId()];
+      auto &rightChildTimeBounds = expressionTimeBoundMap[rightChild];
       TETRISCHED_DEBUG("[" << name << "] Right child " << rightChild->getId()
                            << "(" << rightChild->getName()
                            << ") has time bounds: "
@@ -253,14 +253,14 @@ void CriticalPathOptimizationPass::pushDownTimeBounds(
     } else {
       // Iterate through the children and tighten the bounds, if possible.
       for (auto &child : currentExpression->getChildren()) {
-        if (expressionTimeBoundMap.find(child->getId()) ==
+        if (expressionTimeBoundMap.find(child) ==
             expressionTimeBoundMap.end()) {
           throw exceptions::RuntimeException(
               "[" + name + "] Child " + child->getId() + "(" +
               child->getName() + ") of " + currentExpression->getId() + "(" +
               currentExpression->getName() + ") does not have time bounds.");
         }
-        auto &childTimeBounds = expressionTimeBoundMap[child->getId()];
+        auto &childTimeBounds = expressionTimeBoundMap[child];
         TETRISCHED_DEBUG("[" << name << "] Child " << child->getId() << " ("
                              << child->getName() << ") has time bounds: "
                              << childTimeBounds.toString())
@@ -333,9 +333,15 @@ void CriticalPathOptimizationPass::purgeNodes(ExpressionPtr expression) {
   // A Post-Order Traversal will now be the order in which
   // the expressions are popped from the second stack.
   std::unordered_set<ExpressionPtr> visitedExpressions;
+  visitedExpressions.reserve(secondStack.size());
   std::unordered_set<ExpressionPtr> purgedExpressions;
+  purgedExpressions.reserve(secondStack.size());
   while (!secondStack.empty()) {
     auto currentExpression = secondStack.top();
+
+    TETRISCHED_SCOPE_TIMER("CriticalPathOptimizationPass::purgeNodes::purge" +
+                           currentExpression->getTypeString())
+
     secondStack.pop();
     if (visitedExpressions.find(currentExpression) ==
         visitedExpressions.end()) {
@@ -347,16 +353,18 @@ void CriticalPathOptimizationPass::purgeNodes(ExpressionPtr expression) {
                          << currentExpression->getId() << " ("
                          << currentExpression->getName() << ")")
 
-    if (expressionTimeBoundMap.find(currentExpression->getId()) ==
-        expressionTimeBoundMap.end()) {
+    auto newTimeBoundsLocation = expressionTimeBoundMap.find(currentExpression);
+    if (newTimeBoundsLocation == expressionTimeBoundMap.end()) {
       throw exceptions::RuntimeException(
           "[" + name + "] Expression " + currentExpression->getId() + "(" +
           currentExpression->getName() + ") does not have time bounds.");
     }
 
     if (currentExpression->getNumChildren() == 0) {
+      TETRISCHED_SCOPE_TIMER(
+          "CriticalPathOptimizationPass::purgeNodes::boundsCheckPurgeLeaf");
       // If this is a leaf node, we check if it can be purged.
-      auto newTimeBounds = expressionTimeBoundMap[currentExpression->getId()];
+      auto newTimeBounds = newTimeBoundsLocation->second;
       auto originalTimeBounds = currentExpression->getTimeBounds();
       TETRISCHED_DEBUG("[" << name << "] Original Time bounds for "
                            << currentExpression->getId() << "("
@@ -379,6 +387,10 @@ void CriticalPathOptimizationPass::purgeNodes(ExpressionPtr expression) {
                 newTimeBounds.endTimeRange.first ||
             originalTimeBounds.endTimeRange.second >
                 newTimeBounds.endTimeRange.second) {
+          // Remove the node from all its parents.
+          for (auto &parent : currentExpression->getParents()) {
+            parent->removeChild(currentExpression);
+          }
           purgedExpressions.insert(currentExpression);
           TETRISCHED_DEBUG("[" << name << "] Purging node "
                                << currentExpression->getId() << " ("
@@ -394,7 +406,11 @@ void CriticalPathOptimizationPass::purgeNodes(ExpressionPtr expression) {
         if (newTimeBounds.startTimeRange.first >
             newTimeBounds.endTimeRange.second) {
           // The expression is being asked to start after it can finish at the
-          // earliest. This can definitely be purged.
+          // earliest. This can definitely be purged. Remove the node from all
+          // its parents.
+          for (auto &parent : currentExpression->getParents()) {
+            parent->removeChild(currentExpression);
+          }
           purgedExpressions.insert(currentExpression);
           TETRISCHED_DEBUG("[" << name << "] Purging node "
                                << currentExpression->getId() << "("
@@ -404,27 +420,35 @@ void CriticalPathOptimizationPass::purgeNodes(ExpressionPtr expression) {
         }
       }
     } else {
-      // This is not a leaf node, so we need to remove the children that
-      // need to be purged.
-      std::vector<ExpressionPtr> purgedChildrens;
-      for (auto &child : currentExpression->getChildren()) {
-        if (purgedExpressions.find(child) != purgedExpressions.end()) {
-          purgedChildrens.push_back(child);
+      // This is not a leaf node, we purge it depending on the type of
+      // the node.
+      if (currentExpression->getType() == ExpressionType::EXPR_MAX) {
+        if (currentExpression->getNumChildren() == 0) {
+          purgedExpressions.insert(currentExpression);
         }
-      }
-      for (auto &purgedChild : purgedChildrens) {
-        currentExpression->removeChild(purgedChild);
-      }
+      } else if (currentExpression->getType() ==
+                     ExpressionType::EXPR_LESSTHAN ||
+                 currentExpression->getType() == ExpressionType::EXPR_MIN) {
+        // Purge these nodes if any of the children have been purged.
+        bool shouldPurgeNode = false;
+        for (auto &child : currentExpression->getChildren()) {
+          if (purgedExpressions.find(child) != purgedExpressions.end()) {
+            shouldPurgeNode = true;
+            break;
+          }
+        }
 
-      if (currentExpression->getNumChildren() == 0 ||
-          (currentExpression->getNumChildren() == 1 &&
-           currentExpression->getType() == ExpressionType::EXPR_LESSTHAN) ||
-          (purgedChildrens.size() > 0 &&
-           currentExpression->getType() == ExpressionType::EXPR_MIN)) {
-        purgedExpressions.insert(currentExpression);
-        TETRISCHED_DEBUG("[" << name << "] Purging node "
-                             << currentExpression->getId() << "("
-                             << currentExpression->getName() << ")")
+        // If this node needs to be purged, remove it from all of its parents
+        // and add it to the set of purged nodes.
+        if (shouldPurgeNode) {
+          for (auto &parent : currentExpression->getParents()) {
+            parent->removeChild(currentExpression);
+          }
+          purgedExpressions.insert(currentExpression);
+          TETRISCHED_DEBUG("[" << name << "] Purging node "
+                               << currentExpression->getId() << "("
+                               << currentExpression->getName() << ")")
+        }
       }
     }
   }

@@ -49,8 +49,9 @@ using OptimizationPassPtr = std::shared_ptr<OptimizationPass>;
 
 class CriticalPathOptimizationPass : public OptimizationPass {
  private:
-  /// A map from an Expression's ID to the valid time bounds for it.
-  std::unordered_map<std::string, ExpressionTimeBounds> expressionTimeBoundMap;
+  /// A map from an Expression to the valid time bounds for it.
+  std::unordered_map<ExpressionPtr, ExpressionTimeBounds>
+      expressionTimeBoundMap;
 
   /// A helper method to recursively compute the time bounds for an Expression.
   void computeTimeBounds(ExpressionPtr expression);
