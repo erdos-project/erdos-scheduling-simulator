@@ -50,7 +50,11 @@ void Scheduler::registerSTRL(
                                                       << currentTime << ".")
 
   // Clear the previously saved expressions in the SolverModel.
-  solverModel->clear();
+  {
+    TETRISCHED_SCOPE_TIMER("Scheduler::registerSTRL::clearSolverModel," +
+                           std::to_string(currentTime));
+    solverModel->clear();
+  }
 
   // Check if the expression is an objective function.
   if (expression->getType() != ExpressionType::EXPR_OBJECTIVE) {

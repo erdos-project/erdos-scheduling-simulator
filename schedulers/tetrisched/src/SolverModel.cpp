@@ -1,5 +1,7 @@
 #include "tetrisched/SolverModel.hpp"
 
+#include "tbb/parallel_for.h"
+
 namespace tetrisched {
 
 /*
@@ -523,28 +525,42 @@ void SolverModelT<T>::clear() {
   // Clear the solution value cache first.
   // As of now we only keep track of the solution value from the previous
   // invocation of the solver.
-  solutionValueCache.clear();
-
-  // For each variable, if it has a solution value, then save it to the solution
-  // value cache.
-  for (auto const& [id, variable] : modelVariables) {
-    if (variable->getValue().has_value()) {
-      TETRISCHED_DEBUG("Caching solution value "
-                       << variable->getValue().value() << " for variable "
-                       << variable->getName() << "(" << id << ")");
-      typename decltype(solutionValueCache)::accessor
-          solutionValueCacheAccessor;
-      solutionValueCache.insert(solutionValueCacheAccessor,
-                                variable->getName());
-      solutionValueCacheAccessor->second = variable->getValue().value();
-    }
+  {
+    TETRISCHED_SCOPE_TIMER("SolverModel::clear::solutionValueCache");
+    solutionValueCache = tbb::concurrent_hash_map<std::string, T>();
   }
 
   {
+    TETRISCHED_SCOPE_TIMER("SolverModel::clear::resetSolutionValueCache");
+    tbb::parallel_for(
+        modelVariables.range(),
+        [&](const decltype(modelVariables)::range_type& range) {
+          for (auto const& [id, variable] : range) {
+            if (variable->getValue().has_value()) {
+              TETRISCHED_DEBUG("Caching solution value "
+                               << variable->getValue().value()
+                               << " for variable " << variable->getName() << "("
+                               << id << ")");
+              typename decltype(solutionValueCache)::accessor
+                  solutionValueCacheAccessor;
+
+              solutionValueCache.insert(solutionValueCacheAccessor,
+                                        variable->getName());
+              solutionValueCacheAccessor->second = variable->getValue().value();
+            }
+          }
+        });
+  }
+
+  {
+    // NOTE (Sukrit): We do not clear the modelVariables and modelConstraints
+    // maps here. This is because TBB's clear() method is unbelievably slow
+    // (~400ms). Instead, we just drop the old map, and reset with a new one.
+    TETRISCHED_SCOPE_TIMER("SolverModel::clear::modelVariables");
     // Clear the model now.
     std::lock_guard<std::mutex> lock(modelMutex);
-    modelVariables.clear();
-    modelConstraints.clear();
+    modelVariables = tbb::concurrent_hash_map<uint32_t, VariablePtr>();
+    modelConstraints = tbb::concurrent_hash_map<uint32_t, ConstraintPtr>();
     objectiveFunction.reset();
   }
 }
