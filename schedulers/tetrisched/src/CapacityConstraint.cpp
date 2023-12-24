@@ -88,6 +88,9 @@ void CapacityConstraint::registerUsage(const ExpressionPtr expression,
   capacityConstraint->addTerm(usageVariable);
   if (usageVariable.isVariable()) {
     usageVector.emplace_back(expression, usageVariable);
+  } else {
+    auto usageVariableValue = usageVariable.get<uint32_t>();
+    quantity -= usageVariableValue;
   }
 }
 

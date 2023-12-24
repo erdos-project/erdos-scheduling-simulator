@@ -897,154 +897,155 @@ void CapacityConstraintMapPurgingOptimizationPass::computeCliques(
 void CapacityConstraintMapPurgingOptimizationPass::
     deactivateCapacityConstraints(CapacityConstraintMapPtr capacityConstraints,
                                   std::optional<std::string> debugFile) {
-  std::ofstream debugFileStream;
+  std::ofstream debugStream;
   if (debugFile.has_value()) {
-    debugFileStream.open(debugFile.value());
+    debugStream.open(debugFile.value(), std::ios_base::app);
   }
-  // Construct a vector of the size of the number of cliques.
-  // This vector will keep track of if the clique was used in a constraint,
-  // and if so, its maximum usage.
-  TETRISCHED_DEBUG("Running deactivation of constraints from a map of size "
-                   << capacityConstraints->size())
   size_t deactivatedConstraints = 0;
 
-  std::unordered_map<ExpressionPtr, uint32_t> expressionUsageMap;
-
-  // Iterate over each of the individual CapacityConstraints in the map.
+  // Iterate over all of the individual CapacityConstraints in the map.
   for (auto &[key, capacityConstraint] :
        capacityConstraints->capacityConstraints) {
-    // If the capacity check is trivially satisfiable, don't even bother
-    // checking the cliques.
-    if (capacityConstraint->capacityConstraint->isTriviallySatisfiable()) {
-      TETRISCHED_DEBUG("Deactivating " << capacityConstraint->getName()
-                                       << " since it is trivially satisfied.")
-      deactivatedConstraints++;
-      capacityConstraint->deactivate();
-      continue;
-    }
+    std::vector<
+        std::pair<std::unordered_set<ExpressionPtr>, TETRISCHED_ILP_TYPE>>
+        cliqueUsages;
+    cliqueUsages.reserve(cliques.size());
 
-    auto maxCliqueStartTime = std::chrono::high_resolution_clock::now();
-    // Reset the clique usage map.
-    expressionUsageMap.clear();
-
-    // Iterate over all the Expressions that contribute to a usage in
-    // this CapacityConstraint, and turn on their clique usage.
+    // We iterate over each Expression that contributes to the usage of this
+    // CapacityConstraint. We then find the clique that this Expression belongs
+    // to, and update the usage of that clique if this Expression adds a higher
+    // usage than previously seen. If no such clique exists, we create a new
+    // one.
     for (auto &[expression, usage] : capacityConstraint->usageVector) {
-      if (expression->getNumParents() != 1) {
-        throw tetrisched::exceptions::RuntimeException(
-            "Expression " + expression->getId() + " (" + expression->getName() +
-            ") of type " + expression->getTypeString() +
-            " has more than one parent. This is not supported.");
-      }
-      auto expressionKey = expression->getParents()[0];
-      if (expressionKey->getType() != ExpressionType::EXPR_MAX) {
-        expressionKey = expression;
-      }
-      // if (cliques.find(expressionKey) == cliques.end()) {
-      //   expressionKey = expression;
-      // }
-
-      // We make note of the maximum usage that this clique can
-      // contribute to the CapacityConstraint.
-      uint32_t constraintUsage = std::numeric_limits<uint32_t>::max();
-      if (usage.isVariable()) {
-        auto usageUpperBound = usage.get<VariablePtr>()->getUpperBound();
-        if (usageUpperBound.has_value()) {
-          constraintUsage = static_cast<uint32_t>(usageUpperBound.value());
-        }
-      } else {
-        constraintUsage = usage.get<uint32_t>();
+      auto currentExpression = expression;
+      if (expression->getType() == ExpressionType::EXPR_CHOOSE &&
+          expression->getNumParents() == 1 &&
+          expression->getParents()[0]->getType() == ExpressionType::EXPR_MAX) {
+        // PERF: We generate a lot of ChooseExpressions, which make this
+        // pass extremely slow to run. When possible, we use the MaxExpression
+        // to generate the clique.
+        currentExpression = expression->getParents()[0];
       }
 
-      // We now insert the usage of this expression into the map.
-      if (expressionUsageMap.find(expressionKey) == expressionUsageMap.end()) {
-        expressionUsageMap[expressionKey] = constraintUsage;
-      } else {
-        expressionUsageMap[expressionKey] =
-            std::max(expressionUsageMap[expressionKey], constraintUsage);
+      auto cliqueForThisExpression = cliques.find(currentExpression);
+      if (cliqueForThisExpression == cliques.end()) {
+        throw exceptions::RuntimeException(
+            "[" + name + "] Expression " + currentExpression->getId() + "(" +
+            currentExpression->getName() + ") does not have a clique.");
       }
-    }
-    auto maxCliqueEndTime = std::chrono::high_resolution_clock::now();
 
-    // All the MAX cliques have been identified, if they are immediately
-    // ordered by a < expression, then we can keep bubbling up the checks
-    // until they reach a min.
-    std::unordered_set<ExpressionPtr> keysToDelete;
-    do {
-      // Clear up the keys to delete.
-      keysToDelete.clear();
-
-      // Bubble up cliques.
-      for (auto &[clique, usage] : expressionUsageMap) {
-        for (auto &parent : clique->getParents()) {
-          if (parent->getType() == ExpressionType::EXPR_LESSTHAN) {
-            keysToDelete.insert(clique);
-            if (expressionUsageMap.find(parent) == expressionUsageMap.end()) {
-              expressionUsageMap[parent] = usage;
-            } else {
-              expressionUsageMap[parent] =
-                  std::max(expressionUsageMap[parent], usage);
-            }
+      // We now find the clique that this expression belongs to.
+      bool foundClique = false;
+      for (auto &[clique, cliqueUsage] : cliqueUsages) {
+        // If the intersection between this clique and the clique of the
+        // expression is non-empty, then we have found the clique.
+        bool doesIntersect = false;
+        for (auto &cliqueExpression : clique) {
+          if (cliqueForThisExpression->second.find(cliqueExpression) !=
+              cliqueForThisExpression->second.end()) {
+            doesIntersect = true;
+            break;
           }
         }
+        if (debugFile.has_value()) {
+          debugStream << "\t\t Intersects? " << doesIntersect << " : "
+                      << std::endl;
+          ;
+          debugStream << "\t\t Current clique: ";
+          for (auto &cliqueExpression : clique) {
+            debugStream << cliqueExpression->getName() << ", ";
+          }
+          debugStream << std::endl << "\t\t Expression clique:";
+          for (auto &expression : cliqueForThisExpression->second) {
+            debugStream << expression->getName() << ", ";
+          }
+          debugStream << std::endl;
+        }
+        if (doesIntersect) {
+          // We have found the clique, we now update the usage.
+          foundClique = true;
+          if (usage.isVariable()) {
+            auto usageUpperBound = usage.get<VariablePtr>()->getUpperBound();
+            if (usageUpperBound.has_value()) {
+              cliqueUsage = std::max(cliqueUsage, usageUpperBound.value());
+            }
+            clique.insert(currentExpression);
+          } else {
+            throw exceptions::RuntimeException(
+                "[" + name + "] Expression " + expression->getId() + "(" +
+                expression->getName() +
+                ") has a non-variable usage. This is not supported.");
+          }
+          break;
+        }
       }
 
-      // Delete redundant keys.
-      for (auto &key : keysToDelete) {
-        expressionUsageMap.erase(key);
+      // No clique was found, we create a new one.
+      if (!foundClique) {
+        if (usage.isVariable()) {
+          auto usageUpperBound = usage.get<VariablePtr>()->getUpperBound();
+          if (usageUpperBound.has_value()) {
+            cliqueUsages.push_back(
+                {{currentExpression}, usageUpperBound.value()});
+          }
+        } else {
+          throw exceptions::RuntimeException(
+              "[" + name + "] Expression " + expression->getId() + "(" +
+              expression->getName() +
+              ") has a non-variable usage. This is not supported.");
+        }
       }
-    } while (keysToDelete.size() > 0);
-    auto lessThanCliqueEndTime = std::chrono::high_resolution_clock::now();
-    auto maxCliqueDuration =
-        std::chrono::duration_cast<std::chrono::microseconds>(
-            maxCliqueEndTime - maxCliqueStartTime)
-            .count();
-    auto lessThanCliqueDuration =
-        std::chrono::duration_cast<std::chrono::microseconds>(
-            lessThanCliqueEndTime - maxCliqueEndTime)
-            .count();
-
-    // If the clique usage is <= RHS, then we can deactivate this constraint.
-    uint32_t totalUsage = 0;
-    for (auto &[clique, usage] : expressionUsageMap) {
-      totalUsage += usage;
     }
-    if (totalUsage <= capacityConstraint->getQuantity()) {
-      deactivatedConstraints++;
-      capacityConstraint->deactivate();
-      TETRISCHED_DEBUG("Deactivating " << capacityConstraint->getName()
-                                       << " since its total quantity is "
-                                       << capacityConstraint->getQuantity()
-                                       << " and its maximum resource usage is "
-                                       << totalUsage)
-    } else {
-      TETRISCHED_DEBUG("Cannot deactivate "
-                       << capacityConstraint->getName()
-                       << " since its total quantity is "
-                       << capacityConstraint->getQuantity()
-                       << " and its maximum resource usage is " << totalUsage)
+
+    // We have now found the cliques and their usages, we sum them up now and
+    // check if the constraint can be deactivated.
+    TETRISCHED_ILP_TYPE totalUsage = 0;
+    for (auto &[clique, usage] : cliqueUsages) {
+      totalUsage += usage;
     }
 
     if (debugFile.has_value()) {
-      debugFileStream << capacityConstraint->getName() << ": " << totalUsage
-                      << ", " << capacityConstraint->getQuantity() << std::endl;
+      debugStream << capacityConstraint->capacityConstraint->toString()
+                  << std::endl;
+      for (auto &[clique, usage] : cliqueUsages) {
+        debugStream << "\t" << usage << " : ";
+        for (auto &expression : clique) {
+          debugStream << expression->getName() << ", ";
+        }
+        debugStream << std::endl;
+      }
+      debugStream << "\t Deactivated: "
+                  << (totalUsage <= capacityConstraint->getQuantity())
+                  << ", totalUsage: " << totalUsage
+                  << ", quantity: " << capacityConstraint->getQuantity()
+                  << std::endl;
+    }
+
+    if (totalUsage <= capacityConstraint->getQuantity()) {
+      // The constraint can be deactivated.
+      capacityConstraint->deactivate();
+      deactivatedConstraints++;
+      TETRISCHED_DEBUG("[" << name << "] Deactivated constraint "
+                           << capacityConstraint->getName() << " with quantity "
+                           << capacityConstraint->getQuantity()
+                           << " and total usage " << totalUsage);
+    } else {
+      TETRISCHED_DEBUG("[" << name << "] Constraint "
+                           << capacityConstraint->getName() << " with quantity "
+                           << capacityConstraint->getQuantity()
+                           << " and total usage " << totalUsage
+                           << " cannot be deactivated.");
     }
   }
-  TETRISCHED_DEBUG("Deactivated " << deactivatedConstraints << " out of "
-                                  << capacityConstraints->size()
-                                  << " constraints.")
+
+  TETRISCHED_DEBUG("[" << name << "] Deactivated " << deactivatedConstraints
+                       << " constraints.");
 }
 
 void CapacityConstraintMapPurgingOptimizationPass::runPass(
     ExpressionPtr strlExpression, CapacityConstraintMapPtr capacityConstraints,
     std::optional<std::string> debugFile) {
-  // Open the debug file if one was provided.
-  std::ofstream debugFileStream;
-  if (debugFile.has_value()) {
-    debugFileStream.open(debugFile.value());
-  }
-
-  /* Preprocessing: Compute the post-order traversal to compute the cliques. */
+  /* Preprocessing: Compute the post-order to compute the cliques. */
   auto postOrderTraversal = computePostOrderTraversal(strlExpression);
   cliques.reserve(postOrderTraversal.size());
   childLeafExpressions.reserve(postOrderTraversal.size());
@@ -1059,6 +1060,8 @@ void CapacityConstraintMapPurgingOptimizationPass::runPass(
 
   // Output the cliques, if a debug file was provided.
   if (debugFile.has_value()) {
+    std::ofstream debugFileStream;
+    debugFileStream.open(debugFile.value());
     for (auto &[key, clique] : cliques) {
       debugFileStream << key->getName() << ": ";
       for (auto &expression : clique) {
@@ -1068,31 +1071,14 @@ void CapacityConstraintMapPurgingOptimizationPass::runPass(
     }
   }
 
-  /* Phase 1: We compute the cliques from  the Expressions in the DAG. */
-  // auto cliqueStartTime = std::chrono::high_resolution_clock::now();
-  // computeCliques(strlExpression);
-  // auto cliqueEndTime = std::chrono::high_resolution_clock::now();
-  // auto cliqueDuration =
-  // std::chrono::duration_cast<std::chrono::microseconds>(
-  //                           cliqueEndTime - cliqueStartTime)
-  //                           .count();
-  // TETRISCHED_DEBUG("Computing cliques took: " << cliqueDuration
-  //                                             << " microseconds.")
-  // std::cout << "Computing cliques took: " << cliqueDuration << "
-  // microseconds."
-  //           << std::endl;
-
-  /* Phase 2: We go over each of the CapacityConstraint in the map, and
-  deactivate the constraint that is trivially satisfied. */
-  // auto deactivationStartTime = std::chrono::high_resolution_clock::now();
-  // deactivateCapacityConstraints(capacityConstraints, debugFile);
-  // auto deactivationEndTime = std::chrono::high_resolution_clock::now();
-  // auto deactivationDuration =
-  //     std::chrono::duration_cast<std::chrono::microseconds>(
-  //         deactivationEndTime - deactivationStartTime)
-  //         .count();
-  // TETRISCHED_DEBUG("Deactivating constraints took: " << deactivationDuration
-  //                                                    << " microseconds.")
+  /* Phase 2: We go over each of the CapacityConstraint and deactivate
+  the constraints that are trivially satisfied. */
+  {
+    TETRISCHED_SCOPE_TIMER(
+        "CapacityConstraintMapPurgingOptimizationPass::runPass::"
+        "deactivateCapacityConstraints");
+    deactivateCapacityConstraints(capacityConstraints, debugFile);
+  }
 }
 
 void CapacityConstraintMapPurgingOptimizationPass::clean() { cliques.clear(); }

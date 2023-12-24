@@ -35,7 +35,7 @@ Scheduler::Scheduler(Time discretization, SolverBackendType solverBackend,
   }
   solverModel = solver->getModel();
   optimizationPasses =
-      OptimizationPassRunner(true, enableDynamicDiscretization, discretization,
+      OptimizationPassRunner(false, enableDynamicDiscretization, discretization,
                              maxDiscretization, maxOccupancyThreshold);
 }
 
@@ -82,15 +82,8 @@ void Scheduler::registerSTRL(
     TETRISCHED_SCOPE_TIMER(
         "Scheduler::registerSTRL::preTranslationOptimizationPasses," +
         std::to_string(currentTime));
-    auto optimizerStartTime = std::chrono::high_resolution_clock::now();
     optimizationPasses.runPreTranslationPasses(currentTime, expression,
                                                capacityConstraintMap);
-    auto optimizerEndTime = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
-                        optimizerEndTime - optimizerStartTime)
-                        .count();
-    TETRISCHED_DEBUG("Pre Translation Optimization Passes took: "
-                     << duration << " microseconds.")
   }
 
   {
@@ -110,15 +103,8 @@ void Scheduler::registerSTRL(
     TETRISCHED_SCOPE_TIMER(
         "Scheduler::registerSTRL::postTranslationOptimizationPasses," +
         std::to_string(currentTime));
-    auto optimizerStartTime = std::chrono::high_resolution_clock::now();
     optimizationPasses.runPostTranslationPasses(currentTime, expression,
                                                 capacityConstraintMap);
-    auto optimizerEndTime = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
-                        optimizerEndTime - optimizerStartTime)
-                        .count();
-    TETRISCHED_DEBUG("Post Translation Optimization Passes took: "
-                     << duration << " microseconds.")
   }
 }
 
