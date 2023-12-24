@@ -453,23 +453,23 @@ void CriticalPathOptimizationPass::clean() {
 
 /* Methods for DiscretizationSelectorOptimizationPass */
 DiscretizationSelectorOptimizationPass::DiscretizationSelectorOptimizationPass()
-    : minDiscretization(1),
+    : OptimizationPass("DiscretizationSelectorOptimizationPass",
+                       OptimizationPassType::PRE_TRANSLATION_PASS),
+      minDiscretization(1),
       maxDiscretization(5),
-      maxOccupancyThreshold(0.8),
-      OptimizationPass("DiscretizationSelectorOptimizationPass",
-                       OptimizationPassType::PRE_TRANSLATION_PASS) {}
+      maxOccupancyThreshold(0.8) {}
 
 DiscretizationSelectorOptimizationPass::DiscretizationSelectorOptimizationPass(
     Time minDiscretization, Time maxDiscretization, float maxOccupancyThreshold)
-    : minDiscretization(minDiscretization),
+    : OptimizationPass("DiscretizationSelectorOptimizationPass",
+                       OptimizationPassType::PRE_TRANSLATION_PASS),
+      minDiscretization(minDiscretization),
       maxDiscretization(maxDiscretization),
-      maxOccupancyThreshold(maxOccupancyThreshold),
-      OptimizationPass("DiscretizationSelectorOptimizationPass",
-                       OptimizationPassType::PRE_TRANSLATION_PASS) {}
+      maxOccupancyThreshold(maxOccupancyThreshold) {}
 
 void DiscretizationSelectorOptimizationPass::runPass(
     ExpressionPtr strlExpression, CapacityConstraintMapPtr capacityConstraints,
-    std::optional<std::string> debugFile) {
+    std::optional<std::string> /* debugFile */) {
   /* Do a Post-Order Traversal of the DAG. */
   std::stack<ExpressionPtr> firstStack;
   firstStack.push(strlExpression);
@@ -494,7 +494,7 @@ void DiscretizationSelectorOptimizationPass::runPass(
       independentNcks.push_back(currentExpression);
     }
     bool allChildrenNck = false;
-    int numChildNcks = 0;
+    size_t numChildNcks = 0;
 
     // Add the children to the first stack.
     auto expressionChildren = currentExpression->getChildren();
@@ -1052,13 +1052,12 @@ void CapacityConstraintMapPurgingOptimizationPass::runPass(
   }
 
   // Output the cliques.
-  std::cout << "Cliques: " << std::endl;
+  TETRISCHED_DEBUG("[" << name << "] The cliques for each expression are: ")
   for (auto &[key, clique] : cliques) {
-    std::cout << "\t" << key->getId() << "(" << key->getName() << "): ";
+    TETRISCHED_DEBUG("\t" << key->getName() << ": ");
     for (auto &expression : clique) {
-      std::cout << expression->getId() << "(" << expression->getName() << "), ";
+      TETRISCHED_DEBUG("\t\t" << expression->getName());
     }
-    std::cout << std::endl;
   }
 
   /* Phase 1: We compute the cliques from  the Expressions in the DAG. */
