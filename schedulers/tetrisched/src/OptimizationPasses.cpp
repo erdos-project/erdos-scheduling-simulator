@@ -724,65 +724,174 @@ CapacityConstraintMapPurgingOptimizationPass::
                        OptimizationPassType::POST_TRANSLATION_PASS) {}
 
 void CapacityConstraintMapPurgingOptimizationPass::computeCliques(
-    ExpressionPtr expression) {
-  /* Do a Depth-First Search of the DAG and match Max -> {Leaves} */
-  std::stack<ExpressionPtr> expressionStack;
-  std::unordered_set<std::string> visitedExpressions;
-  expressionStack.push(expression);
+    const ExpressionPostOrderTraversal &postOrderTraversal) {
+  // Iterate over the post-order traversal and compute the cliques.
+  std::unordered_set<ExpressionPtr> visitedExpressions;
+  visitedExpressions.reserve(postOrderTraversal.size());
 
-  while (!expressionStack.empty()) {
-    // Pop the expression from the stack, and check if it needs to be visited.
-    auto currentExpression = expressionStack.top();
-    expressionStack.pop();
-    if (visitedExpressions.find(currentExpression->getId()) !=
+  for (auto currentExpressionIt = postOrderTraversal.rbegin();
+       currentExpressionIt != postOrderTraversal.rend();
+       ++currentExpressionIt) {
+    auto currentExpression = *currentExpressionIt;
+
+    if (visitedExpressions.find(currentExpression) ==
         visitedExpressions.end()) {
+      visitedExpressions.insert(currentExpression);
+    } else {
       continue;
     }
-    visitedExpressions.insert(currentExpression->getId());
 
-    TETRISCHED_DEBUG("Visiting " << currentExpression->getId() << " ("
-                                 << currentExpression->getName() << ") of type "
-                                 << currentExpression->getTypeString())
+    if (currentExpression->getNumChildren() == 0) {
+      if (currentExpression->getType() == ExpressionType::EXPR_CHOOSE &&
+          currentExpression->getNumParents() == 1 &&
+          currentExpression->getParents()[0]->getType() ==
+              ExpressionType::EXPR_MAX) {
+        // PERF: We generate a lot of ChooseExpressions, which make this
+        // pass extremely slow to run. When possible, we use the MaxExpression
+        // to generate the clique.
+        continue;
+      } else {
+        // This is a leaf node, we just add it to its own clique.
+        cliques[currentExpression] =
+            std::unordered_set<ExpressionPtr>({currentExpression});
+        childLeafExpressions[currentExpression] =
+            std::unordered_set<ExpressionPtr>({currentExpression});
+        TETRISCHED_DEBUG("[" << name << "] " << currentExpression->getId()
+                             << " (" << currentExpression->getName() << ") has "
+                             << currentExpression->getNumChildren()
+                             << " children. "
+                             << "Constructed the clique with "
+                             << currentExpression->getName());
+      }
+    } else if (currentExpression->getType() == ExpressionType::EXPR_MAX) {
+      TETRISCHED_SCOPE_TIMER(
+          "CriticalPathOptimizationPass::computeCliques::MaxExpression");
+      // NOTE (Sukrit): We make some optimizations here since we know that
+      // in our current STRL generation, a MaxExpression is never more than a
+      // single level away from the leaves. We can both construct the cliques
+      // and the child leaf expressions in one go.
+      childLeafExpressions[currentExpression] =
+          std::unordered_set<ExpressionPtr>({currentExpression});
+      cliques[currentExpression] =
+          std::unordered_set<ExpressionPtr>({currentExpression});
+      // {
+      //   TETRISCHED_SCOPE_TIMER(
+      //       "CriticalPathOptimizationPass::computeCliques::"
+      //       "MaxExpression::constructChildCliques");
+      //   for (auto &child : maxChildren) {
+      //     auto childClique = cliques.find(child);
+      //     if (childClique == cliques.end()) {
+      //       throw exceptions::RuntimeException(
+      //           "[" + name + "] Child " + child->getId() + "(" +
+      //           child->getName() + ") of " + currentExpression->getId() + "("
+      //           + currentExpression->getName() + ") does not have a
+      //           clique.");
+      //     }
+      //     childClique->second.insert(maxChildren.begin(), maxChildren.end());
+      //   }
+      // }
+      TETRISCHED_DEBUG("[" << name << "] " << currentExpression->getId() << " ("
+                           << currentExpression->getName() << ") has "
+                           << currentExpression->getNumChildren()
+                           << " children. "
+                           << "Constructed the MaxExpression clique for "
+                           << currentExpression->getName());
+    } else {
+      TETRISCHED_SCOPE_TIMER("CriticalPathOptimizationPass::computeCliques::" +
+                             currentExpression->getTypeString());
+      // Construct the leaf expressions under the current expression as
+      // a merger of all the leaf expressions under its children.
+      childLeafExpressions[currentExpression] =
+          std::unordered_set<ExpressionPtr>();
 
-    // If the Expression is a MaxExpression, and all of its children are
-    // ChooseExpressions, then we use this clique.
-    if (currentExpression->getType() == ExpressionType::EXPR_MAX) {
-      bool allChildrenAreChooseExpressions = true;
       for (auto &child : currentExpression->getChildren()) {
-        if (child->getType() != ExpressionType::EXPR_CHOOSE &&
-            child->getType() != ExpressionType::EXPR_MALLEABLE_CHOOSE) {
-          allChildrenAreChooseExpressions = false;
-          TETRISCHED_DEBUG("Child "
-                           << child->getId() << " (" << child->getName()
-                           << ") is not a ChooseExpression. It is of type "
-                           << child->getTypeString())
-          break;
+        // Add the child expression set to the current expression.
+        auto childLeafExpressionSet = childLeafExpressions.find(child);
+        if (childLeafExpressionSet == childLeafExpressions.end()) {
+          throw exceptions::RuntimeException(
+              "[" + name + "] Child " + child->getId() + "(" +
+              child->getName() + ") of " + currentExpression->getId() + "(" +
+              currentExpression->getName() + ") does not have a clique.");
         }
+        childLeafExpressions[currentExpression].insert(
+            childLeafExpressionSet->second.begin(),
+            childLeafExpressionSet->second.end());
+        TETRISCHED_DEBUG("[" << name << "] Adding child expressions from "
+                             << child->getName() << " to "
+                             << currentExpression->getName());
       }
-      if (allChildrenAreChooseExpressions) {
-        TETRISCHED_DEBUG("Creating a clique for Expression "
-                         << currentExpression->getId() << " ("
-                         << currentExpression->getName() << ")")
-        std::unordered_set<ExpressionPtr> clique;
-        for (auto &child : currentExpression->getChildren()) {
-          clique.insert(child);
-          TETRISCHED_DEBUG("Inserting " << child->getId() << " ("
-                                        << child->getName()
-                                        << ") to the clique for "
-                                        << currentExpression->getId())
-        }
-        cliques[currentExpression] = clique;
-      }
-    }
 
-    // Visit all the children.
-    for (auto &child : currentExpression->getChildren()) {
-      if (child->getNumChildren() > 0) {
-        expressionStack.push(child);
+      TETRISCHED_DEBUG(
+          "[" << name << "] " << currentExpression->getId() << " ("
+              << currentExpression->getName() << ") has "
+              << currentExpression->getNumChildren() << " children. "
+              << "Constructed the clique with " << currentExpression->getName()
+              << " for " << currentExpression->getTypeString());
+
+      if (currentExpression->getType() == ExpressionType::EXPR_LESSTHAN) {
+        // For a LESSTHAN expression, we go over each of the two child
+        // expressions, and add the leave expressions from the other child to
+        // its clique.
+        auto currentExpressionChildren = currentExpression->getChildren();
+
+        auto leftChild = currentExpressionChildren[0];
+        auto leftChildLeafExpressions = childLeafExpressions.find(leftChild);
+        if (leftChildLeafExpressions == childLeafExpressions.end()) {
+          throw exceptions::RuntimeException(
+              "[" + name + "] Left child " + leftChild->getId() + "(" +
+              leftChild->getName() + ") of " + currentExpression->getId() +
+              "(" + currentExpression->getName() + ") does not have a clique.");
+        }
+
+        auto rightChild = currentExpressionChildren[1];
+        auto rightChildLeafExpressions = childLeafExpressions.find(rightChild);
+        if (rightChildLeafExpressions == childLeafExpressions.end()) {
+          throw exceptions::RuntimeException(
+              "[" + name + "] Right child " + rightChild->getId() + "(" +
+              rightChild->getName() + ") of " + currentExpression->getId() +
+              "(" + currentExpression->getName() + ") does not have a clique.");
+        }
+
+        for (auto &leftChildLeafExpression : leftChildLeafExpressions->second) {
+          auto leftChildClique = cliques.find(leftChildLeafExpression);
+          if (leftChildClique == cliques.end()) {
+            throw exceptions::RuntimeException(
+                "[" + name + "] Left child leaf " +
+                leftChildLeafExpression->getId() + "(" +
+                leftChildLeafExpression->getName() + ") of " +
+                currentExpression->getId() + "(" +
+                currentExpression->getName() + ") does not have a clique.");
+          }
+          leftChildClique->second.insert(
+              rightChildLeafExpressions->second.begin(),
+              rightChildLeafExpressions->second.end());
+        }
+
+        for (auto &rightChildLeafExpression :
+             rightChildLeafExpressions->second) {
+          auto rightChildClique = cliques.find(rightChildLeafExpression);
+          if (rightChildClique == cliques.end()) {
+            throw exceptions::RuntimeException(
+                "[" + name + "] Right child leaf " +
+                rightChildLeafExpression->getId() + "(" +
+                rightChildLeafExpression->getName() + ") of " +
+                currentExpression->getId() + "(" +
+                currentExpression->getName() + ") does not have a clique.");
+          }
+          rightChildClique->second.insert(
+              leftChildLeafExpressions->second.begin(),
+              leftChildLeafExpressions->second.end());
+        }
+
+        TETRISCHED_DEBUG("[" << name << "] Adding child expressions from "
+                             << leftChild->getName() << " and "
+                             << rightChild->getName()
+                             << " to each other's clique as part of "
+                             << currentExpression->getName() << " ("
+                             << currentExpression->getTypeString() << ").");
       }
     }
   }
-  TETRISCHED_DEBUG("Computed " << cliques.size() << " cliques.")
 }
 
 void CapacityConstraintMapPurgingOptimizationPass::
@@ -929,6 +1038,29 @@ void CapacityConstraintMapPurgingOptimizationPass::
 void CapacityConstraintMapPurgingOptimizationPass::runPass(
     ExpressionPtr strlExpression, CapacityConstraintMapPtr capacityConstraints,
     std::optional<std::string> debugFile) {
+  /* Preprocessing: Compute the post-order traversal to compute the cliques. */
+  auto postOrderTraversal = computePostOrderTraversal(strlExpression);
+  cliques.reserve(postOrderTraversal.size());
+  childLeafExpressions.reserve(postOrderTraversal.size());
+
+  /* Phase 1: Compute the cliques from the Expressions in the DAG. */
+  {
+    TETRISCHED_SCOPE_TIMER(
+        "CapacityConstraintMapPurgingOptimizationPass::runPass::"
+        "computeCliques");
+    computeCliques(postOrderTraversal);
+  }
+
+  // Output the cliques.
+  std::cout << "Cliques: " << std::endl;
+  for (auto &[key, clique] : cliques) {
+    std::cout << "\t" << key->getId() << "(" << key->getName() << "): ";
+    for (auto &expression : clique) {
+      std::cout << expression->getId() << "(" << expression->getName() << "), ";
+    }
+    std::cout << std::endl;
+  }
+
   /* Phase 1: We compute the cliques from  the Expressions in the DAG. */
   // auto cliqueStartTime = std::chrono::high_resolution_clock::now();
   // computeCliques(strlExpression);
@@ -945,15 +1077,15 @@ void CapacityConstraintMapPurgingOptimizationPass::runPass(
 
   /* Phase 2: We go over each of the CapacityConstraint in the map, and
   deactivate the constraint that is trivially satisfied. */
-  auto deactivationStartTime = std::chrono::high_resolution_clock::now();
-  deactivateCapacityConstraints(capacityConstraints, debugFile);
-  auto deactivationEndTime = std::chrono::high_resolution_clock::now();
-  auto deactivationDuration =
-      std::chrono::duration_cast<std::chrono::microseconds>(
-          deactivationEndTime - deactivationStartTime)
-          .count();
-  TETRISCHED_DEBUG("Deactivating constraints took: " << deactivationDuration
-                                                     << " microseconds.")
+  // auto deactivationStartTime = std::chrono::high_resolution_clock::now();
+  // deactivateCapacityConstraints(capacityConstraints, debugFile);
+  // auto deactivationEndTime = std::chrono::high_resolution_clock::now();
+  // auto deactivationDuration =
+  //     std::chrono::duration_cast<std::chrono::microseconds>(
+  //         deactivationEndTime - deactivationStartTime)
+  //         .count();
+  // TETRISCHED_DEBUG("Deactivating constraints took: " << deactivationDuration
+  //                                                    << " microseconds.")
 }
 
 void CapacityConstraintMapPurgingOptimizationPass::clean() { cliques.clear(); }
@@ -976,8 +1108,8 @@ OptimizationPassRunner::OptimizationPassRunner(bool debug,
   }
 
   // Register the CapacityConstraintMapPurging optimization pass.
-  // registeredPasses.push_back(
-  //     std::make_shared<CapacityConstraintMapPurgingOptimizationPass>());
+  registeredPasses.push_back(
+      std::make_shared<CapacityConstraintMapPurgingOptimizationPass>());
 }
 
 void OptimizationPassRunner::runPreTranslationPasses(

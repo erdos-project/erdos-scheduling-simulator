@@ -116,10 +116,17 @@ class DiscretizationSelectorOptimizationPass : public OptimizationPass {
 class CapacityConstraintMapPurgingOptimizationPass : public OptimizationPass {
  private:
   /// A HashMap of the Expression ID to the cliques in the Expression tree.
+  /// A clique is defined as a set of Expressions that are known to be
+  /// non-concurrent with each other.
   std::unordered_map<ExpressionPtr, std::unordered_set<ExpressionPtr>> cliques;
 
+  /// A map from an Expression to the set of entire leaf Expressions that are
+  /// resident under that Expression.
+  std::unordered_map<ExpressionPtr, std::unordered_set<ExpressionPtr>>
+      childLeafExpressions;
+
   /// Computes the cliques from a bottom-up traversal of the STRL.
-  void computeCliques(ExpressionPtr expression);
+  void computeCliques(const ExpressionPostOrderTraversal& expression);
 
   /// Deactivates the CapacityConstraints that are trivially satisfied.
   void deactivateCapacityConstraints(
