@@ -1038,6 +1038,12 @@ void CapacityConstraintMapPurgingOptimizationPass::
 void CapacityConstraintMapPurgingOptimizationPass::runPass(
     ExpressionPtr strlExpression, CapacityConstraintMapPtr capacityConstraints,
     std::optional<std::string> debugFile) {
+  // Open the debug file if one was provided.
+  std::ofstream debugFileStream;
+  if (debugFile.has_value()) {
+    debugFileStream.open(debugFile.value());
+  }
+
   /* Preprocessing: Compute the post-order traversal to compute the cliques. */
   auto postOrderTraversal = computePostOrderTraversal(strlExpression);
   cliques.reserve(postOrderTraversal.size());
@@ -1051,12 +1057,14 @@ void CapacityConstraintMapPurgingOptimizationPass::runPass(
     computeCliques(postOrderTraversal);
   }
 
-  // Output the cliques.
-  TETRISCHED_DEBUG("[" << name << "] The cliques for each expression are: ")
-  for (auto &[key, clique] : cliques) {
-    TETRISCHED_DEBUG("\t" << key->getName() << ": ");
-    for (auto &expression : clique) {
-      TETRISCHED_DEBUG("\t\t" << expression->getName());
+  // Output the cliques, if a debug file was provided.
+  if (debugFile.has_value()) {
+    for (auto &[key, clique] : cliques) {
+      debugFileStream << key->getName() << ": ";
+      for (auto &expression : clique) {
+        debugFileStream << expression->getName() << ", ";
+      }
+      debugFileStream << std::endl;
     }
   }
 
