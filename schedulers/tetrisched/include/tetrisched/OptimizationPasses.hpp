@@ -118,7 +118,8 @@ class CapacityConstraintMapPurgingOptimizationPass : public OptimizationPass {
   /// A HashMap of the Expression ID to the cliques in the Expression tree.
   /// A clique is defined as a set of Expressions that are known to be
   /// non-concurrent with each other.
-  std::unordered_map<ExpressionPtr, std::unordered_set<ExpressionPtr>> cliques;
+  tbb::concurrent_hash_map<ExpressionPtr, std::unordered_set<ExpressionPtr>>
+      cliques;
 
   /// A map from an Expression to the set of entire leaf Expressions that are
   /// resident under that Expression.
@@ -131,7 +132,7 @@ class CapacityConstraintMapPurgingOptimizationPass : public OptimizationPass {
   /// Deactivates the CapacityConstraints that are trivially satisfied.
   void deactivateCapacityConstraints(
       CapacityConstraintMapPtr capacityConstraints,
-      std::optional<std::string> debugFile);
+      std::optional<std::string> debugFile) const;
 
  public:
   /// Instantiate the CapacityConstraintMapPurgingOptimizationPass.
