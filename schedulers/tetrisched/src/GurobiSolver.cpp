@@ -52,7 +52,8 @@ GurobiSolver::GurobiSolver()
       gurobiModel(new GRBModel(*gurobiEnv)),
       logFileName(""),
       numCachedVariables(0),
-      numUncachedVariables(0) {}
+      numUncachedVariables(0),
+      numDeactivatedConstraints(0) {}
 
 SolverModelPtr GurobiSolver::getModel() {
   if (!solverModel) {
@@ -253,6 +254,7 @@ void GurobiSolver::translateModel() {
         TETRISCHED_DEBUG("Skipping the addition of inactive Constraint "
                          << constraint->getName() << "(" << constraintId
                          << ") to Gurobi Model.");
+        ++numDeactivatedConstraints;
       }
     }
   }
@@ -306,6 +308,8 @@ SolverSolutionPtr GurobiSolver::solveModel() {
   numUncachedVariables = 0;
   solverSolution->numVariables = gurobiModel->get(GRB_IntAttr_NumVars);
   solverSolution->numConstraints = gurobiModel->get(GRB_IntAttr_NumConstrs);
+  solverSolution->numDeactivatedConstraints = numDeactivatedConstraints;
+  numDeactivatedConstraints = 0;
   solverSolution->numNonZeroCoefficients = gurobiModel->get(GRB_IntAttr_NumNZs);
 
   // Construct the Interrupt callback, and register it with the model.

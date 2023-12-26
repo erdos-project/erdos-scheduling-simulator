@@ -54,6 +54,8 @@ struct SolverSolution {
   std::optional<uint64_t> numUncachedVariables;
   /// The number of constraints in the model.
   std::optional<uint64_t> numConstraints;
+  /// The number of constraints that were generated but deactivated.
+  std::optional<uint64_t> numDeactivatedConstraints;
   /// The number of non-zero coefficients in the model.
   std::optional<uint64_t> numNonZeroCoefficients;
   /// The number of solutions found by the solver.

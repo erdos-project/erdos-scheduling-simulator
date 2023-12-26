@@ -779,22 +779,6 @@ void CapacityConstraintMapPurgingOptimizationPass::computeCliques(
         cliques.insert(cliquesAccessor, currentExpression.get());
         cliquesAccessor->second = {currentExpression.get()};
       }
-      // {
-      //   TETRISCHED_SCOPE_TIMER(
-      //       "CriticalPathOptimizationPass::computeCliques::"
-      //       "MaxExpression::constructChildCliques");
-      //   for (auto &child : maxChildren) {
-      //     auto childClique = cliques.find(child);
-      //     if (childClique == cliques.end()) {
-      //       throw exceptions::RuntimeException(
-      //           "[" + name + "] Child " + child->getId() + "(" +
-      //           child->getName() + ") of " + currentExpression->getId() + "("
-      //           + currentExpression->getName() + ") does not have a
-      //           clique.");
-      //     }
-      //     childClique->second.insert(maxChildren.begin(), maxChildren.end());
-      //   }
-      // }
       TETRISCHED_DEBUG("[" << name << "] " << currentExpression->getId() << " ("
                            << currentExpression->getName() << ") has "
                            << currentExpression->getNumChildren()
@@ -806,7 +790,7 @@ void CapacityConstraintMapPurgingOptimizationPass::computeCliques(
                              currentExpression->getTypeString());
       // Construct the leaf expressions under the current expression as
       // a merger of all the leaf expressions under its children.
-      childLeafExpressions[currentExpression.get()] = {currentExpression.get()};
+      childLeafExpressions[currentExpression.get()] = {};
 
       for (auto &child : currentExpression->getChildren()) {
         // Add the child expression set to the current expression.
@@ -1093,8 +1077,8 @@ OptimizationPassRunner::OptimizationPassRunner(bool debug,
   }
 
   // Register the CapacityConstraintMapPurging optimization pass.
-  // registeredPasses.push_back(
-  //     std::make_shared<CapacityConstraintMapPurgingOptimizationPass>());
+  registeredPasses.push_back(
+      std::make_shared<CapacityConstraintMapPurgingOptimizationPass>());
 }
 
 void OptimizationPassRunner::runPreTranslationPasses(

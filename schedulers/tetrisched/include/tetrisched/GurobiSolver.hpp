@@ -49,6 +49,8 @@ class GurobiSolver : public Solver {
   mutable uint64_t numCachedVariables;
   /// The number of uncached variables for the current model.
   mutable uint64_t numUncachedVariables;
+  /// The number of deactivated constraints for the current model.
+  mutable uint64_t numDeactivatedConstraints;
 
   /// Set the defaults for parameters on the model.
   void setParameters(GRBModel& gurobiModel);

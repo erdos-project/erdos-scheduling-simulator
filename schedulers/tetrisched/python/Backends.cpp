@@ -61,6 +61,12 @@ void defineSolverSolution(py::module_& tetrisched_m) {
           },
           "The number of constraints in the model.")
       .def_property_readonly(
+          "numDeactivatedConstraints",
+          [](const tetrisched::SolverSolution& solution) {
+            return solution.numDeactivatedConstraints;
+          },
+          "The number of constraints that were generated but deactivated.")
+      .def_property_readonly(
           "numNonZeroCoefficients",
           [](const tetrisched::SolverSolution& solution) {
             return solution.numNonZeroCoefficients;
@@ -113,6 +119,11 @@ void defineSolverSolution(py::module_& tetrisched_m) {
         if (solution.numConstraints.has_value()) {
           solutionTypeStr += ", numConstraints=" +
                              std::to_string(solution.numConstraints.value());
+        }
+        if (solution.numDeactivatedConstraints.has_value()) {
+          solutionTypeStr +=
+              ", numDeactivatedConstraints=" +
+              std::to_string(solution.numDeactivatedConstraints.value());
         }
         if (solution.numNonZeroCoefficients.has_value()) {
           solutionTypeStr +=
