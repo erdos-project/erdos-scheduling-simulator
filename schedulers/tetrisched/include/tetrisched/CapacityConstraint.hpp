@@ -150,6 +150,9 @@ class CapacityConstraintMap {
 
   /// The number of constraints in this map.
   size_t size() const;
+
+  /// Destructs the CapacityConstraintMap.
+  ~CapacityConstraintMap();
 };
 typedef std::shared_ptr<CapacityConstraintMap> CapacityConstraintMapPtr;
 }  // namespace tetrisched

@@ -278,12 +278,19 @@ void CapacityConstraintMap::translate(SolverModelPtr solverModel) {
   for (auto& [mapKey, constraint] : capacityConstraints) {
     constraint->translate(solverModel);
   }
-
-  // Clear the map now that the constraints have been drained.
-  // capacityConstraints.clear();
 }
 
 size_t CapacityConstraintMap::size() const {
   return capacityConstraints.size();
 }
+
+/// Destructs the CapacityConstraintMap.
+/// Drops the underlying map since this is the fastest.
+/// tbb::concurrent_hash_map clear() which is called by the default
+/// constructor is unbelievably slow (sometimes adding ~300ms to the
+/// critical path runtime).
+CapacityConstraintMap::~CapacityConstraintMap() {
+  capacityConstraints = decltype(capacityConstraints)();
+}
+
 }  // namespace tetrisched
