@@ -552,9 +552,9 @@ ParseResultPtr ChooseExpression::parse(
 
     // Register this indicator with the capacity constraints that
     // are being bubbled up.
-    capacityConstraints->registerUsageForDuration(
-        shared_from_this(), *partition, startTime, duration, isSatisfiedVar,
-        allocationVar, std::nullopt);
+    capacityConstraints->registerUsageForDuration(this, *partition, startTime,
+                                                  duration, isSatisfiedVar,
+                                                  allocationVar, std::nullopt);
   }
   // Ensure that if the Choose expression is satisfied, it fulfills the
   // demand for this expression. Pass the constraint to the model.
@@ -766,8 +766,8 @@ ParseResultPtr WindowedChooseExpression::parse(
 
       // Register the allocation variable with the capacity constraints.
       capacityConstraints->registerUsageForDuration(
-          shared_from_this(), *partition, chooseTime, duration,
-          placedAtChooseTime, allocationVar, std::nullopt);
+          this, *partition, chooseTime, duration, placedAtChooseTime,
+          allocationVar, std::nullopt);
     }
 
     // Keep track of the allocation variables for this time.
@@ -1076,7 +1076,7 @@ ParseResultPtr MalleableChooseExpression::parse(
         // Register this Integer variable with the CapacityConstraintMap
         // that is being bubbled up.
         capacityConstraints->registerUsageForDuration(
-            shared_from_this(), *partition, time, granularity, isSatisfiedVar,
+            this, *partition, time, granularity, isSatisfiedVar,
             allocationAtTime, std::nullopt);
       } else {
         throw tetrisched::exceptions::ExpressionConstructionException(
@@ -1398,8 +1398,7 @@ ParseResultPtr AllocationExpression::parse(
   // Add the allocation variables to the CapacityConstraintMap.
   for (const auto& [partition, allocation] : allocatedResources) {
     capacityConstraints->registerUsageForDuration(
-        shared_from_this(), *partition, startTime, duration, 1, allocation,
-        std::nullopt);
+        this, *partition, startTime, duration, 1, allocation, std::nullopt);
   }
   TETRISCHED_DEBUG("Finished parsing AllocationExpression for "
                    << name << " to be placed starting at time " << startTime

@@ -46,7 +46,7 @@ class CapacityConstraint {
   ConstraintPtr capacityConstraint;
 
   /// A vector of the Expression contributing the given usage to Constraint.
-  std::vector<std::pair<ExpressionPtr, XOrVariableT<uint32_t>>> usageVector;
+  std::vector<std::pair<const Expression*, XOrVariableT<uint32_t>>> usageVector;
 
   /// The CapacityConstraintMap is allowed to translate this CapacityConstraint.
   void translate(SolverModelPtr solverModel);
@@ -60,7 +60,7 @@ class CapacityConstraint {
                      Time granularity, bool useOverlapConstraints);
 
   /// Registers the given usage in this CapacityConstraint.
-  void registerUsage(const ExpressionPtr expression,
+  void registerUsage(const Expression* expression,
                      const IndicatorT usageIndicator,
                      const PartitionUsageT usageVariable, Time duration);
 
@@ -118,7 +118,9 @@ class CapacityConstraintMap {
   /// specified time for the specified duration, which is to be
   /// decided by the solver. The variable is expected to take on a
   /// value >= 0 only if the indicator is 1.
-  void registerUsageAtTime(const ExpressionPtr expression,
+  /// NOTE: The lifetime of the Expression must be longer than the
+  /// lifetime of the CapacityConstraintMap.
+  void registerUsageAtTime(const Expression* expression,
                            const Partition& partition, const Time time,
                            const Time granularity,
                            const IndicatorT usageIndicator,
@@ -133,7 +135,9 @@ class CapacityConstraintMap {
   /// specified by the variable, which is to be decided by the solver.
   /// Optionally, a step granularity can be provided. The default granularity
   /// is the one that the CapacityConstraintMap was initialized with.
-  void registerUsageForDuration(const ExpressionPtr expression,
+  /// NOTE: The lifetime of the Expression must be longer than the
+  /// lifetime of the CapacityConstraintMap.
+  void registerUsageForDuration(const Expression* expression,
                                 const Partition& partition,
                                 const Time startTime, const Time duration,
                                 const IndicatorT usageIndicator,

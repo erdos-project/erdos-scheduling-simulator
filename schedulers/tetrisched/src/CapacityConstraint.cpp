@@ -43,7 +43,7 @@ CapacityConstraint::CapacityConstraint(const Partition& partition,
       capacityConstraint(std::make_shared<Constraint>(
           name, ConstraintType::CONSTR_LE, quantity)) {}
 
-void CapacityConstraint::registerUsage(const ExpressionPtr expression,
+void CapacityConstraint::registerUsage(const Expression* expression,
                                        const IndicatorT usageIndicator,
                                        const PartitionUsageT usageVariable,
                                        Time duration) {
@@ -153,7 +153,7 @@ CapacityConstraintMap::CapacityConstraintMap(
 }
 
 void CapacityConstraintMap::registerUsageAtTime(
-    const ExpressionPtr expression, const Partition& partition, const Time time,
+    const Expression* expression, const Partition& partition, const Time time,
     const Time granularity, const IndicatorT usageIndicator,
     const PartitionUsageT usageVariable, const Time duration) {
   if (!usageIndicator.isVariable() && usageIndicator.get<uint32_t>() == 0) {
@@ -193,7 +193,7 @@ void CapacityConstraintMap::setDynamicDiscretization(
 }
 
 void CapacityConstraintMap::registerUsageForDuration(
-    const ExpressionPtr expression, const Partition& partition,
+    const Expression* expression, const Partition& partition,
     const Time startTime, const Time duration, const IndicatorT usageIndicator,
     const PartitionUsageT variable, std::optional<Time> granularity) {
   if (!useDynamicDiscretization) {
