@@ -478,7 +478,7 @@ uint32_t ChooseExpression::getResourceQuantity() const {
 ParseResultPtr ChooseExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
-  TETRISCHED_SCOPE_TIMER("ChooseExpression::parse," +
+  TETRISCHED_SCOPE_TIMER("ChooseExpression::parse::" + name + "," +
                          std::to_string(currentTime) + "," + name + "," + id)
   // Check that the Expression was parsed before
   if (parsedResult != nullptr) {
