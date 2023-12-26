@@ -212,18 +212,27 @@ void CapacityConstraintMap::registerUsageForDuration(
     // register the usage at the provided granularity.
     Time _granularity = granularity.value_or(this->granularity);
     Time remainderTime = duration;
+    tbb::task_group registerUsageTaskGroup;
     for (Time time = startTime; time < startTime + duration;
          time += _granularity) {
       if (remainderTime > _granularity) {
-        registerUsageAtTime(expression, partition, time, _granularity,
-                            usageIndicator, variable, _granularity);
+        registerUsageTaskGroup.run([this, &expression, &partition, time,
+                                    &_granularity, &usageIndicator, &variable] {
+          registerUsageAtTime(expression, partition, time, _granularity,
+                              usageIndicator, variable, _granularity);
+        });
         remainderTime -= _granularity;
       } else {
-        registerUsageAtTime(expression, partition, time, _granularity,
-                            usageIndicator, variable, remainderTime);
+        registerUsageTaskGroup.run([this, &expression, &partition, time,
+                                    &_granularity, &usageIndicator, &variable,
+                                    remainderTime] {
+          registerUsageAtTime(expression, partition, time, _granularity,
+                              usageIndicator, variable, remainderTime);
+        });
         remainderTime = 0;
       }
     }
+    registerUsageTaskGroup.wait();
   } else {
     // Find the first interval where the start time is in the range.
     decltype(timeRangeToGranularities)::size_type granularityIndex = 0;
