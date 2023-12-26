@@ -1,5 +1,7 @@
 #include "tetrisched/CapacityConstraint.hpp"
 
+#include "tbb/task_group.h"
+
 namespace tetrisched {
 
 /* Method definitions for PartitionTimePairHasher */
@@ -30,7 +32,6 @@ CapacityConstraint::CapacityConstraint(const Partition& partition,
     : useOverlapConstraints(useOverlapConstraints),
       name("CapacityConstraint_" + partition.getPartitionName() + "_at_" +
            std::to_string(constraintTime)),
-      quantity(partition.getQuantity()),
       granularity(granularity),
       usageUpperBound(0),
       durationUpperBound(0),
@@ -41,7 +42,8 @@ CapacityConstraint::CapacityConstraint(const Partition& partition,
       lowerBoundConstraint(std::make_shared<Constraint>(
           name + "_lower_bound", ConstraintType::CONSTR_GE, granularity + 0.5)),
       capacityConstraint(std::make_shared<Constraint>(
-          name, ConstraintType::CONSTR_LE, quantity)) {}
+          name, ConstraintType::CONSTR_LE, partition.getQuantity())),
+      quantity(partition.getQuantity()) {}
 
 void CapacityConstraint::registerUsage(const Expression* expression,
                                        const IndicatorT usageIndicator,
@@ -87,7 +89,18 @@ void CapacityConstraint::registerUsage(const Expression* expression,
   // is an overlap, we can ensure that it is never violated.
   capacityConstraint->addTerm(usageVariable);
   if (usageVariable.isVariable()) {
-    usageVector.emplace_back(expression, usageVariable);
+    auto variableUpperBound = usageVariable.get<VariablePtr>()->getUpperBound();
+    if (!variableUpperBound.has_value()) {
+      throw tetrisched::exceptions::ExpressionConstructionException(
+          "Usage variable " + usageVariable.get<VariablePtr>()->getName() +
+          " does not have an upper bound.");
+    }
+    if (usageMap.find(expression) == usageMap.end()) {
+      usageMap[expression] = variableUpperBound.value();
+    } else {
+      usageMap[expression] =
+          std::max(usageMap[expression], variableUpperBound.value());
+    }
   } else {
     auto usageVariableValue = usageVariable.get<uint32_t>();
     quantity -= usageVariableValue;
@@ -117,8 +130,6 @@ void CapacityConstraint::translate(SolverModelPtr solverModel) {
 }
 
 void CapacityConstraint::deactivate() { capacityConstraint->deactivate(); }
-
-uint32_t CapacityConstraint::getQuantity() const { return quantity; }
 
 std::string CapacityConstraint::getName() const { return name; }
 

@@ -26,9 +26,6 @@ class CapacityConstraint {
   bool useOverlapConstraints;
   /// The name of this CapacityConstraint.
   std::string name;
-  /// The RHS of this constraint i.e., the quantity of this Partition
-  /// at this time.
-  uint32_t quantity;
   /// The granularity of this CapacityConstraint.
   /// This is typically the duration of the Constraint.
   Time granularity;
@@ -45,12 +42,20 @@ class CapacityConstraint {
   /// The SolverModel constraint that enforces the resource usage.
   ConstraintPtr capacityConstraint;
 
-  /// A vector of the Expression contributing the given usage to Constraint.
-  std::vector<std::pair<const Expression*, XOrVariableT<uint32_t>>> usageVector;
-
   /// The CapacityConstraintMap is allowed to translate this CapacityConstraint.
   void translate(SolverModelPtr solverModel);
   friend class CapacityConstraintMap;
+
+  /// PERF (Sukrit): We maintain the following information to aid the
+  /// CapacityConstraintPurgingOptimizationPass. These structures are used
+  /// to bookkeep the usage of the Partition at a particular time by the
+  /// specific Expressions. The optimization pass can then use this information
+  /// to see if the CapacityConstraint is redundant.
+
+  /// A vector of the Expression contributing the given usage to Constraint.
+  std::unordered_map<const Expression*, TETRISCHED_ILP_TYPE> usageMap;
+  /// The quantity of this Partition at this time.
+  uint32_t quantity;
   friend class CapacityConstraintMapPurgingOptimizationPass;
 
  public:
@@ -63,9 +68,6 @@ class CapacityConstraint {
   void registerUsage(const Expression* expression,
                      const IndicatorT usageIndicator,
                      const PartitionUsageT usageVariable, Time duration);
-
-  /// Retrieves the maximum quantity of this CapacityConstraint.
-  uint32_t getQuantity() const;
 
   /// Retrieves the name for this CapacityConstraint.
   std::string getName() const;

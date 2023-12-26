@@ -527,6 +527,18 @@ ParseResultPtr ChooseExpression::parse(
                                        strategyName);
   solverModel->addVariable(isSatisfiedVar);
 
+  // The associated expression for the capacity usage for this Expression.
+  // PERF (Sukrit): We generate a lot of ChooseConstraints, and instead of
+  // associating the usage with a specific ChooseExpression, we look above
+  // us to see if we are descendents of a MaxExpression, and associate it
+  // with that. This is only meant for performance so we don't have to
+  // maintain a large number of keys in the CapacityConstraint.
+  const Expression* associatedExpression = this;
+  if (parents.size() == 1 &&
+      parents[0]->getType() == ExpressionType::EXPR_MAX) {
+    associatedExpression = parents[0];
+  }
+
   ConstraintPtr fulfillsDemandConstraint = std::make_shared<Constraint>(
       name + "_fulfills_demand_at_" + std::to_string(startTime) + "_for_" +
           strategyName,
@@ -553,9 +565,9 @@ ParseResultPtr ChooseExpression::parse(
 
     // Register this indicator with the capacity constraints that
     // are being bubbled up.
-    capacityConstraints->registerUsageForDuration(this, *partition, startTime,
-                                                  duration, isSatisfiedVar,
-                                                  allocationVar, std::nullopt);
+    capacityConstraints->registerUsageForDuration(
+        associatedExpression, *partition, startTime, duration, isSatisfiedVar,
+        allocationVar, std::nullopt);
   }
   // Ensure that if the Choose expression is satisfied, it fulfills the
   // demand for this expression. Pass the constraint to the model.

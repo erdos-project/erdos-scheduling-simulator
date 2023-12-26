@@ -757,7 +757,8 @@ void CapacityConstraintMapPurgingOptimizationPass::computeCliques(
           cliques.insert(cliquesAccessor, currentExpression.get());
           cliquesAccessor->second = {currentExpression.get()};
         }
-        childLeafExpressions[currentExpression.get()] = {currentExpression.get()};
+        childLeafExpressions[currentExpression.get()] = {
+            currentExpression.get()};
         TETRISCHED_DEBUG("[" << name << "] " << currentExpression->getId()
                              << " (" << currentExpression->getName() << ") has "
                              << currentExpression->getNumChildren()
@@ -838,7 +839,8 @@ void CapacityConstraintMapPurgingOptimizationPass::computeCliques(
         auto currentExpressionChildren = currentExpression->getChildren();
 
         auto leftChild = currentExpressionChildren[0];
-        auto leftChildLeafExpressions = childLeafExpressions.find(leftChild.get());
+        auto leftChildLeafExpressions =
+            childLeafExpressions.find(leftChild.get());
         if (leftChildLeafExpressions == childLeafExpressions.end()) {
           throw exceptions::RuntimeException(
               "[" + name + "] Left child " + leftChild->getId() + "(" +
@@ -847,7 +849,8 @@ void CapacityConstraintMapPurgingOptimizationPass::computeCliques(
         }
 
         auto rightChild = currentExpressionChildren[1];
-        auto rightChildLeafExpressions = childLeafExpressions.find(rightChild.get());
+        auto rightChildLeafExpressions =
+            childLeafExpressions.find(rightChild.get());
         if (rightChildLeafExpressions == childLeafExpressions.end()) {
           throw exceptions::RuntimeException(
               "[" + name + "] Right child " + rightChild->getId() + "(" +
@@ -920,11 +923,11 @@ void CapacityConstraintMapPurgingOptimizationPass::
     // Expression adds a higher usage than previously seen. If no such
     // clique exists, we create a new one.
     std::vector<
-        std::pair<std::unordered_set<const Expression*>, TETRISCHED_ILP_TYPE>>
+        std::pair<std::unordered_set<const Expression *>, TETRISCHED_ILP_TYPE>>
         cliqueUsages;
-    cliqueUsages.reserve(capacityConstraint->usageVector.size());
+    cliqueUsages.reserve(capacityConstraint->usageMap.size());
 
-    for (auto &[expression, usageVariable] : capacityConstraint->usageVector) {
+    for (auto &[expression, usage] : capacityConstraint->usageMap) {
       auto currentExpression = expression;
       if (expression->getType() == ExpressionType::EXPR_CHOOSE &&
           expression->getNumParents() == 1 &&
@@ -973,9 +976,7 @@ void CapacityConstraintMapPurgingOptimizationPass::
         if (doesIntersect) {
           // We have found the clique, we now update the usage.
           foundClique = true;
-          auto newCliqueUsage = std::max(
-              cliqueUsage,
-              usageVariable.get<VariablePtr>()->getUpperBound().value());
+          auto newCliqueUsage = std::max(cliqueUsage, usage);
           if (newCliqueUsage > cliqueUsage) {
             cliqueUsage = newCliqueUsage;
           }
@@ -986,9 +987,7 @@ void CapacityConstraintMapPurgingOptimizationPass::
 
       // No clique was found, we create a new one.
       if (!foundClique) {
-        cliqueUsages.push_back(
-            {{currentExpression},
-             usageVariable.get<VariablePtr>()->getUpperBound().value()});
+        cliqueUsages.push_back({{currentExpression}, usage});
       }
     }
 
@@ -1010,24 +1009,24 @@ void CapacityConstraintMapPurgingOptimizationPass::
         debugStream << std::endl;
       }
       debugStream << "\t Deactivated: "
-                  << (totalUsage <= capacityConstraint->getQuantity())
+                  << (totalUsage <= capacityConstraint->quantity)
                   << ", totalUsage: " << totalUsage
-                  << ", quantity: " << capacityConstraint->getQuantity()
+                  << ", quantity: " << capacityConstraint->quantity
                   << std::endl;
     }
 
-    if (totalUsage <= capacityConstraint->getQuantity()) {
+    if (totalUsage <= capacityConstraint->quantity) {
       // The constraint can be deactivated.
       capacityConstraint->deactivate();
       ++deactivatedConstraints;
       TETRISCHED_DEBUG("[" << name << "] Deactivated constraint "
                            << capacityConstraint->getName() << " with quantity "
-                           << capacityConstraint->getQuantity()
+                           << capacityConstraint->quantity
                            << " and total usage " << totalUsage);
     } else {
       TETRISCHED_DEBUG("[" << name << "] Constraint "
                            << capacityConstraint->getName() << " with quantity "
-                           << capacityConstraint->getQuantity()
+                           << capacityConstraint->quantity
                            << " and total usage " << totalUsage
                            << " cannot be deactivated.");
     }
