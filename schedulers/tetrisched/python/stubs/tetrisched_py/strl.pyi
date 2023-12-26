@@ -2,10 +2,8 @@
 STRL primitives for the TetriSched Python API.
 """
 from __future__ import annotations
-
-import typing
-
 import tetrisched_py
+import typing
 
 __all__ = [
     "AllocationExpression",
@@ -42,6 +40,30 @@ class AllocationExpression(Expression):
         """
 
 class ChooseExpression(Expression):
+    @typing.overload
+    def __init__(
+        self,
+        taskName: str,
+        strategyName: str,
+        partitions: tetrisched_py.Partitions,
+        numRequiredMachines: int,
+        startTime: int,
+        duration: int,
+        utility: float,
+    ) -> None:
+        """
+        Initializes a ChooseExpression for the given task to be placed on `numRequiredMachines` from the given partition at the given startTime, running for the given duration.
+
+        Args:
+          taskName (str): The name of the task to be placed.
+          strategyName (str): The name of the strategy of the Choose.
+          partitions (Partitions): The Partitions to be placed on.
+          numRequiredMachines (int): The number of machines required for the task.
+          startTime (int): The start time of the task.
+          duration (int): The duration of the task.
+          utility (TETRISCHED_ILP_TYPE): The utility of the task.
+        """
+    @typing.overload
     def __init__(
         self,
         taskName: str,

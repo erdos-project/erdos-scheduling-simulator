@@ -2,10 +2,10 @@
 Python API for TetriSched.
 """
 from __future__ import annotations
-
 import typing
-
-from . import backends, model, strl
+from . import backends
+from . import model
+from . import strl
 
 __all__ = ["Partition", "Partitions", "Scheduler", "backends", "model", "strl"]
 

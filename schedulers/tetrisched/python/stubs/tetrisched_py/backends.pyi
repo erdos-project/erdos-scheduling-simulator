@@ -2,10 +2,8 @@
 Solver backends for the TetriSched Python API.
 """
 from __future__ import annotations
-
-import typing
-
 import tetrisched_py.model
+import typing
 
 __all__ = [
     "CPLEXSolver",
@@ -147,9 +145,49 @@ class SolverSolution:
         Check if the solution was valid.
         """
     @property
+    def numCachedVariables(self) -> int | None:
+        """
+        The number of variables that were cached before.
+        """
+    @property
+    def numConstraints(self) -> int | None:
+        """
+        The number of constraints in the model.
+        """
+    @property
+    def numDeactivatedConstraints(self) -> int | None:
+        """
+        The number of constraints that were generated but deactivated.
+        """
+    @property
+    def numNonZeroCoefficients(self) -> int | None:
+        """
+        The number of non-zero coefficients in the model.
+        """
+    @property
+    def numSolutions(self) -> int | None:
+        """
+        The number of solutions found by the solver.
+        """
+    @property
+    def numUncachedVariables(self) -> int | None:
+        """
+        The number of variables that were not cached before.
+        """
+    @property
+    def numVariables(self) -> int | None:
+        """
+        The number of variables in the model.
+        """
+    @property
     def objectiveValue(self) -> float | None:
         """
         The objective value of the solution (if available).
+        """
+    @property
+    def objectiveValueBound(self) -> float | None:
+        """
+        The objective value of the bound retrieved from STRL (if available).
         """
     @property
     def solutionType(self) -> SolutionType:
