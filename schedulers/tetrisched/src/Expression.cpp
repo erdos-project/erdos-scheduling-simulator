@@ -152,7 +152,7 @@ void Expression::addChild(ExpressionPtr child) {
     throw tetrisched::exceptions::ExpressionConstructionException(
         "Cannot add a null child to the Expression " + name + ".");
   }
-  child->addParent(shared_from_this());
+  child->addParent(this);
   children.push_back(child);
 }
 
@@ -269,17 +269,18 @@ void Expression::setTimeBounds(ExpressionTimeBounds timeBounds) {
   this->timeBounds = timeBounds;
 }
 
-void Expression::addParent(ExpressionPtr parent) { parents.push_back(parent); }
+void Expression::addParent(const Expression* parent) {
+  if (parent == nullptr) {
+    throw tetrisched::exceptions::ExpressionConstructionException(
+        "Cannot add a null parent to the Expression " + name + ".");
+  }
+  parents.push_back(parent);
+}
 
 size_t Expression::getNumParents() const { return parents.size(); }
 
-std::vector<ExpressionPtr> Expression::getParents() const {
-  std::vector<ExpressionPtr> returnParents;
-  returnParents.reserve(parents.size());
-  for (decltype(parents)::size_type i = 0; i < parents.size(); i++) {
-    returnParents.push_back(parents[i].lock());
-  }
-  return returnParents;
+std::vector<const Expression*> Expression::getParents() const {
+  return parents;
 }
 
 SolutionResultPtr Expression::populateResults(SolverModelPtr solverModel) {

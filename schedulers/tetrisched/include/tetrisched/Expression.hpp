@@ -198,7 +198,7 @@ class Expression : public std::enable_shared_from_this<Expression> {
   /// The children of this Expression.
   std::vector<ExpressionPtr> children;
   /// The parents of this Expression.
-  std::vector<std::weak_ptr<Expression>> parents;
+  std::vector<const Expression*> parents;
   /// The type of this Expression.
   ExpressionType type;
   /// The Solution result from this Expression.
@@ -210,7 +210,7 @@ class Expression : public std::enable_shared_from_this<Expression> {
   std::mutex expressionMutex;
 
   /// Adds a parent to this expression.
-  void addParent(ExpressionPtr parent);
+  void addParent(const Expression* parent);
 
  public:
   /// Construct the Expression class of the given type.
@@ -250,7 +250,7 @@ class Expression : public std::enable_shared_from_this<Expression> {
   size_t getNumParents() const;
 
   /// Returns the parents of this Expression.
-  std::vector<ExpressionPtr> getParents() const;
+  std::vector<const Expression*> getParents() const;
 
   /// Returns the number of children of this Expression.
   size_t getNumChildren() const;
