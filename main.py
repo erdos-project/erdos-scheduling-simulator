@@ -1,7 +1,6 @@
 import os
 import random
 import sys
-from collections import namedtuple
 
 from absl import app, flags
 
@@ -36,11 +35,6 @@ from utils import EventTime, setup_csv_logging, setup_logging
 from workload import BranchPredictionPolicy, Workload
 
 FLAGS = flags.FLAGS
-
-Task = namedtuple(
-    "Task",
-    field_names="name,job,instances,status,start_time,end_time,duration,cpu,mem",
-)
 
 # Define the flags.
 flags.DEFINE_enum(
