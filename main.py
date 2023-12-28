@@ -77,8 +77,30 @@ flags.DEFINE_bool(
 flags.DEFINE_string("log_level", "debug", "Level of logging.")
 flags.DEFINE_string(
     "workload_profile_path",
-    "./profiles/workload/pylot-workload-profile.json",
-    "Path of the description of the Workload to schedule.",
+    None,
+    "Path of the description of the Workload to schedule. The path can be a file, or a "
+    "directory, and the behavior is defined by the workload loader used. Use "
+    "`workload_profile_paths` if specific files are to be loaded.",
+)
+flags.DEFINE_list(
+    "workload_profile_paths",
+    [],
+    "A list of paths of the description of the Workload to schedule.",
+)
+flags.register_multi_flags_validator(
+    ["workload_profile_path", "workload_profile_paths"],
+    lambda flags: not (
+        len(flags["workload_profile_paths"]) > 0
+        and flags["workload_profile_path"] is not None
+    ),
+    message="Only one of workload_profile_path and workload_profile_paths must be set.",
+)
+flags.register_multi_flags_validator(
+    ["workload_profile_path", "workload_profile_paths"],
+    lambda flags: len(flags["workload_profile_paths"]) > 0
+    or flags["workload_profile_path"] is not None,
+    message="At least one of workload_profile_path and workload_profile_paths must be "
+    "set.",
 )
 flags.DEFINE_string(
     "worker_profile_path",
@@ -137,7 +159,7 @@ flags.DEFINE_integer(
     "benchmark_num_cpus", 10, "Number of CPUs available for benchmarking."
 )
 
-# Task related flags.
+# AlibabaLoader related flags.
 flags.DEFINE_integer(
     "alibaba_loader_task_cpu_divisor",
     25,
@@ -161,6 +183,8 @@ flags.DEFINE_bool(
     False,
     "If true, we use heterogeneous resource types with %difference in runtime.",
 )
+
+# Task related flags.
 flags.DEFINE_integer(
     "max_timestamp",
     None,
