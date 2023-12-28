@@ -508,12 +508,10 @@ def main(args):
             )
         elif FLAGS.replay_trace == "alibaba":
             workload_loader = AlibabaLoader(
-                path=FLAGS.workload_profile_path,
                 workload_interval=EventTime(
                     FLAGS.workload_update_interval, EventTime.Unit.US
                 ),
                 flags=FLAGS,
-                heterogeneous=FLAGS.alibaba_enable_heterogeneous_resource_type,
             )
         else:
             raise NotImplementedError(

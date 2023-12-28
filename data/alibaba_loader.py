@@ -62,13 +62,11 @@ class AlibabaLoader(BaseWorkloadLoader):
 
     def __init__(
         self,
-        path: str,
         workload_interval: EventTime,
         flags: "absl.flags",
-        heterogeneous: bool = False,
     ):
-        self._path = path
         self._flags = flags
+        self._path = flags.workload_profile_path
         self._logger = setup_logging(
             name=self.__class__.__name__,
             log_dir=flags.log_dir,
@@ -87,26 +85,10 @@ class AlibabaLoader(BaseWorkloadLoader):
             else EventTime(sys.maxsize, EventTime.Unit.US)
         )
         self._workload = Workload.empty(flags)
-        self._heterogeneous = heterogeneous
+        self._heterogeneous = self._flags.alibaba_enable_heterogeneous_resource_type
 
-        if self._flags:
-            self._csv_logger = setup_csv_logging(
-                name=self.__class__.__name__,
-                log_dir=self._flags.log_dir,
-                log_file=self._flags.csv_file_name,
-            )
-
-            self._task_cpu_divisor = int(self._flags.alibaba_loader_task_cpu_divisor)
-            self._task_max_pow2_slots = int(
-                self._flags.alibaba_loader_task_max_pow2_slots
-            )
-        else:
-            self._csv_logger = setup_csv_logging(
-                name=self.__class__.__name__, log_file=None
-            )
-            self._log_dir = os.getcwd()
-            self._task_cpu_divisor = 25
-            self._task_max_pow2_slots = 0  # default behaviour: use task.cpu from trace
+        self._task_cpu_divisor = self._flags.alibaba_loader_task_cpu_divisor
+        self._task_max_pow2_slots = self._flags.alibaba_loader_task_max_pow2_slots
 
     def _construct_release_times(self):
         """Construct the release times of the jobs in the workload.
