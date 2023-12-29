@@ -137,10 +137,19 @@ class AlibabaLoader(BaseWorkloadLoader):
                         f"Release policy {release_policy_type} not implemented."
                     )
                 else:
+                    if index >= len(self._flags.override_poisson_arrival_rates):
+                        raise ValueError(
+                            "Not enough arrival rates provided for the number of "
+                            "workload profile paths."
+                        )
                     release_policy = self._construct_release_policy(
                         policy_type=release_policy_type,
-                        arrival_rate=self._flags.override_poisson_arrival_rates[index],
-                        num_invocations=self._flags.override_num_invocations[index],
+                        arrival_rate=float(
+                            self._flags.override_poisson_arrival_rates[index]
+                        ),
+                        num_invocations=int(
+                            self._flags.override_num_invocations[index]
+                        ),
                     )
                 if os.path.isfile(path):
                     extension = pathlib.Path(path).suffix.lower()
