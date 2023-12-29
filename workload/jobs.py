@@ -190,6 +190,15 @@ class JobGraph(Graph[Job]):
             deadline can be dithered on top of the actual execution time.
     """
 
+    RELEASE_POLICIES = (
+        "periodic",
+        "fixed",
+        "poisson",
+        "gamma",
+        "closed_loop",
+        "fixed_gamma",
+    )
+
     class ReleasePolicyType(Enum):
         """Represents the different release policies supported by a JobGraph."""
 
@@ -254,6 +263,10 @@ class JobGraph(Graph[Job]):
                     needs to be extrapolated.
             """
             releases = []
+            if self._fixed_invocation_nums == 0:
+                # If there are no invocations, we return an empty list.
+                return releases
+
             if self._policy_type == JobGraph.ReleasePolicyType.PERIODIC:
                 releases.extend(
                     map(
@@ -648,6 +661,14 @@ class JobGraph(Graph[Job]):
         @property
         def start_time(self) -> EventTime:
             return self._start
+
+        def __str__(self) -> str:
+            return (
+                f"ReleasePolicy(policy_type={self.policy_type}, period={self._period}, "
+                f"num_invocations={self._fixed_invocation_nums}, "
+                f"rate={self._variable_arrival_rate}, coefficient={self._coefficient}, "
+                f"concurrency={self._concurrency}, start_time={self.start_time})"
+            )
 
     def __init__(
         self,
