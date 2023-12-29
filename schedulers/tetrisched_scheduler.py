@@ -786,7 +786,7 @@ class TetriSchedScheduler(BaseScheduler):
                         time_discretization <= task.current_placement.placement_time
                         and (
                             index == len(placement_times_and_rewards) - 1
-                            or placement_times_and_rewards[index + 1]
+                            or placement_times_and_rewards[index + 1][0]
                             > task.current_placement.placement_time
                         )
                     ):
