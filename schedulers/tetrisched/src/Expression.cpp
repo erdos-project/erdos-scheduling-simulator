@@ -479,8 +479,8 @@ uint32_t ChooseExpression::getResourceQuantity() const {
 ParseResultPtr ChooseExpression::parse(
     SolverModelPtr solverModel, Partitions availablePartitions,
     CapacityConstraintMapPtr capacityConstraints, Time currentTime) {
-  TETRISCHED_SCOPE_TIMER("ChooseExpression::parse::" + name + "," +
-                         std::to_string(currentTime) + "," + name + "," + id)
+  // TETRISCHED_SCOPE_TIMER("ChooseExpression::parse::" + name + "," +
+  //                        std::to_string(currentTime) + "," + name + "," + id)
   // Check that the Expression was parsed before
   if (parsedResult != nullptr) {
     // return the already parsed sub-tree from another parent
@@ -1676,16 +1676,16 @@ ParseResultPtr LessThanExpression::parse(
   TETRISCHED_DEBUG("Parsing LessThanExpression with name " << name << ".")
 
   // Parse both the children.
-  tbb::task_group lessThanExpressionChildParsing;
-  lessThanExpressionChildParsing.run([&] {
+  // tbb::task_group lessThanExpressionChildParsing;
+  // lessThanExpressionChildParsing.run([&] {
     children[0]->parse(solverModel, availablePartitions, capacityConstraints,
                        currentTime);
-  });
-  lessThanExpressionChildParsing.run([&] {
+  // });
+  // lessThanExpressionChildParsing.run([&] {
     children[1]->parse(solverModel, availablePartitions, capacityConstraints,
                        currentTime);
-  });
-  lessThanExpressionChildParsing.wait();
+  // });
+  // lessThanExpressionChildParsing.wait();
   TETRISCHED_DEBUG(
       "Finished parsing the children for LessThanExpression with name " << name
                                                                         << ".")
@@ -1902,7 +1902,7 @@ ParseResultPtr MinExpression::parse(
       std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
 
   // Run parsing of all the children in parallel.
-  tbb::task_group minChildrenParsing;
+  // tbb::task_group minChildrenParsing;
 
   // Keep track of the bounds of start and end time.
   // std::pair<double, double> startTimeRange =
@@ -1911,7 +1911,7 @@ ParseResultPtr MinExpression::parse(
   //     std::make_pair(std::numeric_limits<Time>::max(), 0);
 
   for (auto& child : children) {
-    minChildrenParsing.run([&] {
+    // minChildrenParsing.run([&] {
       // Parse the Child.
       auto childParsedResult = child->parse(solverModel, availablePartitions,
                                             capacityConstraints, currentTime);
@@ -1919,7 +1919,8 @@ ParseResultPtr MinExpression::parse(
       if (childParsedResult->type != ParseResultType::EXPRESSION_UTILITY) {
         // If any of the children cannot provide a utility, the MIN expression
         // cannot be satisfied.
-        return;
+        continue;
+        //return;
       }
 
       // Ensure that the MIN is satisfied only if this child is satisfied.
@@ -2037,9 +2038,9 @@ ParseResultPtr MinExpression::parse(
             "Utility needed from " + child->getName() +
             " for MIN, but was not present!");
       }
-    });
+    // });
   }
-  minChildrenParsing.wait();
+  // minChildrenParsing.wait();
 
   // Check that all the children provided a utility.
   bool allChildrenProvidedUtilities = true;
