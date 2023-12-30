@@ -770,7 +770,7 @@ class TaskGraph(Graph[Task]):
         # Do a breadth-first traversal from this task to all the children of this
         # task until the first terminal task, or until no task is left.
         cancelled_tasks = []
-        for child in self.breadth_first(task):
+        for child in self.depth_first(task):
             task._logger.debug(
                 "[%s] The TaskGraph %s is considering whether to cancel Task %s.",
                 time.to(EventTime.Unit.US).time,

@@ -1315,7 +1315,7 @@ class Simulator(object):
         task_graph = workload.get_task_graph(task.task_graph)
         assert task_graph is not None, "Inconsistency in Task placement and Workload."
         if not task.is_ready_to_run(task_graph):
-            if task.state == TaskState.CANCELLED:
+            if task.state == TaskState.CANCELLED or task_graph.is_cancelled():
                 # The Task was cancelled. Consume the event.
                 self._logger.info(
                     "[%s] The Task %s was cancelled. Removing the event.",
