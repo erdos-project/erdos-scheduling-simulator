@@ -901,6 +901,18 @@ void CapacityConstraintMapPurgingOptimizationPass::
   for (auto &[key, capacityConstraint] :
        capacityConstraints->capacityConstraints) {
     TETRISCHED_SCOPE_TIMER("CapacityConstraint::" + capacityConstraint->name);
+
+    if (debugFile.has_value()) {
+      debugStream << "\n" << capacityConstraint->getName() << ": " << std::endl;
+      debugStream << capacityConstraint->capacityConstraint->toString()
+                  << std::endl;
+      debugStream << "\t Default Usages: " << std::endl;
+      for (auto &[expression, usage] : capacityConstraint->usageMap) {
+        debugStream << "\t" << expression->getName() << " : " << usage
+                    << std::endl;
+      }
+      debugStream << "\t Clique Checking: " << std::endl;
+    }
     // We iterate over each Expression that contributes to the usage of
     // this CapacityConstraint. We then find the clique that this
     // Expression belongs to, and update the usage of that clique if this
@@ -930,34 +942,42 @@ void CapacityConstraintMapPurgingOptimizationPass::
             currentExpression->getName() + ") does not have a clique.");
       }
 
+      if (debugFile.has_value()) {
+        debugStream << "\n\t" << currentExpression->getName() << " : " << usage
+                    << std::endl;
+        debugStream << "\tThe clique for this expression is: ";
+        for (auto &expression : cliquesAccessor->second) {
+          debugStream << expression->getName() << ", ";
+        }
+        debugStream << std::endl;
+      }
+
       // We now find the clique that this expression belongs to.
       bool foundClique = false;
       for (auto &[clique, cliqueUsage] : cliqueUsages) {
+        // If any of th expressions in this clique do not belong to the
+        // clique of the current expression, then we skip this clique.
         // If the intersection between this clique and the clique of the
-        // expression is non-empty, then we have found the clique.
-        bool doesIntersect = false;
+        bool anyExpressionNotInClique = false;
         for (auto &cliqueExpression : clique) {
-          if (cliquesAccessor->second.find(cliqueExpression) !=
+          if (cliquesAccessor->second.find(cliqueExpression) ==
               cliquesAccessor->second.end()) {
-            doesIntersect = true;
+            anyExpressionNotInClique = true;
             break;
           }
         }
         if (debugFile.has_value()) {
-          debugStream << "\t\t Intersects? " << doesIntersect << " : "
-                      << std::endl;
-          ;
-          debugStream << "\t\t Current clique: ";
+          debugStream
+              << "\n\tChecking with previously available clique with usage "
+              << cliqueUsage << ": " << std::endl
+              << "\t\t";
           for (auto &cliqueExpression : clique) {
             debugStream << cliqueExpression->getName() << ", ";
           }
-          debugStream << std::endl << "\t\t Expression clique:";
-          for (auto &expression : cliquesAccessor->second) {
-            debugStream << expression->getName() << ", ";
-          }
-          debugStream << std::endl;
+          debugStream << "\n\tAny Expression Not in Clique? "
+                      << (anyExpressionNotInClique ? "Yes" : "No") << std::endl;
         }
-        if (doesIntersect) {
+        if (!anyExpressionNotInClique) {
           // We have found the clique, we now update the usage.
           foundClique = true;
           auto newCliqueUsage = std::max(cliqueUsage, usage);
@@ -983,8 +1003,6 @@ void CapacityConstraintMapPurgingOptimizationPass::
     }
 
     if (debugFile.has_value()) {
-      debugStream << capacityConstraint->capacityConstraint->toString()
-                  << std::endl;
       for (auto &[clique, usage] : cliqueUsages) {
         debugStream << "\t" << usage << " : ";
         for (auto &expression : clique) {
