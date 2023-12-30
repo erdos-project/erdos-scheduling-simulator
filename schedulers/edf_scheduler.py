@@ -34,6 +34,9 @@ class EDFScheduler(BaseScheduler):
             enforce_deadlines=enforce_deadlines,
             _flags=_flags,
         )
+        if _flags is not None:
+            if _flags.release_taskgraphs:
+                raise ValueError("EDFScheduler does not support taskgraphs.")
 
     def schedule(
         self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools
