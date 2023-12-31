@@ -335,6 +335,7 @@ class ObjectiveFunctionT {
   ObjectiveFunctionT(ObjectiveType objectiveType);
 
   /// Adds a term to the left-hand side constraint.
+  void addTerm(T coefficient, const XOrVariableT<T>& term);
   void addTerm(T coefficient, std::shared_ptr<VariableT<T>> variable);
   void addTerm(T constant);
 

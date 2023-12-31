@@ -277,6 +277,16 @@ ObjectiveFunctionT<T>::ObjectiveFunctionT(ObjectiveType type)
 
 template <typename T>
 void ObjectiveFunctionT<T>::addTerm(T coefficient,
+                                    const XOrVariableT<T>& term) {
+  if (term.isVariable()) {
+    this->addTerm(coefficient, term.template get<VariablePtr>());
+  } else {
+    this->addTerm(coefficient * term.template get<T>());
+  }
+}
+
+template <typename T>
+void ObjectiveFunctionT<T>::addTerm(T coefficient,
                                     std::shared_ptr<VariableT<T>> variable) {
   terms.push_back(std::make_pair(coefficient, variable));
 }

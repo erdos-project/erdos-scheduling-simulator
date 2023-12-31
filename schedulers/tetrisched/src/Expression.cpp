@@ -1678,12 +1678,12 @@ ParseResultPtr LessThanExpression::parse(
   // Parse both the children.
   // tbb::task_group lessThanExpressionChildParsing;
   // lessThanExpressionChildParsing.run([&] {
-    children[0]->parse(solverModel, availablePartitions, capacityConstraints,
-                       currentTime);
+  children[0]->parse(solverModel, availablePartitions, capacityConstraints,
+                     currentTime);
   // });
   // lessThanExpressionChildParsing.run([&] {
-    children[1]->parse(solverModel, availablePartitions, capacityConstraints,
-                       currentTime);
+  children[1]->parse(solverModel, availablePartitions, capacityConstraints,
+                     currentTime);
   // });
   // lessThanExpressionChildParsing.wait();
   TETRISCHED_DEBUG(
@@ -1912,132 +1912,132 @@ ParseResultPtr MinExpression::parse(
 
   for (auto& child : children) {
     // minChildrenParsing.run([&] {
-      // Parse the Child.
-      auto childParsedResult = child->parse(solverModel, availablePartitions,
-                                            capacityConstraints, currentTime);
+    // Parse the Child.
+    auto childParsedResult = child->parse(solverModel, availablePartitions,
+                                          capacityConstraints, currentTime);
 
-      if (childParsedResult->type != ParseResultType::EXPRESSION_UTILITY) {
-        // If any of the children cannot provide a utility, the MIN expression
-        // cannot be satisfied.
-        continue;
-        //return;
-      }
+    if (childParsedResult->type != ParseResultType::EXPRESSION_UTILITY) {
+      // If any of the children cannot provide a utility, the MIN expression
+      // cannot be satisfied.
+      continue;
+      // return;
+    }
 
-      // Ensure that the MIN is satisfied only if this child is satisfied.
-      if (childParsedResult->indicator.has_value()) {
-        auto childIndicator = childParsedResult->indicator.value();
-        if (childIndicator.isVariable()) {
-          minIndicatorConstraint->addTerm(childIndicator);
-          ++numEnforceableChildren;
+    // Ensure that the MIN is satisfied only if this child is satisfied.
+    if (childParsedResult->indicator.has_value()) {
+      auto childIndicator = childParsedResult->indicator.value();
+      if (childIndicator.isVariable()) {
+        minIndicatorConstraint->addTerm(childIndicator);
+        ++numEnforceableChildren;
+      } else {
+        auto indicatorValue = childIndicator.get<uint32_t>();
+        if (indicatorValue == 1) {
+          // This child is trivially satisifed, we shouldn't add its utility.
+          TETRISCHED_DEBUG("Child " << child->getName() << " of MIN " << name
+                                    << " is trivially satisfied.")
+          // continue;
         } else {
-          auto indicatorValue = childIndicator.get<uint32_t>();
-          if (indicatorValue == 1) {
-            // This child is trivially satisifed, we shouldn't add its utility.
-            TETRISCHED_DEBUG("Child " << child->getName() << " of MIN " << name
-                                      << " is trivially satisfied.")
-            // continue;
-          } else {
-            throw tetrisched::exceptions::ExpressionConstructionException(
-                "Indicator needed from " + child->getName() +
-                " for MIN, but was 0.");
-          }
+          throw tetrisched::exceptions::ExpressionConstructionException(
+              "Indicator needed from " + child->getName() +
+              " for MIN, but was 0.");
         }
-      } else {
-        throw tetrisched::exceptions::ExpressionConstructionException(
-            "Indicator needed from " + child->getName() +
-            " for MIN, but was not present!");
       }
+    } else {
+      throw tetrisched::exceptions::ExpressionConstructionException(
+          "Indicator needed from " + child->getName() +
+          " for MIN, but was not present!");
+    }
 
-      // Ensure that the MIN's start time is <= the start time of this child.
-      ConstraintPtr minStartTimeConstraint = std::make_shared<Constraint>(
-          name + "_min_start_time_constr_child_" + child->getName(),
-          ConstraintType::CONSTR_GE, 0, 2);  // minStartTime < childStartTime
-      if (childParsedResult->startTime.has_value()) {
-        auto childStartTime = childParsedResult->startTime.value();
-        if (childStartTime.isVariable()) {
-          auto childStartTimeVariable = childStartTime.get<VariablePtr>();
-          minStartTimeConstraint->addTerm(1, childStartTimeVariable);
-          // if (auto lowerBound = childStartTimeVariable->getLowerBound();
-          //     lowerBound.has_value()) {
-          // auto lowerBoundValue = lowerBound.value();
-          // std::cout << "Lower bound for " <<
-          // childStartTimeVariable->getName()
-          //           << " is " << lowerBoundValue << std::endl;
-          // if (lowerBoundValue < startTimeRange.first) {
-          //   startTimeRange.first = lowerBoundValue;
-          // }
-          // if (lowerBoundValue > startTimeRange.second) {
-          //   startTimeRange.second = lowerBoundValue;
-          // }
-          // }
-        } else {
-          auto childStartTimeValue = childStartTime.get<Time>();
-          minStartTimeConstraint->addTerm(childStartTimeValue);
-          // if (childStartTimeValue < startTimeRange.first) {
-          //   startTimeRange.first = childStartTimeValue;
-          // }
-          // if (childStartTimeValue > startTimeRange.second) {
-          //   startTimeRange.second = childStartTimeValue;
-          // }
-        }
-        minStartTimeConstraint->addTerm(-1, minStartTime);
-
-        // Add the constraint to solver
-        solverModel->addConstraint(std::move(minStartTimeConstraint));
+    // Ensure that the MIN's start time is <= the start time of this child.
+    ConstraintPtr minStartTimeConstraint = std::make_shared<Constraint>(
+        name + "_min_start_time_constr_child_" + child->getName(),
+        ConstraintType::CONSTR_GE, 0, 2);  // minStartTime < childStartTime
+    if (childParsedResult->startTime.has_value()) {
+      auto childStartTime = childParsedResult->startTime.value();
+      if (childStartTime.isVariable()) {
+        auto childStartTimeVariable = childStartTime.get<VariablePtr>();
+        minStartTimeConstraint->addTerm(1, childStartTimeVariable);
+        // if (auto lowerBound = childStartTimeVariable->getLowerBound();
+        //     lowerBound.has_value()) {
+        // auto lowerBoundValue = lowerBound.value();
+        // std::cout << "Lower bound for " <<
+        // childStartTimeVariable->getName()
+        //           << " is " << lowerBoundValue << std::endl;
+        // if (lowerBoundValue < startTimeRange.first) {
+        //   startTimeRange.first = lowerBoundValue;
+        // }
+        // if (lowerBoundValue > startTimeRange.second) {
+        //   startTimeRange.second = lowerBoundValue;
+        // }
+        // }
       } else {
-        throw tetrisched::exceptions::ExpressionConstructionException(
-            "Start Time needed from " + child->getName() +
-            " for MIN, but was not present!");
+        auto childStartTimeValue = childStartTime.get<Time>();
+        minStartTimeConstraint->addTerm(childStartTimeValue);
+        // if (childStartTimeValue < startTimeRange.first) {
+        //   startTimeRange.first = childStartTimeValue;
+        // }
+        // if (childStartTimeValue > startTimeRange.second) {
+        //   startTimeRange.second = childStartTimeValue;
+        // }
       }
+      minStartTimeConstraint->addTerm(-1, minStartTime);
 
-      // Ensure that the MIN's end time is >= the end time of this child.
-      ConstraintPtr minEndTimeConstraint = std::make_shared<Constraint>(
-          name + "_min_end_time_constr_child_" + child->getName(),
-          ConstraintType::CONSTR_LE, 0, 2);
-      if (childParsedResult->endTime.has_value()) {
-        auto childEndTime = childParsedResult->endTime.value();
-        if (childEndTime.isVariable()) {
-          auto childEndTimeVariable = childEndTime.get<VariablePtr>();
-          minEndTimeConstraint->addTerm(1, childEndTimeVariable);
-          // if (auto lowerBound = childEndTimeVariable->getLowerBound();
-          //     lowerBound.has_value()) {
-          //   std::cout << "Lower bound for " <<
-          //   childEndTimeVariable->getName()
-          //             << " is " << lowerBound.value() << std::endl;
-          //   auto lowerBoundValue = lowerBound.value();
-          //   if (lowerBoundValue < endTimeRange.first) {
-          //     endTimeRange.first = lowerBoundValue;
-          //   }
-          //   if (lowerBoundValue > endTimeRange.second) {
-          //     endTimeRange.second = lowerBoundValue;
-          //   }
-          // }
-        } else {
-          auto childEndTimeValue = childEndTime.get<Time>();
-          minEndTimeConstraint->addTerm(childEndTimeValue);
-          // if (childEndTimeValue < endTimeRange.first) {
-          //   endTimeRange.first = childEndTimeValue;
-          // }
-          // if (childEndTimeValue > endTimeRange.second) {
-          //   endTimeRange.second = childEndTimeValue;
-          // }
-        }
-        minEndTimeConstraint->addTerm(-1, minEndTime);
-        // Add the constraint to solver
-        solverModel->addConstraint(std::move(minEndTimeConstraint));
-      } else {
-        throw tetrisched::exceptions::ExpressionConstructionException(
-            "End Time needed from " + child->getName() +
-            " for MIN, but was not present!");
-      }
+      // Add the constraint to solver
+      solverModel->addConstraint(std::move(minStartTimeConstraint));
+    } else {
+      throw tetrisched::exceptions::ExpressionConstructionException(
+          "Start Time needed from " + child->getName() +
+          " for MIN, but was not present!");
+    }
 
-      if (childParsedResult->utility.has_value()) {
-        (*minUtility) += *(childParsedResult->utility.value());
+    // Ensure that the MIN's end time is >= the end time of this child.
+    ConstraintPtr minEndTimeConstraint = std::make_shared<Constraint>(
+        name + "_min_end_time_constr_child_" + child->getName(),
+        ConstraintType::CONSTR_LE, 0, 2);
+    if (childParsedResult->endTime.has_value()) {
+      auto childEndTime = childParsedResult->endTime.value();
+      if (childEndTime.isVariable()) {
+        auto childEndTimeVariable = childEndTime.get<VariablePtr>();
+        minEndTimeConstraint->addTerm(1, childEndTimeVariable);
+        // if (auto lowerBound = childEndTimeVariable->getLowerBound();
+        //     lowerBound.has_value()) {
+        //   std::cout << "Lower bound for " <<
+        //   childEndTimeVariable->getName()
+        //             << " is " << lowerBound.value() << std::endl;
+        //   auto lowerBoundValue = lowerBound.value();
+        //   if (lowerBoundValue < endTimeRange.first) {
+        //     endTimeRange.first = lowerBoundValue;
+        //   }
+        //   if (lowerBoundValue > endTimeRange.second) {
+        //     endTimeRange.second = lowerBoundValue;
+        //   }
+        // }
       } else {
-        throw tetrisched::exceptions::ExpressionConstructionException(
-            "Utility needed from " + child->getName() +
-            " for MIN, but was not present!");
+        auto childEndTimeValue = childEndTime.get<Time>();
+        minEndTimeConstraint->addTerm(childEndTimeValue);
+        // if (childEndTimeValue < endTimeRange.first) {
+        //   endTimeRange.first = childEndTimeValue;
+        // }
+        // if (childEndTimeValue > endTimeRange.second) {
+        //   endTimeRange.second = childEndTimeValue;
+        // }
       }
+      minEndTimeConstraint->addTerm(-1, minEndTime);
+      // Add the constraint to solver
+      solverModel->addConstraint(std::move(minEndTimeConstraint));
+    } else {
+      throw tetrisched::exceptions::ExpressionConstructionException(
+          "End Time needed from " + child->getName() +
+          " for MIN, but was not present!");
+    }
+
+    if (childParsedResult->utility.has_value()) {
+      (*minUtility) += *(childParsedResult->utility.value());
+    } else {
+      throw tetrisched::exceptions::ExpressionConstructionException(
+          "Utility needed from " + child->getName() +
+          " for MIN, but was not present!");
+    }
     // });
   }
   // minChildrenParsing.wait();
@@ -2387,8 +2387,15 @@ ParseResultPtr MaxExpression::parse(
 /* Method definitions for ScaleExpression */
 
 ScaleExpression::ScaleExpression(std::string name,
+                                 TETRISCHED_ILP_TYPE scaleFactor,
+                                 bool disregardUtility)
+    : Expression(name, ExpressionType::EXPR_SCALE),
+      scaleFactor(scaleFactor),
+      disregardUtility(disregardUtility) {}
+
+ScaleExpression::ScaleExpression(std::string name,
                                  TETRISCHED_ILP_TYPE scaleFactor)
-    : Expression(name, ExpressionType::EXPR_SCALE), scaleFactor(scaleFactor) {}
+    : ScaleExpression(name, scaleFactor, false) {}
 
 void ScaleExpression::addChild(ExpressionPtr child) {
   if (children.size() == 1) {
@@ -2417,18 +2424,43 @@ ParseResultPtr ScaleExpression::parse(
     parsedResult = std::make_shared<ParseResult>();
     parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
 
-    if (!childParseResult->utility) {
-      throw tetrisched::exceptions::ExpressionConstructionException(
-          "ScaleExpression applied to a child that does not have any "
-          "utility.");
+    if (disregardUtility) {
+      // We are being asked to amplify the indicator, but disregard the utility.
+      if (!childParseResult->indicator) {
+        throw tetrisched::exceptions::ExpressionConstructionException(
+            "ScaleExpression applied to a child that does not have any "
+            "indicator.");
+      }
+      TETRISCHED_DEBUG(
+          "[" << name << "] is amplifying the indicator for the child "
+              << children[0]->getName() << " by " << scaleFactor << ".");
+      parsedResult->utility =
+          std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
+      parsedResult->utility.value()->addTerm(
+          scaleFactor, childParseResult->indicator.value());
+      parsedResult->utility.value()->setUpperBound(scaleFactor);
+    } else {
+      // We are being asked to amplify the utility.
+      if (!childParseResult->utility) {
+        throw tetrisched::exceptions::ExpressionConstructionException(
+            "ScaleExpression applied to a child that does not have any "
+            "utility.");
+      }
+      TETRISCHED_DEBUG(
+          "[" << name << "] is amplifying the utility for the child "
+              << children[0]->getName() << " by " << scaleFactor << ".");
+      parsedResult->utility = std::make_shared<ObjectiveFunction>(
+          (*childParseResult->utility.value()) * scaleFactor);
+      auto childUtilityUpperBound =
+          childParseResult->utility.value()->getUpperBound();
+      if (childUtilityUpperBound.has_value()) {
+        (parsedResult->utility)
+            .value()
+            ->setUpperBound(childUtilityUpperBound.value() * scaleFactor);
+      }
     }
-    TETRISCHED_DEBUG("The child utility is "
-                     << childParseResult->utility.value()->toString());
-    parsedResult->utility = std::make_shared<ObjectiveFunction>(
-        (*childParseResult->utility.value()) * scaleFactor);
-    TETRISCHED_DEBUG("The scale utility is "
-                     << parsedResult->utility.value()->toString());
 
+    // Copy the start, end times and indicator from the child.
     if (childParseResult->startTime) {
       parsedResult->startTime.emplace(childParseResult->startTime.value());
     }
@@ -2437,13 +2469,6 @@ ParseResultPtr ScaleExpression::parse(
     }
     if (childParseResult->indicator) {
       parsedResult->indicator.emplace(childParseResult->indicator.value());
-    }
-    auto childUtilityUpperBound =
-        childParseResult->utility.value()->getUpperBound();
-    if (childUtilityUpperBound.has_value()) {
-      (parsedResult->utility)
-          .value()
-          ->setUpperBound(childUtilityUpperBound.value() * scaleFactor);
     }
     return parsedResult;
   } else {

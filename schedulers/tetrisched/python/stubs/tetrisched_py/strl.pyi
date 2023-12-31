@@ -271,13 +271,25 @@ class Placement:
         """
 
 class ScaleExpression(Expression):
-    def __init__(self, name: str, scalingFactor: float) -> None:
+    @typing.overload
+    def __init__(self, name: str, scaleFactor: float) -> None:
         """
         Initializes a ScaleExpression with the given name and scaling factor.
 
         Args:
           name (str): The name of the ScaleExpression.
-          scalingFactor (TETRISCHED_ILP_TYPE): The scaling factor of the ScaleExpression.
+          scaleFactor (TETRISCHED_ILP_TYPE): The scaling factor of the ScaleExpression.
+        """
+    @typing.overload
+    def __init__(self, name: str, scaleFactor: float, disregardUtility: bool) -> None:
+        """
+        Initializes a ScaleExpression with the given name and scaling factor.
+
+        Args:
+          name (str): The name of the ScaleExpression.
+          scaleFactor (TETRISCHED_ILP_TYPE): The scaling factor of the ScaleExpression.
+          disregardUtility (bool): If true, the utility of the child expression is disregarded,
+        and its indicator is amplified by the scale factor instead.
         """
 
 class SolutionResult:

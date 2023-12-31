@@ -489,12 +489,20 @@ class MaxExpression : public Expression {
 };
 
 /// A `ScaleExpression` amplifies the utility of its child by a scalar factor.
+/// It can also be used to disregard the utility and amplify the indicator of
+/// the child expression by the scalar factor.
 class ScaleExpression : public Expression {
  private:
   /// The scalar factor to amplify the utility of the child by.
   TETRISCHED_ILP_TYPE scaleFactor;
+  /// A boolean indicating if the utility should be disregarded.
+  /// Instead, the indicator of the child expression is amplified by the
+  /// scalar factor.
+  bool disregardUtility;
 
  public:
+  ScaleExpression(std::string name, TETRISCHED_ILP_TYPE scaleFactor,
+                  bool disregardUtility);
   ScaleExpression(std::string name, TETRISCHED_ILP_TYPE scaleFactor);
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,

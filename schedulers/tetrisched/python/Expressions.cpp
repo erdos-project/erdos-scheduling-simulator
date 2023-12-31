@@ -286,9 +286,21 @@ void defineSTRLExpressions(py::module_& tetrisched_m) {
            "scaling factor.\n"
            "\nArgs:\n"
            "  name (str): The name of the ScaleExpression.\n"
-           "  scalingFactor (TETRISCHED_ILP_TYPE): The scaling factor of the "
+           "  scaleFactor (TETRISCHED_ILP_TYPE): The scaling factor of the "
            "ScaleExpression.",
-           py::arg("name"), py::arg("scalingFactor"));
+           py::arg("name"), py::arg("scaleFactor"))
+      .def(py::init<std::string, TETRISCHED_ILP_TYPE, bool>(),
+           "Initializes a ScaleExpression with the given name and "
+           "scaling factor.\n"
+           "\nArgs:\n"
+           "  name (str): The name of the ScaleExpression.\n"
+           "  scaleFactor (TETRISCHED_ILP_TYPE): The scaling factor of "
+           "the ScaleExpression.\n"
+           "  disregardUtility (bool): If true, the utility of the child "
+           "expression is disregarded, \nand its indicator is amplified by the "
+           "scale factor instead.",
+           py::arg("name"), py::arg("scaleFactor"),
+           py::arg("disregardUtility"));
 
   // Define the LessThanExpression.
   py::class_<tetrisched::LessThanExpression, tetrisched::Expression,
