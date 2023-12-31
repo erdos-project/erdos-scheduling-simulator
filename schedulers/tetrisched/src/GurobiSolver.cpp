@@ -86,7 +86,7 @@ void GurobiSolver::setModel(SolverModelPtr solverModelPtr) {
 void GurobiSolver::setParameters(GRBModel& gurobiModel) {
   // Set the maximum numer of threads.
   const auto thread_count = std::thread::hardware_concurrency();
-  gurobiModel.set(GRB_IntParam_Threads, thread_count);
+  gurobiModel.set(GRB_IntParam_Threads, thread_count / 2);
 
   // Ask Gurobi to aggressively cut the search space.
   gurobiModel.set(GRB_IntParam_Cuts, 3);
