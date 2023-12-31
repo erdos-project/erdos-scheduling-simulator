@@ -413,9 +413,6 @@ class Simulator(object):
             sched_start_event,
         )
 
-    def _get_available_exec_strategies(self, task: Task):
-        return task.available_execution_strategies
-
     def dry_run(self) -> None:
         """Displays the order in which the TaskGraphs will be released."""
         start_time = EventTime.zero()
@@ -454,22 +451,18 @@ class Simulator(object):
                     task_graph.job_graph.completion_time,
                 )
                 self._csv_logger.info(
-                    "%s,TASK_GRAPH_RELEASE,%s,%s,%s,%s,%s",
-                    0,
+                    "%s,TASK_GRAPH_RELEASE,%s,%s,%s,%s",
                     task_graph.release_time.to(EventTime.Unit.US).time,
-                    task_graph.deadline.to(EventTime.Unit.US).time,
                     task_graph.name,
+                    task_graph.deadline.to(EventTime.Unit.US).time,
                     len(task_graph.get_nodes()),
                     sum(
                         [
-                            self._get_available_exec_strategies(t)
-                            .get_slowest_strategy()
-                            .runtime.time
+                            t.slowest_execution_strategy.runtime.to(
+                                EventTime.Unit.US
+                            ).time
                             for t in task_graph.get_longest_path(
-                                lambda t: self._get_available_exec_strategies(t)
-                                .get_slowest_strategy()
-                                .runtime.to(EventTime.Unit.US)
-                                .time
+                                lambda t: t.slowest_execution_strategy.runtime.time
                             )
                         ]
                     ),  # This is the critical path time
@@ -1485,14 +1478,9 @@ class Simulator(object):
             len(task_graph.get_nodes()),
             sum(
                 [
-                    self._get_available_exec_strategies(t)
-                    .get_slowest_strategy()
-                    .runtime.time
+                    t.slowest_execution_strategy.runtime.to(EventTime.Unit.US).time
                     for t in task_graph.get_longest_path(
-                        lambda t: self._get_available_exec_strategies(t)
-                        .get_slowest_strategy()
-                        .runtime.to(EventTime.Unit.US)
-                        .time
+                        lambda t: t.slowest_execution_strategy.runtime.time
                     )
                 ]
             ),  # This is the critical path time

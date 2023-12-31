@@ -13,7 +13,7 @@ from . import BranchPredictionPolicy
 from .graph import Graph
 from .placement import Placement
 from .profile import WorkProfile
-from .strategy import ExecutionStrategies
+from .strategy import ExecutionStrategies, ExecutionStrategy
 
 
 @total_ordering
@@ -672,6 +672,10 @@ class Task(object):
     @property
     def available_execution_strategies(self) -> ExecutionStrategies:
         return self._profile.execution_strategies
+
+    @property
+    def slowest_execution_strategy(self) -> ExecutionStrategy:
+        return self._profile.execution_strategies.get_slowest_strategy()
 
     @property
     def preemption_time(self) -> EventTime:
