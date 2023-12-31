@@ -218,6 +218,7 @@ class TetriSchedScheduler(BaseScheduler):
             self._max_discretization.time,
             max_occupancy_threshold,
         )
+        self._use_task_graph_indicator_uility = True
         self._previously_placed_reward_scale_factor = 1.0
         self._enable_optimization_passes = (
             _flags.scheduler_enable_optimization_pass if _flags else False
@@ -627,7 +628,7 @@ class TetriSchedScheduler(BaseScheduler):
                     )
                 self._logger.warning(f"[{sim_time.time}] Failed to place any tasks.")
 
-        # if sim_time == EventTime(16, EventTime.Unit.US):
+        # if sim_time == EventTime(204, EventTime.Unit.US):
         #     raise RuntimeError("Stopping the Simulation.")
 
         scheduler_end_time = time.time()
@@ -1215,15 +1216,26 @@ class TetriSchedScheduler(BaseScheduler):
                 min_expression_task_graph.addChild(root_task_strl)
             task_graph_strl = min_expression_task_graph
 
-        # If the TaskGraph has been previously placed, then we scale the reward.
-        if previously_placed and self._previously_placed_reward_scale_factor > 1.0:
+        # Find which utility to assign to the TaskGraph and how to scale it.
+        # The utility needs to be scaled if we request previously placed TaskGraph
+        # utilities to be scaled, or if we are using the indicator from the topmost
+        # TaskGraph expression to scale the utility.
+        should_scale = (
+            self._previously_placed_reward_scale_factor > 1.0
+        ) or self._use_task_graph_indicator_uility
+
+        if should_scale:
             self._logger.debug(
-                f"[{current_time.time}] Scaling the STRL for {task_graph.name} by "
-                f"the factor {self._previously_placed_reward_scale_factor}."
+                "[%s] Scaling the %s of %s by %s.",
+                current_time.to(EventTime.Unit.US).time,
+                "indicator" if self._use_task_graph_indicator_uility else "utility",
+                task_graph.name,
+                self._previously_placed_reward_scale_factor,
             )
             scale_expression = tetrisched.strl.ScaleExpression(
-                f"{task_graph.name}_previous_placement_scale",
+                f"{task_graph.name}_scale",
                 self._previously_placed_reward_scale_factor,
+                self._use_task_graph_indicator_uility,
             )
             scale_expression.addChild(task_graph_strl)
             return scale_expression
