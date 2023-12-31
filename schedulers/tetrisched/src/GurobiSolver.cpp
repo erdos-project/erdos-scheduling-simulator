@@ -13,26 +13,43 @@ namespace tetrisched {
  */
 GurobiSolver::GurobiInterruptOptimizationCallback::
     GurobiInterruptOptimizationCallback(GurobiInterruptParams params)
-    : params(params), startTime(std::chrono::steady_clock::now()) {}
+    : params(params) {
+  auto currentTime = std::chrono::steady_clock::now();
+  startTime = currentTime;
+  lastIncumbentSolutionTime = currentTime;
+}
 
 void GurobiSolver::GurobiInterruptOptimizationCallback::callback() {
   try {
     auto currentTime = std::chrono::steady_clock::now();
-    if (where == GRB_CB_POLLING && params.timeLimitMs.has_value()) {
-      auto elapsedTimeMs =
-          std::chrono::duration_cast<std::chrono::milliseconds>(currentTime -
-                                                                startTime)
-              .count();
+    if (where == GRB_CB_POLLING) {
+      if (params.timeLimitMs.has_value()) {
+        auto elapsedTimeMs =
+            std::chrono::duration_cast<std::chrono::milliseconds>(currentTime -
+                                                                  startTime)
+                .count();
 
-      if (elapsedTimeMs > params.timeLimitMs.value()) {
-        abort();
+        if (elapsedTimeMs > params.timeLimitMs.value()) {
+          abort();
+        }
+      }
+      if (params.newSolutionTimeLimitMs.has_value()) {
+        auto elapsedTimeMs =
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                currentTime - lastIncumbentSolutionTime)
+                .count();
+
+        if (elapsedTimeMs > params.newSolutionTimeLimitMs.value()) {
+          abort();
+        }
       }
     } else if (where == GRB_CB_MIPSOL && params.utilityUpperBound.has_value()) {
-      if (getDoubleInfo(GRB_CB_MIPSOL_OBJ) >=
-          params.utilityUpperBound.value() -
-              TETRISCHED_SOLUTION_UPPER_BOUND_DELTA) {
+      auto solutionObjectiveValue = getDoubleInfo(GRB_CB_MIPSOL_OBJ);
+      if (solutionObjectiveValue >= params.utilityUpperBound.value() -
+                                        TETRISCHED_SOLUTION_UPPER_BOUND_DELTA) {
         abort();
       }
+      lastIncumbentSolutionTime = currentTime;
     }
   } catch (GRBException& e) {
     std::cout << "Gurobi Solver failed with error code: " << e.getErrorCode()
@@ -79,6 +96,9 @@ void GurobiSolver::setParameters(GRBModel& gurobiModel) {
 
   // Ask Gurobi to find new incumbent solutions rather than prove bounds.
   gurobiModel.set(GRB_IntParam_MIPFocus, 1);
+
+  // Ask Gurobi to solve the MIP concurrently with different paths.
+  // gurobiModel.set(GRB_IntParam_ConcurrentMIP, 8);
 
   // Ask Gurobi to not output to the console, and instead direct it
   // to the specified file.
@@ -197,8 +217,9 @@ GRBConstr GurobiSolver::translateConstraint(
 GRBLinExpr GurobiSolver::translateObjectiveFunction(
     GRBModel& /* gurobiModel */,
     const ObjectiveFunctionPtr& objectiveFunction) const {
-  // TODO (Sukrit): We are currently assuming that all constraints and objective
-  // functions are linear. We may need to support quadratic constraints.
+  // TODO (Sukrit): We are currently assuming that all constraints and
+  // objective functions are linear. We may need to support quadratic
+  // constraints.
   GRBLinExpr objectiveExpr;
 
   // Construct all the terms.
@@ -313,6 +334,10 @@ SolverSolutionPtr GurobiSolver::solveModel() {
   solverSolution->numNonZeroCoefficients = gurobiModel->get(GRB_IntAttr_NumNZs);
 
   // Construct the Interrupt callback, and register it with the model.
+  // TODO (Sukrit): This should be configurable, but for now, we just interrupt
+  // after 5 minutes.
+  constexpr auto interruptTimeLimitMs = 5 * 60 * 1000;
+  interruptParams.newSolutionTimeLimitMs = interruptTimeLimitMs;
   GurobiInterruptOptimizationCallback interruptCallback(interruptParams);
   gurobiModel->setCallback(&interruptCallback);
 

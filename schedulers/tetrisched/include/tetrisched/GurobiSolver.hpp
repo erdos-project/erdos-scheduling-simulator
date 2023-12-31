@@ -13,6 +13,8 @@ class GurobiSolver : public Solver {
   struct GurobiInterruptParams {
     /// The time limit for the optimization (in milliseconds).
     std::optional<Time> timeLimitMs;
+    /// The time limit until a new solution is found (in milliseconds).
+    std::optional<Time> newSolutionTimeLimitMs;
     /// The upper bound of the utility (if available).
     std::optional<TETRISCHED_ILP_TYPE> utilityUpperBound;
   };
@@ -24,6 +26,8 @@ class GurobiSolver : public Solver {
     GurobiInterruptParams params;
     /// The start time of the optimization.
     std::chrono::steady_clock::time_point startTime;
+    /// The time at which the last incumbent solution was found.
+    std::chrono::steady_clock::time_point lastIncumbentSolutionTime;
 
    public:
     /// Create a new GurobiInterruptOptimizationCallback.
