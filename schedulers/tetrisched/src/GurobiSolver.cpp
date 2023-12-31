@@ -97,6 +97,9 @@ void GurobiSolver::setParameters(GRBModel& gurobiModel) {
   // Ask Gurobi to find new incumbent solutions rather than prove bounds.
   gurobiModel.set(GRB_IntParam_MIPFocus, 1);
 
+  // Increase the time spent on Heuristics.
+  gurobiModel.set(GRB_DoubleParam_Heuristics, 0.5);
+
   // Ask Gurobi to solve the MIP concurrently with different paths.
   // gurobiModel.set(GRB_IntParam_ConcurrentMIP, 8);
 
