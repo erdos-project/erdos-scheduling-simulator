@@ -219,7 +219,7 @@ class TetriSchedScheduler(BaseScheduler):
             max_occupancy_threshold,
         )
         self._use_task_graph_indicator_uility = True
-        self._previously_placed_reward_scale_factor = 1.0
+        self._previously_placed_reward_scale_factor = 2.0
         self._enable_optimization_passes = (
             _flags.scheduler_enable_optimization_pass if _flags else False
         )
@@ -628,7 +628,7 @@ class TetriSchedScheduler(BaseScheduler):
                     )
                 self._logger.warning(f"[{sim_time.time}] Failed to place any tasks.")
 
-        # if sim_time == EventTime(204, EventTime.Unit.US):
+        # if sim_time == EventTime(136, EventTime.Unit.US):
         #     raise RuntimeError("Stopping the Simulation.")
 
         scheduler_end_time = time.time()
@@ -1061,8 +1061,8 @@ class TetriSchedScheduler(BaseScheduler):
             # If this Task is not in the set of Tasks that we are required to schedule,
             # then we just return a None expression.
             self._logger.debug(
-                f"[{current_time.time}] Task {task.unique_name} is not in the set of "
-                f"tasks to be scheduled."
+                f"[{current_time.time}] Task {task.unique_name} in state {task.state} "
+                f"is not in the set of tasks to be scheduled."
             )
             task_expression = None
 
@@ -1080,16 +1080,20 @@ class TetriSchedScheduler(BaseScheduler):
             )
             if child_expression:
                 child_expressions[child_expression.id] = child_expression
+            elif child.state != TaskState.COMPLETED:
+                raise RuntimeError(
+                    f"Could not construct the STRL for all the children of "
+                    f"{task.unique_name}."
+                )
 
         # If the number of children does not equal the number of children in the
-        # TaskGraph, then we have not been able to construct the STRL for all the
-        # children. Return None.
-        if len(child_expressions) != len(task_graph.get_children(task)):
-            self._logger.warn(
-                f"[{current_time.time}] Could not construct the STRL for all the "
-                f"children of {task.unique_name}."
-            )
-            return None
+        # TaskGraph that haven't completed, then we have not been able to construct the
+        # STRL for all the children. Return None.
+        # if len(child_expressions) != num_enforceable_children:
+        #     self._logger.warn(
+        #         f"[{current_time.time}] Could not construct the STRL for all the "
+        #         f"children of {task.unique_name}."
+        #     )
 
         # If there are no children, cache and return the expression for this Task.
         if len(child_expressions) == 0:
@@ -1221,7 +1225,7 @@ class TetriSchedScheduler(BaseScheduler):
         # utilities to be scaled, or if we are using the indicator from the topmost
         # TaskGraph expression to scale the utility.
         should_scale = (
-            self._previously_placed_reward_scale_factor > 1.0
+            self._previously_placed_reward_scale_factor > 1.0 and previously_placed
         ) or self._use_task_graph_indicator_uility
 
         if should_scale:
@@ -1234,7 +1238,7 @@ class TetriSchedScheduler(BaseScheduler):
             )
             scale_expression = tetrisched.strl.ScaleExpression(
                 f"{task_graph.name}_scale",
-                self._previously_placed_reward_scale_factor,
+                self._previously_placed_reward_scale_factor if previously_placed else 1,
                 self._use_task_graph_indicator_uility,
             )
             scale_expression.addChild(task_graph_strl)
