@@ -1402,10 +1402,16 @@ ParseResultPtr AllocationExpression::parse(
   parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
   parsedResult->startTime = startTime;
   parsedResult->endTime = endTime;
+
+  // Construct the Utility function for the Allocation expression.
+  // NOTE (Sukrit): We assign a utility of 0 here since AllocationExpression
+  // only adds constraints into the model and does not predicate the constraints
+  // on any indicator. As a result, the solver has nothing to minimize or
+  // maximize.
   parsedResult->utility =
       std::make_shared<ObjectiveFunction>(ObjectiveType::OBJ_MAXIMIZE);
-  (parsedResult->utility).value()->addTerm(1);
-  (parsedResult->utility).value()->setUpperBound(1);
+  (parsedResult->utility).value()->addTerm(0);
+  (parsedResult->utility).value()->setUpperBound(0);
   parsedResult->indicator = 1;
 
   // Add the allocation variables to the CapacityConstraintMap.
