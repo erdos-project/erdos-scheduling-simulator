@@ -1383,6 +1383,15 @@ class TaskGraph(Graph[Task]):
         """
         raise NotImplementedError("Merging of Taskgraphs has not been implemented yet.")
 
+    def is_scheduled(self) -> bool:
+        """Check if any of the tasks in the TaskGraph have been scheduled.
+
+        Returns:
+            `True` if any of the tasks in the TaskGraph have been scheduled,
+            and `False` otherwise.
+        """
+        return any(task.state == TaskState.SCHEDULED for task in self.get_nodes())
+
     def is_complete(self) -> bool:
         """Check if the task graph has finished execution.
 
