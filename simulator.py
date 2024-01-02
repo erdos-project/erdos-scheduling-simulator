@@ -653,6 +653,13 @@ class Simulator(object):
         assert (
             not placement.is_placed()
         ), f"Skipping requested for a placed Task {placement.task.unique_name}."
+        self._logger.debug(
+            "[%s] Creating events from the skipping of %s, "
+            "with drop_skipped_tasks set to %s.",
+            time.to(EventTime.Unit.US).time,
+            placement.task.unique_name,
+            drop_skipped_tasks,
+        )
 
         task_events = []
         if drop_skipped_tasks:
@@ -675,13 +682,14 @@ class Simulator(object):
             if task_graph.is_cancelled():
                 released_tasks_from_new_task_graph = (
                     self._workload.notify_task_graph_completion(
-                        task_graph, cancelled_task.cancellation_time
+                        task_graph,
+                        time,
                     )
                 )
                 self._logger.info(
                     "[%s] Notified the Workload of the cancellation of %s, "
                     "and received %s new Tasks from new TaskGraphs.",
-                    cancelled_task.cancellation_time.time,
+                    time.to(EventTime.Unit.US).time,
                     task_graph.name,
                     len(released_tasks_from_new_task_graph),
                 )
