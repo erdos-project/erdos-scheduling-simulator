@@ -17,6 +17,10 @@ GurobiSolver::GurobiInterruptOptimizationCallback::
   auto currentTime = std::chrono::steady_clock::now();
   startTime = currentTime;
   lastIncumbentSolutionTime = currentTime;
+  if (params.utilityUpperBound.has_value()) {
+    std::cout << "The upper bound of the objective function is "
+              << params.utilityUpperBound.value() << std::endl;
+  }
 }
 
 void GurobiSolver::GurobiInterruptOptimizationCallback::callback() {
@@ -95,13 +99,20 @@ void GurobiSolver::setParameters(GRBModel& gurobiModel) {
   gurobiModel.set(GRB_IntParam_Cuts, 3);
 
   // Ask Gurobi to conservatively presolve the model.
-  gurobiModel.set(GRB_IntParam_Presolve, 1);
+  // gurobiModel.set(GRB_IntParam_Presolve, 2);
 
   // Ask Gurobi to find new incumbent solutions rather than prove bounds.
   gurobiModel.set(GRB_IntParam_MIPFocus, 1);
 
   // Increase the time spent on Heuristics.
   gurobiModel.set(GRB_DoubleParam_Heuristics, 0.5);
+
+  // Set PreSparsify to 1 to enable presolve sparsification.
+  // gurobiModel.set(GRB_IntParam_PreSparsify, 1);
+
+  // Increase the time spent in No Relaxation Heuristic.
+  // NOTE (Sukrit): This does not seem to help in our problem setup.
+  // gurobiModel.set(GRB_DoubleParam_NoRelHeurTime, 10);
 
   // Ask Gurobi to solve the MIP concurrently with different paths.
   // gurobiModel.set(GRB_IntParam_ConcurrentMIP, 8);
