@@ -424,15 +424,15 @@ class AlibabaLoader(BaseWorkloadLoader):
                     path_to_job_graph_generator_mapping[path] = partial(
                         job_graph_data_generator,
                         path,
-                        self._flags.min_deadline_variance,
-                        self._flags.max_deadline_variance,
+                        int(self._flags.min_deadline_variance),
+                        int(self._flags.max_deadline_variance),
                     )
                 else:
                     path_to_job_graph_generator_mapping[path] = partial(
                         job_graph_data_generator,
                         path,
-                        self._flags.min_deadline_variances[index],
-                        self._flags.max_deadline_variances[index],
+                        int(self._flags.min_deadline_variances[index]),
+                        int(self._flags.max_deadline_variances[index]),
                     )
         return path_to_job_graph_generator_mapping
 
