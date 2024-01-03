@@ -3,4 +3,4 @@
       - name: Worker_1_1
         resources:
             - name: Slot_1
-              quantity: 10
+              quantity: 60
