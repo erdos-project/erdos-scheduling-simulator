@@ -13,7 +13,7 @@ namespace tetrisched {
  */
 GurobiSolver::GurobiInterruptOptimizationCallback::
     GurobiInterruptOptimizationCallback(GurobiInterruptParams params)
-    : params(params) {
+    : params(params), incumbentObjectiveValue(0) {
   auto currentTime = std::chrono::steady_clock::now();
   startTime = currentTime;
   lastIncumbentSolutionTime = currentTime;
@@ -49,7 +49,10 @@ void GurobiSolver::GurobiInterruptOptimizationCallback::callback() {
                                         TETRISCHED_SOLUTION_UPPER_BOUND_DELTA) {
         abort();
       }
-      lastIncumbentSolutionTime = currentTime;
+      if (solutionObjectiveValue > incumbentObjectiveValue) {
+        incumbentObjectiveValue = solutionObjectiveValue;
+        lastIncumbentSolutionTime = currentTime;
+      }
     }
   } catch (GRBException& e) {
     std::cout << "Gurobi Solver failed with error code: " << e.getErrorCode()
@@ -338,8 +341,8 @@ SolverSolutionPtr GurobiSolver::solveModel() {
 
   // Construct the Interrupt callback, and register it with the model.
   // TODO (Sukrit): This should be configurable, but for now, we just interrupt
-  // after 5 minutes.
-  constexpr auto interruptTimeLimitMs = 5 * 60 * 1000;
+  // after 1 minute.
+  constexpr auto interruptTimeLimitMs = 1 * 60 * 1000;
   interruptParams.newSolutionTimeLimitMs = interruptTimeLimitMs;
   GurobiInterruptOptimizationCallback interruptCallback(interruptParams);
   gurobiModel->setCallback(&interruptCallback);

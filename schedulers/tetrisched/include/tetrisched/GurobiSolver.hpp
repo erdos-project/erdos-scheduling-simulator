@@ -26,6 +26,8 @@ class GurobiSolver : public Solver {
     GurobiInterruptParams params;
     /// The start time of the optimization.
     std::chrono::steady_clock::time_point startTime;
+    /// The objective value of the incumbent solution.
+    TETRISCHED_ILP_TYPE incumbentObjectiveValue;
     /// The time at which the last incumbent solution was found.
     std::chrono::steady_clock::time_point lastIncumbentSolutionTime;
 
