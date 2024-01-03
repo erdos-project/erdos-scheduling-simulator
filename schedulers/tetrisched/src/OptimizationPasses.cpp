@@ -651,11 +651,8 @@ void DiscretizationSelectorOptimizationPass::runPass(
   // set capacity constraint map to dynamic and update it
   capacityConstraints->setDynamicDiscretization(timeRangeToGranularities);
 
-  // // Log the found dynamic discretizations and times.
-  // std::cout <<
-  //     "[DiscretizationSelectorOptimizationPass] Dynamic Discretization
-  //     between "
-  //     << minOccupancyTime << " and " << maxOccupancyTime << ": "<<
+  // Log the found dynamic discretizations and times.
+  // std::cout << "[DiscretizationSelectorOptimizationPass] Dynamic Discretization between " << minOccupancyTime << " and " << maxOccupancyTime << ": "<<
   //     std::endl;
 
   // for (auto &[discretizationTimeRange, granularity] :
@@ -664,8 +661,7 @@ void DiscretizationSelectorOptimizationPass::runPass(
   //             << "[" << minOccupancyTime << "]"
   //             << "[DiscretizationSelectorOptimizationPassDiscreteTime] "
   //             << discretizationTimeRange.first << " - " <<
-  //             discretizationTimeRange.second << " : " << granularity << "
-  //             Occuapncy: " <<
+  //             discretizationTimeRange.second << " : " << granularity << " Occuapncy: " <<
   //             occupancyRequests[discretizationTimeRange.first
   //             - minOccupancyTime] << std::endl;
   // }

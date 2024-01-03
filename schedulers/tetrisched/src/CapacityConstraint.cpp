@@ -251,7 +251,7 @@ void CapacityConstraintMap::registerUsageForDuration(
 
     // Time currentTime = startTime;
     Time currentTime = timeRangeToGranularities[granularityIndex].first.first;
-    Time remainderTime = duration;
+    Time remainderTime = duration + (startTime - currentTime);
     while (remainderTime > 0) {
       auto& timeRange = timeRangeToGranularities[granularityIndex].first;
       auto& granularity = timeRangeToGranularities[granularityIndex].second;
@@ -279,8 +279,12 @@ void CapacityConstraintMap::registerUsageForDuration(
           currentTime += granularity;
           remainderTime = 0;
         }
+        if (remainderTime!=0 && currentTime >= std::min(startTime + duration, timeRange.second) &&   granularityIndex == timeRangeToGranularities.size() - 1)
+        {
+          remainderTime = 0;
+          break;
+        }
       }
-
       if (currentTime >=
           timeRangeToGranularities[granularityIndex].first.second) {
         // We have passed the interval. We need to skip to the next interval,
