@@ -627,7 +627,20 @@ class AlibabaLoader(BaseWorkloadLoader):
                     start_time=start_time,
                     _flags=self._flags,
                 )
-                if task_graph is not None:
+                if (
+                    task_graph is not None
+                    and task_graph.critical_path_runtime.time < 1000
+                    and task_graph.critical_path_runtime.time > 100
+                ):
+                    self._logger.debug(
+                        "[0] Adding TaskGraph %s from path %s to workload with "
+                        "release time %s, critical path runtime %s and deadline %s.",
+                        task_graph.name,
+                        workload_profile,
+                        task_graph.release_time,
+                        task_graph.critical_path_runtime,
+                        task_graph.deadline,
+                    )
                     self._workload.add_task_graph(task_graph)
                     task_release_index += 1
             return self._workload

@@ -1572,6 +1572,28 @@ class TaskGraph(Graph[Task]):
         """
         return max(task.deadline for task in self.get_nodes())
 
+    @cached_property
+    def critical_path_runtime(self) -> EventTime:
+        """Retrieve the runtime of the critical path of the TaskGraph.
+
+        This runtime is calculated by assuming the slowest ExecutionStrategy for all
+        the nodes in the TaskGraph.
+
+        Returns:
+            An `EventTime` denoting the runtime of the critical path of the TaskGraph.
+        """
+        return EventTime(
+            sum(
+                task.slowest_execution_strategy.runtime.to(EventTime.Unit.US).time
+                for task in self.get_longest_path(
+                    lambda t: t.slowest_execution_strategy.runtime.to(
+                        EventTime.Unit.US
+                    ).time
+                )
+            ),
+            EventTime.Unit.US,
+        )
+
     @property
     def completion_time(self) -> EventTime:
         """Retrieve the completion time of the TaskGraph.

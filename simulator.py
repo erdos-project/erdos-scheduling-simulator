@@ -456,16 +456,7 @@ class Simulator(object):
                     task_graph.name,
                     task_graph.deadline.to(EventTime.Unit.US).time,
                     len(task_graph.get_nodes()),
-                    sum(
-                        [
-                            t.slowest_execution_strategy.runtime.to(
-                                EventTime.Unit.US
-                            ).time
-                            for t in task_graph.get_longest_path(
-                                lambda t: t.slowest_execution_strategy.runtime.time
-                            )
-                        ]
-                    ),  # This is the critical path time
+                    task_graph.critical_path_runtime.to(EventTime.Unit.US).time,
                 )
                 if self._log_task_graphs:
                     # Log a DOT representation of the TaskGraph, if requested.
@@ -1481,14 +1472,7 @@ class Simulator(object):
             task_graph.deadline.to(EventTime.Unit.US).time,
             task_graph.name,
             len(task_graph.get_nodes()),
-            sum(
-                [
-                    t.slowest_execution_strategy.runtime.to(EventTime.Unit.US).time
-                    for t in task_graph.get_longest_path(
-                        lambda t: t.slowest_execution_strategy.runtime.time
-                    )
-                ]
-            ),  # This is the critical path time
+            task_graph.critical_path_runtime.to(EventTime.Unit.US).time,
         )
         if self._log_task_graphs:
             # Log a DOT representation of the TaskGraph, if requested.
