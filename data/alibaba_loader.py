@@ -390,7 +390,11 @@ class AlibabaLoader(BaseWorkloadLoader):
             A mapping from the Workload profile path to the JobGraph generator."""
 
         # Define the JobGraph generator for a given path.
-        def job_graph_data_generator(path: str):
+        def job_graph_data_generator(
+            path: str,
+            min_deadline_variance: int,
+            max_deadline_variance: int,
+        ):
             if not os.path.isfile(path):
                 raise FileNotFoundError(f"No such file: {path}")
             with open(path, "rb") as pickled_file:
@@ -400,7 +404,10 @@ class AlibabaLoader(BaseWorkloadLoader):
                 for job_graph_name, job_tasks in data.items():
                     try:
                         job_graph = self._convert_job_data_to_job_graph(
-                            job_graph_name, job_tasks
+                            job_graph_name,
+                            job_tasks,
+                            min_deadline_variance,
+                            max_deadline_variance,
                         )
                         if job_graph:
                             self._job_graphs[path][job_graph_name] = job_graph
@@ -411,11 +418,22 @@ class AlibabaLoader(BaseWorkloadLoader):
                         )
 
         path_to_job_graph_generator_mapping = {}
-        for path, _ in self._workload_paths_and_release_policies:
+        for index, (path, _) in enumerate(self._workload_paths_and_release_policies):
             if path is not None:
-                path_to_job_graph_generator_mapping[path] = partial(
-                    job_graph_data_generator, path
-                )
+                if index >= len(self._flags.min_deadline_variances):
+                    path_to_job_graph_generator_mapping[path] = partial(
+                        job_graph_data_generator,
+                        path,
+                        self._flags.min_deadline_variance,
+                        self._flags.max_deadline_variance,
+                    )
+                else:
+                    path_to_job_graph_generator_mapping[path] = partial(
+                        job_graph_data_generator,
+                        path,
+                        self._flags.min_deadline_variances[index],
+                        self._flags.max_deadline_variances[index],
+                    )
         return path_to_job_graph_generator_mapping
 
     def _sample_normal_distribution_random(self, n, mean, std, min_val=0, max_val=100):
@@ -427,7 +445,11 @@ class AlibabaLoader(BaseWorkloadLoader):
         return samples
 
     def _convert_job_data_to_job_graph(
-        self, job_graph_name: str, job_tasks: List[str]
+        self,
+        job_graph_name: str,
+        job_tasks: List[str],
+        min_deadline_variance: Optional[int] = None,
+        max_deadline_variance: Optional[int] = None,
     ) -> Optional[JobGraph]:
         """
         Convert the raw job data to a Job object.
@@ -559,8 +581,12 @@ class AlibabaLoader(BaseWorkloadLoader):
             name=job_graph_name,
             jobs=jobs_to_children,
             deadline_variance=(
-                self._flags.min_deadline_variance,
-                self._flags.max_deadline_variance,
+                self._flags.min_deadline_variance
+                if min_deadline_variance is None
+                else min_deadline_variance,
+                self._flags.max_deadline_variance
+                if max_deadline_variance is None
+                else max_deadline_variance,
             ),
         )
 

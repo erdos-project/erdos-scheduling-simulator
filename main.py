@@ -212,6 +212,13 @@ flags.DEFINE_integer(
     0,
     "The minimum % variance to allocate to the assigned deadline for each task.",
 )
+flags.DEFINE_list(
+    "min_deadline_variances",
+    [],
+    "The minimum % variance to allocate to the assigned deadline for each TaskGraph "
+    "from the corresponding Workload. If only one Workload profile is provided, then "
+    "use `min_deadline_variance`.",
+)
 flags.DEFINE_integer(
     "max_deadline",
     sys.maxsize,
@@ -221,6 +228,13 @@ flags.DEFINE_integer(
     "max_deadline_variance",
     20,
     "The maximum % variance to allocate to the assigned deadline for each task.",
+)
+flags.DEFINE_list(
+    "max_deadline_variances",
+    [],
+    "The maximum % variance to allocate to the assigned deadline for each TaskGraph "
+    "from the corresponding Workload. If only one Workload profile is provided, then "
+    "use `max_deadline_variance`.",
 )
 flags.DEFINE_integer(
     "runtime_variance",
