@@ -3,6 +3,7 @@ import random
 import sys
 import uuid
 from enum import Enum
+from functools import cached_property
 from typing import List, Mapping, Optional, Sequence, Tuple
 
 import absl
@@ -906,10 +907,25 @@ class JobGraph(Graph[Job]):
         )
 
     @property
-    def completion_time(self):
+    def completion_time(self) -> EventTime:
         if not self._completion_time and len(self) != 0:
             self._completion_time = self.__get_completion_time()
         return self._completion_time
+
+    @cached_property
+    def critical_path_runtime(self) -> EventTime:
+        return sum(
+            [
+                job.execution_strategies.get_slowest_strategy().runtime
+                for job in self.get_longest_path(
+                    weights=lambda job: job.execution_strategies.get_slowest_strategy()
+                    .runtime.to(EventTime.Unit.US)
+                    .time
+                    if job.probability > sys.float_info.epsilon
+                    else 0
+                )
+            ]
+        )
 
     @property
     def release_policy(self) -> Optional["ReleasePolicy"]:

@@ -394,6 +394,8 @@ class AlibabaLoader(BaseWorkloadLoader):
             path: str,
             min_deadline_variance: int,
             max_deadline_variance: int,
+            min_critical_path_runtime: int,
+            max_critical_path_runtime: int,
         ):
             if not os.path.isfile(path):
                 raise FileNotFoundError(f"No such file: {path}")
@@ -410,7 +412,25 @@ class AlibabaLoader(BaseWorkloadLoader):
                             max_deadline_variance,
                         )
                         if job_graph:
-                            self._job_graphs[path][job_graph_name] = job_graph
+                            cp_runtime = job_graph.critical_path_runtime
+                            if (
+                                min_critical_path_runtime
+                                <= cp_runtime.to(EventTime.Unit.US).time
+                                < max_critical_path_runtime
+                            ):
+                                self._job_graphs[path][job_graph_name] = job_graph
+                            else:
+                                self._logger.debug(
+                                    f"Skipping job graph {job_graph_name} with "
+                                    f"critical path runtime "
+                                    f"{cp_runtime.to(EventTime.Unit.US).time}"
+                                    f" outside of range [{min_critical_path_runtime}, "
+                                    f"{max_critical_path_runtime})."
+                                )
+                        else:
+                            self._logger.warning(
+                                f"Failed to create job graph {job_graph_name}."
+                            )
                     except ValueError as e:
                         self._logger.warning(
                             f"Failed to convert job graph {job_graph_name} "
@@ -420,20 +440,38 @@ class AlibabaLoader(BaseWorkloadLoader):
         path_to_job_graph_generator_mapping = {}
         for index, (path, _) in enumerate(self._workload_paths_and_release_policies):
             if path is not None:
-                if index >= len(self._flags.min_deadline_variances):
-                    path_to_job_graph_generator_mapping[path] = partial(
-                        job_graph_data_generator,
-                        path,
-                        int(self._flags.min_deadline_variance),
-                        int(self._flags.max_deadline_variance),
+                min_deadline_variance = (
+                    int(self._flags.min_deadline_variance)
+                    if index >= len(self._flags.min_deadline_variances)
+                    else int(self._flags.min_deadline_variances[index])
+                )
+                max_deadline_variance = (
+                    int(self._flags.max_deadline_variance)
+                    if index >= len(self._flags.max_deadline_variances)
+                    else int(self._flags.max_deadline_variances[index])
+                )
+                min_critical_path_runtime = (
+                    0
+                    if index >= len(self._flags.min_critical_path_runtimes)
+                    else int(
+                        self._flags.alibaba_loader_max_critical_path_runtime[index]
                     )
-                else:
-                    path_to_job_graph_generator_mapping[path] = partial(
-                        job_graph_data_generator,
-                        path,
-                        int(self._flags.min_deadline_variances[index]),
-                        int(self._flags.max_deadline_variances[index]),
+                )
+                max_critical_path_runtime = (
+                    sys.maxsize
+                    if index >= len(self._flags.max_critical_path_runtimes)
+                    else int(
+                        self._flags.alibaba_loader_max_critical_path_runtime[index]
                     )
+                )
+                path_to_job_graph_generator_mapping[path] = partial(
+                    job_graph_data_generator,
+                    path,
+                    min_deadline_variance,
+                    max_deadline_variance,
+                    min_critical_path_runtime,
+                    max_critical_path_runtime,
+                )
         return path_to_job_graph_generator_mapping
 
     def _sample_normal_distribution_random(self, n, mean, std, min_val=0, max_val=100):
