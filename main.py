@@ -179,14 +179,14 @@ flags.DEFINE_float(
     "The multiplier used for alibaba trace tasks task.duration.",
 )
 flags.DEFINE_list(
-    "alibaba_loader_min_critical_path_runtime",
+    "alibaba_loader_min_critical_path_runtimes",
     [],
     "The minimum critical path duration for each TaskGraph from the corresponding "
     "Workload. If the list is empty, then the minimum critical path duration is "
     "set to 0. TaskGraphs lower than this critical path duration will not be released.",
 )
 flags.DEFINE_list(
-    "alibaba_loader_max_critical_path_runtime",
+    "alibaba_loader_max_critical_path_runtimes",
     [],
     "The maximum critical path duration for each TaskGraph from the corresponding "
     "Workload. If the list is empty, then the maximum critical path duration is "

@@ -924,7 +924,8 @@ class JobGraph(Graph[Job]):
                     if job.probability > sys.float_info.epsilon
                     else 0
                 )
-            ]
+            ],
+            start=EventTime.zero(),
         )
 
     @property

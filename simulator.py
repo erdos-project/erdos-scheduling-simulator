@@ -444,11 +444,11 @@ class Simulator(object):
             for task_graph in task_graphs:
                 self._logger.info(
                     "[%s] The TaskGraph %s will be released with deadline "
-                    "%s and completion time %s.",
+                    "%s and critical path runtime %s.",
                     task_graph.release_time.to(EventTime.Unit.US).time,
                     task_graph.name,
                     task_graph.deadline,
-                    task_graph.job_graph.completion_time,
+                    task_graph.critical_path_runtime,
                 )
                 self._csv_logger.info(
                     "%s,TASK_GRAPH_RELEASE,%s,%s,%s,%s",

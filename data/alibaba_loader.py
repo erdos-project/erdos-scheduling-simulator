@@ -403,6 +403,7 @@ class AlibabaLoader(BaseWorkloadLoader):
                 data: Mapping[str, List[str]] = AlibabaTaskUnpickler(
                     pickled_file
                 ).load()
+                skipped_job_graphs = 0
                 for job_graph_name, job_tasks in data.items():
                     try:
                         job_graph = self._convert_job_data_to_job_graph(
@@ -420,13 +421,14 @@ class AlibabaLoader(BaseWorkloadLoader):
                             ):
                                 self._job_graphs[path][job_graph_name] = job_graph
                             else:
-                                self._logger.debug(
-                                    f"Skipping job graph {job_graph_name} with "
-                                    f"critical path runtime "
-                                    f"{cp_runtime.to(EventTime.Unit.US).time}"
-                                    f" outside of range [{min_critical_path_runtime}, "
-                                    f"{max_critical_path_runtime})."
-                                )
+                                skipped_job_graphs += 1
+                                # self._logger.debug(
+                                #     f"[0] Skipping job graph {job_graph_name} with "
+                                #     f"critical path runtime "
+                                #     f"{cp_runtime.to(EventTime.Unit.US).time}"
+                                #     f" outside of range [{min_critical_path_runtime},"
+                                #     f" {max_critical_path_runtime})."
+                                # )
                         else:
                             self._logger.warning(
                                 f"Failed to create job graph {job_graph_name}."
@@ -436,6 +438,10 @@ class AlibabaLoader(BaseWorkloadLoader):
                             f"Failed to convert job graph {job_graph_name} "
                             f"with error {e.__class__}: {e}."
                         )
+                self._logger.debug(
+                    f"[0] Skipped {skipped_job_graphs} job graphs from path {path}, "
+                    f"loaded {len(self._job_graphs[path])} job graphs."
+                )
 
         path_to_job_graph_generator_mapping = {}
         for index, (path, _) in enumerate(self._workload_paths_and_release_policies):
@@ -452,16 +458,18 @@ class AlibabaLoader(BaseWorkloadLoader):
                 )
                 min_critical_path_runtime = (
                     0
-                    if index >= len(self._flags.min_critical_path_runtimes)
+                    if index
+                    >= len(self._flags.alibaba_loader_min_critical_path_runtimes)
                     else int(
-                        self._flags.alibaba_loader_max_critical_path_runtime[index]
+                        self._flags.alibaba_loader_min_critical_path_runtimes[index]
                     )
                 )
                 max_critical_path_runtime = (
                     sys.maxsize
-                    if index >= len(self._flags.max_critical_path_runtimes)
+                    if index
+                    >= len(self._flags.alibaba_loader_max_critical_path_runtimes)
                     else int(
-                        self._flags.alibaba_loader_max_critical_path_runtime[index]
+                        self._flags.alibaba_loader_max_critical_path_runtimes[index]
                     )
                 )
                 path_to_job_graph_generator_mapping[path] = partial(
