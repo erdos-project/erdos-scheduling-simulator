@@ -113,6 +113,8 @@ struct SolutionResult {
   std::optional<TETRISCHED_ILP_TYPE> utility;
   /// The placement objects being bubbled up in the solution.
   std::unordered_map<std::string, PlacementPtr> placements;
+  /// list of satisfied leaf expressions
+  std::set<std::string> satsifiedExpressionNames;
 };
 using SolutionResultPtr = std::shared_ptr<SolutionResult>;
 
@@ -208,6 +210,8 @@ class Expression : public std::enable_shared_from_this<Expression> {
   /// A mutex representing a lock on the parsing and population of results
   /// from this Expression.
   std::mutex expressionMutex;
+  /// if this choose expression was previously satisfied
+  bool previouslySatisfied;
 
   /// Adds a parent to this expression.
   void addParent(const Expression* parent);
@@ -236,6 +240,12 @@ class Expression : public std::enable_shared_from_this<Expression> {
 
   /// Removes a child from this Expression.
   void removeChild(ExpressionPtr child);
+
+  /// sets that the expression was previously satisfied
+  void setPreviouslySatisfied(bool satisfied);
+
+  /// check of the expression was previously satisfied
+  bool isPreviouslySatisfied();
 
   /// Replaces the children of this node with the given children.
   void replaceChildren(std::vector<ExpressionPtr> children);

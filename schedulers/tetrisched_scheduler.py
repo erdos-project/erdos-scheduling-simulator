@@ -230,6 +230,8 @@ class TetriSchedScheduler(BaseScheduler):
         # sure that no optimization passes remove it.
         # Reset at the beginning of each Scheduler invocation (`schedule()`).
         self._individual_task_strls: Mapping[str, tetrisched.Expression] = {}
+        # a cache for previously selected choose expressions, this is done for providing better hints to the solver
+        self._previously_satisfied_choose_exprs = set([])
         if (
             self._adaptive_discretization
             and self._max_discretization.time < self._time_discretization.time
@@ -529,6 +531,12 @@ class TetriSchedScheduler(BaseScheduler):
 
             # Retrieve the solution and check if we were able to schedule anything.
             solverSolution = objective_strl.getSolution()
+            self._previously_satisfied_choose_exprs = (
+                solverSolution.satsifiedExpressionNames
+            )
+            self._logger.info(
+                f"The satisfied Choose Expressions: {self._previously_satisfied_choose_exprs}"
+            )
             if solverSolution is not None and solverSolution.utility > 0:
                 self._logger.info(
                     f"[{sim_time.time}] Solver returned utility of "
@@ -913,6 +921,11 @@ class TetriSchedScheduler(BaseScheduler):
                             reward_for_this_placement,
                         )
                     )
+                    if (
+                        task_choose_expressions[-1].discriptiveName
+                        in self._previously_satisfied_choose_exprs
+                    ):
+                        task_choose_expressions[-1].setPreviouslySatisfied(True)
                     choice_placement_times_and_rewards.append(
                         (placement_time.time, reward_for_this_placement)
                     )
@@ -1098,6 +1111,9 @@ class TetriSchedScheduler(BaseScheduler):
         # If there are no children, cache and return the expression for this Task.
         if len(child_expressions) == 0:
             task_strls[task.id] = task_expression
+            # self._logger.info(
+            #     f"[FoundLeafExpr] Found Task's LeafExpr: {task_expression.discriptiveName} , previously satisfied: {self._previously_satisfied_choose_exprs}"
+            # )
             return task_expression
 
         # Construct the subtree for the children of this Task.

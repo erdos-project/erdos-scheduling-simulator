@@ -137,7 +137,7 @@ Expression::Expression(std::string name, ExpressionType type)
     : name(name),
       id(tetrisched::uuid::generate_uuid()),
       type(type),
-      timeBounds(ExpressionTimeBounds()) {}
+      timeBounds(ExpressionTimeBounds()), previouslySatisfied(false) {}
 
 std::string Expression::getName() const { return name; }
 
@@ -168,6 +168,14 @@ void Expression::removeChild(ExpressionPtr child) {
 
 void Expression::replaceChildren(std::vector<ExpressionPtr> children) {
   this->children = children;
+}
+
+void Expression::setPreviouslySatisfied(bool satisfied) {
+  this->previouslySatisfied = satisfied;
+}
+
+bool Expression::isPreviouslySatisfied() {
+  return this->previouslySatisfied == true;
 }
 
 ExpressionType Expression::getType() const { return type; }
@@ -370,6 +378,10 @@ SolutionResultPtr Expression::populateResults(SolverModelPtr solverModel) {
     for (auto& [taskName, placement] :
          childExpressionSolution.value()->placements) {
       solution->placements[taskName] = placement;
+    }
+    // the child was satisfied, merge its satisfied leaf expressions
+    for (auto & leafExprName: childExpressionSolution.value()->satsifiedExpressionNames) {
+      solution->satsifiedExpressionNames.insert(leafExprName);
     }
   }
 
@@ -625,6 +637,7 @@ SolutionResultPtr ChooseExpression::populateResults(
                                       variableValue.value());
   }
   solution->placements[name] = std::move(placement);
+  solution->satsifiedExpressionNames.insert(getDescriptiveName());
   return solution;
 }
 
@@ -970,6 +983,7 @@ SolutionResultPtr WindowedChooseExpression::populateResults(
     placement->setEndTime(chooseTime + duration);
   }
   solution->placements[name] = std::move(placement);
+  solution->satsifiedExpressionNames.insert(getDescriptiveName());
   return solution;
 }
 
@@ -1351,6 +1365,7 @@ SolutionResultPtr MalleableChooseExpression::populateResults(
     placement->addPartitionAllocation(partitionId, time, variableValue.value());
   }
   solution->placements[name] = std::move(placement);
+  solution->satsifiedExpressionNames.insert(getDescriptiveName());
   return solution;
 }
 

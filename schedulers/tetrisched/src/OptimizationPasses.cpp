@@ -678,11 +678,15 @@ void DiscretizationSelectorOptimizationPass::runPass(
       std::vector<ExpressionPtr> ncksWithinTimeRange;
       auto expressionChildren = maxNckExpr->getChildren();
       ExpressionPtr minStartTimeNckExpr = nullptr;
+      ExpressionPtr prevSolutionNckExpr = nullptr;
       for (auto child = expressionChildren.rbegin();
            child != expressionChildren.rend(); ++child) {
         auto startTimeNck = (*child)->getTimeBounds().startTimeRange.first;
         if (startTimeNck >= startTime && startTimeNck < endTime) {
           ncksWithinTimeRange.push_back(*child);
+          if (prevSolutionNckExpr == nullptr && (*child)->isPreviouslySatisfied()) {
+            prevSolutionNckExpr = *child;
+          }
           if (minStartTimeNckExpr != nullptr) {
             if (minStartTimeNckExpr->getTimeBounds().startTimeRange.first >
                 startTimeNck) {
@@ -693,12 +697,22 @@ void DiscretizationSelectorOptimizationPass::runPass(
           }
         }
       }
+      ExpressionPtr chosenNckExpr = nullptr;
+      if (prevSolutionNckExpr != nullptr) {
+        chosenNckExpr = prevSolutionNckExpr;
+        // std::cout << "\t ***** "
+        //           << "[" << minOccupancyTime << "]"
+        //           << "[DiscretizationSelectorOptimizationPassDiscreteTime] Not Removing Previous Solution: "
+        //           << chosenNckExpr->getDescriptiveName() << std::endl;
+      } else {
+        chosenNckExpr = minStartTimeNckExpr;
+      }
       if (ncksWithinTimeRange.size() > 1) {
         // if more than one nck found within the time range, remove it as only
         // one nck within granularity is sufficient. Nck with minimum start
         // time is kept within this time range
         for (auto redundantNckExpr : ncksWithinTimeRange) {
-          if (redundantNckExpr->getId() != minStartTimeNckExpr->getId()) {
+          if (redundantNckExpr->getId() != chosenNckExpr->getId()) {
             maxNckExpr->removeChild(redundantNckExpr);
             // std::cout << "[DiscretizationSelectorOptimizationPassRemoveNck]
             // Removing NCK: " + redundantNckExpr->getName() + " From Max: " +
