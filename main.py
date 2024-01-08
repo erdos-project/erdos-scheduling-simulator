@@ -87,6 +87,13 @@ flags.DEFINE_list(
     [],
     "A list of paths of the description of the Workload to schedule.",
 )
+flags.DEFINE_list(
+    "workload_profile_path_labels",
+    [],
+    "A list of labels for the workload profile paths. If provided, the list must be of "
+    "the same length as the list of workload profile paths. This is used to annotate "
+    "the TaskGraphs with the corresponding workload profile path label.",
+)
 flags.register_multi_flags_validator(
     ["workload_profile_path", "workload_profile_paths"],
     lambda flags: not (

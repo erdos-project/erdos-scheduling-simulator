@@ -396,6 +396,7 @@ class AlibabaLoader(BaseWorkloadLoader):
             max_deadline_variance: int,
             min_critical_path_runtime: int,
             max_critical_path_runtime: int,
+            profile_label: Optional[str] = None,
         ):
             if not os.path.isfile(path):
                 raise FileNotFoundError(f"No such file: {path}")
@@ -411,6 +412,7 @@ class AlibabaLoader(BaseWorkloadLoader):
                             job_tasks,
                             min_deadline_variance,
                             max_deadline_variance,
+                            profile_label,
                         )
                         if job_graph:
                             cp_runtime = job_graph.critical_path_runtime
@@ -472,6 +474,11 @@ class AlibabaLoader(BaseWorkloadLoader):
                         self._flags.alibaba_loader_max_critical_path_runtimes[index]
                     )
                 )
+                profile_label = (
+                    None
+                    if index >= len(self._flags.workload_profile_path_labels)
+                    else self._flags.workload_profile_path_labels[index]
+                )
                 path_to_job_graph_generator_mapping[path] = partial(
                     job_graph_data_generator,
                     path,
@@ -479,6 +486,7 @@ class AlibabaLoader(BaseWorkloadLoader):
                     max_deadline_variance,
                     min_critical_path_runtime,
                     max_critical_path_runtime,
+                    profile_label,
                 )
         return path_to_job_graph_generator_mapping
 
@@ -496,6 +504,7 @@ class AlibabaLoader(BaseWorkloadLoader):
         job_tasks: List[str],
         min_deadline_variance: Optional[int] = None,
         max_deadline_variance: Optional[int] = None,
+        profile_label: Optional[str] = None,
     ) -> Optional[JobGraph]:
         """
         Convert the raw job data to a Job object.
@@ -624,7 +633,9 @@ class AlibabaLoader(BaseWorkloadLoader):
                         )
 
         return JobGraph(
-            name=job_graph_name,
+            name=job_graph_name
+            if profile_label is None
+            else f"{job_graph_name}_{profile_label}",
             jobs=jobs_to_children,
             deadline_variance=(
                 self._flags.min_deadline_variance
