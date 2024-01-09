@@ -348,9 +348,19 @@ class Workload(object):
                     task_graph.deadline,
                     task_graph.completion_time,
                 )
+            elif task_graph.is_complete():
+                self._logger.debug(
+                    "The TaskGraph %s completed at %s, and met its deadline of %s.",
+                    task_graph.name,
+                    task_graph.completion_time,
+                    task_graph.deadline,
+                )
             else:
                 self._logger.debug(
-                    "The TaskGraph %s was not cancelled.", task_graph.name
+                    "The TaskGraph %s was not cancelled. "
+                    "Its sinks are in the state %s.",
+                    task_graph.name,
+                    [task.state for task in task_graph.get_sink_tasks()],
                 )
         return cancelled_task_graphs
 
