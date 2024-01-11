@@ -457,15 +457,15 @@ DiscretizationSelectorOptimizationPass::DiscretizationSelectorOptimizationPass()
                        OptimizationPassType::PRE_TRANSLATION_PASS),
       minDiscretization(1),
       maxDiscretization(5),
-      maxOccupancyThreshold(0.8) {}
+      maxOccupancyThreshold(0.8), finerDiscretizationAtPrevSolution(false), finerDiscretizationWindow(5) {}
 
 DiscretizationSelectorOptimizationPass::DiscretizationSelectorOptimizationPass(
-    Time minDiscretization, Time maxDiscretization, float maxOccupancyThreshold)
+    Time minDiscretization, Time maxDiscretization, float maxOccupancyThreshold, bool finerDiscretizationAtPrevSolution, Time finerDiscretizationWindow)
     : OptimizationPass("DiscretizationSelectorOptimizationPass",
                        OptimizationPassType::PRE_TRANSLATION_PASS),
       minDiscretization(minDiscretization),
       maxDiscretization(maxDiscretization),
-      maxOccupancyThreshold(maxOccupancyThreshold) {}
+      maxOccupancyThreshold(maxOccupancyThreshold), finerDiscretizationAtPrevSolution(finerDiscretizationAtPrevSolution), finerDiscretizationWindow(finerDiscretizationWindow) {}
 
 void DiscretizationSelectorOptimizationPass::runPass(
     ExpressionPtr strlExpression, CapacityConstraintMapPtr capacityConstraints,
@@ -476,6 +476,7 @@ void DiscretizationSelectorOptimizationPass::runPass(
 
   std::vector<ExpressionPtr> maxOverNckExprs;
   std::vector<ExpressionPtr> independentNcks;
+  std::set<Time> chooseExprStartTimes;
 
   while (!firstStack.empty()) {
     // Move the expression to the second stack.
@@ -484,14 +485,27 @@ void DiscretizationSelectorOptimizationPass::runPass(
     bool isMaxExpr = false;
     if (currentExpression->getType() == ExpressionType::EXPR_MAX) {
       isMaxExpr = true;
-    } else if ((currentExpression->getType() == ExpressionType::EXPR_CHOOSE ||
+    } else if (currentExpression->getType() == ExpressionType::EXPR_CHOOSE ||
                 currentExpression->getType() ==
-                    ExpressionType::EXPR_WINDOWED_CHOOSE) &&
-               currentExpression->getParents()[0]->getType() !=
-                   ExpressionType::EXPR_MAX) {
+                    ExpressionType::EXPR_WINDOWED_CHOOSE) {
       // TODO(Alind): Actual check should be that MAX has all children NCK for
       // EXPR_CHOOSE
-      independentNcks.push_back(currentExpression);
+      if (finerDiscretizationAtPrevSolution && currentExpression->isPreviouslySatisfied()){
+        // register the start time of prev solved choose expr +- finerDiscretizationWindow
+        Time startTimeChooseExpr = currentExpression->getTimeBounds().startTimeRange.first;
+        Time tbegin = 0;
+        Time tend = startTimeChooseExpr + finerDiscretizationWindow;
+        if(startTimeChooseExpr > finerDiscretizationWindow){
+          tbegin = startTimeChooseExpr - finerDiscretizationWindow;
+        }
+        for (auto finerTime = tbegin; finerTime <= tend; finerTime++)
+          chooseExprStartTimes.insert(finerTime);
+      }
+      if (currentExpression->getParents()[0]->getType() !=
+          ExpressionType::EXPR_MAX){
+        independentNcks.push_back(currentExpression);
+      }
+      
     }
     bool allChildrenNck = false;
     size_t numChildNcks = 0;
@@ -621,6 +635,10 @@ void DiscretizationSelectorOptimizationPass::runPass(
     uint32_t predictedDiscretization = linearDecayFunction(currentOccupancy);
     auto nextPlanAhead =
         std::min(i + predictedDiscretization, occupancyRequests.size());
+    if (finerDiscretizationAtPrevSolution && chooseExprStartTimes.contains(i+minOccupancyTime)){
+      nextPlanAhead =
+          std::min(i + 1, occupancyRequests.size());
+    }
 
     // find the right discretization such that average occupancy for that
     // period predicts same discretization
@@ -703,7 +721,7 @@ void DiscretizationSelectorOptimizationPass::runPass(
         // std::cout << "\t ***** "
         //           << "[" << minOccupancyTime << "]"
         //           << "[DiscretizationSelectorOptimizationPassDiscreteTime] Not Removing Previous Solution: "
-        //           << chosenNckExpr->getDescriptiveName() << std::endl;
+        //           << chosenNckExpr->getDescriptiveName() << " Start Time: " << chosenNckExpr->getTimeBounds().startTimeRange.first << std::endl;
       } else {
         chosenNckExpr = minStartTimeNckExpr;
       }
@@ -1101,7 +1119,7 @@ OptimizationPassRunner::OptimizationPassRunner(bool debug,
     // Register the DiscretizationGenerator pass.
     registeredPasses.push_back(
         std::make_shared<DiscretizationSelectorOptimizationPass>(
-            minDiscretization, maxDiscretization, maxOccupancyThreshold));
+            minDiscretization, maxDiscretization, maxOccupancyThreshold, true, 5));
   }
 
   // Register the CapacityConstraintMapPurging optimization pass.
