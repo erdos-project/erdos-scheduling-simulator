@@ -103,8 +103,10 @@ void defineSTRLExpressions(py::module_& tetrisched_m) {
       .def("exportToDot", &tetrisched::Expression::exportToDot,
            "Exports the Expression to a dot file.\n"
            "\nArgs:\n"
-           "  fileName (str): The name of the dot file to export to.",
-           py::arg("fileName"))
+           "  fileName (str): The name of the dot file to export to.\n"
+           "  emitChooseExpressions (bool): If True, ChooseExpressions are \n"
+           "    included in the dot file. If False, they are not included.",
+           py::arg("fileName"), py::arg("emitChooseExpressions") = false)
       .def("__str__",
            [](const tetrisched::Expression& expr) {
              return "Expression<name=" + expr.getName() +
