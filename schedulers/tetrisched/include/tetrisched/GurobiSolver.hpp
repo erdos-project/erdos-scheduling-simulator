@@ -87,7 +87,7 @@ class GurobiSolver : public Solver {
   void setModel(SolverModelPtr model) override;
 
   /// Translates the SolverModel into a Gurobi model.
-  void translateModel() override;
+  void translateModel(SolverConfigPtr solverConfig) override;
 
   /// Export the constructed model to the given file.
   void exportModel(const std::string& fileName) override;

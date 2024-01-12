@@ -122,7 +122,7 @@ LinearExpr GoogleCPSolver::translateObjectiveFunction(
   return objectiveExpr;
 }
 
-void GoogleCPSolver::translateModel() {
+void GoogleCPSolver::translateModel(SolverConfigPtr /*solverConfig*/) {
   if (!solverModel) {
     throw tetrisched::exceptions::SolverException(
         "Empty SolverModel for GurobiSolver. Nothing to translate!");

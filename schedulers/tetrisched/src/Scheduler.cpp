@@ -125,7 +125,7 @@ void Scheduler::schedule(Time currentTime) {
   {
     TETRISCHED_SCOPE_TIMER("Scheduler::schedule::translateModel," +
                            std::to_string(currentTime));
-    this->solver->translateModel();
+    this->solver->translateModel(std::make_shared<SolverConfig>());
   }
 
   // Solve the model.

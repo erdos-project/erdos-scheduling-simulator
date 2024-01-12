@@ -21,6 +21,28 @@ enum SolverBackendType {
 #endif
 };
 
+/// The `SolverConfig` structure represents the configuration of the
+/// solver backend for a particular translation of the underlying
+/// SolverModel to the backend-specific model.
+/// This config is used to inform the choice of how the backend solver
+/// should solve the model.
+struct SolverConfig {
+  /// The total time to be spent on the Solver.
+  /// This is used to interrupt the Solver if it takes too long.
+  std::optional<Time> totalSolverTimeMs;
+  /// The total time to be spent between finding new incumbent solutions.
+  /// This is used to interrupt the Solver if it cannot find better solutions
+  /// in the given time.
+  std::optional<Time> newSolutionTimeMs;
+  /// The total number of threads to allocate to the Solver.
+  /// This is used to cap the number of threads available to the Solver.
+  /// If this is set to a value more than the number of available threads,
+  /// the Solver will use the maximum number of threads available.
+  std::optional<uint64_t> numThreads;
+};
+using SolverConfig = struct SolverConfig;
+using SolverConfigPtr = std::shared_ptr<SolverConfig>;
+
 /// The `SolutionType` enum represents the different types of solutions
 /// that we can retrieve from the solver.
 enum SolutionType {
@@ -110,7 +132,7 @@ class Solver {
   virtual void setModel(SolverModelPtr model) = 0;
 
   /// Translate the SolverModel into a backend-specific model.
-  virtual void translateModel() = 0;
+  virtual void translateModel(SolverConfigPtr solverConfig) = 0;
 
   /// Export the constructed model to the given file.
   virtual void exportModel(const std::string& fileName) = 0;

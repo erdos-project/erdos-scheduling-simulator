@@ -102,7 +102,7 @@ TEST(SolverModel, TestCPLEXSolverTranslation) {
   EXPECT_TRUE(std::filesystem::exists("test_solvermodel.lp"))
       << "The file test_solvermodel.lp was not created.";
   std::filesystem::remove("test_solvermodel.lp");
-  cplexSolver.translateModel();
+  cplexSolver.translateModel(nullptr);
   cplexSolver.exportModel("test_cplexmodel.lp");
   EXPECT_TRUE(std::filesystem::exists("test_cplexmodel.lp"))
       << "The file test_cplexmodel.lp was not created.";
@@ -129,7 +129,7 @@ TEST(SolverModel, TestGurobiSolverTranslation) {
   EXPECT_TRUE(std::filesystem::exists("test_solvermodel.lp"))
       << "The file test_solvermodel.lp was not created.";
   std::filesystem::remove("test_solvermodel.lp");
-  gurobiSolver.translateModel();
+  gurobiSolver.translateModel(nullptr);
   gurobiSolver.exportModel("test_gurobimodel.lp");
   EXPECT_TRUE(std::filesystem::exists("test_gurobimodel.lp"))
       << "The file test_gurobimodel.lp was not created.";
@@ -156,7 +156,7 @@ TEST(SolverModel, TestOrToolsSolverTranslation) {
   EXPECT_TRUE(std::filesystem::exists("test_solvermodel.lp"))
       << "The file test_solvermodel.lp was not created.";
   std::filesystem::remove("test_solvermodel.lp");
-  googleCPSolver.translateModel();
+  googleCPSolver.translateModel(nullptr);
   googleCPSolver.exportModel("test_ortoolsmodel.lp");
   EXPECT_TRUE(std::filesystem::exists("test_ortoolsmodel.lp"))
       << "The file test_ortoolsmodel.lp was not created.";
@@ -181,7 +181,7 @@ TEST(SolverBackends, TestSolverBackends) {
   // Pass it to all the solvers and check if they can solve it.
   for (const auto& solver : solvers) {
     solver->setModel(solverModel);
-    solver->translateModel();
+    solver->translateModel(nullptr);
     auto solverSolution = solver->solveModel();
     EXPECT_EQ(solverSolution->solutionType, tetrisched::SolutionType::OPTIMAL)
         << "Solver " << solver->getName() << " could not solve the model.";

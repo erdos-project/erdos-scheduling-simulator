@@ -257,7 +257,7 @@ GRBLinExpr GurobiSolver::translateObjectiveFunction(
   return objectiveExpr;
 }
 
-void GurobiSolver::translateModel() {
+void GurobiSolver::translateModel(SolverConfigPtr /*solverConfig*/) {
   if (!solverModel) {
     throw tetrisched::exceptions::SolverException(
         "Empty SolverModel for GurobiSolver. Nothing to translate!");
