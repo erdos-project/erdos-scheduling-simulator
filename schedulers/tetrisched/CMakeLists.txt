@@ -127,7 +127,7 @@ endif()
 
 add_library(tetrisched SHARED ${TETRISCHED_SOURCE})
 target_include_directories(tetrisched PRIVATE include)
-target_compile_features(tetrisched PRIVATE cxx_std_17)
+target_compile_features(tetrisched PRIVATE cxx_std_20)
 
 # Include and link all solver backends.
 target_include_directories(tetrisched PRIVATE ${SOLVER_BACKEND_INCLUDE_DIRS})
