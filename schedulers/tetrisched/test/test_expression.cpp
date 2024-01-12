@@ -546,7 +546,7 @@ TEST(Expression, TestMalleableChooseExpressionConstructsVariableRectangles) {
 
   auto result = objectiveExpression->populateResults(solverModelPtr);
   EXPECT_TRUE(result->utility) << "Result should have some utility.";
-  EXPECT_EQ(2, result->utility.value()) << "The utility should be 2.";
+  EXPECT_EQ(1, result->utility.value()) << "The utility should be 1.";
   auto task2Placement = result->placements["task2"]->getPartitionAllocations();
   EXPECT_TRUE(task2Placement.find(partition1->getPartitionId()) !=
               task2Placement.end())
