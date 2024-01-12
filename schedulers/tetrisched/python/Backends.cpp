@@ -4,6 +4,22 @@
 
 namespace py = pybind11;
 
+void defineSolverConfig(py::module_& tetrisched_m) {
+  // Define the SolverConfig structure.
+  py::class_<tetrisched::SolverConfig, tetrisched::SolverConfigPtr>(
+      tetrisched_m, "SolverConfig")
+      .def(py::init<>(), "Initializes an empty SolverConfig.")
+      .def_readwrite("totalSolverTimeMs",
+                     &tetrisched::SolverConfig::totalSolverTimeMs,
+                     "The total time to be spent on the Solver.")
+      .def_readwrite("newSolutionTimeMs",
+                     &tetrisched::SolverConfig::newSolutionTimeMs,
+                     "The total time to be spent between finding new incumbent "
+                     "solutions.")
+      .def_readwrite("numThreads", &tetrisched::SolverConfig::numThreads,
+                     "The total number of threads to allocate to the Solver.");
+}
+
 void defineSolverSolution(py::module_& tetrisched_m) {
   // Define the solution type enum.
   py::enum_<tetrisched::SolutionType>(tetrisched_m, "SolutionType")
@@ -159,8 +175,12 @@ void defineCPLEXBackend(py::module_& tetrisched_m) {
       .def("getModel", &tetrisched::CPLEXSolver::getModel,
            "Returns the underlying SolverModel abstraction used by this "
            "instance of CPLEXSolver.")
-      .def("translateModel", &tetrisched::CPLEXSolver::translateModel,
-           "Translates the underlying SolverModel to a CPLEX model instance.")
+      .def(
+          "translateModel", &tetrisched::CPLEXSolver::translateModel,
+          "Translates the underlying SolverModel to a CPLEX model instance.\n\n"
+          "Args:\n"
+          "  solverConfig (SolverConfig): The configuration for the solver.",
+          py::arg("solverConfig"))
       .def("exportModel", &tetrisched::CPLEXSolver::exportModel,
            "Exports the converted CPLEX model to an LP file. \n"
            "\nArgs:\n"
@@ -183,7 +203,11 @@ void defineGurobiBackend(py::module_& tetrisched_m) {
            "Returns the underlying SolverModel abstraction used by this "
            "instance of GurobiSolver.")
       .def("translateModel", &tetrisched::GurobiSolver::translateModel,
-           "Translates the underlying SolverModel to a Gurobi model instance.")
+           "Translates the underlying SolverModel to a Gurobi model "
+           "instance.\n\n"
+           "Args:\n"
+           "  solverConfig (SolverConfig): The configuration for the solver.",
+           py::arg("solverConfig"))
       .def("exportModel", &tetrisched::GurobiSolver::exportModel,
            "Exports the converted Gurobi model to an LP file. \n"
            "\nArgs: \n"

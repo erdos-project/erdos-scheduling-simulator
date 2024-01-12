@@ -96,12 +96,14 @@ class Expression:
         Args:
           child (Expression): The child to add to this Expression.
         """
-    def exportToDot(self, fileName: str) -> None:
+    def exportToDot(self, fileName: str, emitChooseExpressions: bool = False) -> None:
         """
         Exports the Expression to a dot file.
 
         Args:
           fileName (str): The name of the dot file to export to.
+          emitChooseExpressions (bool): If True, ChooseExpressions are
+            included in the dot file. If False, they are not included.
         """
     def getChildren(self) -> list[Expression]:
         """

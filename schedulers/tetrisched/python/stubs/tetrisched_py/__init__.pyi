@@ -7,7 +7,15 @@ import typing
 
 from . import backends, model, strl
 
-__all__ = ["Partition", "Partitions", "Scheduler", "backends", "model", "strl"]
+__all__ = [
+    "Partition",
+    "Partitions",
+    "Scheduler",
+    "SchedulerConfig",
+    "backends",
+    "model",
+    "strl",
+]
 
 class Partition:
     def __add__(self, quantity: int) -> Partition:
@@ -110,7 +118,7 @@ class Scheduler:
         expression: strl.Expression,
         availablePartitions: Partitions,
         currentTime: int,
-        optimize: bool = False,
+        schedulerConfig: SchedulerConfig,
         timeRangeToGranularities: list[tuple[tuple[int, int], int]] = [],
     ) -> None:
         """
@@ -120,7 +128,7 @@ class Scheduler:
           expression (Expression): The STRL expression to register.
           availablePartitions (Partitions): The available Partitions to schedule on.
           currentTime (int): The current time.
-          optimize (bool): Whether to optimize the schedule.
+          schedulerConfig (SchedulerConfig): The configuration for the scheduler.
           timeRangeToGranularities (list): The time ranges to granularities to use for dynamic discretization.
         """
     def schedule(self, currentTime: int) -> None:
@@ -130,3 +138,37 @@ class Scheduler:
         Args:
           currentTime (int): The current time.
         """
+
+class SchedulerConfig:
+    def __init__(self) -> None:
+        """
+        Initializes an empty SchedulerConfig.
+        """
+    @property
+    def newSolutionTimeMs(self) -> int | None:
+        """
+        The new solution time to use for the solver.
+        """
+    @newSolutionTimeMs.setter
+    def newSolutionTimeMs(self, arg0: int | None) -> None: ...
+    @property
+    def numThreads(self) -> int | None:
+        """
+        The number of threads to use for the solver.
+        """
+    @numThreads.setter
+    def numThreads(self, arg0: int | None) -> None: ...
+    @property
+    def optimize(self) -> bool:
+        """
+        If True, the scheduler will optimize the STRL expression.
+        """
+    @optimize.setter
+    def optimize(self, arg0: bool) -> None: ...
+    @property
+    def totalSolverTimeMs(self) -> int | None:
+        """
+        The total solver time to use for the solver.
+        """
+    @totalSolverTimeMs.setter
+    def totalSolverTimeMs(self, arg0: int | None) -> None: ...

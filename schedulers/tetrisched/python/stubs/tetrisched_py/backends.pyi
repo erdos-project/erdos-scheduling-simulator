@@ -12,6 +12,7 @@ __all__ = [
     "GurobiSolver",
     "SolutionType",
     "SolverBackendType",
+    "SolverConfig",
     "SolverSolution",
 ]
 
@@ -35,9 +36,12 @@ class CPLEXSolver:
         Returns:
           SolverSolution: The characteristics of the solution.
         """
-    def translateModel(self) -> None:
+    def translateModel(self, solverConfig: SolverConfig) -> None:
         """
         Translates the underlying SolverModel to a CPLEX model instance.
+
+        Args:
+          solverConfig (SolverConfig): The configuration for the solver.
         """
 
 class GurobiSolver:
@@ -60,9 +64,12 @@ class GurobiSolver:
         Returns:
           SolverSolution: The characteristics of the solution.
         """
-    def translateModel(self) -> None:
+    def translateModel(self, solverConfig: SolverConfig) -> None:
         """
         Translates the underlying SolverModel to a Gurobi model instance.
+
+        Args:
+          solverConfig (SolverConfig): The configuration for the solver.
         """
 
 class SolutionType:
@@ -139,6 +146,33 @@ class SolverBackendType:
     def name(self) -> str: ...
     @property
     def value(self) -> int: ...
+
+class SolverConfig:
+    def __init__(self) -> None:
+        """
+        Initializes an empty SolverConfig.
+        """
+    @property
+    def newSolutionTimeMs(self) -> int | None:
+        """
+        The total time to be spent between finding new incumbent solutions.
+        """
+    @newSolutionTimeMs.setter
+    def newSolutionTimeMs(self, arg0: int | None) -> None: ...
+    @property
+    def numThreads(self) -> int | None:
+        """
+        The total number of threads to allocate to the Solver.
+        """
+    @numThreads.setter
+    def numThreads(self, arg0: int | None) -> None: ...
+    @property
+    def totalSolverTimeMs(self) -> int | None:
+        """
+        The total time to be spent on the Solver.
+        """
+    @totalSolverTimeMs.setter
+    def totalSolverTimeMs(self, arg0: int | None) -> None: ...
 
 class SolverSolution:
     def __str__(self) -> str: ...

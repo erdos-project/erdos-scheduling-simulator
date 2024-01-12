@@ -224,6 +224,12 @@ class TetriSchedScheduler(BaseScheduler):
         self._enable_optimization_passes = (
             _flags.scheduler_enable_optimization_pass if _flags else False
         )
+
+        # Scheduler configuration.
+        self._scheduler_configuration = tetrisched.SchedulerConfig()
+        self._scheduler_configuration.optimize = self._enable_optimization_passes
+        self._scheduler_configuration.newSolutionTimeMs = 1 * 60 * 1000
+
         # NOTE (Sukrit): We observe that solving each TaskGraph independently usually
         # leads to more missed deadlines than required. To offset this, the following
         # parameter sets a threshold until which the scheduler will try to reschedule
@@ -592,7 +598,7 @@ class TetriSchedScheduler(BaseScheduler):
                     objective_strl,
                     partitions.partitions,
                     sim_time.time,
-                    self._enable_optimization_passes,
+                    self._scheduler_configuration,
                     start_end_time_list,
                 )
                 solver_start_time = time.time()

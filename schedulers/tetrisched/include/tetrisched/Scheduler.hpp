@@ -6,6 +6,22 @@
 #include "tetrisched/Solver.hpp"
 
 namespace tetrisched {
+
+/// The `SchedulerConfig` structure represents the configuration of the
+/// scheduler. This config is used to inform the choice of how the scheduler
+/// should schedule the STRL expression.
+struct SchedulerConfig {
+  /// If True, the scheduler will optimize the STRL expression.
+  bool optimize;
+
+  /// The configuration for the solver backend.
+  std::optional<uint64_t> numThreads;
+  std::optional<Time> totalSolverTimeMs;
+  std::optional<Time> newSolutionTimeMs;
+};
+using SchedulerConfig = struct SchedulerConfig;
+using SchedulerConfigPtr = std::shared_ptr<SchedulerConfig>;
+
 class Scheduler {
  private:
   /// The solver instance underlying the Scheduler with the given type.
@@ -13,6 +29,8 @@ class Scheduler {
   SolverBackendType solverBackend;
   /// The solver model to be passed to the expressions during parsing.
   SolverModelPtr solverModel;
+  /// The configuration for the Solver.
+  SolverConfigPtr solverConfig;
   /// The solution to the last solver invocation (if available).
   std::optional<SolverSolutionPtr> solverSolution;
   /// The time discretization to use for the solver.
@@ -34,7 +52,7 @@ class Scheduler {
   /// and parses it to populate the SolverModel.
   void registerSTRL(
       ExpressionPtr expression, Partitions availablePartitions,
-      Time currentTime, bool optimize = false,
+      Time currentTime, SchedulerConfigPtr schedulerConfig,
       std::vector<std::pair<TimeRange, Time>> timeRangeToGranularities = {});
 
   /// Invokes the solver to schedule the registered STRL expression

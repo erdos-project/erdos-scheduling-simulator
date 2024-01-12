@@ -59,7 +59,7 @@ class GurobiSolver : public Solver {
   mutable uint64_t numDeactivatedConstraints;
 
   /// Set the defaults for parameters on the model.
-  void setParameters(GRBModel& gurobiModel);
+  void setParameters(GRBModel& gurobiModel, SolverConfigPtr solverConfig);
 
   /// Translate the variable to a Gurobi variable.
   GRBVar translateVariable(GRBModel& gurobiModel,
