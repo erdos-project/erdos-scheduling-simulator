@@ -178,6 +178,8 @@ class TetriSchedScheduler(BaseScheduler):
         max_time_discretization: EventTime = EventTime(5, EventTime.Unit.US),
         dynamic_discretization: bool = False,
         max_occupancy_threshold: float = 0.8,
+        finer_discretization_at_prev_solution: bool = False,
+        finer_discretization_window: EventTime = EventTime(5, EventTime.Unit.US),
     ):
         if preemptive:
             raise ValueError("TetrischedScheduler does not support preemption.")
@@ -217,6 +219,8 @@ class TetriSchedScheduler(BaseScheduler):
             self._dynamic_discretization,  # enable dynamic discretization
             self._max_discretization.time,
             max_occupancy_threshold,
+            finer_discretization_at_prev_solution,
+            finer_discretization_window.to(EventTime.Unit.US).time,
         )
         self._use_task_graph_indicator_uility = True
         self._previously_placed_reward_scale_factor = 2.0

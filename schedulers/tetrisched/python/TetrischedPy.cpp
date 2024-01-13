@@ -56,7 +56,7 @@ void defineBasicTypes(py::module_& tetrisched_m) {
 void defineScheduler(py::module_& tetrisched_m) {
   py::class_<tetrisched::Scheduler>(tetrisched_m, "Scheduler")
       .def(py::init<tetrisched::Time, tetrisched::SolverBackendType,
-                    std::string, bool, tetrisched::Time, float>(),
+                    std::string, bool, tetrisched::Time, float, bool, tetrisched::Time>(),
            "Initializes the Scheduler with the given backend.\n"
            "\nArgs:\n"
            "  discretization (int): The time discretization to use for the "
@@ -69,12 +69,17 @@ void defineScheduler(py::module_& tetrisched_m) {
            "  maxDiscretization (int): The maximum discretization to use for "
            "dynamic discretization.\n"
            "  maxOccupancyThreshold (float): The maximum occupancy threshold "
-           "to use for dynamic discretization.",
+           "to use for dynamic discretization.\n",
+            "  finerDiscretizationAtPrevSolution (bool): Enables finer discretization "
+           "At previous solution.\n",
+           "  finerDiscretizationWindow (int): The discretization around prev solution until which the discretization would be 1 ",
            py::arg("discretization"), py::arg("solverBackend"),
            py::arg("logDir") = "./",
            py::arg("enableDynamicDiscretization") = false,
            py::arg("maxDiscretization") = 5,
-           py::arg("maxOccupancyThreshold") = 0.8)
+           py::arg("maxOccupancyThreshold") = 0.8,
+           py::arg("finerDiscretizationAtPrevSolution") = false,
+           py::arg("finerDiscretizationWindow") = 5)
       .def(
           "registerSTRL", &tetrisched::Scheduler::registerSTRL,
           "Registers the STRL expression for the scheduler to schedule from.\n"

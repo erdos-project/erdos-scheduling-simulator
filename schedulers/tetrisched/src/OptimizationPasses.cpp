@@ -1110,8 +1110,9 @@ OptimizationPassRunner::OptimizationPassRunner(bool debug,
                                                bool enableDynamicDiscretization,
                                                Time minDiscretization,
                                                Time maxDiscretization,
-                                               float maxOccupancyThreshold)
-    : debug(debug), enableDynamicDiscretization(enableDynamicDiscretization) {
+                                               float maxOccupancyThreshold, bool finerDiscretizationAtPrevSolution, Time finerDiscretizationWindow)
+    : debug(debug), enableDynamicDiscretization(enableDynamicDiscretization)
+{
   // Register the Critical Path optimization pass.
   registeredPasses.push_back(std::make_shared<CriticalPathOptimizationPass>());
 
@@ -1119,7 +1120,7 @@ OptimizationPassRunner::OptimizationPassRunner(bool debug,
     // Register the DiscretizationGenerator pass.
     registeredPasses.push_back(
         std::make_shared<DiscretizationSelectorOptimizationPass>(
-            minDiscretization, maxDiscretization, maxOccupancyThreshold, true, 5));
+            minDiscretization, maxDiscretization, maxOccupancyThreshold, finerDiscretizationAtPrevSolution, finerDiscretizationWindow));
   }
 
   // Register the CapacityConstraintMapPurging optimization pass.

@@ -162,18 +162,18 @@ class OptimizationPassRunner {
 
  public:
   /// Initialize the OptimizationPassRunner.
-  OptimizationPassRunner(bool debug = false,
-                         bool enableDynamicDiscretization = false,
-                         Time minDiscretization = 1, Time maxDiscretization = 5,
-                         float maxOccupancyThreshold = 0.8);
+   OptimizationPassRunner(bool debug = false,
+                          bool enableDynamicDiscretization = false,
+                          Time minDiscretization = 1, Time maxDiscretization = 5,
+                          float maxOccupancyThreshold = 0.8, bool finerDiscretizationAtPrevSolution = false, Time finerDiscretizationWindow = 5);
 
-  /// Run the pre-translation optimization passes on the given STRL expression.
-  void runPreTranslationPasses(Time currentTime, ExpressionPtr strlExpression,
-                               CapacityConstraintMapPtr capacityConstraints);
-
-  /// Run the post-translation optimization passes on the given STRL expression.
-  void runPostTranslationPasses(Time currentTime, ExpressionPtr strlExpression,
+   /// Run the pre-translation optimization passes on the given STRL expression.
+   void runPreTranslationPasses(Time currentTime, ExpressionPtr strlExpression,
                                 CapacityConstraintMapPtr capacityConstraints);
+
+   /// Run the post-translation optimization passes on the given STRL expression.
+   void runPostTranslationPasses(Time currentTime, ExpressionPtr strlExpression,
+                                 CapacityConstraintMapPtr capacityConstraints);
 };
 }  // namespace tetrisched
 #endif  // _TETRISCHED_OPTIMIZATION_PASSES_HPP_
