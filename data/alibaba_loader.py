@@ -390,31 +390,103 @@ class AlibabaLoader(BaseWorkloadLoader):
             A mapping from the Workload profile path to the JobGraph generator."""
 
         # Define the JobGraph generator for a given path.
-        def job_graph_data_generator(path: str):
+        def job_graph_data_generator(
+            path: str,
+            min_deadline_variance: int,
+            max_deadline_variance: int,
+            min_critical_path_runtime: int,
+            max_critical_path_runtime: int,
+            profile_label: Optional[str] = None,
+        ):
             if not os.path.isfile(path):
                 raise FileNotFoundError(f"No such file: {path}")
             with open(path, "rb") as pickled_file:
                 data: Mapping[str, List[str]] = AlibabaTaskUnpickler(
                     pickled_file
                 ).load()
+                skipped_job_graphs = 0
                 for job_graph_name, job_tasks in data.items():
                     try:
                         job_graph = self._convert_job_data_to_job_graph(
-                            job_graph_name, job_tasks
+                            job_graph_name,
+                            job_tasks,
+                            min_deadline_variance,
+                            max_deadline_variance,
+                            profile_label,
                         )
                         if job_graph:
-                            self._job_graphs[path][job_graph_name] = job_graph
+                            cp_runtime = job_graph.critical_path_runtime
+                            if (
+                                min_critical_path_runtime
+                                <= cp_runtime.to(EventTime.Unit.US).time
+                                < max_critical_path_runtime
+                            ):
+                                self._job_graphs[path][job_graph_name] = job_graph
+                            else:
+                                skipped_job_graphs += 1
+                                # self._logger.debug(
+                                #     f"[0] Skipping job graph {job_graph_name} with "
+                                #     f"critical path runtime "
+                                #     f"{cp_runtime.to(EventTime.Unit.US).time}"
+                                #     f" outside of range [{min_critical_path_runtime},"
+                                #     f" {max_critical_path_runtime})."
+                                # )
+                        else:
+                            self._logger.warning(
+                                f"Failed to create job graph {job_graph_name}."
+                            )
                     except ValueError as e:
                         self._logger.warning(
                             f"Failed to convert job graph {job_graph_name} "
                             f"with error {e.__class__}: {e}."
                         )
+                self._logger.debug(
+                    f"[0] Skipped {skipped_job_graphs} job graphs from path {path}, "
+                    f"loaded {len(self._job_graphs[path])} job graphs."
+                )
 
         path_to_job_graph_generator_mapping = {}
-        for path, _ in self._workload_paths_and_release_policies:
+        for index, (path, _) in enumerate(self._workload_paths_and_release_policies):
             if path is not None:
+                min_deadline_variance = (
+                    int(self._flags.min_deadline_variance)
+                    if index >= len(self._flags.min_deadline_variances)
+                    else int(self._flags.min_deadline_variances[index])
+                )
+                max_deadline_variance = (
+                    int(self._flags.max_deadline_variance)
+                    if index >= len(self._flags.max_deadline_variances)
+                    else int(self._flags.max_deadline_variances[index])
+                )
+                min_critical_path_runtime = (
+                    0
+                    if index
+                    >= len(self._flags.alibaba_loader_min_critical_path_runtimes)
+                    else int(
+                        self._flags.alibaba_loader_min_critical_path_runtimes[index]
+                    )
+                )
+                max_critical_path_runtime = (
+                    sys.maxsize
+                    if index
+                    >= len(self._flags.alibaba_loader_max_critical_path_runtimes)
+                    else int(
+                        self._flags.alibaba_loader_max_critical_path_runtimes[index]
+                    )
+                )
+                profile_label = (
+                    None
+                    if index >= len(self._flags.workload_profile_path_labels)
+                    else self._flags.workload_profile_path_labels[index]
+                )
                 path_to_job_graph_generator_mapping[path] = partial(
-                    job_graph_data_generator, path
+                    job_graph_data_generator,
+                    path,
+                    min_deadline_variance,
+                    max_deadline_variance,
+                    min_critical_path_runtime,
+                    max_critical_path_runtime,
+                    profile_label,
                 )
         return path_to_job_graph_generator_mapping
 
@@ -427,7 +499,12 @@ class AlibabaLoader(BaseWorkloadLoader):
         return samples
 
     def _convert_job_data_to_job_graph(
-        self, job_graph_name: str, job_tasks: List[str]
+        self,
+        job_graph_name: str,
+        job_tasks: List[str],
+        min_deadline_variance: Optional[int] = None,
+        max_deadline_variance: Optional[int] = None,
+        profile_label: Optional[str] = None,
     ) -> Optional[JobGraph]:
         """
         Convert the raw job data to a Job object.
@@ -556,11 +633,17 @@ class AlibabaLoader(BaseWorkloadLoader):
                         )
 
         return JobGraph(
-            name=job_graph_name,
+            name=job_graph_name
+            if profile_label is None
+            else f"{job_graph_name}_{profile_label}",
             jobs=jobs_to_children,
             deadline_variance=(
-                self._flags.min_deadline_variance,
-                self._flags.max_deadline_variance,
+                self._flags.min_deadline_variance
+                if min_deadline_variance is None
+                else min_deadline_variance,
+                self._flags.max_deadline_variance
+                if max_deadline_variance is None
+                else max_deadline_variance,
             ),
         )
 
@@ -601,7 +684,20 @@ class AlibabaLoader(BaseWorkloadLoader):
                     start_time=start_time,
                     _flags=self._flags,
                 )
-                if task_graph is not None:
+                if (
+                    task_graph is not None
+                    and task_graph.critical_path_runtime.time < 1000
+                    and task_graph.critical_path_runtime.time > 100
+                ):
+                    self._logger.debug(
+                        "[0] Adding TaskGraph %s from path %s to workload with "
+                        "release time %s, critical path runtime %s and deadline %s.",
+                        task_graph.name,
+                        workload_profile,
+                        task_graph.release_time,
+                        task_graph.critical_path_runtime,
+                        task_graph.deadline,
+                    )
                     self._workload.add_task_graph(task_graph)
                     task_release_index += 1
             return self._workload

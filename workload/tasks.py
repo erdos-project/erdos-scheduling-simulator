@@ -1383,6 +1383,15 @@ class TaskGraph(Graph[Task]):
         """
         raise NotImplementedError("Merging of Taskgraphs has not been implemented yet.")
 
+    def is_scheduled(self) -> bool:
+        """Check if any of the tasks in the TaskGraph have been scheduled.
+
+        Returns:
+            `True` if any of the tasks in the TaskGraph have been scheduled,
+            and `False` otherwise.
+        """
+        return any(task.state == TaskState.SCHEDULED for task in self.get_nodes())
+
     def is_complete(self) -> bool:
         """Check if the task graph has finished execution.
 
@@ -1562,6 +1571,28 @@ class TaskGraph(Graph[Task]):
             An `EventTime` denoting the maximum deadline of all the Tasks.
         """
         return max(task.deadline for task in self.get_nodes())
+
+    @cached_property
+    def critical_path_runtime(self) -> EventTime:
+        """Retrieve the runtime of the critical path of the TaskGraph.
+
+        This runtime is calculated by assuming the slowest ExecutionStrategy for all
+        the nodes in the TaskGraph.
+
+        Returns:
+            An `EventTime` denoting the runtime of the critical path of the TaskGraph.
+        """
+        return EventTime(
+            sum(
+                task.slowest_execution_strategy.runtime.to(EventTime.Unit.US).time
+                for task in self.get_longest_path(
+                    lambda t: t.slowest_execution_strategy.runtime.to(
+                        EventTime.Unit.US
+                    ).time
+                )
+            ),
+            EventTime.Unit.US,
+        )
 
     @property
     def completion_time(self) -> EventTime:

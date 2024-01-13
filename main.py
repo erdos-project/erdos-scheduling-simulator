@@ -87,6 +87,13 @@ flags.DEFINE_list(
     [],
     "A list of paths of the description of the Workload to schedule.",
 )
+flags.DEFINE_list(
+    "workload_profile_path_labels",
+    [],
+    "A list of labels for the workload profile paths. If provided, the list must be of "
+    "the same length as the list of workload profile paths. This is used to annotate "
+    "the TaskGraphs with the corresponding workload profile path label.",
+)
 flags.register_multi_flags_validator(
     ["workload_profile_path", "workload_profile_paths"],
     lambda flags: not (
@@ -178,6 +185,21 @@ flags.DEFINE_float(
     1,
     "The multiplier used for alibaba trace tasks task.duration.",
 )
+flags.DEFINE_list(
+    "alibaba_loader_min_critical_path_runtimes",
+    [],
+    "The minimum critical path duration for each TaskGraph from the corresponding "
+    "Workload. If the list is empty, then the minimum critical path duration is "
+    "set to 0. TaskGraphs lower than this critical path duration will not be released.",
+)
+flags.DEFINE_list(
+    "alibaba_loader_max_critical_path_runtimes",
+    [],
+    "The maximum critical path duration for each TaskGraph from the corresponding "
+    "Workload. If the list is empty, then the maximum critical path duration is "
+    "set to the maximum critical path duration of the Workload. TaskGraphs higher "
+    "than this critical path duration will not be released.",
+)
 flags.DEFINE_bool(
     "alibaba_enable_heterogeneous_resource_type",
     False,
@@ -212,6 +234,13 @@ flags.DEFINE_integer(
     0,
     "The minimum % variance to allocate to the assigned deadline for each task.",
 )
+flags.DEFINE_list(
+    "min_deadline_variances",
+    [],
+    "The minimum % variance to allocate to the assigned deadline for each TaskGraph "
+    "from the corresponding Workload. If only one Workload profile is provided, then "
+    "use `min_deadline_variance`.",
+)
 flags.DEFINE_integer(
     "max_deadline",
     sys.maxsize,
@@ -221,6 +250,13 @@ flags.DEFINE_integer(
     "max_deadline_variance",
     20,
     "The maximum % variance to allocate to the assigned deadline for each task.",
+)
+flags.DEFINE_list(
+    "max_deadline_variances",
+    [],
+    "The maximum % variance to allocate to the assigned deadline for each TaskGraph "
+    "from the corresponding Workload. If only one Workload profile is provided, then "
+    "use `max_deadline_variance`.",
 )
 flags.DEFINE_integer(
     "runtime_variance",

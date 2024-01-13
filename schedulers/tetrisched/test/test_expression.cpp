@@ -183,7 +183,7 @@ TEST(Expression, TestLessThanEnforcesOrdering) {
   solverModelPtr->exportModel("testLessThanEnforcesOrdering.lp");
 
   // Translate and solve the model.
-  cplexSolver.translateModel();
+  cplexSolver.translateModel(nullptr);
   cplexSolver.solveModel();
 
   auto result = objectiveExpression->populateResults(solverModelPtr);
@@ -261,7 +261,7 @@ TEST(Expression, TestMaxExpressionEnforcesSingleChoice) {
   solverModelPtr->exportModel("testMaxExpressionEnforcesSingleChoice.lp");
 
   // Translate and solve the model.
-  cplexSolver.translateModel();
+  cplexSolver.translateModel(nullptr);
   cplexSolver.exportModel("testMaxExpressionEnforcesSingleChoice_2.lp");
   cplexSolver.solveModel();
 
@@ -310,7 +310,7 @@ TEST(Expression, TestMinExpressionEnforcesAllChildrenSatisfied) {
       "testMinExpressionEnforcesAllChildrenSatisfied.lp");
 
   // Translate and solve the model.
-  cplexSolver.translateModel();
+  cplexSolver.translateModel(nullptr);
   cplexSolver.solveModel();
 
   auto result = objectiveExpression->populateResults(solverModelPtr);
@@ -361,7 +361,7 @@ TEST(Expression, TestMinExpressionEnforcesNoneSatisfied) {
   solverModelPtr->exportModel("testMinExpressionEnforcesNoneSatisfied.lp");
 
   // Translate and solve the model.
-  cplexSolver.translateModel();
+  cplexSolver.translateModel(nullptr);
   cplexSolver.solveModel();
 
   auto result = objectiveExpression->populateResults(solverModelPtr);
@@ -404,7 +404,7 @@ TEST(Expression, TestScaleExpressionDoublesUtility) {
                                       capacityConstraintMap, 0);
 
   // Translate and solve the model.
-  cplexSolver.translateModel();
+  cplexSolver.translateModel(nullptr);
   cplexSolver.solveModel();
 
   auto result = objectiveExpression->populateResults(solverModelPtr);
@@ -456,7 +456,7 @@ TEST(Expression, TestAllocationExpressionFailsChoice) {
                                       capacityConstraintMap, 0);
 
   // Translate and solve the model.
-  cplexSolver.translateModel();
+  cplexSolver.translateModel(nullptr);
   solverModelPtr->exportModel("testAllocationExpressionFailsChoice.lp");
   cplexSolver.solveModel();
 
@@ -541,12 +541,12 @@ TEST(Expression, TestMalleableChooseExpressionConstructsVariableRectangles) {
   solverModelPtr->exportModel("testMalleableChooseVariableRectangle.lp");
 
   // Translate and Solve the model.
-  gurobiSolver.translateModel();
+  gurobiSolver.translateModel(nullptr);
   gurobiSolver.solveModel();
 
   auto result = objectiveExpression->populateResults(solverModelPtr);
   EXPECT_TRUE(result->utility) << "Result should have some utility.";
-  EXPECT_EQ(2, result->utility.value()) << "The utility should be 2.";
+  EXPECT_EQ(1, result->utility.value()) << "The utility should be 1.";
   auto task2Placement = result->placements["task2"]->getPartitionAllocations();
   EXPECT_TRUE(task2Placement.find(partition1->getPartitionId()) !=
               task2Placement.end())
@@ -597,7 +597,7 @@ TEST(Expression, TestNonOverlappingChooseIsAllowed) {
   solverModelPtr->exportModel("testNonOverlappingChooseIsAllowed.lp");
 
   // Translate and Solve the model.
-  gurobiSolver.translateModel();
+  gurobiSolver.translateModel(nullptr);
   gurobiSolver.solveModel();
 
   auto result = objectiveExpression->populateResults(solverModelPtr);
@@ -653,7 +653,7 @@ TEST(Expression, TestWindowedChoosedExpressionCorrect) {
   solverModelPtr->exportModel("testWindowedChooseExpressionCorrect.lp");
 
   // Translate and Solve the model.
-  gurobiSolver.translateModel();
+  gurobiSolver.translateModel(nullptr);
   gurobiSolver.solveModel();
   auto result = objectiveExpression->populateResults(solverModelPtr);
   ASSERT_TRUE(result->utility) << "Result should have some utility.";

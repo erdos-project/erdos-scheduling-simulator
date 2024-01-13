@@ -165,7 +165,7 @@ IloObjective CPLEXSolver::translateObjectiveFunction(
   return objectiveConstraint;
 }
 
-void CPLEXSolver::translateModel() {
+void CPLEXSolver::translateModel(SolverConfigPtr /*solverConfig*/) {
   if (!solverModel) {
     throw tetrisched::exceptions::SolverException(
         "Empty SolverModel for CPLEXSolver. Nothing to translate!");

@@ -26,6 +26,8 @@ class GurobiSolver : public Solver {
     GurobiInterruptParams params;
     /// The start time of the optimization.
     std::chrono::steady_clock::time_point startTime;
+    /// The objective value of the incumbent solution.
+    TETRISCHED_ILP_TYPE incumbentObjectiveValue;
     /// The time at which the last incumbent solution was found.
     std::chrono::steady_clock::time_point lastIncumbentSolutionTime;
 
@@ -57,7 +59,7 @@ class GurobiSolver : public Solver {
   mutable uint64_t numDeactivatedConstraints;
 
   /// Set the defaults for parameters on the model.
-  void setParameters(GRBModel& gurobiModel);
+  void setParameters(GRBModel& gurobiModel, SolverConfigPtr solverConfig);
 
   /// Translate the variable to a Gurobi variable.
   GRBVar translateVariable(GRBModel& gurobiModel,
@@ -85,7 +87,7 @@ class GurobiSolver : public Solver {
   void setModel(SolverModelPtr model) override;
 
   /// Translates the SolverModel into a Gurobi model.
-  void translateModel() override;
+  void translateModel(SolverConfigPtr solverConfig) override;
 
   /// Export the constructed model to the given file.
   void exportModel(const std::string& fileName) override;

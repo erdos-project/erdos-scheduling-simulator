@@ -8,11 +8,30 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++2a -Wall -Wextra")
 
+# Compilation options.
+
+# Set the build type to Release by default.
 if (NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 set(CMAKE_CXX_FLAGS_DEBUG "-g")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+
+# Set the performance profiling flag.
+if (NOT TETRISCHED_PERF_ENABLED)
+   message("-- Performance profiling disabled in TetriSched.")
+else()
+     message("-- Performance profiling enabled in TetriSched.")
+     add_compile_definitions(_TETRISCHED_PERF_ENABLED_)
+endif()
+
+# Set the logging flag.
+if (NOT TETRISCHED_LOGGING_ENABLED)
+   message("-- Logging disabled in TetriSched.")
+else()
+     message("-- Logging enabled in TetriSched.")
+     add_compile_definitions(_TETRISCHED_LOGGING_ENABLED_)
+endif()
 
 set(INSTALL_GTEST OFF)
 include(FetchContent)
@@ -127,7 +146,7 @@ endif()
 
 add_library(tetrisched SHARED ${TETRISCHED_SOURCE})
 target_include_directories(tetrisched PRIVATE include)
-target_compile_features(tetrisched PRIVATE cxx_std_17)
+target_compile_features(tetrisched PRIVATE cxx_std_20)
 
 # Include and link all solver backends.
 target_include_directories(tetrisched PRIVATE ${SOLVER_BACKEND_INCLUDE_DIRS})

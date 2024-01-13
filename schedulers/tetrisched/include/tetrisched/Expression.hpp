@@ -294,7 +294,8 @@ class Expression : public std::enable_shared_from_this<Expression> {
   std::optional<SolutionResultPtr> getSolution() const;
 
   /// Exports the STRL rooted at this Expression into a DOT file.
-  void exportToDot(std::string filename) const;
+  void exportToDot(std::string filename,
+                   bool emitChooseExpressions = false) const;
 
   /// Retrieves the descriptive name for the Expression.
   virtual std::string getDescriptiveName() const;

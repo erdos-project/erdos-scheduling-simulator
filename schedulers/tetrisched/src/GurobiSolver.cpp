@@ -13,10 +13,14 @@ namespace tetrisched {
  */
 GurobiSolver::GurobiInterruptOptimizationCallback::
     GurobiInterruptOptimizationCallback(GurobiInterruptParams params)
-    : params(params) {
+    : params(params), incumbentObjectiveValue(0) {
   auto currentTime = std::chrono::steady_clock::now();
   startTime = currentTime;
   lastIncumbentSolutionTime = currentTime;
+  if (params.utilityUpperBound.has_value()) {
+    std::cout << "The upper bound of the objective function is "
+              << params.utilityUpperBound.value() << std::endl;
+  }
 }
 
 void GurobiSolver::GurobiInterruptOptimizationCallback::callback() {
@@ -49,7 +53,10 @@ void GurobiSolver::GurobiInterruptOptimizationCallback::callback() {
                                         TETRISCHED_SOLUTION_UPPER_BOUND_DELTA) {
         abort();
       }
-      lastIncumbentSolutionTime = currentTime;
+      if (solutionObjectiveValue > incumbentObjectiveValue) {
+        incumbentObjectiveValue = solutionObjectiveValue;
+        lastIncumbentSolutionTime = currentTime;
+      }
     }
   } catch (GRBException& e) {
     std::cout << "Gurobi Solver failed with error code: " << e.getErrorCode()
@@ -83,22 +90,35 @@ void GurobiSolver::setModel(SolverModelPtr solverModelPtr) {
   solverModel = solverModelPtr;
 }
 
-void GurobiSolver::setParameters(GRBModel& gurobiModel) {
+void GurobiSolver::setParameters(GRBModel& gurobiModel,
+                                 SolverConfigPtr solverConfig) {
   // Set the maximum numer of threads.
   const auto thread_count = std::thread::hardware_concurrency();
-  gurobiModel.set(GRB_IntParam_Threads, thread_count / 2);
+  if (solverConfig && solverConfig->numThreads.has_value() &&
+      solverConfig->numThreads.value() < thread_count) {
+    gurobiModel.set(GRB_IntParam_Threads, solverConfig->numThreads.value());
+  } else {
+    gurobiModel.set(GRB_IntParam_Threads, thread_count);
+  }
 
   // Ask Gurobi to aggressively cut the search space.
   gurobiModel.set(GRB_IntParam_Cuts, 3);
 
   // Ask Gurobi to conservatively presolve the model.
-  gurobiModel.set(GRB_IntParam_Presolve, 1);
+  // gurobiModel.set(GRB_IntParam_Presolve, 2);
 
   // Ask Gurobi to find new incumbent solutions rather than prove bounds.
   gurobiModel.set(GRB_IntParam_MIPFocus, 1);
 
   // Increase the time spent on Heuristics.
   gurobiModel.set(GRB_DoubleParam_Heuristics, 0.5);
+
+  // Set PreSparsify to 1 to enable presolve sparsification.
+  // gurobiModel.set(GRB_IntParam_PreSparsify, 1);
+
+  // Increase the time spent in No Relaxation Heuristic.
+  // NOTE (Sukrit): This does not seem to help in our problem setup.
+  // gurobiModel.set(GRB_DoubleParam_NoRelHeurTime, 10);
 
   // Ask Gurobi to solve the MIP concurrently with different paths.
   // gurobiModel.set(GRB_IntParam_ConcurrentMIP, 8);
@@ -243,14 +263,14 @@ GRBLinExpr GurobiSolver::translateObjectiveFunction(
   return objectiveExpr;
 }
 
-void GurobiSolver::translateModel() {
+void GurobiSolver::translateModel(SolverConfigPtr solverConfig) {
   if (!solverModel) {
     throw tetrisched::exceptions::SolverException(
         "Empty SolverModel for GurobiSolver. Nothing to translate!");
   }
 
   gurobiModel = std::make_unique<GRBModel>(*gurobiEnv);
-  setParameters(*gurobiModel);
+  setParameters(*gurobiModel, solverConfig);
 
   {
     TETRISCHED_SCOPE_TIMER("GurobiSolver::translateModel::translateVariables")
@@ -304,6 +324,13 @@ void GurobiSolver::translateModel() {
   if (objectiveUpperBound.has_value()) {
     interruptParams.utilityUpperBound = objectiveUpperBound.value();
   }
+  if (solverConfig && solverConfig->newSolutionTimeMs.has_value()) {
+    interruptParams.newSolutionTimeLimitMs =
+        solverConfig->newSolutionTimeMs.value();
+  }
+  if (solverConfig && solverConfig->totalSolverTimeMs.has_value()) {
+    interruptParams.timeLimitMs = solverConfig->totalSolverTimeMs.value();
+  }
 }
 
 void GurobiSolver::exportModel(const std::string& fileName) {
@@ -337,10 +364,6 @@ SolverSolutionPtr GurobiSolver::solveModel() {
   solverSolution->numNonZeroCoefficients = gurobiModel->get(GRB_IntAttr_NumNZs);
 
   // Construct the Interrupt callback, and register it with the model.
-  // TODO (Sukrit): This should be configurable, but for now, we just interrupt
-  // after 5 minutes.
-  constexpr auto interruptTimeLimitMs = 5 * 60 * 1000;
-  interruptParams.newSolutionTimeLimitMs = interruptTimeLimitMs;
   GurobiInterruptOptimizationCallback interruptCallback(interruptParams);
   gurobiModel->setCallback(&interruptCallback);
 

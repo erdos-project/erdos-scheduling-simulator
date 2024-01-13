@@ -39,14 +39,19 @@ namespace tetrisched {
   optimizationPasses =
       OptimizationPassRunner(false, enableDynamicDiscretization, discretization,
                              maxDiscretization, maxOccupancyThreshold, finerDiscretizationAtPrevSolution, finerDiscretizationWindow);
-  }
+  solverConfig = std::make_shared<SolverConfig>();
+}
 
 void Scheduler::registerSTRL(
     ExpressionPtr expression, Partitions availablePartitions, Time currentTime,
-    bool optimize,
+    SchedulerConfigPtr schedulerConfig,
     std::vector<std::pair<TimeRange, Time>> timeRangeToGranularities) {
   TETRISCHED_SCOPE_TIMER("Scheduler::registerSTRL," +
                          std::to_string(currentTime));
+  if (!schedulerConfig) {
+    throw exceptions::RuntimeException(
+        "The schedulerConfig passed to the scheduler is null.");
+  }
   TETRISCHED_INFO("Registering the STRL expression: " << expression->getName()
                                                       << " for time "
                                                       << currentTime << ".")
@@ -80,7 +85,7 @@ void Scheduler::registerSTRL(
   }
 
   // Run the Pre-Translation OptimizationPasses on this expression.
-  if (optimize) {
+  if (schedulerConfig->optimize) {
     TETRISCHED_SCOPE_TIMER(
         "Scheduler::registerSTRL::preTranslationOptimizationPasses," +
         std::to_string(currentTime));
@@ -101,12 +106,25 @@ void Scheduler::registerSTRL(
   }
 
   // Run the Post-Translation OptimizationPasses on this expression.
-  if (optimize) {
+  if (schedulerConfig->optimize) {
     TETRISCHED_SCOPE_TIMER(
         "Scheduler::registerSTRL::postTranslationOptimizationPasses," +
         std::to_string(currentTime));
     optimizationPasses.runPostTranslationPasses(currentTime, expression,
                                                 capacityConstraintMap);
+  }
+
+  // Construct the SolverConfig for the solver.
+  if (schedulerConfig->numThreads.has_value()) {
+    solverConfig->numThreads = schedulerConfig->numThreads.value();
+  }
+  if (schedulerConfig->totalSolverTimeMs.has_value()) {
+    solverConfig->totalSolverTimeMs =
+        schedulerConfig->totalSolverTimeMs.value();
+  }
+  if (schedulerConfig->newSolutionTimeMs.has_value()) {
+    solverConfig->newSolutionTimeMs =
+        schedulerConfig->newSolutionTimeMs.value();
   }
 }
 
@@ -127,7 +145,7 @@ void Scheduler::schedule(Time currentTime) {
   {
     TETRISCHED_SCOPE_TIMER("Scheduler::schedule::translateModel," +
                            std::to_string(currentTime));
-    this->solver->translateModel();
+    this->solver->translateModel(solverConfig);
   }
 
   // Solve the model.

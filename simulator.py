@@ -444,11 +444,11 @@ class Simulator(object):
             for task_graph in task_graphs:
                 self._logger.info(
                     "[%s] The TaskGraph %s will be released with deadline "
-                    "%s and completion time %s.",
+                    "%s and critical path runtime %s.",
                     task_graph.release_time.to(EventTime.Unit.US).time,
                     task_graph.name,
                     task_graph.deadline,
-                    task_graph.job_graph.completion_time,
+                    task_graph.critical_path_runtime,
                 )
                 self._csv_logger.info(
                     "%s,TASK_GRAPH_RELEASE,%s,%s,%s,%s",
@@ -456,16 +456,7 @@ class Simulator(object):
                     task_graph.name,
                     task_graph.deadline.to(EventTime.Unit.US).time,
                     len(task_graph.get_nodes()),
-                    sum(
-                        [
-                            t.slowest_execution_strategy.runtime.to(
-                                EventTime.Unit.US
-                            ).time
-                            for t in task_graph.get_longest_path(
-                                lambda t: t.slowest_execution_strategy.runtime.time
-                            )
-                        ]
-                    ),  # This is the critical path time
+                    task_graph.critical_path_runtime.to(EventTime.Unit.US).time,
                 )
                 if self._log_task_graphs:
                     # Log a DOT representation of the TaskGraph, if requested.
@@ -1481,14 +1472,7 @@ class Simulator(object):
             task_graph.deadline.to(EventTime.Unit.US).time,
             task_graph.name,
             len(task_graph.get_nodes()),
-            sum(
-                [
-                    t.slowest_execution_strategy.runtime.to(EventTime.Unit.US).time
-                    for t in task_graph.get_longest_path(
-                        lambda t: t.slowest_execution_strategy.runtime.time
-                    )
-                ]
-            ),  # This is the critical path time
+            task_graph.critical_path_runtime.to(EventTime.Unit.US).time,
         )
         if self._log_task_graphs:
             # Log a DOT representation of the TaskGraph, if requested.

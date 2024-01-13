@@ -13,7 +13,11 @@
 #include <string>
 
 // Macros for logging.
+#ifdef _TETRISCHED_LOGGING_ENABLED_
+#define TETRISCHED_LOGGING_ENABLED true
+#else
 #define TETRISCHED_LOGGING_ENABLED false
+#endif
 #define TETRISCHED_LOGGING_DIR_ENV_NAME "TETRISCHED_LOGGING_DIR"
 #define TETRISCHED_LOG_FILE_NAME "libtetrisched.log"
 #define TETRISCHED_DEFAULT_LOG_LEVEL tetrisched::logging::INFO
@@ -37,15 +41,14 @@
   }
 
 // Macros for timing.
-// Uncomment the following line to enable timing.
-// #define TETRISCHED_TIMING_ENABLED
 #define TETRISCHED_TIMING_FILE_NAME "libtetrisched_performance.csv"
-#ifdef TETRISCHED_TIMING_ENABLED
+#ifdef _TETRISCHED_PERF_ENABLED_
 
 #define CONCAT_INTERNAL(x, y) x##y
 #define CONCAT(x, y) CONCAT_INTERNAL(x, y)
 #define TETRISCHED_SCOPE_TIMER(TIMER_NAME) \
   tetrisched::timing::ScopeTimer CONCAT(timer, __LINE__)(TIMER_NAME);
+
 #else
 #define TETRISCHED_SCOPE_TIMER(TIMER_NAME)
 #endif

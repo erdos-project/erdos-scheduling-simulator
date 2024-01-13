@@ -54,6 +54,23 @@ void defineBasicTypes(py::module_& tetrisched_m) {
 
 /// Define the Scheduler interface.
 void defineScheduler(py::module_& tetrisched_m) {
+  // Define the Config for the Scheduler.
+  py::class_<tetrisched::SchedulerConfig, tetrisched::SchedulerConfigPtr>(
+      tetrisched_m, "SchedulerConfig")
+      .def(py::init<>(), "Initializes an empty SchedulerConfig.")
+      .def_readwrite("optimize", &tetrisched::SchedulerConfig::optimize,
+                     "If True, the scheduler will optimize the STRL "
+                     "expression.")
+      .def_readwrite("numThreads", &tetrisched::SchedulerConfig::numThreads,
+                     "The number of threads to use for the solver.")
+      .def_readwrite("totalSolverTimeMs",
+                     &tetrisched::SchedulerConfig::totalSolverTimeMs,
+                     "The total solver time to use for the solver.")
+      .def_readwrite("newSolutionTimeMs",
+                     &tetrisched::SchedulerConfig::newSolutionTimeMs,
+                     "The new solution time to use for the solver.");
+
+  // Define the interface to the Scheduler.
   py::class_<tetrisched::Scheduler>(tetrisched_m, "Scheduler")
       .def(py::init<tetrisched::Time, tetrisched::SolverBackendType,
                     std::string, bool, tetrisched::Time, float, bool, tetrisched::Time>(),
@@ -88,11 +105,12 @@ void defineScheduler(py::module_& tetrisched_m) {
           "  availablePartitions (Partitions): The available Partitions to "
           "schedule on.\n"
           "  currentTime (int): The current time.\n"
-          "  optimize (bool): Whether to optimize the schedule.\n"
+          "  schedulerConfig (SchedulerConfig): The configuration for the "
+          "scheduler.\n"
           "  timeRangeToGranularities (list): The time ranges to granularities "
           "to use for dynamic discretization.",
           py::arg("expression"), py::arg("availablePartitions"),
-          py::arg("currentTime"), py::arg("optimize") = false,
+          py::arg("currentTime"), py::arg("schedulerConfig"),
           py::arg("timeRangeToGranularities") =
               std::vector<std::pair<tetrisched::TimeRange, tetrisched::Time>>())
       .def("schedule", &tetrisched::Scheduler::schedule,
@@ -113,6 +131,7 @@ void defineScheduler(py::module_& tetrisched_m) {
 
 /// Define the Solver backends.
 void defineSolverBackends(py::module_& tetrisched_m) {
+  defineSolverConfig(tetrisched_m);
   defineSolverSolution(tetrisched_m);
 #ifdef _TETRISCHED_WITH_CPLEX_
   defineCPLEXBackend(tetrisched_m);

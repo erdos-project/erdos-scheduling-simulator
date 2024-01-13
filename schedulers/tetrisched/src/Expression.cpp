@@ -397,7 +397,8 @@ std::optional<SolutionResultPtr> Expression::getSolution() const {
   return solution;
 }
 
-void Expression::exportToDot(std::string fileName) const {
+void Expression::exportToDot(std::string fileName,
+                             bool emitChooseExpressions) const {
   // Open the file for writing.
   std::ofstream dotFile;
   dotFile.open(fileName);
@@ -427,6 +428,11 @@ void Expression::exportToDot(std::string fileName) const {
 
     // Output the edges.
     for (auto& child : node->getChildren()) {
+      if (!emitChooseExpressions &&
+          child->getType() == ExpressionType::EXPR_CHOOSE) {
+        // Skip Choose expressions if we are not emitting them.
+        continue;
+      }
       dotFile << "\"" << node->getId() << "\" -> \"" << child->getId() << "\""
               << std::endl;
       nodesToVisit.push(child.get());
