@@ -659,13 +659,14 @@ class TetriSchedScheduler(BaseScheduler):
 
             # Retrieve the solution and check if we were able to schedule anything.
             solverSolution = objective_strl.getSolution()
-            self._previously_satisfied_choose_exprs = (
-                solverSolution.satsifiedExpressionNames
-            )
-            self._logger.info(
-                f"The satisfied Choose Expressions: {self._previously_satisfied_choose_exprs}"
-            )
+
             if solverSolution is not None and solverSolution.utility > 0:
+                self._previously_satisfied_choose_exprs = (
+                    solverSolution.satsifiedExpressionNames
+                )
+                self._logger.info(
+                    f"The satisfied Choose Expressions: {self._previously_satisfied_choose_exprs}"
+                )
                 self._logger.info(
                     f"[{sim_time.time}] Solver returned utility of "
                     f"{solverSolution.utility} and took {solver_time} to solve. The "
@@ -752,6 +753,7 @@ class TetriSchedScheduler(BaseScheduler):
                     )
             else:
                 # There were no Placements from the Scheduler. Inform the Simulator.
+                self._previously_satisfied_choose_exprs = set([])
                 for task in tasks_to_be_scheduled:
                     placements.append(
                         Placement.create_task_placement(
