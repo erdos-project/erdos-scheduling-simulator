@@ -330,7 +330,7 @@ class TetriSchedScheduler(BaseScheduler):
                 # TaskGraphs that have been previously scheduled cannot be cancelled
                 # upfront since they already have a feasible placement. The scheduler
                 # must choose to cancel or keep them later.
-                if task_graph.is_scheduled():
+                if task_graph.is_scheduled() and task_graph.deadline < sim_time:
                     # The TaskGraph has been scheduled before. Keep it.
                     self._logger.debug(
                         f"[{sim_time.time}] Keeping TaskGraph {task_graph_name} "
