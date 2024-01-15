@@ -114,11 +114,6 @@ flags.DEFINE_string(
     "./profiles/workers/worker_profile.json",
     "Path of the topology of Workers to schedule on.",
 )
-flags.DEFINE_string(
-    "profile_path",
-    "./profiles/workload/pylot_profile.json",
-    "Path of the JSON profile for the Pylot execution.",
-)
 flags.DEFINE_bool("stats", False, "Print the statistics from the tasks loaded.")
 flags.DEFINE_bool("dry_run", False, "If True, the simulator does not run.")
 
@@ -567,7 +562,6 @@ def main(args):
     logger.info("Starting the execution of the simulator loop.")
     logger.info("Workload File: %s", FLAGS.workload_profile_path)
     logger.info("Workers File: %s", FLAGS.worker_profile_path)
-    logger.info("Profile File: %s", FLAGS.profile_path)
 
     csv_logger = setup_csv_logging(
         name=__name__,
@@ -587,7 +581,7 @@ def main(args):
             task_loader = TaskLoaderPylot(
                 job_graph=job_graph,
                 graph_name="pylot_dataflow",
-                profile_path=FLAGS.profile_path,
+                profile_path=FLAGS.workload_profile_path,
                 _flags=FLAGS,
             )
             workload = Workload.from_task_graphs(  # noqa: F841
