@@ -1,4 +1,5 @@
 import os
+import random
 import time
 from collections import defaultdict
 from math import ceil
@@ -1314,11 +1315,44 @@ class TetriSchedScheduler(BaseScheduler):
 
     def _should_reschedule_task_graph(self, task_graph: TaskGraph) -> bool:
         """Returns whether the given TaskGraph should be eligible for rescheduling."""
-        return (
-            task_graph.deadline.time
-            >= task_graph.release_time.time
-            + task_graph.critical_path_runtime.time * 1.20
-        )
+        # If the TaskGraph has not been scheduled before, then it should be made
+        # available for rescheduling.
+        if not task_graph.is_scheduled():
+            return True
+
+        # Strategy 1: We do not reconsider the TaskGraphs for scheduling that have
+        # a very low slack between their release time and the deadline given their
+        # critical path.
+        # allowed_slack = 1.20 # 20% slack from critical path runtime.
+        # should_reschedule = (
+        #     task_graph.deadline.time
+        #     >= task_graph.release_time.time
+        #     + task_graph.critical_path_runtime.time * allowed_slack
+        # )
+
+        # Strategy 2: We try to only allow rescheduling of the TaskGraphs whose prior
+        # placements of the sinks have a large slack between their deadline as a
+        # percentage of their critical path runtime.
+        # allowed_slack = 0.20  # 20% slack from critical path runtime.
+        # completion_slack = min(
+        #     [
+        #         task_graph.deadline.time
+        #         - (
+        #             task.current_placement.placement_time.time
+        #             + task.current_placement.execution_strategy.runtime.time
+        #         )
+        #         for task in task_graph.get_sink_tasks()
+        #     ]
+        # )
+        # should_reschedule = (
+        #     completion_slack >= task_graph.critical_path_runtime.time * allowed_slack
+        # )
+
+        # Strategy 3: Just flip a random biased coin with the given probability.
+        coin_probability = 0.4
+        should_reschedule = random.random() < coin_probability
+
+        return should_reschedule
 
     def construct_task_graph_strl(
         self,
