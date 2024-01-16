@@ -143,6 +143,7 @@ class Task(object):
         self._remaining_time = None
         self._last_step_time = -1  # Time when this task was stepped through.
         self._state = TaskState.VIRTUAL
+        self._pre_scheduling_state = TaskState.VIRTUAL
         # ID of the worker pool on which the task is running.
         self._worker_pool_id = None
 
@@ -184,6 +185,7 @@ class Task(object):
                     f"{self.unique_name} from state {self._state}."
                 )
             self._state = TaskState.RELEASED
+            self._pre_scheduling_state = TaskState.RELEASED
 
     def schedule(
         self,
@@ -224,6 +226,32 @@ class Task(object):
         self._scheduler_placement = placement
         self._worker_pool_id = placement.worker_pool_id
         self.update_remaining_time(placement.execution_strategy.runtime)
+
+    def unschedule(
+        self,
+        time: EventTime,
+    ) -> None:
+        """Unschedules the execution of the task at the given simulator time.
+
+        Args:
+            time (`EventTime`): The simulation time at which the task was
+                unscheduled.
+
+        Raises:
+            `ValueError` if Task is not in `SCHEDULED` state yet.
+        """
+        if self.state != TaskState.SCHEDULED:
+            raise ValueError(
+                f"Task must be in SCHEDULED state, currently in {self.state}."
+            )
+        self._logger.debug(
+            f"[{time.to(EventTime.Unit.US).time}] Transitioning {self} to "
+            f"{self._pre_scheduling_state} from {TaskState.SCHEDULED}."
+        )
+        self._state = self._pre_scheduling_state
+        self._scheduling_time = None
+        self._scheduler_placement = None
+        self._worker_pool_id = None
 
     def start(
         self,

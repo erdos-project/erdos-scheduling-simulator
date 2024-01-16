@@ -711,6 +711,9 @@ class Simulator(object):
                 )
                 self._event_queue.remove_event(future_placement_event)
                 del self._future_placement_events[placement.task.id]
+
+                # Unschedule the Task.
+                placement.task.unschedule(time)
             else:
                 self._logger.warning(
                     "[%s] Failed to place %s, skipping it for future reconsideration.",
