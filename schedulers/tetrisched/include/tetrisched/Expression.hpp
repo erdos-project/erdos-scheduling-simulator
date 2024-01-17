@@ -185,6 +185,20 @@ struct ExpressionTimeBounds {
   std::string toString() const;
 };
 
+/// An `ExpressionStatus` enumeration represents the status of an expression.
+/// The status of an Expression is used to determine if the Expression was
+/// satisfied before. If so, the Solver can be informed of the initial values
+/// of the variables that were used to satisfy the Expression.
+enum ExpressionStatus {
+  /// The Expression was not satisfied before.
+  EXPR_STATUS_UNSATISFIED = 0,
+  /// The Expression was satisfied before.
+  EXPR_STATUS_SATISFIED = 1,
+  /// The Expression has not been encountered before, and must be solved.
+  EXPR_STATUS_UNKNOWN = 2,
+};
+using ExpressionStatus = enum ExpressionStatus;
+
 /// A Base Class for all expressions in the STRL language.
 class Expression : public std::enable_shared_from_this<Expression> {
  protected:
@@ -205,6 +219,8 @@ class Expression : public std::enable_shared_from_this<Expression> {
   SolutionResultPtr solution;
   /// The time bounds for this Expression.
   ExpressionTimeBounds timeBounds;
+  /// The status of this Expression.
+  ExpressionStatus status;
   /// A mutex representing a lock on the parsing and population of results
   /// from this Expression.
   std::mutex expressionMutex;
@@ -214,7 +230,8 @@ class Expression : public std::enable_shared_from_this<Expression> {
 
  public:
   /// Construct the Expression class of the given type.
-  Expression(std::string name, ExpressionType type);
+  Expression(std::string name, ExpressionType type,
+             ExpressionStatus status = ExpressionStatus::EXPR_STATUS_UNKNOWN);
 
   /// Prevent copies of the Expression class.
   Expression(const Expression&) = delete;
@@ -271,6 +288,9 @@ class Expression : public std::enable_shared_from_this<Expression> {
   /// Note that only certain Expressions may choose to use this information.
   void setTimeBounds(ExpressionTimeBounds timeBounds);
 
+  /// Retrieves the status of the Expression.
+  ExpressionStatus getStatus() const;
+
   /// Populates the solution of the subtree rooted at this Expression and
   /// returns the Solution for this Expression. It assumes that the
   /// SolverModelPtr has been populated with values for unknown variables and
@@ -299,6 +319,9 @@ class Expression : public std::enable_shared_from_this<Expression> {
   std::optional<ParseResultPtr> getParsedResult() const;
 };
 
+/// A `PriorPlacement` represents the usage of Partitions for a given placement.
+using PriorPlacement = std::vector<std::pair<PartitionPtr, uint32_t>>;
+
 /// A `ChooseExpression` represents a choice of a required number of machines
 /// from the set of resource partitions for the given duration starting at the
 /// provided start_time.
@@ -322,14 +345,22 @@ class ChooseExpression : public Expression {
   /// The variables that represent the choice of each Partition for this
   /// Expression.
   std::unordered_map<uint32_t, VariablePtr> partitionVariables;
+  /// The prior placements for this ChooseExpression if they exist.
+  std::optional<PriorPlacement> priorPlacements;
 
  public:
-  ChooseExpression(std::string taskName, std::string strategyName,
-                   Partitions resourcePartitions, uint32_t numRequiredMachines,
-                   Time startTime, Time duration, TETRISCHED_ILP_TYPE utility);
-  ChooseExpression(std::string taskName, Partitions resourcePartitions,
-                   uint32_t numRequiredMachines, Time startTime, Time duration,
-                   TETRISCHED_ILP_TYPE utility);
+  ChooseExpression(
+      std::string taskName, std::string strategyName,
+      Partitions resourcePartitions, uint32_t numRequiredMachines,
+      Time startTime, Time duration, TETRISCHED_ILP_TYPE utility,
+      ExpressionStatus status = ExpressionStatus::EXPR_STATUS_UNKNOWN,
+      std::optional<PriorPlacement> priorPlacements = std::nullopt);
+  ChooseExpression(
+      std::string taskName, Partitions resourcePartitions,
+      uint32_t numRequiredMachines, Time startTime, Time duration,
+      TETRISCHED_ILP_TYPE utility,
+      ExpressionStatus status = ExpressionStatus::EXPR_STATUS_UNKNOWN,
+      std::optional<PriorPlacement> priorPlacements = std::nullopt);
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,
@@ -430,7 +461,7 @@ class MalleableChooseExpression : public Expression {
 class AllocationExpression : public Expression {
  private:
   /// The allocation from each Partition that is part of this Placement.
-  std::vector<std::pair<PartitionPtr, uint32_t>> allocatedResources;
+  PriorPlacement allocatedResources;
   /// The start time of the allocation represented by this Expression.
   Time startTime;
   /// The duration of the allocation represented by this Expression.
@@ -439,10 +470,9 @@ class AllocationExpression : public Expression {
   Time endTime;
 
  public:
-  AllocationExpression(
-      std::string taskName,
-      std::vector<std::pair<PartitionPtr, uint32_t>> partitionAssignments,
-      Time startTime, Time duration);
+  AllocationExpression(std::string taskName,
+                       PriorPlacement partitionAssignments, Time startTime,
+                       Time duration);
   void addChild(ExpressionPtr child) override;
   ParseResultPtr parse(SolverModelPtr solverModel,
                        Partitions availablePartitions,

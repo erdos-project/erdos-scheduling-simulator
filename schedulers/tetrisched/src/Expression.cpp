@@ -133,11 +133,13 @@ std::string ExpressionTimeBounds::toString() const {
 
 /* Method definitions for Expression */
 
-Expression::Expression(std::string name, ExpressionType type)
+Expression::Expression(std::string name, ExpressionType type,
+                       ExpressionStatus status)
     : name(name),
       id(tetrisched::uuid::generate_uuid()),
       type(type),
-      timeBounds(ExpressionTimeBounds()) {}
+      timeBounds(ExpressionTimeBounds()),
+      status(status) {}
 
 std::string Expression::getName() const { return name; }
 
@@ -452,8 +454,10 @@ ChooseExpression::ChooseExpression(std::string taskName,
                                    std::string strategyName,
                                    Partitions resourcePartitions,
                                    uint32_t numRequiredMachines, Time startTime,
-                                   Time duration, TETRISCHED_ILP_TYPE utility)
-    : Expression(taskName, ExpressionType::EXPR_CHOOSE),
+                                   Time duration, TETRISCHED_ILP_TYPE utility,
+                                   ExpressionStatus status,
+                                   std::optional<PriorPlacement> priorPlacement)
+    : Expression(taskName, ExpressionType::EXPR_CHOOSE, status),
       strategyName(strategyName),
       resourcePartitions(resourcePartitions),
       numRequiredMachines(numRequiredMachines),
@@ -464,14 +468,23 @@ ChooseExpression::ChooseExpression(std::string taskName,
   // Set the time bounds for this Choice.
   timeBounds = ExpressionTimeBounds({startTime, startTime}, {endTime, endTime},
                                     duration);
+  if (status == ExpressionStatus::EXPR_STATUS_SATISFIED &&
+      !priorPlacement.has_value()) {
+    throw tetrisched::exceptions::ExpressionConstructionException(
+        "ChooseExpression " + name +
+        " was instantiated with status EXPR_STATUS_SATISFIED, but no "
+        "PriorPlacement was provided.");
+  }
 }
 
 ChooseExpression::ChooseExpression(std::string taskName,
                                    Partitions resourcePartitions,
                                    uint32_t numRequiredMachines, Time startTime,
-                                   Time duration, TETRISCHED_ILP_TYPE utility)
+                                   Time duration, TETRISCHED_ILP_TYPE utility,
+                                   ExpressionStatus status,
+                                   std::optional<PriorPlacement> priorPlacement)
     : ChooseExpression(taskName, "", resourcePartitions, numRequiredMachines,
-                       startTime, duration, utility) {}
+                       startTime, duration, utility, status, priorPlacement) {}
 
 void ChooseExpression::addChild(ExpressionPtr /* child */) {
   throw tetrisched::exceptions::ExpressionConstructionException(
@@ -533,6 +546,18 @@ ParseResultPtr ChooseExpression::parse(
                                        strategyName);
   solverModel->addVariable(isSatisfiedVar);
 
+  // Set the hint for the indicator variable.
+  if (status == ExpressionStatus::EXPR_STATUS_SATISFIED) {
+    // If the ChooseExpression was previously satisfied, we set the hint for the
+    // indicator variable to be 1.
+    isSatisfiedVar->hint(1);
+  } else {
+    // If the ChooseExpression was not previously satisfied or we have no
+    // solution for the ChooseExpressions, we set the hint for the indicator
+    // variable to be 0.
+    isSatisfiedVar->hint(0);
+  }
+
   // The associated expression for the capacity usage for this Expression.
   // PERF (Sukrit): We generate a lot of ChooseConstraints, and instead of
   // associating the usage with a specific ChooseExpression, we look above
@@ -561,6 +586,31 @@ ParseResultPtr ChooseExpression::parse(
         std::min(static_cast<uint32_t>(partition->getQuantity()),
                  numRequiredMachines));
     solverModel->addVariable(allocationVar);
+
+    // Set the hint for the partition variables.
+    if (status == ExpressionStatus::EXPR_STATUS_SATISFIED) {
+      // If the ChooseExpression was satisfied previously, we find the
+      // allocation for this particular Partition and set the hint accordingly.
+      bool wasHinted = false;
+      for (auto& [priorPartition, quantity] : priorPlacements.value()) {
+        if (priorPartition->getPartitionId() == partition->getPartitionId()) {
+          allocationVar->hint(quantity);
+          wasHinted = true;
+        }
+      }
+
+      if (!wasHinted) {
+        throw tetrisched::exceptions::ExpressionConstructionException(
+            "ChooseExpression " + name +
+            " was instantiated with status EXPR_STATUS_SATISFIED, but no "
+            "PriorPlacement was provided for Partition " +
+            std::to_string(partition->getPartitionId()) + ".");
+      }
+    } else {
+      // If the ChooseExpression was unsatisfied previously or we have no solution
+      // for the ChooseExpressions, we set the hint for the allocation variable to be 0.
+      allocationVar->hint(0);
+    }
 
     // Save a reference to this Variable for this particular Partition.
     // We use this later to retrieve the placement.
@@ -1367,11 +1417,11 @@ std::string MalleableChooseExpression::getDescriptiveName() const {
 
 /* Method definitions for AllocationExpression */
 
-AllocationExpression::AllocationExpression(
-    std::string taskName,
-    std::vector<std::pair<PartitionPtr, uint32_t>> allocatedResources,
-    Time startTime, Time duration)
-    : Expression(taskName, ExpressionType::EXPR_ALLOCATION),
+AllocationExpression::AllocationExpression(std::string taskName,
+                                           PriorPlacement allocatedResources,
+                                           Time startTime, Time duration)
+    : Expression(taskName, ExpressionType::EXPR_ALLOCATION,
+                 ExpressionStatus::EXPR_STATUS_SATISFIED),
       allocatedResources(allocatedResources),
       startTime(startTime),
       duration(duration),
