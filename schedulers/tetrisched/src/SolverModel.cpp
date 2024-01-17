@@ -400,8 +400,9 @@ T ObjectiveFunctionT<T>::getValue() const {
  */
 
 template <typename T>
-void SolverModelT<T>::addVariable(std::shared_ptr<VariableT<T>> variable) {
-  {
+void SolverModelT<T>::addVariable(std::shared_ptr<VariableT<T>> variable,
+                                  bool useHint) {
+  if (useHint) {
     // Check if variable name exists in the solutionValueCache
     typename decltype(solutionValueCache)::accessor solutionValueCacheAccessor;
 
@@ -417,8 +418,9 @@ void SolverModelT<T>::addVariable(std::shared_ptr<VariableT<T>> variable) {
       variable->hint(solutionValueCacheAccessor->second);
     }
   }
+
+  // Insert the variable into the map.
   {
-    // Insert the variable into the map.
     typename decltype(modelVariables)::accessor modelVariablesAccessor;
     modelVariables.insert(modelVariablesAccessor, variable->getId());
     modelVariablesAccessor->second = variable;
