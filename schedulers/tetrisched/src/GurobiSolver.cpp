@@ -114,6 +114,8 @@ void GurobiSolver::setParameters(GRBModel& gurobiModel,
   // Increase the time spent on Heuristics.
   gurobiModel.set(GRB_DoubleParam_Heuristics, 0.5);
 
+  gurobiModel.set(GRB_DoubleParam_NodefileStart, 0.5);
+
   // Set PreSparsify to 1 to enable presolve sparsification.
   // gurobiModel.set(GRB_IntParam_PreSparsify, 1);
 

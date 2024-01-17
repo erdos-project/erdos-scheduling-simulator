@@ -309,8 +309,8 @@ size_t CapacityConstraintMap::size() const {
 /// tbb::concurrent_hash_map clear() which is called by the default
 /// constructor is unbelievably slow (sometimes adding ~300ms to the
 /// critical path runtime).
-CapacityConstraintMap::~CapacityConstraintMap() {
-  capacityConstraints = decltype(capacityConstraints)();
-}
+// CapacityConstraintMap::~CapacityConstraintMap() {
+//   capacityConstraints = decltype(capacityConstraints)();
+// }
 
 }  // namespace tetrisched

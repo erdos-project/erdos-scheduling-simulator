@@ -537,7 +537,8 @@ void SolverModelT<T>::clear() {
   // invocation of the solver.
   {
     TETRISCHED_SCOPE_TIMER("SolverModel::clear::solutionValueCache");
-    solutionValueCache = tbb::concurrent_hash_map<std::string, T>();
+    solutionValueCache.clear();
+    // solutionValueCache = tbb::concurrent_hash_map<std::string, T>();
   }
 
   {
@@ -569,8 +570,10 @@ void SolverModelT<T>::clear() {
     TETRISCHED_SCOPE_TIMER("SolverModel::clear::modelVariables");
     // Clear the model now.
     std::lock_guard<std::mutex> lock(modelMutex);
-    modelVariables = tbb::concurrent_hash_map<uint32_t, VariablePtr>();
-    modelConstraints = tbb::concurrent_hash_map<uint32_t, ConstraintPtr>();
+    modelVariables.clear();
+    modelConstraints.clear();
+    // modelVariables = tbb::concurrent_hash_map<uint32_t, VariablePtr>();
+    // modelConstraints = tbb::concurrent_hash_map<uint32_t, ConstraintPtr>();
     objectiveFunction.reset();
   }
 }
