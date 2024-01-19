@@ -19,6 +19,15 @@ void defineSTRLExpressions(py::module_& tetrisched_m) {
       .value("EXPR_WINDOWED_CHOOSE",
              tetrisched::ExpressionType::EXPR_WINDOWED_CHOOSE);
 
+  // Define the ExpressionStatus enum.
+  py::enum_<tetrisched::ExpressionStatus>(tetrisched_m, "ExpressionStatus")
+      .value("EXPR_STATUS_UNKNOWN",
+             tetrisched::ExpressionStatus::EXPR_STATUS_UNKNOWN)
+      .value("EXPR_STATUS_SATISFIED",
+             tetrisched::ExpressionStatus::EXPR_STATUS_SATISFIED)
+      .value("EXPR_STATUS_UNSATISFIED",
+             tetrisched::ExpressionStatus::EXPR_STATUS_UNSATISFIED);
+
   // Define the Placement object.
   py::class_<tetrisched::Placement, tetrisched::PlacementPtr>(tetrisched_m,
                                                               "Placement")
@@ -119,50 +128,72 @@ void defineSTRLExpressions(py::module_& tetrisched_m) {
   py::class_<tetrisched::ChooseExpression, tetrisched::Expression,
              std::shared_ptr<tetrisched::ChooseExpression>>(tetrisched_m,
                                                             "ChooseExpression")
-      .def(py::init([](std::string taskName, std::string strategyName,
-                       tetrisched::Partitions partitions,
-                       uint32_t numRequiredMachines, tetrisched::Time startTime,
-                       tetrisched::Time duration, TETRISCHED_ILP_TYPE utility) {
-             return std::make_shared<tetrisched::ChooseExpression>(
-                 taskName, strategyName, partitions, numRequiredMachines,
-                 startTime, duration, utility);
-           }),
-           "Initializes a ChooseExpression for the given task to be placed on "
-           "`numRequiredMachines` from the given partition at the given "
-           "startTime, running for the given duration.\n"
-           "\nArgs:\n"
-           "  taskName (str): The name of the task to be placed.\n"
-           "  strategyName (str): The name of the strategy of the Choose.\n"
-           "  partitions (Partitions): The Partitions to be placed on.\n"
-           "  numRequiredMachines (int): The number of machines required "
-           "for the task.\n"
-           "  startTime (int): The start time of the task.\n"
-           "  duration (int): The duration of the task.\n"
-           "  utility (TETRISCHED_ILP_TYPE): The utility of the task.",
-           py::arg("taskName"), py::arg("strategyName"), py::arg("partitions"),
-           py::arg("numRequiredMachines"), py::arg("startTime"),
-           py::arg("duration"), py::arg("utility"))
-      .def(py::init([](std::string taskName, tetrisched::Partitions partitions,
-                       uint32_t numRequiredMachines, tetrisched::Time startTime,
-                       tetrisched::Time duration, TETRISCHED_ILP_TYPE utility) {
-             return std::make_shared<tetrisched::ChooseExpression>(
-                 taskName, partitions, numRequiredMachines, startTime, duration,
-                 utility);
-           }),
-           "Initializes a ChooseExpression for the given task to be placed on "
-           "`numRequiredMachines` from the given partition at the given "
-           "startTime, running for the given duration.\n"
-           "\nArgs:\n"
-           "  taskName (str): The name of the task to be placed.\n"
-           "  partitions (Partitions): The Partitions to be placed on.\n"
-           "  numRequiredMachines (int): The number of machines required "
-           "for the task.\n"
-           "  startTime (int): The start time of the task.\n"
-           "  duration (int): The duration of the task.\n"
-           "  utility (TETRISCHED_ILP_TYPE): The utility of the task.",
-           py::arg("taskName"), py::arg("partitions"),
-           py::arg("numRequiredMachines"), py::arg("startTime"),
-           py::arg("duration"), py::arg("utility"));
+      .def(
+          py::init(
+              [](std::string taskName, std::string strategyName,
+                 tetrisched::Partitions partitions,
+                 uint32_t numRequiredMachines, tetrisched::Time startTime,
+                 tetrisched::Time duration, TETRISCHED_ILP_TYPE utility,
+                 tetrisched::ExpressionStatus status =
+                     tetrisched::ExpressionStatus::EXPR_STATUS_UNKNOWN,
+                 std::optional<tetrisched::PriorPlacement> priorPlacements =
+                     std::nullopt) {
+                return std::make_shared<tetrisched::ChooseExpression>(
+                    taskName, strategyName, partitions, numRequiredMachines,
+                    startTime, duration, utility, status, priorPlacements);
+              }),
+          "Initializes a ChooseExpression for the given task to be placed on \n"
+          "`numRequiredMachines` from the given partition at the given \n"
+          "startTime, running for the given duration.\n"
+          "\nArgs:\n"
+          "  taskName (str): The name of the task to be placed.\n"
+          "  strategyName (str): The name of the strategy of the Choose.\n"
+          "  partitions (Partitions): The Partitions to be placed on.\n"
+          "  numRequiredMachines (int): The number of machines required \n"
+          "     for the task.\n"
+          "  startTime (int): The start time of the task.\n"
+          "  duration (int): The duration of the task.\n"
+          "  utility (TETRISCHED_ILP_TYPE): The utility of the task.\n "
+          "  status (ExpressionStatus): The status of the expression in a \n"
+          "     previous cycle, if available.\n"
+          "  priorPlacements (PriorPlacement): The prior placements of the \n"
+          "     expression in a previous cycle, if available.\n",
+          py::arg("taskName"), py::arg("strategyName"), py::arg("partitions"),
+          py::arg("numRequiredMachines"), py::arg("startTime"),
+          py::arg("duration"), py::arg("utility"), py::arg("status"),
+          py::arg("priorPlacements"))
+      .def(
+          py::init(
+              [](std::string taskName, tetrisched::Partitions partitions,
+                 uint32_t numRequiredMachines, tetrisched::Time startTime,
+                 tetrisched::Time duration, TETRISCHED_ILP_TYPE utility,
+                 tetrisched::ExpressionStatus status =
+                     tetrisched::ExpressionStatus::EXPR_STATUS_UNKNOWN,
+                 std::optional<tetrisched::PriorPlacement> priorPlacements =
+                     std::nullopt) {
+                return std::make_shared<tetrisched::ChooseExpression>(
+                    taskName, partitions, numRequiredMachines, startTime,
+                    duration, utility, status, priorPlacements);
+              }),
+          "Initializes a ChooseExpression for the given task to be placed on \n"
+          "`numRequiredMachines` from the given partition at the given \n"
+          "startTime, running for the given duration.\n"
+          "\nArgs:\n"
+          "  taskName (str): The name of the task to be placed.\n"
+          "  partitions (Partitions): The Partitions to be placed on.\n"
+          "  numRequiredMachines (int): The number of machines required \n"
+          "     for the task.\n"
+          "  startTime (int): The start time of the task.\n"
+          "  duration (int): The duration of the task.\n"
+          "  utility (TETRISCHED_ILP_TYPE): The utility of the task.\n"
+          "  status (ExpressionStatus): The status of the expression in a \n"
+          "     previous cycle, if available.\n"
+          "  priorPlacements (PriorPlacement): The prior placements of the \n"
+          "     expression in a previous cycle, if available.\n",
+          py::arg("taskName"), py::arg("partitions"),
+          py::arg("numRequiredMachines"), py::arg("startTime"),
+          py::arg("duration"), py::arg("utility"), py::arg("status"),
+          py::arg("priorPlacements"));
 
   // Define the WindowedChooseExpression.
   py::class_<tetrisched::WindowedChooseExpression, tetrisched::Expression,

@@ -133,11 +133,13 @@ std::string ExpressionTimeBounds::toString() const {
 
 /* Method definitions for Expression */
 
-Expression::Expression(std::string name, ExpressionType type)
+Expression::Expression(std::string name, ExpressionType type,
+                       ExpressionStatus status)
     : name(name),
       id(tetrisched::uuid::generate_uuid()),
       type(type),
-      timeBounds(ExpressionTimeBounds()) {}
+      timeBounds(ExpressionTimeBounds()),
+      status(status) {}
 
 std::string Expression::getName() const { return name; }
 
@@ -268,6 +270,8 @@ ExpressionTimeBounds Expression::getTimeBounds() const {
 void Expression::setTimeBounds(ExpressionTimeBounds timeBounds) {
   this->timeBounds = timeBounds;
 }
+
+ExpressionStatus Expression::getStatus() const { return status; }
 
 void Expression::addParent(const Expression* parent) {
   if (parent == nullptr) {
@@ -452,26 +456,38 @@ ChooseExpression::ChooseExpression(std::string taskName,
                                    std::string strategyName,
                                    Partitions resourcePartitions,
                                    uint32_t numRequiredMachines, Time startTime,
-                                   Time duration, TETRISCHED_ILP_TYPE utility)
-    : Expression(taskName, ExpressionType::EXPR_CHOOSE),
+                                   Time duration, TETRISCHED_ILP_TYPE utility,
+                                   ExpressionStatus status,
+                                   std::optional<PriorPlacement> priorPlacement)
+    : Expression(taskName, ExpressionType::EXPR_CHOOSE, status),
       strategyName(strategyName),
       resourcePartitions(resourcePartitions),
       numRequiredMachines(numRequiredMachines),
       startTime(startTime),
       duration(duration),
       endTime(startTime + duration),
-      utility(utility) {
+      utility(utility),
+      priorPlacements(priorPlacement) {
   // Set the time bounds for this Choice.
   timeBounds = ExpressionTimeBounds({startTime, startTime}, {endTime, endTime},
                                     duration);
+  if (status == ExpressionStatus::EXPR_STATUS_SATISFIED &&
+      !priorPlacement.has_value()) {
+    throw tetrisched::exceptions::ExpressionConstructionException(
+        "ChooseExpression " + name +
+        " was instantiated with status EXPR_STATUS_SATISFIED, but no "
+        "PriorPlacement was provided.");
+  }
 }
 
 ChooseExpression::ChooseExpression(std::string taskName,
                                    Partitions resourcePartitions,
                                    uint32_t numRequiredMachines, Time startTime,
-                                   Time duration, TETRISCHED_ILP_TYPE utility)
+                                   Time duration, TETRISCHED_ILP_TYPE utility,
+                                   ExpressionStatus status,
+                                   std::optional<PriorPlacement> priorPlacement)
     : ChooseExpression(taskName, "", resourcePartitions, numRequiredMachines,
-                       startTime, duration, utility) {}
+                       startTime, duration, utility, status, priorPlacement) {}
 
 void ChooseExpression::addChild(ExpressionPtr /* child */) {
   throw tetrisched::exceptions::ExpressionConstructionException(
@@ -533,6 +549,20 @@ ParseResultPtr ChooseExpression::parse(
                                        strategyName);
   solverModel->addVariable(isSatisfiedVar);
 
+  // Set the hint for the indicator variable.
+  if (TETRISCHED_INFER_HINTS_FROM_LEAVES) {
+    if (status == ExpressionStatus::EXPR_STATUS_SATISFIED) {
+      // If the ChooseExpression was previously satisfied, we set the hint for
+      // the indicator variable to be 1.
+      isSatisfiedVar->hint(1);
+    } else {
+      // If the ChooseExpression was not previously satisfied or we have no
+      // solution for the ChooseExpressions, we set the hint for the indicator
+      // variable to be 0.
+      isSatisfiedVar->hint(0);
+    }
+  }
+
   // The associated expression for the capacity usage for this Expression.
   // PERF (Sukrit): We generate a lot of ChooseConstraints, and instead of
   // associating the usage with a specific ChooseExpression, we look above
@@ -561,6 +591,41 @@ ParseResultPtr ChooseExpression::parse(
         std::min(static_cast<uint32_t>(partition->getQuantity()),
                  numRequiredMachines));
     solverModel->addVariable(allocationVar);
+
+    // Set the hint for the partition variables, if requested.
+    if (TETRISCHED_INFER_HINTS_FROM_LEAVES) {
+      if (status == ExpressionStatus::EXPR_STATUS_SATISFIED) {
+        if (!priorPlacements.has_value()) {
+          throw tetrisched::exceptions::ExpressionConstructionException(
+              "ChooseExpression " + name +
+              " was instantiated with status EXPR_STATUS_SATISFIED, but no "
+              "PriorPlacement was provided.");
+        }
+        // If the ChooseExpression was satisfied previously, we find the
+        // allocation for this particular Partition and set the hint
+        // accordingly.
+        bool wasHinted = false;
+        for (auto& [priorPartition, quantity] : priorPlacements.value()) {
+          if (priorPartition->getPartitionId() == partition->getPartitionId()) {
+            allocationVar->hint(quantity);
+            wasHinted = true;
+          }
+        }
+
+        if (!wasHinted) {
+          throw tetrisched::exceptions::ExpressionConstructionException(
+              "ChooseExpression " + name +
+              " was instantiated with status EXPR_STATUS_SATISFIED, but no "
+              "PriorPlacement was provided for Partition " +
+              std::to_string(partition->getPartitionId()) + ".");
+        }
+      } else {
+        // If the ChooseExpression was unsatisfied previously or we have no
+        // solution for the ChooseExpressions, we set the hint for the
+        // allocation variable to be 0.
+        allocationVar->hint(0);
+      }
+    }
 
     // Save a reference to this Variable for this particular Partition.
     // We use this later to retrieve the placement.
@@ -1367,11 +1432,11 @@ std::string MalleableChooseExpression::getDescriptiveName() const {
 
 /* Method definitions for AllocationExpression */
 
-AllocationExpression::AllocationExpression(
-    std::string taskName,
-    std::vector<std::pair<PartitionPtr, uint32_t>> allocatedResources,
-    Time startTime, Time duration)
-    : Expression(taskName, ExpressionType::EXPR_ALLOCATION),
+AllocationExpression::AllocationExpression(std::string taskName,
+                                           PriorPlacement allocatedResources,
+                                           Time startTime, Time duration)
+    : Expression(taskName, ExpressionType::EXPR_ALLOCATION,
+                 ExpressionStatus::EXPR_STATUS_SATISFIED),
       allocatedResources(allocatedResources),
       startTime(startTime),
       duration(duration),
@@ -1789,6 +1854,9 @@ ParseResultPtr LessThanExpression::parse(
                                      ConstraintType::CONSTR_EQ, 0, 3);
     double numEnforceableChildren = 0;
 
+    // Get the status of both of the children.
+    std::unordered_map<ExpressionStatus, size_t> childStatuses;
+
     if (!firstChildResult->indicator || !secondChildResult->indicator) {
       throw tetrisched::exceptions::ExpressionConstructionException(
           "LessThanExpression must have children with indicators.");
@@ -1797,6 +1865,7 @@ ParseResultPtr LessThanExpression::parse(
       lessThanIndicatorConstraint->addTerm(
           firstChildResult->indicator->get<VariablePtr>());
       numEnforceableChildren += 1;
+      childStatuses[children[0]->getStatus()] += 1;
     } else if (firstChildResult->indicator->get<uint32_t>() == 0) {
       throw tetrisched::exceptions::ExpressionConstructionException(
           "LessThanExpression must have children with non-0 indicators. "
@@ -1807,6 +1876,7 @@ ParseResultPtr LessThanExpression::parse(
       lessThanIndicatorConstraint->addTerm(
           secondChildResult->indicator->get<VariablePtr>());
       numEnforceableChildren += 1;
+      childStatuses[children[1]->getStatus()] += 1;
     } else if (secondChildResult->indicator->get<uint32_t>() == 0) {
       throw tetrisched::exceptions::ExpressionConstructionException(
           "LessThanExpression must have children with non-0 indicators. "
@@ -1829,6 +1899,38 @@ ParseResultPtr LessThanExpression::parse(
                      << happensBeforeConstraintName
                      << " to enforce ordering in LessThanExpression with name "
                      << name << ".")
+
+    // Set the hints for the indicator.
+    if (TETRISCHED_INFER_HINTS_FROM_LEAVES) {
+      auto numSatisfiedChildren =
+          childStatuses[ExpressionStatus::EXPR_STATUS_SATISFIED];
+      auto numUnsatisfiedChildren =
+          childStatuses[ExpressionStatus::EXPR_STATUS_UNSATISFIED];
+      auto numUnknownChildren =
+          childStatuses[ExpressionStatus::EXPR_STATUS_UNKNOWN];
+      if (numUnknownChildren == 0 && numUnsatisfiedChildren == 0) {
+        // All the children were satisfied, hint the indicator to be true.
+        isSatisfiedVar->hint(1);
+        this->status = ExpressionStatus::EXPR_STATUS_SATISFIED;
+      } else if (numUnknownChildren == 0 && numSatisfiedChildren == 0) {
+        // All the children were unsatisfied, hint the indicator to be false.
+        isSatisfiedVar->hint(0);
+        this->status = ExpressionStatus::EXPR_STATUS_UNSATISFIED;
+      } else if (numSatisfiedChildren == 0 && numUnsatisfiedChildren == 0) {
+        // All the children were unknown, hint the indicator to be false.
+        isSatisfiedVar->hint(0);
+        this->status = ExpressionStatus::EXPR_STATUS_UNKNOWN;
+      } else {
+        throw tetrisched::exceptions::ExpressionConstructionException(
+            "LessThanExpression with name " + name +
+            " has children with mixed statuses. The number of satisfied " +
+            "children is " + std::to_string(numSatisfiedChildren) +
+            ", the number of unsatisfied children is " +
+            std::to_string(numUnsatisfiedChildren) +
+            ", and the number of unknown children is " +
+            std::to_string(numUnknownChildren) + ".");
+      }
+    }
   }
 
   // Construct a utility function that is the sum of the two utilities.
@@ -1922,6 +2024,12 @@ ParseResultPtr MinExpression::parse(
   // std::pair<double, double> endTimeRange =
   //     std::make_pair(std::numeric_limits<Time>::max(), 0);
 
+  // Keep track of the statuses of the children.
+  std::unordered_map<ExpressionStatus, size_t> childStatuses;
+  TETRISCHED_ILP_TYPE minStartTimeHint =
+      std::numeric_limits<TETRISCHED_ILP_TYPE>::max();
+  TETRISCHED_ILP_TYPE minEndTimeHint = 0;
+
   for (auto& child : children) {
     // minChildrenParsing.run([&] {
     // Parse the Child.
@@ -1960,6 +2068,9 @@ ParseResultPtr MinExpression::parse(
           " for MIN, but was not present!");
     }
 
+    // Get the status of the child.
+    childStatuses[child->getStatus()] += 1;
+
     // Ensure that the MIN's start time is <= the start time of this child.
     ConstraintPtr minStartTimeConstraint = std::make_shared<Constraint>(
         name + "_min_start_time_constr_child_" + child->getName(),
@@ -1982,6 +2093,17 @@ ParseResultPtr MinExpression::parse(
         //   startTimeRange.second = lowerBoundValue;
         // }
         // }
+        auto childStartTimeHint = childStartTimeVariable->getHint();
+        if (child->getStatus() == ExpressionStatus::EXPR_STATUS_SATISFIED &&
+            !childStartTimeHint.has_value()) {
+          throw tetrisched::exceptions::ExpressionConstructionException(
+              "Hint needed from " + child->getName() +
+              " for MIN, but was not present!");
+        }
+        if (childStartTimeHint.has_value() &&
+            childStartTimeHint.value() < minStartTimeHint) {
+          minStartTimeHint = childStartTimeHint.value();
+        }
       } else {
         auto childStartTimeValue = childStartTime.get<Time>();
         minStartTimeConstraint->addTerm(childStartTimeValue);
@@ -1991,6 +2113,9 @@ ParseResultPtr MinExpression::parse(
         // if (childStartTimeValue > startTimeRange.second) {
         //   startTimeRange.second = childStartTimeValue;
         // }
+        if (childStartTimeValue < minStartTimeHint) {
+          minStartTimeHint = childStartTimeValue;
+        }
       }
       minStartTimeConstraint->addTerm(-1, minStartTime);
 
@@ -2024,6 +2149,17 @@ ParseResultPtr MinExpression::parse(
         //     endTimeRange.second = lowerBoundValue;
         //   }
         // }
+        auto childEndTimeHint = childEndTimeVariable->getHint();
+        if (child->getStatus() == ExpressionStatus::EXPR_STATUS_SATISFIED &&
+            !childEndTimeHint.has_value()) {
+          throw tetrisched::exceptions::ExpressionConstructionException(
+              "Hint needed from " + child->getName() +
+              " for MIN, but was not present!");
+        }
+        if (childEndTimeHint.has_value() &&
+            childEndTimeHint.value() > minEndTimeHint) {
+          minEndTimeHint = childEndTimeHint.value();
+        }
       } else {
         auto childEndTimeValue = childEndTime.get<Time>();
         minEndTimeConstraint->addTerm(childEndTimeValue);
@@ -2033,6 +2169,9 @@ ParseResultPtr MinExpression::parse(
         // if (childEndTimeValue > endTimeRange.second) {
         //   endTimeRange.second = childEndTimeValue;
         // }
+        if (childEndTimeValue > minEndTimeHint) {
+          minEndTimeHint = childEndTimeValue;
+        }
       }
       minEndTimeConstraint->addTerm(-1, minEndTime);
       // Add the constraint to solver
@@ -2119,6 +2258,48 @@ ParseResultPtr MinExpression::parse(
     //   minEndTime->setLowerBound(endTimeRange.first);
     //   minEndTime->setUpperBound(endTimeRange.second);
     // }
+  }
+
+  // Pass the hints to the SolverModel.
+  if (TETRISCHED_INFER_HINTS_FROM_LEAVES) {
+    auto numSatisfiedChildren =
+        childStatuses[ExpressionStatus::EXPR_STATUS_SATISFIED];
+    auto numUnsatisfiedChildren =
+        childStatuses[ExpressionStatus::EXPR_STATUS_UNSATISFIED];
+    auto numUnknownChildren =
+        childStatuses[ExpressionStatus::EXPR_STATUS_UNKNOWN];
+    if (numUnsatisfiedChildren == 0 && numUnknownChildren == 0) {
+      // The expression was satisfied, hint the indicator to be true and use the
+      // start and end times that were suggested.
+      minIndicator->hint(1);
+      minStartTime->hint(minStartTimeHint);
+      minEndTime->hint(minEndTimeHint);
+      this->status = ExpressionStatus::EXPR_STATUS_SATISFIED;
+    } else if (numUnsatisfiedChildren > 0 && numUnknownChildren == 0) {
+      // The expression was not satisfied, hint the indicator to be false, and
+      // use the start and end times that were suggested.
+      minIndicator->hint(0);
+      minStartTime->hint(minStartTimeHint);
+      minEndTime->hint(minEndTimeHint);
+      this->status = ExpressionStatus::EXPR_STATUS_UNSATISFIED;
+    } else if (numUnknownChildren > 0) {
+      // The expression was unknown, hint the indicator to be false, and use the
+      // start and end times that were suggested.
+      minIndicator->hint(0);
+      minStartTime->hint(minStartTimeHint);
+      minEndTime->hint(minEndTimeHint);
+      this->status = ExpressionStatus::EXPR_STATUS_UNKNOWN;
+    } else {
+      throw tetrisched::exceptions::ExpressionConstructionException(
+          "MIN with name " + name +
+          " has children with mixed statuses. The number of satisfied children "
+          "is " +
+          std::to_string(numSatisfiedChildren) +
+          ", the number of unsatisfied children is " +
+          std::to_string(numUnsatisfiedChildren) +
+          ", and the number of unknown children is " +
+          std::to_string(numUnknownChildren) + ".");
+    }
   }
 
   // Construct and return the ParsedResult.
@@ -2211,6 +2392,11 @@ ParseResultPtr MaxExpression::parse(
       name + "_max_end_time_constr", ConstraintType::CONSTR_LE, 0,
       numChildren + 1);
 
+  // Construct the hints for the variables, if all of the leaves have hints.
+  std::unordered_map<ExpressionStatus, size_t> childStatusCounts;
+  TETRISCHED_ILP_TYPE startTimeHint = 0;
+  TETRISCHED_ILP_TYPE endTimeHint = 0;
+
   // Parse each of the children and constrain the MaxExpression's start time,
   // end time and utility as a function of the children's start time, end time
   // and utility.
@@ -2267,6 +2453,10 @@ ParseResultPtr MaxExpression::parse(
     // Retrieve the indicator for the child.
     auto childIndicator = childParsedResult->indicator.value();
 
+    // Check the state of the Expression before this iteration, and append the
+    // counter for the children in that given state.
+    childStatusCounts[children[i]->getStatus()] += 1;
+
     // Enforce that only one of the children is satisfied.
     maxChildSubexprConstraint->addTerm(childIndicator);
 
@@ -2287,6 +2477,18 @@ ParseResultPtr MaxExpression::parse(
       if (childBounds.second > startTimeBounds.second) {
         startTimeBounds.second = childBounds.second;
       }
+
+      // If this expression was satisfied, we can use its start time hint.
+      if (children[i]->getStatus() == ExpressionStatus::EXPR_STATUS_SATISFIED) {
+        auto childStartTimeHint = childStartTime->getHint();
+        if (!childStartTimeHint.has_value()) {
+          throw tetrisched::exceptions::ExpressionConstructionException(
+              name + " child-" + std::to_string(i) + " (" +
+              children[i]->getName() +
+              ") must have a start time hint if it is satisfied.");
+        }
+        startTimeHint = childStartTimeHint.value();
+      }
     } else {
       // Add the start time of the child to the MaxExpression's start time.
       auto childStartTime = childParsedResult->startTime.value().get<Time>();
@@ -2298,6 +2500,11 @@ ParseResultPtr MaxExpression::parse(
       }
       if (childStartTime > startTimeBounds.second) {
         startTimeBounds.second = childStartTime;
+      }
+
+      // If this Expression was satisfied, we can use its start time hint.
+      if (children[i]->getStatus() == ExpressionStatus::EXPR_STATUS_SATISFIED) {
+        startTimeHint = childStartTime;
       }
     }
 
@@ -2317,6 +2524,18 @@ ParseResultPtr MaxExpression::parse(
       if (childBounds.second > endTimeBounds.second) {
         endTimeBounds.second = childBounds.second;
       }
+
+      // If the Expression was satisfied, we can use its end time hint.
+      if (children[i]->getStatus() == ExpressionStatus::EXPR_STATUS_SATISFIED) {
+        auto childEndTimeHint = childEndTime->getHint();
+        if (!childEndTimeHint.has_value()) {
+          throw tetrisched::exceptions::ExpressionConstructionException(
+              name + " child-" + std::to_string(i) + " (" +
+              children[i]->getName() +
+              ") must have an end time hint if it is satisfied.");
+        }
+        endTimeHint = childEndTimeHint.value();
+      }
     } else {
       // Add the end time of the child to the MaxExpression's end time.
       auto childEndTime = childParsedResult->endTime.value().get<Time>();
@@ -2328,6 +2547,11 @@ ParseResultPtr MaxExpression::parse(
       }
       if (childEndTime > endTimeBounds.second) {
         endTimeBounds.second = childEndTime;
+      }
+
+      // If this Expression was satisfied, we can use its end time hint.
+      if (children[i]->getStatus() == ExpressionStatus::EXPR_STATUS_SATISFIED) {
+        endTimeHint = childEndTime;
       }
     }
 
@@ -2382,6 +2606,60 @@ ParseResultPtr MaxExpression::parse(
   solverModel->addConstraint(std::move(maxStartTimeConstraint));
   solverModel->addConstraint(std::move(maxEndTimeConstraint));
   solverModel->addConstraint(std::move(maxChildSubexprConstraint));
+
+  // Set the hints for all the Variables that the MaxExpression emits.
+  if (TETRISCHED_INFER_HINTS_FROM_LEAVES) {
+    auto satisfiedChildrenCount =
+        childStatusCounts[ExpressionStatus::EXPR_STATUS_SATISFIED];
+    auto unsatisfiedChildrenCount =
+        childStatusCounts[ExpressionStatus::EXPR_STATUS_UNSATISFIED];
+    auto unknownChildrenCount =
+        childStatusCounts[ExpressionStatus::EXPR_STATUS_UNKNOWN];
+    // std::cout << "[" << name << "] has " << satisfiedChildrenCount
+    //           << " satisfied children, " << unsatisfiedChildrenCount
+    //           << " unsatisfied children, and " << unknownChildrenCount
+    //           << " unknown children." << std::endl;
+    // std::cout << "[" << name << "] has start time bounds "
+    //           << startTimeBounds.first << " " << startTimeBounds.second
+    //           << " and end time bounds " << endTimeBounds.first << " "
+    //           << endTimeBounds.second << std::endl;
+    // std::cout << "[" << name << "] has start time hint " << startTimeHint
+    //           << " and end time hint " << endTimeHint << std::endl;
+    if (satisfiedChildrenCount == 1 && unknownChildrenCount == 0) {
+      // There was one satisfied child, and no unknown children.
+      // We have the correct hints, set them.
+      maxStartTime->hint(startTimeHint);
+      maxEndTime->hint(endTimeHint);
+      maxIndicator->hint(1);
+      this->status = ExpressionStatus::EXPR_STATUS_SATISFIED;
+    } else if (satisfiedChildrenCount == 0 && unknownChildrenCount == 0 &&
+               unsatisfiedChildrenCount > 0) {
+      // There were no satisfied children, and no unknown children.
+      // We have the correct hints, set them.
+      maxStartTime->hint(
+          static_cast<TETRISCHED_ILP_TYPE>(startTimeBounds.first));
+      maxEndTime->hint(static_cast<TETRISCHED_ILP_TYPE>(endTimeBounds.first));
+      maxIndicator->hint(0);
+      this->status = ExpressionStatus::EXPR_STATUS_UNSATISFIED;
+    } else if (satisfiedChildrenCount == 0 && unsatisfiedChildrenCount == 0 &&
+               unknownChildrenCount > 0) {
+      // This expression was not solved yet, we hint the variables to take
+      // values that make this Expression not satisfiable.
+      maxStartTime->hint(
+          static_cast<TETRISCHED_ILP_TYPE>(startTimeBounds.first));
+      maxEndTime->hint(static_cast<TETRISCHED_ILP_TYPE>(endTimeBounds.first));
+      maxIndicator->hint(0);
+      this->status = ExpressionStatus::EXPR_STATUS_UNKNOWN;
+    } else {
+      throw tetrisched::exceptions::ExpressionConstructionException(
+          "MaxExpression " + name +
+          " has an incorrect number of children in each state. There were " +
+          std::to_string(satisfiedChildrenCount) + " satisfied children, " +
+          std::to_string(unsatisfiedChildrenCount) +
+          " unsatisfied children, and " + std::to_string(unknownChildrenCount) +
+          " unknown children.");
+    }
+  }
 
   // Construct the ParsedResult for the MaxExpression.
   parsedResult->type = ParseResultType::EXPRESSION_UTILITY;

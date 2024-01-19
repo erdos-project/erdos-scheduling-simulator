@@ -61,6 +61,15 @@
 // values for this macro is supposed to be int32_t or double.
 #define TETRISCHED_ILP_TYPE double
 
+
+// Macro for hinting the variables. 
+// We have two strategies for hinting the variables.
+// 1. We can hint the variables from a solution value cache saved from the previous
+//    iteration. This is the default behavior.
+// 2. We can infer hints from which leaves have been previously satisfied. To turn
+//    this behavior on, set the following macro to true.
+#define TETRISCHED_INFER_HINTS_FROM_LEAVES false
+
 namespace tetrisched {
 /// Defines the exceptions that the methods can throw.
 namespace exceptions {

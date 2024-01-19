@@ -11,6 +11,7 @@ __all__ = [
     "AllocationExpression",
     "ChooseExpression",
     "Expression",
+    "ExpressionStatus",
     "ExpressionType",
     "LessThanExpression",
     "MalleableChooseExpression",
@@ -52,18 +53,27 @@ class ChooseExpression(Expression):
         startTime: int,
         duration: int,
         utility: float,
+        status: ExpressionStatus,
+        priorPlacements: list[tuple[tetrisched_py.Partition, int]] | None,
     ) -> None:
         """
-        Initializes a ChooseExpression for the given task to be placed on `numRequiredMachines` from the given partition at the given startTime, running for the given duration.
+        Initializes a ChooseExpression for the given task to be placed on
+        `numRequiredMachines` from the given partition at the given
+        startTime, running for the given duration.
 
         Args:
           taskName (str): The name of the task to be placed.
           strategyName (str): The name of the strategy of the Choose.
           partitions (Partitions): The Partitions to be placed on.
-          numRequiredMachines (int): The number of machines required for the task.
+          numRequiredMachines (int): The number of machines required
+             for the task.
           startTime (int): The start time of the task.
           duration (int): The duration of the task.
           utility (TETRISCHED_ILP_TYPE): The utility of the task.
+           status (ExpressionStatus): The status of the expression in a
+             previous cycle, if available.
+          priorPlacements (PriorPlacement): The prior placements of the
+             expression in a previous cycle, if available.
         """
     @typing.overload
     def __init__(
@@ -74,17 +84,26 @@ class ChooseExpression(Expression):
         startTime: int,
         duration: int,
         utility: float,
+        status: ExpressionStatus,
+        priorPlacements: list[tuple[tetrisched_py.Partition, int]] | None,
     ) -> None:
         """
-        Initializes a ChooseExpression for the given task to be placed on `numRequiredMachines` from the given partition at the given startTime, running for the given duration.
+        Initializes a ChooseExpression for the given task to be placed on
+        `numRequiredMachines` from the given partition at the given
+        startTime, running for the given duration.
 
         Args:
           taskName (str): The name of the task to be placed.
           partitions (Partitions): The Partitions to be placed on.
-          numRequiredMachines (int): The number of machines required for the task.
+          numRequiredMachines (int): The number of machines required
+             for the task.
           startTime (int): The start time of the task.
           duration (int): The duration of the task.
           utility (TETRISCHED_ILP_TYPE): The utility of the task.
+          status (ExpressionStatus): The status of the expression in a
+             previous cycle, if available.
+          priorPlacements (PriorPlacement): The prior placements of the
+             expression in a previous cycle, if available.
         """
 
 class Expression:
@@ -129,6 +148,44 @@ class Expression:
     def id(self) -> str: ...
     @property
     def name(self) -> str: ...
+
+class ExpressionStatus:
+    """
+    Members:
+
+      EXPR_STATUS_UNKNOWN
+
+      EXPR_STATUS_SATISFIED
+
+      EXPR_STATUS_UNSATISFIED
+    """
+
+    EXPR_STATUS_SATISFIED: typing.ClassVar[
+        ExpressionStatus
+    ]  # value = <ExpressionStatus.EXPR_STATUS_SATISFIED: 1>
+    EXPR_STATUS_UNKNOWN: typing.ClassVar[
+        ExpressionStatus
+    ]  # value = <ExpressionStatus.EXPR_STATUS_UNKNOWN: 2>
+    EXPR_STATUS_UNSATISFIED: typing.ClassVar[
+        ExpressionStatus
+    ]  # value = <ExpressionStatus.EXPR_STATUS_UNSATISFIED: 0>
+    __members__: typing.ClassVar[
+        dict[str, ExpressionStatus]
+    ]  # value = {'EXPR_STATUS_UNKNOWN': <ExpressionStatus.EXPR_STATUS_UNKNOWN: 2>, 'EXPR_STATUS_SATISFIED': <ExpressionStatus.EXPR_STATUS_SATISFIED: 1>, 'EXPR_STATUS_UNSATISFIED': <ExpressionStatus.EXPR_STATUS_UNSATISFIED: 0>}
+    def __eq__(self, other: typing.Any) -> bool: ...
+    def __getstate__(self) -> int: ...
+    def __hash__(self) -> int: ...
+    def __index__(self) -> int: ...
+    def __init__(self, value: int) -> None: ...
+    def __int__(self) -> int: ...
+    def __ne__(self, other: typing.Any) -> bool: ...
+    def __repr__(self) -> str: ...
+    def __setstate__(self, state: int) -> None: ...
+    def __str__(self) -> str: ...
+    @property
+    def name(self) -> str: ...
+    @property
+    def value(self) -> int: ...
 
 class ExpressionType:
     """
