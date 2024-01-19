@@ -87,6 +87,9 @@ class VariableT {
   /// search.
   void hint(T hintValue);
 
+  /// Retrieves the hinted value for the variable, if available.
+  std::optional<T> getHint() const;
+
   /// Retrieve a string representation of this VariableT.
   std::string toString() const;
 
@@ -404,7 +407,7 @@ class SolverModelT {
 
  public:
   /// Add a variable to the model.
-  void addVariable(std::shared_ptr<VariableT<T>> variable, bool useHint = true);
+  void addVariable(std::shared_ptr<VariableT<T>> variable);
 
   /// Add a batch of variables to the model.
   void addVariables(std::vector<std::shared_ptr<VariableT<T>>>& variables);

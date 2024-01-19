@@ -794,8 +794,8 @@ class TetriSchedScheduler(BaseScheduler):
                 # placement of any of the tasks, and wait for the next invocation.
                 self._logger.warning(f"[{sim_time.time}] Failed to place any tasks.")
 
-        # if sim_time == EventTime(136, EventTime.Unit.US):
-        #     raise RuntimeError("Stopping the Simulation.")
+        if sim_time == EventTime(75, EventTime.Unit.US):
+            raise RuntimeError("Stopping the Simulation.")
 
         scheduler_end_time = time.time()
         scheduler_runtime = EventTime(
@@ -1077,6 +1077,55 @@ class TetriSchedScheduler(BaseScheduler):
                         # place the task.
                         continue
 
+                    # If the Task was scheduled before, and this time corresponds to
+                    # the previous scheduling time, we provide a hint to the Scheduler
+                    # so that it can reduce the overall solver time.
+                    choose_expression_status = (
+                        tetrisched.strl.ExpressionStatus.EXPR_STATUS_UNKNOWN
+                    )
+                    placement_hint = None
+                    if task.state == TaskState.SCHEDULED:
+                        choose_expression_status = (
+                            tetrisched.strl.ExpressionStatus.EXPR_STATUS_UNSATISFIED
+                        )
+                        if (
+                            task.current_placement.execution_strategy
+                            == execution_strategy
+                            and task.current_placement.placement_time == placement_time
+                        ):
+                            choose_expression_status = (
+                                tetrisched.strl.ExpressionStatus.EXPR_STATUS_SATISFIED
+                            )
+
+                            # Retrieve the partition for the previous placement.
+                            scheduled_partition = (
+                                partitions.get_partition_for_worker_id(
+                                    task.current_placement.worker_id
+                                )
+                            )
+                            if scheduled_partition is None:
+                                raise RuntimeError(
+                                    f"Could not find the Partition for "
+                                    f"the Task {task.unique_name} in state "
+                                    f"{task.state} that was previously placed on "
+                                    f"{task.current_placement.worker_id}."
+                                )
+
+                            placement_hint = [(scheduled_partition, quantity)]
+
+                    if choose_expression_status == (
+                        tetrisched.strl.ExpressionStatus.EXPR_STATUS_SATISFIED
+                    ):
+                        self._logger.debug(
+                            "[%s] Hinting the placement of %s in state %s for time "
+                            "%s with the previous placement %s.",
+                            current_time,
+                            task.unique_name,
+                            task.state,
+                            placement_time,
+                            placement_hint,
+                        )
+
                     # Construct a ChooseExpression for placement at this time.
                     # TODO (Sukrit): We just assume for now that all Slots are the same
                     # and thus the task can be placed on any Slot. This is not true
@@ -1090,6 +1139,8 @@ class TetriSchedScheduler(BaseScheduler):
                             placement_time.to(EventTime.Unit.US).time,
                             execution_strategy.runtime.to(EventTime.Unit.US).time,
                             reward_for_this_placement,
+                            choose_expression_status,
+                            placement_hint,
                         )
                     )
                     choice_placement_times_and_rewards.append(
