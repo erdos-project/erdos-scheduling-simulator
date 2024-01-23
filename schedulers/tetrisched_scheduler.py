@@ -280,6 +280,141 @@ class TetriSchedScheduler(BaseScheduler):
         """Returns True if the TaskGraph should be skipped from scheduling."""
         return False
 
+    def _cancel_task_graphs(
+        self, current_time: EventTime, task_graph_names: Set[str], workload: Workload
+    ) -> Set[str]:
+        """Cancels the appropriate TaskGraphs from the given set and returns the names
+        of the cancelled TaskGraphs.
+
+        The decision of when to cancel a TaskGraph is made by either the predicate
+        `_cancel_task_graph_predicate` or by the time until the TaskGraph was supposed
+        to be reconsidred for scheduling. To alter the behavior of the latter, the
+        `_task_graph_reconsideration_period` parameter can be used.
+
+        Args:
+            current_time (`EventTime`): The current time in the simulation.
+            task_graph_names (`Set[str]`): The names of the TaskGraphs available for
+                scheduling in this cycle.
+            workload (`Workload`): The Workload to be used to retrieve the TaskGraphs.
+
+        Returns:
+            `Set[str]`: The names of the TaskGraphs that were cancelled.
+        """
+        cancelled_task_graphs: Set[str] = set()
+        for task_graph_name in task_graph_names:
+            # Retrieve the TaskGraph.
+            task_graph = workload.get_task_graph(task_graph_name)
+            if task_graph is None:
+                raise ValueError(
+                    f"Could not find TaskGraph with name {task_graph_name}."
+                )
+
+            # TaskGraphs that have been previously scheduled cannot be cancelled
+            # upfront since they already have a feasible placement. The scheduler
+            # must choose to cancel or keep them later.
+            if task_graph.is_scheduled():
+                # The TaskGraph has been scheduled before. Keep it.
+                self._logger.debug(
+                    f"[{current_time.time}] Keeping TaskGraph {task_graph_name} "
+                    f"released at {task_graph.release_time} with deadline "
+                    f"{task_graph.deadline} since it has been scheduled before."
+                )
+                continue
+
+            # Check if the TaskGraph needs to be cancelled.
+            if task_graph_name not in self._previously_considered_task_graphs:
+                # If this is a new TaskGraph, check if it needs to be cancelled
+                # upfront as decided by the predicate
+                if self._cancel_task_graph_predicate(task_graph):
+                    # If the predicate says that we should cancel the TaskGraph
+                    # without trying, we just add the TaskGraph to the set of cancelled
+                    # TaskGraphs.
+                    self._logger.debug(
+                        f"[{current_time.time}] Cancelling TaskGraph {task_graph_name} "
+                        f"since the predicate that decides whether to cancel it is "
+                        f"True."
+                    )
+                    self._previously_considered_task_graphs.add(task_graph_name)
+                    cancelled_task_graphs.add(task_graph_name)
+            else:
+                # The TaskGraph has not been scheduled before, and is being
+                # reconsidered for scheduling. Calculate the slack between the
+                # release time and the deadline and decide whether the TaskGraph
+                # should be dropped.
+                slack = task_graph.deadline - task_graph.release_time
+                time_until_reconsideration_ends = task_graph.release_time + EventTime(
+                    ceil(slack.time * self._task_graph_reconsideration_period),
+                    EventTime.Unit.US,
+                )
+                if current_time > time_until_reconsideration_ends:
+                    # The TaskGraph has been reconsidered for too long. Cancel it.
+                    self._logger.debug(
+                        f"[{current_time.time}] Cancelling TaskGraph {task_graph_name} "
+                        f"because it has been reconsidered for too long. It was "
+                        f"released at {task_graph.release_time} with deadline "
+                        f"{task_graph.deadline}, and was reconsidered until "
+                        f"{time_until_reconsideration_ends}."
+                    )
+                    cancelled_task_graphs.add(task_graph_name)
+                else:
+                    # The TaskGraph has not been reconsidered for too long. Keep it.
+                    self._logger.debug(
+                        f"[{current_time.time}] Keeping TaskGraph {task_graph_name} "
+                        f"released at {task_graph.release_time} with deadline "
+                        f"{task_graph.deadline}, and it will be reconsidered until "
+                        f"{time_until_reconsideration_ends}."
+                    )
+        return cancelled_task_graphs
+
+    def _get_plan_ahead_this_cycle(
+        self, current_time: EventTime, tasks: List[Task]
+    ) -> EventTime:
+        """Returns the plan-ahead for this scheduling cycle.
+
+        Args:
+            current_time (`EventTime`): The current time in the simulation.
+            tasks (`List[Task]`): The tasks to be scheduled in this cycle.
+
+        Returns:
+            `EventTime`: The plan-ahead for this scheduling cycle.
+        """
+        plan_ahead_this_cycle = None
+        if self.enforce_deadlines:
+            plan_ahead_this_cycle = max(task.deadline for task in tasks)
+        else:
+            if self._plan_ahead.is_invalid():
+                # If no plan-ahead was provided, we use the sum of the remainder
+                # of the critical paths for each of the TaskGraphs available to
+                # the scheduler for this cycle. For cases where the TaskGraphs are
+                # not released, we use the sum of the remaining runtimes of all
+                # the available tasks for scheduling.
+                if self.release_taskgraphs:
+                    raise NotImplementedError(
+                        "Plan-ahead not implemented for TaskGraph-based scheduler."
+                    )
+                else:
+                    plan_ahead = sum(
+                        (
+                            # For tasks that are already running, we take their
+                            # remaining time. Otherwise, we find the slowest
+                            # execution strategy and use its runtime.
+                            task.slowest_execution_strategy.runtime
+                            if task.state != TaskState.RUNNING
+                            else task.remaining_time
+                            for task in tasks
+                        ),
+                        start=EventTime.zero(),
+                    )
+                    self._logger.debug(
+                        "[%s] The plan-ahead for this cycle was computed based on "
+                        "the runtimes of the schedulable tasks and is %s.",
+                        current_time.time,
+                        plan_ahead,
+                    )
+            else:
+                plan_ahead_this_cycle = current_time + self._plan_ahead
+        return plan_ahead_this_cycle
+
     def schedule(
         self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools
     ) -> Placements:
@@ -319,84 +454,17 @@ class TetriSchedScheduler(BaseScheduler):
         # those upfront.
         cancelled_task_graphs: Set[str] = set()
         if self._release_taskgraphs:
-            for task_graph_name in task_graph_names:
-                task_graph = workload.get_task_graph(task_graph_name)
-                if task_graph is None:
-                    raise ValueError(
-                        f"Could not find TaskGraph with name {task_graph_name}."
-                    )
+            cancelled_task_graphs = self._cancel_task_graphs(
+                current_time=sim_time,
+                task_graph_names=task_graph_names,
+                workload=workload,
+            )
 
-                # TaskGraphs that have been previously scheduled cannot be cancelled
-                # upfront since they already have a feasible placement. The scheduler
-                # must choose to cancel or keep them later.
-                if task_graph.is_scheduled():
-                    # The TaskGraph has been scheduled before. Keep it.
-                    self._logger.debug(
-                        f"[{sim_time.time}] Keeping TaskGraph {task_graph_name} "
-                        f"released at {task_graph.release_time} with deadline "
-                        f"{task_graph.deadline} since it has been scheduled before."
-                    )
-                    continue
-
-                # Check if the TaskGraph needs to be cancelled.
-                if task_graph_name not in self._previously_considered_task_graphs:
-                    # If this is a new TaskGraph, check if it needs to be cancelled
-                    # upfront as decided by the predicate
-                    if self._cancel_task_graph_predicate(task_graph):
-                        self._logger.debug(
-                            f"[{sim_time.time}] Cancelling TaskGraph {task_graph_name} "
-                            f"since the predicate that decides whether to cancel it is "
-                            f"True."
-                        )
-                        # If the predicate says that we should cancel the TaskGraph
-                        # without trying, we just add all of its nodes to the cancelled
-                        # TaskGraphs.
-                        for task in tasks_to_be_scheduled:
-                            if task.task_graph == task_graph_name:
-                                placements.append(
-                                    Placement.create_task_cancellation(task=task)
-                                )
-                        self._previously_considered_task_graphs.add(task_graph_name)
-                        cancelled_task_graphs.add(task_graph_name)
-                        continue
-                else:
-                    # The TaskGraph has not been scheduled before, and is being
-                    # reconsidered for scheduling. Calculate the slack between the
-                    # release time and the deadline and decide whether the TaskGraph
-                    # should be dropped.
-                    slack = task_graph.deadline - task_graph.release_time
-                    time_until_reconsideration_ends = (
-                        task_graph.release_time
-                        + EventTime(
-                            ceil(slack.time * self._task_graph_reconsideration_period),
-                            EventTime.Unit.US,
-                        )
-                    )
-                    if sim_time > time_until_reconsideration_ends:
-                        # The TaskGraph has been reconsidered for too long. Cancel it.
-                        self._logger.debug(
-                            f"[{sim_time.time}] Cancelling TaskGraph {task_graph_name} "
-                            f"because it has been reconsidered for too long. It was "
-                            f"released at {task_graph.release_time} with deadline "
-                            f"{task_graph.deadline}, and was reconsidered until "
-                            f"{time_until_reconsideration_ends}."
-                        )
-                        # Emit TASK_CANCEL events for all the tasks in the TaskGraph.
-                        for task in tasks_to_be_scheduled:
-                            if task.task_graph == task_graph_name:
-                                placements.append(
-                                    Placement.create_task_cancellation(task=task)
-                                )
-                        # Add the TaskGraph to the cancelled TaskGraphs.
-                        cancelled_task_graphs.add(task_graph_name)
-                    else:
-                        # The TaskGraph has not been reconsidered for too long. Keep it.
-                        self._logger.debug(
-                            f"[{sim_time.time}] Keeping TaskGraph {task_graph_name} "
-                            f"released at {task_graph.release_time} with deadline "
-                            f"{task_graph.deadline}, and it will be reconsidered until "
-                            f"{time_until_reconsideration_ends}."
-                        )
+            # Find the tasks that belong to any of these TaskGraphs and emit a
+            # TASK_CANCEL event for each one of them.
+            for task in tasks_to_be_scheduled:
+                if task.task_graph in cancelled_task_graphs:
+                    placements.append(Placement.create_task_cancellation(task=task))
 
         # Find the currently running and scheduled tasks to inform
         # the scheduler of previous placements.
@@ -448,43 +516,9 @@ class TetriSchedScheduler(BaseScheduler):
             # Find the plan-ahead window to normalize the rewards for the tasks.
             # If enforce_deadlines is set to true, then we use the maximum deadline
             # across all the jobs in this scheduling cycle to decide the plan-ahead.
-            plan_ahead_this_cycle = None
-            if self.enforce_deadlines:
-                plan_ahead_this_cycle = max(
-                    task.deadline for task in tasks_to_be_scheduled
-                )
-            else:
-                if self._plan_ahead.is_invalid():
-                    # If no plan-ahead was provided, we use the sum of the remainder
-                    # of the critical paths for each of the TaskGraphs available to
-                    # the scheduler for this cycle. For cases where the TaskGraphs are
-                    # not released, we use the sum of the remaining runtimes of all
-                    # the available tasks for scheduling.
-                    if self.release_taskgraphs:
-                        raise NotImplementedError(
-                            "Plan-ahead not implemented for TaskGraph-based scheduler."
-                        )
-                    else:
-                        plan_ahead = sum(
-                            (
-                                # For tasks that are already running, we take their
-                                # remaining time. Otherwise, we find the slowest
-                                # execution strategy and use its runtime.
-                                task.slowest_execution_strategy.runtime
-                                if task.state != TaskState.RUNNING
-                                else task.remaining_time
-                                for task in tasks_to_be_scheduled
-                            ),
-                            start=EventTime.zero(),
-                        )
-                        self._logger.debug(
-                            "[%s] The plan-ahead for this cycle was computed based on "
-                            "the runtimes of the schedulable tasks and is %s.",
-                            sim_time.time,
-                            plan_ahead,
-                        )
-                else:
-                    plan_ahead_this_cycle = sim_time + self._plan_ahead
+            plan_ahead_this_cycle = self._get_plan_ahead_this_cycle(
+                sim_time, tasks_to_be_scheduled
+            )
             self._logger.debug(
                 "[%s] The plan-ahead for this scheduling cycle was set to %s.",
                 sim_time.time,
