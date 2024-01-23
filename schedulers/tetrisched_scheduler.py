@@ -367,13 +367,23 @@ class TetriSchedScheduler(BaseScheduler):
         return cancelled_task_graphs
 
     def _get_plan_ahead_this_cycle(
-        self, current_time: EventTime, tasks: List[Task]
+        self,
+        current_time: EventTime,
+        workload: Workload,
+        tasks: List[Task],
+        task_graph_names: Set[str],
+        cancelled_task_graphs: Set[str],
     ) -> EventTime:
         """Returns the plan-ahead for this scheduling cycle.
 
         Args:
             current_time (`EventTime`): The current time in the simulation.
+            workload (`Workload`): The Workload to be used to retrieve the TaskGraphs.
             tasks (`List[Task]`): The tasks to be scheduled in this cycle.
+            task_graph_names (`Set[str]`): The names of the TaskGraphs available for
+                scheduling in this cycle.
+            cancelled_task_graphs (`Set[str]`): The names of the TaskGraphs that were
+                cancelled upfront.
 
         Returns:
             `EventTime`: The plan-ahead for this scheduling cycle.
@@ -389,20 +399,25 @@ class TetriSchedScheduler(BaseScheduler):
                 # not released, we use the sum of the remaining runtimes of all
                 # the available tasks for scheduling.
                 if self.release_taskgraphs:
-                    raise NotImplementedError(
-                        "Plan-ahead not implemented for TaskGraph-based scheduler."
+                    plan_ahead = EventTime.zero()
+                    for task_graph_name in task_graph_names:
+                        if task_graph_name not in cancelled_task_graphs:
+                            task_graph = workload.get_task_graph(task_graph_name)
+                            if task_graph is None:
+                                raise ValueError(
+                                    f"Could not find TaskGraph with name "
+                                    f"{task_graph_name}."
+                                )
+                            plan_ahead += task_graph.get_remaining_time()
+                    self._logger.debug(
+                        "[%s] The plan-ahead for this cycle was computed based on the "
+                        "remaining time of the TaskGraphs and is %s.",
+                        current_time.time,
+                        plan_ahead,
                     )
                 else:
                     plan_ahead = sum(
-                        (
-                            # For tasks that are already running, we take their
-                            # remaining time. Otherwise, we find the slowest
-                            # execution strategy and use its runtime.
-                            task.slowest_execution_strategy.runtime
-                            if task.state != TaskState.RUNNING
-                            else task.remaining_time
-                            for task in tasks
-                        ),
+                        (task.remaining_time for task in tasks),
                         start=EventTime.zero(),
                     )
                     self._logger.debug(
@@ -411,6 +426,7 @@ class TetriSchedScheduler(BaseScheduler):
                         current_time.time,
                         plan_ahead,
                     )
+                plan_ahead_this_cycle = current_time + plan_ahead
             else:
                 plan_ahead_this_cycle = current_time + self._plan_ahead
         return plan_ahead_this_cycle
@@ -517,7 +533,11 @@ class TetriSchedScheduler(BaseScheduler):
             # If enforce_deadlines is set to true, then we use the maximum deadline
             # across all the jobs in this scheduling cycle to decide the plan-ahead.
             plan_ahead_this_cycle = self._get_plan_ahead_this_cycle(
-                sim_time, tasks_to_be_scheduled
+                sim_time,
+                workload,
+                tasks_to_be_scheduled,
+                task_graph_names,
+                cancelled_task_graphs,
             )
             self._logger.debug(
                 "[%s] The plan-ahead for this scheduling cycle was set to %s.",
