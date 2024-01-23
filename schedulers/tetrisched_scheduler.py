@@ -216,12 +216,12 @@ class TetriSchedScheduler(BaseScheduler):
             self._max_discretization.time,
             max_occupancy_threshold,
         )
-        self._use_task_graph_indicator_uility = True
+        self._use_task_graph_indicator_utility = self._goal == "max_goodput"
         self._previously_placed_reward_scale_factor = 1.0
         self._enable_optimization_passes = (
             _flags.scheduler_enable_optimization_pass if _flags else False
         )
-        self._selectively_choose_task_graphs_for_rescheduling = True
+        self._selectively_choose_task_graphs_for_rescheduling = False
         self._selectively_choose_task_graphs_sample_size = 2
 
         # Scheduler configuration.
@@ -1661,20 +1661,20 @@ class TetriSchedScheduler(BaseScheduler):
         # TaskGraph expression to scale the utility.
         should_scale = (
             self._previously_placed_reward_scale_factor > 1.0 and previously_placed
-        ) or self._use_task_graph_indicator_uility
+        ) or self._use_task_graph_indicator_utility
 
         if should_scale:
             self._logger.debug(
                 "[%s] Scaling the %s of %s by %s.",
                 current_time.to(EventTime.Unit.US).time,
-                "indicator" if self._use_task_graph_indicator_uility else "utility",
+                "indicator" if self._use_task_graph_indicator_utility else "utility",
                 task_graph.name,
                 self._previously_placed_reward_scale_factor,
             )
             scale_expression = tetrisched.strl.ScaleExpression(
                 f"{task_graph.name}_scale",
                 self._previously_placed_reward_scale_factor if previously_placed else 1,
-                self._use_task_graph_indicator_uility,
+                self._use_task_graph_indicator_utility,
             )
             scale_expression.addChild(task_graph_strl)
             return scale_expression
