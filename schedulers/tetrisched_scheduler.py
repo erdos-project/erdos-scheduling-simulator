@@ -183,10 +183,6 @@ class TetriSchedScheduler(BaseScheduler):
     ):
         if preemptive:
             raise ValueError("TetrischedScheduler does not support preemption.")
-        if not enforce_deadlines and plan_ahead.is_invalid():
-            raise ValueError(
-                "Plan-Ahead must be specified if deadlines are not enforced."
-            )
         super(TetriSchedScheduler, self).__init__(
             preemptive=preemptive,
             runtime=runtime,
@@ -459,11 +455,41 @@ class TetriSchedScheduler(BaseScheduler):
                 )
             else:
                 if self._plan_ahead.is_invalid():
-                    raise RuntimeError(
-                        "A Plan-Ahead value must be specified "
-                        "if deadlines are not being enforced."
-                    )
-                plan_ahead_this_cycle = sim_time + self._plan_ahead
+                    # If no plan-ahead was provided, we use the sum of the remainder
+                    # of the critical paths for each of the TaskGraphs available to
+                    # the scheduler for this cycle. For cases where the TaskGraphs are
+                    # not released, we use the sum of the remaining runtimes of all
+                    # the available tasks for scheduling.
+                    if self.release_taskgraphs:
+                        raise NotImplementedError(
+                            "Plan-ahead not implemented for TaskGraph-based scheduler."
+                        )
+                    else:
+                        plan_ahead = sum(
+                            (
+                                # For tasks that are already running, we take their
+                                # remaining time. Otherwise, we find the slowest
+                                # execution strategy and use its runtime.
+                                task.slowest_execution_strategy.runtime
+                                if task.state != TaskState.RUNNING
+                                else task.remaining_time
+                                for task in tasks_to_be_scheduled
+                            ),
+                            start=EventTime.zero(),
+                        )
+                        self._logger.debug(
+                            "[%s] The plan-ahead for this cycle was computed based on "
+                            "the runtimes of the schedulable tasks and is %s.",
+                            sim_time.time,
+                            plan_ahead,
+                        )
+                else:
+                    plan_ahead_this_cycle = sim_time + self._plan_ahead
+            self._logger.debug(
+                "[%s] The plan-ahead for this scheduling cycle was set to %s.",
+                sim_time.time,
+                plan_ahead_this_cycle,
+            )
 
             if not self._adaptive_discretization:
                 placement_reward_discretizations = self._get_time_discretizations_until(

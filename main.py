@@ -288,6 +288,7 @@ flags.DEFINE_enum(
         "TetriSched_Gurobi",
         "Clockwork",
         "TetriSched",
+        "GraphenePrime",
     ],
     "The scheduler to use for this execution.",
 )
@@ -777,6 +778,27 @@ def main(args):
             ),
             dynamic_discretization=FLAGS.scheduler_dynamic_discretization,
             max_occupancy_threshold=FLAGS.scheduler_max_occupancy_threshold,
+        )
+    elif FLAGS.scheduler == "GraphenePrime":
+        scheduler = TetriSchedScheduler(
+            preemptive=FLAGS.preemption,
+            runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
+            lookahead=EventTime(FLAGS.scheduler_lookahead, EventTime.Unit.US),
+            # Graphene does not have a notion of deadlines, so we do not enforce them.
+            enforce_deadlines=False,
+            retract_schedules=FLAGS.retract_schedules,
+            # Graphene is a DAG-aware scheduler, so we force the release of TaskGraphs
+            # when any of the tasks in the graph are released.
+            release_taskgraphs=True,
+            # Graphene aims to minimize the makespan of the schedule, so we force the
+            # goal of the Scheduler to be the minimum placement delay.
+            goal="min_placement_delay",
+            time_discretization=EventTime(
+                FLAGS.scheduler_time_discretization, EventTime.Unit.US
+            ),
+            plan_ahead=EventTime(FLAGS.scheduler_plan_ahead, EventTime.Unit.US),
+            log_to_file=FLAGS.scheduler_log_to_file,
+            _flags=FLAGS,
         )
     else:
         raise ValueError(
