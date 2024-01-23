@@ -62,8 +62,8 @@ class WorkloadLoader(BaseWorkloadLoader):
                 else None
             )
             self._num_invocations = (
-                _flags.override_num_invocations
-                if _flags.override_num_invocations > 0
+                _flags.override_num_invocation
+                if _flags.override_num_invocation > 0
                 else None
             )
             self._unique_work_profiles = _flags.unique_work_profiles
