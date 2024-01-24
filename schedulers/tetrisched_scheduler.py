@@ -223,6 +223,7 @@ class TetriSchedScheduler(BaseScheduler):
         )
         self._selectively_choose_task_graphs_for_rescheduling = False
         self._selectively_choose_task_graphs_sample_size = 2
+        self._plan_ahead_multiplier: int = 2
 
         # Scheduler configuration.
         self._scheduler_configuration = tetrisched.SchedulerConfig()
@@ -398,9 +399,14 @@ class TetriSchedScheduler(BaseScheduler):
             plan_ahead_this_cycle = max(task.deadline for task in tasks)
         else:
             if self._plan_ahead.is_invalid():
-                # If no plan-ahead was provided, we use the sum of the remainder
-                # of the critical paths for each of the TaskGraphs available to
-                # the scheduler for this cycle. For cases where the TaskGraphs are
+                # If no plan-ahead was provided, we use a configurable multiple of the
+                # maximum remaining time across all the schedulable TaskGraphs.
+                # Earlier iterations of this code used the sum of the remainder of the
+                # critical paths for each of the TaskGraphs available to the scheduler
+                # for this cycle. However, this led to an extraordinary amount of time
+                # being stuck in presolve, and not actually solving the model using
+                # branch and bound. We did not see any significant difference in the
+                # goodput using this approach. For cases where the TaskGraphs are
                 # not released, we use the sum of the remaining runtimes of all
                 # the available tasks for scheduling.
                 if self.release_taskgraphs:
@@ -413,7 +419,10 @@ class TetriSchedScheduler(BaseScheduler):
                                     f"Could not find TaskGraph with name "
                                     f"{task_graph_name}."
                                 )
-                            plan_ahead += task_graph.get_remaining_time()
+                            plan_ahead = max(
+                                task_graph.get_remaining_time(), plan_ahead
+                            )
+                    plan_ahead = plan_ahead * self._plan_ahead_multiplier
                     self._logger.debug(
                         "[%s] The plan-ahead for this cycle was computed based on the "
                         "remaining time of the TaskGraphs and is %s.",
