@@ -445,7 +445,7 @@ flags.DEFINE_bool(
     "If `True`, the supported schedulers will follow some pre-defined strategies for "
     "selectively sampling TaskGraphs to reschedule.",
 )
-flags.DEFINE_int(
+flags.DEFINE_integer(
     "scheduler_selective_rescheduling_sample_size",
     5,
     "If `scheduler_selective_rescheduling` is True, then this flag defines the number "
