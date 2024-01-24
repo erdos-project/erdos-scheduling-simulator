@@ -227,7 +227,12 @@ class TetriSchedScheduler(BaseScheduler):
         # Scheduler configuration.
         self._scheduler_configuration = tetrisched.SchedulerConfig()
         self._scheduler_configuration.optimize = self._enable_optimization_passes
-        self._scheduler_configuration.newSolutionTimeMs = 1 * 60 * 1000
+        self._scheduler_configuration.newSolutionTimeMs = (
+            # 1 minute interrupt by default.
+            1 * 60 * 1000
+            if _flags is None or _flags.scheduler_time_limit == -1
+            else _flags.scheduler_time_limit * 1000
+        )
 
         # NOTE (Sukrit): We observe that solving each TaskGraph independently usually
         # leads to more missed deadlines than required. To offset this, the following
@@ -469,7 +474,7 @@ class TetriSchedScheduler(BaseScheduler):
         # Find the TaskGraphs that are past their reconsideration deadline and cancel
         # those upfront.
         cancelled_task_graphs: Set[str] = set()
-        if self._release_taskgraphs:
+        if self.release_taskgraphs and self.enforce_deadlines:
             cancelled_task_graphs = self._cancel_task_graphs(
                 current_time=sim_time,
                 task_graph_names=task_graph_names,
