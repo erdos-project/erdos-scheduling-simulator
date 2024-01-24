@@ -104,7 +104,11 @@ if (EXISTS "${GUROBI_DIR}")
           "${GUROBI_DIR}/lib/")
      LIST(APPEND SOLVER_BACKEND_LINK_LIBRARIES
           "gurobi_c++")
-     if (NOT DEFINED TETRISCHED_GUROBI_VER OR ${TETRISCHED_GUROBI_VER} EQUAL 10)
+     if (NOT DEFINED TETRISCHED_GUROBI_VER)
+          message("-- Using Gurobi version 10.0.0")
+          LIST(APPEND SOLVER_BACKEND_LINK_LIBRARIES
+               "gurobi100")
+     elseif (${TETRISCHED_GUROBI_VER} EQUAL 10)
           message("-- Using Gurobi version 10.0.0")
           LIST(APPEND SOLVER_BACKEND_LINK_LIBRARIES
                "gurobi100")
