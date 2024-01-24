@@ -221,8 +221,12 @@ class TetriSchedScheduler(BaseScheduler):
         self._enable_optimization_passes = (
             _flags.scheduler_enable_optimization_pass if _flags else False
         )
-        self._selectively_choose_task_graphs_for_rescheduling = False
-        self._selectively_choose_task_graphs_sample_size = 2
+        self._selectively_choose_task_graphs_for_rescheduling = (
+            _flags.scheduler_selective_rescheduling if _flags else False
+        )
+        self._selectively_choose_task_graphs_sample_size = (
+            _flags.scheduler_selective_rescheduling_sample_size if _flags else 5
+        )
         self._plan_ahead_multiplier: int = 2
 
         # Scheduler configuration.
