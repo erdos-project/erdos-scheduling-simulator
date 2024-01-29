@@ -451,6 +451,12 @@ flags.DEFINE_integer(
     "If `scheduler_selective_rescheduling` is True, then this flag defines the number "
     "of TaskGraphs to sample for rescheduling.",
 )
+flags.DEFINE_float(
+    "scheduler_reconsideration_period",
+    0.1,
+    "The percentage of critical path duration until which the scheduler will try "
+    "placing the TaskGraph, and drop the TaskGraph if it cannot be placed after.",
+)
 
 # Workload definition related flags.
 flags.DEFINE_integer(

@@ -248,7 +248,9 @@ class TetriSchedScheduler(BaseScheduler):
         # the release time and the deadline. So, if a TaskGraph was released at 100 and
         # has a deadline of 500, it will be retried until scheduler invocations upto
         # 180, and will be dropped after.
-        self._task_graph_reconsideration_period = 0.10
+        self._task_graph_reconsideration_period = (
+            0.10 if _flags is None else _flags.scheduler_reconsideration_period
+        )
         self._previously_considered_task_graphs: Set[str] = set()
 
         # A cache for the STRLs generated for individual tasks.
