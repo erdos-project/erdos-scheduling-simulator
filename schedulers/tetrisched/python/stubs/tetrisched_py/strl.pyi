@@ -1,6 +1,7 @@
 """
 STRL primitives for the TetriSched Python API.
 """
+
 from __future__ import annotations
 
 import typing
@@ -75,6 +76,7 @@ class ChooseExpression(Expression):
           priorPlacements (PriorPlacement): The prior placements of the
              expression in a previous cycle, if available.
         """
+
     @typing.overload
     def __init__(
         self,
@@ -115,6 +117,7 @@ class Expression:
         Args:
           child (Expression): The child to add to this Expression.
         """
+
     def exportToDot(self, fileName: str, emitChooseExpressions: bool = False) -> None:
         """
         Exports the Expression to a dot file.
@@ -124,26 +127,32 @@ class Expression:
           emitChooseExpressions (bool): If True, ChooseExpressions are
             included in the dot file. If False, they are not included.
         """
+
     def getChildren(self) -> list[Expression]:
         """
         Returns the children of this Expression.
         """
+
     def getNumChildren(self) -> int:
         """
         Returns the number of children of this Expression.
         """
+
     def getNumParents(self) -> int:
         """
         Returns the number of parents of this Expression.
         """
+
     def getSolution(self) -> SolutionResult | None:
         """
         Returns the solution for this Expression.
         """
+
     def getType(self) -> ExpressionType:
         """
         Returns the type of this Expression.
         """
+
     @property
     def id(self) -> str: ...
     @property
@@ -314,15 +323,18 @@ class Placement:
         """
         Returns the Partition assignments for this Placement.
         """
+
     def isPlaced(self) -> bool:
         """
         Returns true if the Placement was placed, false otherwise.
         """
+
     @property
     def name(self) -> str:
         """
         The name of the Placement.
         """
+
     @property
     def startTime(self) -> int | None:
         """
@@ -339,6 +351,7 @@ class ScaleExpression(Expression):
           name (str): The name of the ScaleExpression.
           scaleFactor (TETRISCHED_ILP_TYPE): The scaling factor of the ScaleExpression.
         """
+
     @typing.overload
     def __init__(self, name: str, scaleFactor: float, disregardUtility: bool) -> None:
         """
@@ -360,16 +373,19 @@ class SolutionResult:
         Args:
           taskName (str): The name of the task to get the Placement for.
         """
+
     @property
     def endTime(self) -> int | None:
         """
         The end time of the expression.
         """
+
     @property
     def startTime(self) -> int | None:
         """
         The start time of the expression.
         """
+
     @property
     def utility(self) -> float | None:
         """

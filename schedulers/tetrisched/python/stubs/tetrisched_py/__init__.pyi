@@ -1,6 +1,7 @@
 """
 Python API for TetriSched.
 """
+
 from __future__ import annotations
 
 import typing
@@ -22,6 +23,7 @@ class Partition:
         """
         Adds the given quantity to this Partition.
         """
+
     @typing.overload
     def __init__(self, partitionId: int, partitionName: str) -> None:
         """
@@ -31,6 +33,7 @@ class Partition:
           partitionId (int): The ID of this Partition.
           partitionName (str): The name of this Partition.
         """
+
     @typing.overload
     def __init__(self, partitionId: int, partitionName: str, quantity: int) -> None:
         """
@@ -41,15 +44,18 @@ class Partition:
           partitionName (str): The name of this Partition.
           quantity (int): The quantity of this Partition.
         """
+
     def __len__(self) -> int:
         """
         Returns the number of Workers in this Partition.
         """
+
     @property
     def id(self) -> int:
         """
         The ID of this Partition.
         """
+
     @property
     def name(self) -> str:
         """
@@ -61,14 +67,17 @@ class Partitions:
         """
         Returns the Partition with the given ID (if exists).
         """
+
     def __init__(self) -> None:
         """
         Initializes an empty Partitions.
         """
+
     def __len__(self) -> int:
         """
         Returns the number of Partitions in this Partitions.
         """
+
     def addPartition(self, partition: Partition) -> None:
         """
         Adds a Partition to this Partitions.
@@ -76,6 +85,7 @@ class Partitions:
         Args:
           partition (Partition): The Partition to add to this Partitions.
         """
+
     def getPartitions(self) -> list[Partition]:
         """
         Returns the Partitions in this Partitions.
@@ -102,6 +112,7 @@ class Scheduler:
           maxDiscretization (int): The maximum discretization to use for dynamic discretization.
           maxOccupancyThreshold (float): The maximum occupancy threshold to use for dynamic discretization.
         """
+
     def exportLastSolverModel(self, fileName: str) -> None:
         """
         Exports the model from the last invocation of the solver.
@@ -109,10 +120,12 @@ class Scheduler:
         Args:
           fileName (str): The filename to export the model to.
         """
+
     def getLastSolverSolution(self) -> backends.SolverSolution:
         """
         Retrieve the solution from the last invocation of the solver.
         """
+
     def registerSTRL(
         self,
         expression: strl.Expression,
@@ -131,6 +144,7 @@ class Scheduler:
           schedulerConfig (SchedulerConfig): The configuration for the scheduler.
           timeRangeToGranularities (list): The time ranges to granularities to use for dynamic discretization.
         """
+
     def schedule(self, currentTime: int) -> None:
         """
         Invokes the solver to schedule the registered STRL expression.
@@ -144,11 +158,13 @@ class SchedulerConfig:
         """
         Initializes an empty SchedulerConfig.
         """
+
     @property
     def newSolutionTimeMs(self) -> int | None:
         """
         The new solution time to use for the solver.
         """
+
     @newSolutionTimeMs.setter
     def newSolutionTimeMs(self, arg0: int | None) -> None: ...
     @property
@@ -156,6 +172,7 @@ class SchedulerConfig:
         """
         The number of threads to use for the solver.
         """
+
     @numThreads.setter
     def numThreads(self, arg0: int | None) -> None: ...
     @property
@@ -163,6 +180,7 @@ class SchedulerConfig:
         """
         If True, the scheduler will optimize the STRL expression.
         """
+
     @optimize.setter
     def optimize(self, arg0: bool) -> None: ...
     @property
@@ -170,5 +188,6 @@ class SchedulerConfig:
         """
         The total solver time to use for the solver.
         """
+
     @totalSolverTimeMs.setter
     def totalSolverTimeMs(self, arg0: int | None) -> None: ...

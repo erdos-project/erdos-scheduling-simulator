@@ -1,6 +1,7 @@
 """
 Solver backends for the TetriSched Python API.
 """
+
 from __future__ import annotations
 
 import typing
@@ -25,10 +26,12 @@ class CPLEXSolver:
         Args:
           filename (str): The filename to export the model to.
         """
+
     def getModel(self) -> tetrisched_py.model.SolverModel:
         """
         Returns the underlying SolverModel abstraction used by this instance of CPLEXSolver.
         """
+
     def solveModel(self) -> SolverSolution:
         """
         Solves the CPLEX model.
@@ -36,6 +39,7 @@ class CPLEXSolver:
         Returns:
           SolverSolution: The characteristics of the solution.
         """
+
     def translateModel(self, solverConfig: SolverConfig) -> None:
         """
         Translates the underlying SolverModel to a CPLEX model instance.
@@ -53,10 +57,12 @@ class GurobiSolver:
         Args:
           filename (str): The filename to export the model to.
         """
+
     def getModel(self) -> tetrisched_py.model.SolverModel:
         """
         Returns the underlying SolverModel abstraction used by this instance of GurobiSolver.
         """
+
     def solveModel(self) -> SolverSolution:
         """
         Solves the Gurobi model.
@@ -64,6 +70,7 @@ class GurobiSolver:
         Returns:
           SolverSolution: The characteristics of the solution.
         """
+
     def translateModel(self, solverConfig: SolverConfig) -> None:
         """
         Translates the underlying SolverModel to a Gurobi model instance.
@@ -152,11 +159,13 @@ class SolverConfig:
         """
         Initializes an empty SolverConfig.
         """
+
     @property
     def newSolutionTimeMs(self) -> int | None:
         """
         The total time to be spent between finding new incumbent solutions.
         """
+
     @newSolutionTimeMs.setter
     def newSolutionTimeMs(self, arg0: int | None) -> None: ...
     @property
@@ -164,6 +173,7 @@ class SolverConfig:
         """
         The total number of threads to allocate to the Solver.
         """
+
     @numThreads.setter
     def numThreads(self, arg0: int | None) -> None: ...
     @property
@@ -171,6 +181,7 @@ class SolverConfig:
         """
         The total time to be spent on the Solver.
         """
+
     @totalSolverTimeMs.setter
     def totalSolverTimeMs(self, arg0: int | None) -> None: ...
 
@@ -180,56 +191,67 @@ class SolverSolution:
         """
         Check if the solution was valid.
         """
+
     @property
     def numCachedVariables(self) -> int | None:
         """
         The number of variables that were cached before.
         """
+
     @property
     def numConstraints(self) -> int | None:
         """
         The number of constraints in the model.
         """
+
     @property
     def numDeactivatedConstraints(self) -> int | None:
         """
         The number of constraints that were generated but deactivated.
         """
+
     @property
     def numNonZeroCoefficients(self) -> int | None:
         """
         The number of non-zero coefficients in the model.
         """
+
     @property
     def numSolutions(self) -> int | None:
         """
         The number of solutions found by the solver.
         """
+
     @property
     def numUncachedVariables(self) -> int | None:
         """
         The number of variables that were not cached before.
         """
+
     @property
     def numVariables(self) -> int | None:
         """
         The number of variables in the model.
         """
+
     @property
     def objectiveValue(self) -> float | None:
         """
         The objective value of the solution (if available).
         """
+
     @property
     def objectiveValueBound(self) -> float | None:
         """
         The objective value of the bound retrieved from STRL (if available).
         """
+
     @property
     def solutionType(self) -> SolutionType:
         """
         The type of solution returned by the solver.
         """
+
     @property
     def solverTimeMicroseconds(self) -> int:
         """
