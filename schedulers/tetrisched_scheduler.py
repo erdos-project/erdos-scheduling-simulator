@@ -1179,6 +1179,9 @@ class TetriSchedScheduler(BaseScheduler):
                 )
                 continue
 
+            # Validate that a hint was provided if required.
+            was_hint_provided = False
+
             if not self._use_windowed_choose or len(time_discretizations) == 1:
                 # We now construct the Choose expressions for each possible placement
                 # choice of this Task, and collate them under a MaxExpression.
@@ -1232,12 +1235,13 @@ class TetriSchedScheduler(BaseScheduler):
                         self._logger.debug(
                             "[%s] Hinting the placement of %s in state %s for time "
                             "%s with the previous placement %s.",
-                            current_time,
+                            current_time.to(EventTime.Unit.US).time,
                             task.unique_name,
                             task.state,
                             placement_time,
                             placement_hint,
                         )
+                        was_hint_provided = True
 
                     # Construct a ChooseExpression for placement at this time.
                     # TODO (Sukrit): We just assume for now that all Slots are the same
@@ -1322,6 +1326,26 @@ class TetriSchedScheduler(BaseScheduler):
                 )
                 task_execution_strategy_strls.append(task_windowed_choose)
 
+            if (
+                task.state == TaskState.SCHEDULED
+                and not was_hint_provided
+                and task.current_placement.execution_strategy == execution_strategy
+            ):
+                self._logger.error(
+                    "[%s] Task %s was in state %s with the prior placement "
+                    "time %s, but no corresponding hint was provided. The "
+                    "ChooseExpressions were generated for times: %s.",
+                    current_time.to(EventTime.Unit.US).time,
+                    task.unique_name,
+                    task.state,
+                    task.current_placement.placement_time,
+                    [t.time for t, _ in time_discretizations],
+                )
+                raise RuntimeError(
+                    f"No hint was provided for {task.unique_name}, but one "
+                    f"was expected at {task.current_placement.placement_time}."
+                )
+
         # Construct the STRL MAX expression for this Task.
         # This enforces the choice of only one placement for this Task.
         if len(task_execution_strategy_strls) == 0:
@@ -1400,6 +1424,13 @@ class TetriSchedScheduler(BaseScheduler):
             task_expression = self.construct_task_strl(
                 current_time, task, partitions, placement_times_and_rewards
             )
+            if not task_expression:
+                self._logger.warn(
+                    f"[{current_time.time}] Could not construct the STRL for "
+                    f"Task {task.unique_name}. Failing the construction of STRL "
+                    f"for the TaskGraph {task_graph.name} rooted at {task.unique_name}."
+                )
+                return None
         else:
             # If this Task is not in the set of Tasks that we are required to schedule,
             # then we just return a None expression.
