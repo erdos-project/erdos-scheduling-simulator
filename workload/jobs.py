@@ -871,9 +871,11 @@ class JobGraph(Graph[Job]):
                 (
                     task.job.runtime
                     for task in task_graph.get_longest_path(
-                        weights=lambda task: task.job.runtime.time
-                        if task.probability > sys.float_info.epsilon
-                        else 0
+                        weights=lambda task: (
+                            task.job.runtime.time
+                            if task.probability > sys.float_info.epsilon
+                            else 0
+                        )
                     )
                 ),
                 start=EventTime.zero(),
@@ -892,15 +894,19 @@ class JobGraph(Graph[Job]):
     def __get_completion_time(self, start=EventTime.zero()) -> EventTime:
         return sum(
             (
-                job.slo
-                if job.slo != EventTime.invalid()
-                else job.execution_strategies.get_slowest_strategy().runtime
+                (
+                    job.slo
+                    if job.slo != EventTime.invalid()
+                    else job.execution_strategies.get_slowest_strategy().runtime
+                )
                 for job in self.get_longest_path(
-                    weights=lambda job: job.execution_strategies.get_slowest_strategy()
-                    .runtime.to(EventTime.Unit.US)
-                    .time
-                    if job.probability > sys.float_info.epsilon
-                    else 0
+                    weights=lambda job: (
+                        job.execution_strategies.get_slowest_strategy()
+                        .runtime.to(EventTime.Unit.US)
+                        .time
+                        if job.probability > sys.float_info.epsilon
+                        else 0
+                    )
                 )
             ),
             start=start,
@@ -918,11 +924,13 @@ class JobGraph(Graph[Job]):
             [
                 job.execution_strategies.get_slowest_strategy().runtime
                 for job in self.get_longest_path(
-                    weights=lambda job: job.execution_strategies.get_slowest_strategy()
-                    .runtime.to(EventTime.Unit.US)
-                    .time
-                    if job.probability > sys.float_info.epsilon
-                    else 0
+                    weights=lambda job: (
+                        job.execution_strategies.get_slowest_strategy()
+                        .runtime.to(EventTime.Unit.US)
+                        .time
+                        if job.probability > sys.float_info.epsilon
+                        else 0
+                    )
                 )
             ],
             start=EventTime.zero(),

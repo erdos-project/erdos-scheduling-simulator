@@ -719,11 +719,11 @@ class TetriSchedGurobiScheduler(BaseScheduler):
                     )
 
                 for task_variables in tasks_to_variables.values():
-                    placements_for_task: Sequence[
-                        Placement
-                    ] = task_variables.get_placements(
-                        worker_index_to_worker=workers,
-                        worker_id_to_worker_pool=worker_to_worker_pool,
+                    placements_for_task: Sequence[Placement] = (
+                        task_variables.get_placements(
+                            worker_index_to_worker=workers,
+                            worker_id_to_worker_pool=worker_to_worker_pool,
+                        )
                     )
                     for placement in placements_for_task:
                         if placement.is_placed():

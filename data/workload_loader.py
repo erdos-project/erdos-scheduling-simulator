@@ -140,19 +140,21 @@ class WorkloadLoader(BaseWorkloadLoader):
             # Create the JobGraph.
             if self._replication_factor > 1:
                 for i in range(1, self._replication_factor + 1):
-                    job_graph_mapping[
-                        f"{job_name}_{i}"
-                    ] = WorkloadLoader.load_job_graph(
-                        JobGraph(
-                            name=f"{job_name}_{i}",
-                            release_policy=release_policy,
-                            deadline_variance=deadline_variance,
-                        ),
-                        job["graph"],
-                        deepcopy(work_profiles)
-                        if not self._unique_work_profiles
-                        else work_profiles,
-                        self._slo,
+                    job_graph_mapping[f"{job_name}_{i}"] = (
+                        WorkloadLoader.load_job_graph(
+                            JobGraph(
+                                name=f"{job_name}_{i}",
+                                release_policy=release_policy,
+                                deadline_variance=deadline_variance,
+                            ),
+                            job["graph"],
+                            (
+                                deepcopy(work_profiles)
+                                if not self._unique_work_profiles
+                                else work_profiles
+                            ),
+                            self._slo,
+                        )
                     )
                 pass
             else:
@@ -163,9 +165,11 @@ class WorkloadLoader(BaseWorkloadLoader):
                         deadline_variance=deadline_variance,
                     ),
                     job["graph"],
-                    deepcopy(work_profiles)
-                    if not self._unique_work_profiles
-                    else work_profiles,
+                    (
+                        deepcopy(work_profiles)
+                        if not self._unique_work_profiles
+                        else work_profiles
+                    ),
                     self._slo,
                 )
 
@@ -258,9 +262,11 @@ class WorkloadLoader(BaseWorkloadLoader):
                 )
             return JobGraph.ReleasePolicy.periodic(
                 period=EventTime(
-                    job["period"]
-                    if override_arrival_period is None
-                    else override_arrival_period,
+                    (
+                        job["period"]
+                        if override_arrival_period is None
+                        else override_arrival_period
+                    ),
                     EventTime.Unit.US,
                 ),
                 start=start_time,
@@ -278,14 +284,18 @@ class WorkloadLoader(BaseWorkloadLoader):
                 )
             return JobGraph.ReleasePolicy.fixed(
                 period=EventTime(
-                    job["period"]
-                    if override_arrival_period is None
-                    else override_arrival_period,
+                    (
+                        job["period"]
+                        if override_arrival_period is None
+                        else override_arrival_period
+                    ),
                     EventTime.Unit.US,
                 ),
-                num_invocations=job["invocations"]
-                if override_num_invocations is None
-                else override_num_invocations,
+                num_invocations=(
+                    job["invocations"]
+                    if override_num_invocations is None
+                    else override_num_invocations
+                ),
                 start=start_time,
             )
         elif job["release_policy"] == "poisson":
@@ -297,9 +307,11 @@ class WorkloadLoader(BaseWorkloadLoader):
                     "`rate` or `invocations` was not defined for the JobGraph."
                 )
             return JobGraph.ReleasePolicy.poisson(
-                rate=job["rate"]
-                if override_poisson_arrival_rate is None
-                else override_poisson_arrival_rate,
+                rate=(
+                    job["rate"]
+                    if override_poisson_arrival_rate is None
+                    else override_poisson_arrival_rate
+                ),
                 num_invocations=job["invocations"],
                 start=start_time,
             )
@@ -312,13 +324,17 @@ class WorkloadLoader(BaseWorkloadLoader):
                     "`rate` or `coefficient` was not defined for the JobGraph."
                 )
             return JobGraph.ReleasePolicy.gamma(
-                rate=job["rate"]
-                if override_poisson_arrival_rate is None
-                else override_poisson_arrival_rate,
+                rate=(
+                    job["rate"]
+                    if override_poisson_arrival_rate is None
+                    else override_poisson_arrival_rate
+                ),
                 num_invocations=job["invocations"],
-                coefficient=job["coefficient"]
-                if override_gamma_coefficient is None
-                else override_gamma_coefficient,
+                coefficient=(
+                    job["coefficient"]
+                    if override_gamma_coefficient is None
+                    else override_gamma_coefficient
+                ),
                 start=start_time,
             )
         elif job["release_policy"] == "closed_loop":

@@ -456,9 +456,9 @@ class TaskOptimizerVariables(object):
         return [
             Placement.create_task_placement(
                 task=task,
-                placement_time=start_time
-                if placement_worker_id and placement_strategy
-                else None,
+                placement_time=(
+                    start_time if placement_worker_id and placement_strategy else None
+                ),
                 worker_pool_id=placement_worker_pool_id,
                 worker_id=placement_worker_id,
                 execution_strategy=placement_strategy,
@@ -833,9 +833,11 @@ class ILPScheduler(BaseScheduler):
         unscheduled_tasks = deque(
             sorted(
                 unscheduled_tasks,
-                key=lambda t: t.deadline
-                if t.task_graph not in self._allowed_to_miss_deadlines
-                else float("inf"),
+                key=lambda t: (
+                    t.deadline
+                    if t.task_graph not in self._allowed_to_miss_deadlines
+                    else float("inf")
+                ),
             )
         )
         tasks_to_batch_tasks: Mapping[Task, List[BatchTask]] = defaultdict(list)
@@ -896,12 +898,14 @@ class ILPScheduler(BaseScheduler):
                 # Deadlines are not to be enforced if the tasks in this batch are all
                 # allowed to miss their deadlines. Otherwise, we conservatively aim to
                 # enforce deadlines.
-                enforce_deadlines=False
-                if all(
-                    task.task_graph in self._allowed_to_miss_deadlines
-                    for task in batch_task.tasks
-                )
-                else self.enforce_deadlines,
+                enforce_deadlines=(
+                    False
+                    if all(
+                        task.task_graph in self._allowed_to_miss_deadlines
+                        for task in batch_task.tasks
+                    )
+                    else self.enforce_deadlines
+                ),
                 retract_schedules=self.retract_schedules,
             )
 
@@ -1088,14 +1092,16 @@ class ILPScheduler(BaseScheduler):
                 "variables (along with the number of parents in each variable): %s",
                 sim_time.to(EventTime.Unit.US).time,
                 task_name,
-                ", ".join(
-                    [
-                        f"{variable.task.unique_name} ({num_parents})"
-                        for variable, num_parents in parent_variables.items()
-                    ]
-                )
-                if len(parent_variables) > 0
-                else "None",
+                (
+                    ", ".join(
+                        [
+                            f"{variable.task.unique_name} ({num_parents})"
+                            for variable, num_parents in parent_variables.items()
+                        ]
+                    )
+                    if len(parent_variables) > 0
+                    else "None"
+                ),
             )
 
             # Ensure that the task is only placed if all of its parents are placed,

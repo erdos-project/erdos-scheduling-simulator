@@ -35,9 +35,9 @@ class Partitions(object):
 
     def __init__(self, worker_pools: WorkerPools) -> None:
         self._available_partitions = tetrisched.Partitions()
-        self._resource_name_to_partitions_map: Mapping[
-            str, tetrisched.Partitions
-        ] = defaultdict(tetrisched.Partitions)
+        self._resource_name_to_partitions_map: Mapping[str, tetrisched.Partitions] = (
+            defaultdict(tetrisched.Partitions)
+        )
         # BUG (Sukrit): The worker_index_to_partition_map is being used to keep the
         # Partition objects live on the Python side so we can query the associatedWorker
         # and the associatedWorkerPool. Otherwise, pybind11 loses track of the objects
@@ -90,9 +90,9 @@ class Partitions(object):
                 # Maintain the relevant mappings to transform it to a Placement.
                 partition.associatedWorker = worker
                 partition.associatedWorkerPool = worker_pool
-                self._worker_index_to_partition_map[
-                    self._worker_index_counter
-                ] = partition
+                self._worker_index_to_partition_map[self._worker_index_counter] = (
+                    partition
+                )
                 self._worker_index_counter += 1
 
     def get_partition_for_worker_id(

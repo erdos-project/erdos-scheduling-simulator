@@ -134,9 +134,9 @@ class CSVReader(object):
                                 window_to_execute=None,
                                 # Checking if len(reading) > 6
                                 # is for backward compatibility
-                                slowest_execution_time=int(reading[6])
-                                if len(reading) > 6
-                                else None,
+                                slowest_execution_time=(
+                                    int(reading[6]) if len(reading) > 6 else None
+                                ),
                             )
                         tasks[reading[4]].cancelled = True
                         tasks[reading[4]].cancelled_at = int(reading[0])
@@ -163,9 +163,9 @@ class CSVReader(object):
                             num_tasks=int(reading[5]),
                             # Checking if len(reading) > 6
                             # is for backward compatibility
-                            critical_path_time=int(reading[6])
-                            if len(reading) > 6
-                            else None,
+                            critical_path_time=(
+                                int(reading[6]) if len(reading) > 6 else None
+                            ),
                         )
                     elif reading[1] == "TASK_GRAPH_FINISHED":
                         task_graphs[reading[2]].completion_at = int(reading[0])
@@ -504,9 +504,9 @@ class CSVReader(object):
                 resource_counter = defaultdict(int)
                 for resource in worker_pool.resources:
                     resource_counter[resource.name] += 1
-                    resource_ids_to_canonical_names[
-                        resource.id
-                    ] = f"{resource.name}_{resource_counter[resource.name]}"
+                    resource_ids_to_canonical_names[resource.id] = (
+                        f"{resource.name}_{resource_counter[resource.name]}"
+                    )
 
         # Output all the tasks and the requested deadlines.
         if trace_fmt in ["task", "taskgraph", "application", "resource"]:
