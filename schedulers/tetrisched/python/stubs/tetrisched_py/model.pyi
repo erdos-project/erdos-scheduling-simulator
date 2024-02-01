@@ -1,6 +1,7 @@
 """
 Modelling primitives for the TetriSched Python API.
 """
+
 from __future__ import annotations
 
 import typing
@@ -25,6 +26,7 @@ class Constraint:
           type (ConstraintType): The type of this Constraint.
           rhs (int): The RHS of this Constraint.
         """
+
     def __len__(self) -> int: ...
     def __str__(self) -> str: ...
     @typing.overload
@@ -36,6 +38,7 @@ class Constraint:
           coefficient (int): The coefficient of the new term.
           variable (Variable): The Variable of the new term.
         """
+
     @typing.overload
     def addTerm(self, constant: float) -> None:
         """
@@ -44,11 +47,13 @@ class Constraint:
         Args:
           constant (int): The constant of the new term.
         """
+
     @property
     def id(self) -> int:
         """
         The ID of this Constraint.
         """
+
     @property
     def name(self) -> str:
         """
@@ -95,6 +100,7 @@ class ObjectiveFunction:
         Args:
           type (ObjectiveType): The type of this ObjectiveFunction.
         """
+
     def __len__(self) -> int: ...
     def __str__(self) -> str: ...
     @typing.overload
@@ -106,6 +112,7 @@ class ObjectiveFunction:
           coefficient (int): The coefficient of the new term.
           variable (Variable): The Variable of the new term.
         """
+
     @typing.overload
     def addTerm(self, constant: float) -> None:
         """
@@ -114,6 +121,7 @@ class ObjectiveFunction:
         Args:
           constant (int): The constant of the new term.
         """
+
     def toConstraint(self, name: str, type: ConstraintType, rhs: float) -> Constraint:
         """
         Converts this ObjectiveFunction into a Constraint.
@@ -123,6 +131,7 @@ class ObjectiveFunction:
           type (ConstraintType): The type of the Constraint to be returned.
           rhs (int): The RHS of the Constraint to be returned.
         """
+
     @property
     def value(self) -> float:
         """
@@ -171,6 +180,7 @@ class SolverModel:
         Args:
           constraint (Constraint): The Constraint to add to the model.
         """
+
     def addVariable(self, variable: Variable) -> None:
         """
         Adds a new Variable to the model.
@@ -178,6 +188,7 @@ class SolverModel:
         Args:
           variable (Variable): The Variable to add to the model.
         """
+
     def exportModel(self, fileName: str) -> None:
         """
         Exports the model to the given file.
@@ -185,6 +196,7 @@ class SolverModel:
         Args:
           fileName (str): The name of the file to export the model to.
         """
+
     def setObjectiveFunction(self, objective: ObjectiveFunction) -> None:
         """
         Sets the ObjectiveFunction of the model.
@@ -192,16 +204,19 @@ class SolverModel:
         Args:
           objective (ObjectiveFunction): The ObjectiveFunction to set.
         """
+
     @property
     def num_constraints(self) -> int:
         """
         The number of constraints in the model.
         """
+
     @property
     def num_variables(self) -> int:
         """
         The number of variables in the model.
         """
+
     @property
     def objective_value(self) -> float:
         """
@@ -218,6 +233,7 @@ class Variable:
           type (VariableType): The type of this Variable.
           name (str): The name of this Variable.
         """
+
     @typing.overload
     def __init__(self, type: VariableType, name: str, lowerBound: float) -> None:
         """
@@ -228,6 +244,7 @@ class Variable:
           name (str): The name of this Variable.
           lowerBound (int): The lower bound of this Variable.
         """
+
     @typing.overload
     def __init__(
         self, type: VariableType, name: str, lowerBound: float, upperBound: float
@@ -241,6 +258,7 @@ class Variable:
           lowerBound (int): The lower bound of this Variable.
           upperBound (int): The upper bound of this Variable.
         """
+
     def __str__(self) -> str: ...
     def hint(self, value: float) -> None:
         """
@@ -249,16 +267,19 @@ class Variable:
         Args:
           value (int): The value to set for this Variable.
         """
+
     @property
     def id(self) -> int:
         """
         The ID of this Variable.
         """
+
     @property
     def name(self) -> str:
         """
         The name of this Variable.
         """
+
     @property
     def value(self) -> float | None:
         """

@@ -47,20 +47,22 @@ def create_default_task(
         name=task_name,
         task_graph=task_graph_name,
         job=job,
-        profile=WorkProfile(
-            name=f"{task_name}_work_profile",
-            execution_strategies=ExecutionStrategies(
-                strategies=[
-                    ExecutionStrategy(
-                        resources=resource_requirements,
-                        batch_size=1,
-                        runtime=EventTime(runtime, EventTime.Unit.US),
-                    )
-                ]
-            ),
-        )
-        if profile is None
-        else profile,
+        profile=(
+            WorkProfile(
+                name=f"{task_name}_work_profile",
+                execution_strategies=ExecutionStrategies(
+                    strategies=[
+                        ExecutionStrategy(
+                            resources=resource_requirements,
+                            batch_size=1,
+                            runtime=EventTime(runtime, EventTime.Unit.US),
+                        )
+                    ]
+                ),
+            )
+            if profile is None
+            else profile
+        ),
         deadline=EventTime(deadline, EventTime.Unit.US),
         timestamp=timestamp,
         release_time=EventTime(release_time, EventTime.Unit.US),

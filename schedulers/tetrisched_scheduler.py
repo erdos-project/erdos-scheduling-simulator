@@ -1,4 +1,5 @@
 import os
+import random
 import time
 from collections import defaultdict
 from math import ceil
@@ -34,9 +35,9 @@ class Partitions(object):
 
     def __init__(self, worker_pools: WorkerPools) -> None:
         self._available_partitions = tetrisched.Partitions()
-        self._resource_name_to_partitions_map: Mapping[
-            str, tetrisched.Partitions
-        ] = defaultdict(tetrisched.Partitions)
+        self._resource_name_to_partitions_map: Mapping[str, tetrisched.Partitions] = (
+            defaultdict(tetrisched.Partitions)
+        )
         # BUG (Sukrit): The worker_index_to_partition_map is being used to keep the
         # Partition objects live on the Python side so we can query the associatedWorker
         # and the associatedWorkerPool. Otherwise, pybind11 loses track of the objects
@@ -89,9 +90,9 @@ class Partitions(object):
                 # Maintain the relevant mappings to transform it to a Placement.
                 partition.associatedWorker = worker
                 partition.associatedWorkerPool = worker_pool
-                self._worker_index_to_partition_map[
-                    self._worker_index_counter
-                ] = partition
+                self._worker_index_to_partition_map[self._worker_index_counter] = (
+                    partition
+                )
                 self._worker_index_counter += 1
 
     def get_partition_for_worker_id(
@@ -184,10 +185,6 @@ class TetriSchedScheduler(BaseScheduler):
     ):
         if preemptive:
             raise ValueError("TetrischedScheduler does not support preemption.")
-        if not enforce_deadlines and plan_ahead.is_invalid():
-            raise ValueError(
-                "Plan-Ahead must be specified if deadlines are not enforced."
-            )
         super(TetriSchedScheduler, self).__init__(
             preemptive=preemptive,
             runtime=runtime,
@@ -223,17 +220,28 @@ class TetriSchedScheduler(BaseScheduler):
             finer_discretization_at_prev_solution,
             finer_discretization_window.to(EventTime.Unit.US).time,
         )
-        self._use_task_graph_indicator_uility = True
+        self._use_task_graph_indicator_utility = self._goal == "max_goodput"
         self._previously_placed_reward_scale_factor = 1.0
         self._enable_optimization_passes = (
             _flags.scheduler_enable_optimization_pass if _flags else False
         )
+        self._selectively_choose_task_graphs_for_rescheduling = (
+            _flags.scheduler_selective_rescheduling if _flags else False
+        )
+        self._selectively_choose_task_graphs_sample_size = (
+            _flags.scheduler_selective_rescheduling_sample_size if _flags else 5
+        )
+        self._plan_ahead_multiplier: int = 2
 
         # Scheduler configuration.
         self._scheduler_configuration = tetrisched.SchedulerConfig()
         self._scheduler_configuration.optimize = self._enable_optimization_passes
-        self._scheduler_configuration.newSolutionTimeMs = 1 * 60 * 1000
-        self._scheduler_configuration.totalSolverTimeMs = 1 * 10 * 1000
+        self._scheduler_configuration.newSolutionTimeMs = (
+            # 1 minute interrupt by default.
+            1 * 60 * 1000
+            if _flags is None or _flags.scheduler_time_limit == -1
+            else _flags.scheduler_time_limit * 1000
+        )
 
         # NOTE (Sukrit): We observe that solving each TaskGraph independently usually
         # leads to more missed deadlines than required. To offset this, the following
@@ -244,7 +252,9 @@ class TetriSchedScheduler(BaseScheduler):
         # the release time and the deadline. So, if a TaskGraph was released at 100 and
         # has a deadline of 500, it will be retried until scheduler invocations upto
         # 180, and will be dropped after.
-        self._task_graph_reconsideration_period = 0.10
+        self._task_graph_reconsideration_period = (
+            0.10 if _flags is None else _flags.scheduler_reconsideration_period
+        )
         self._previously_considered_task_graphs: Set[str] = set()
 
         # A cache for the STRLs generated for individual tasks.
@@ -288,6 +298,165 @@ class TetriSchedScheduler(BaseScheduler):
         """Returns True if the TaskGraph should be skipped from scheduling."""
         return False
 
+    def _cancel_task_graphs(
+        self, current_time: EventTime, task_graph_names: Set[str], workload: Workload
+    ) -> Set[str]:
+        """Cancels the appropriate TaskGraphs from the given set and returns the names
+        of the cancelled TaskGraphs.
+
+        The decision of when to cancel a TaskGraph is made by either the predicate
+        `_cancel_task_graph_predicate` or by the time until the TaskGraph was supposed
+        to be reconsidred for scheduling. To alter the behavior of the latter, the
+        `_task_graph_reconsideration_period` parameter can be used.
+
+        Args:
+            current_time (`EventTime`): The current time in the simulation.
+            task_graph_names (`Set[str]`): The names of the TaskGraphs available for
+                scheduling in this cycle.
+            workload (`Workload`): The Workload to be used to retrieve the TaskGraphs.
+
+        Returns:
+            `Set[str]`: The names of the TaskGraphs that were cancelled.
+        """
+        cancelled_task_graphs: Set[str] = set()
+        for task_graph_name in task_graph_names:
+            # Retrieve the TaskGraph.
+            task_graph = workload.get_task_graph(task_graph_name)
+            if task_graph is None:
+                raise ValueError(
+                    f"Could not find TaskGraph with name {task_graph_name}."
+                )
+
+            # TaskGraphs that have been previously scheduled cannot be cancelled
+            # upfront since they already have a feasible placement. The scheduler
+            # must choose to cancel or keep them later.
+            if task_graph.is_scheduled():
+                # The TaskGraph has been scheduled before. Keep it.
+                self._logger.debug(
+                    f"[{current_time.time}] Keeping TaskGraph {task_graph_name} "
+                    f"released at {task_graph.release_time} with deadline "
+                    f"{task_graph.deadline} since it has been scheduled before."
+                )
+                continue
+
+            # Check if the TaskGraph needs to be cancelled.
+            if task_graph_name not in self._previously_considered_task_graphs:
+                # If this is a new TaskGraph, check if it needs to be cancelled
+                # upfront as decided by the predicate
+                if self._cancel_task_graph_predicate(task_graph):
+                    # If the predicate says that we should cancel the TaskGraph
+                    # without trying, we just add the TaskGraph to the set of cancelled
+                    # TaskGraphs.
+                    self._logger.debug(
+                        f"[{current_time.time}] Cancelling TaskGraph {task_graph_name} "
+                        f"since the predicate that decides whether to cancel it is "
+                        f"True."
+                    )
+                    self._previously_considered_task_graphs.add(task_graph_name)
+                    cancelled_task_graphs.add(task_graph_name)
+            else:
+                # The TaskGraph has not been scheduled before, and is being
+                # reconsidered for scheduling. Calculate the slack between the
+                # release time and the deadline and decide whether the TaskGraph
+                # should be dropped.
+                slack = task_graph.deadline - task_graph.release_time
+                time_until_reconsideration_ends = task_graph.release_time + EventTime(
+                    ceil(slack.time * self._task_graph_reconsideration_period),
+                    EventTime.Unit.US,
+                )
+                if current_time > time_until_reconsideration_ends:
+                    # The TaskGraph has been reconsidered for too long. Cancel it.
+                    self._logger.debug(
+                        f"[{current_time.time}] Cancelling TaskGraph {task_graph_name} "
+                        f"because it has been reconsidered for too long. It was "
+                        f"released at {task_graph.release_time} with deadline "
+                        f"{task_graph.deadline}, and was reconsidered until "
+                        f"{time_until_reconsideration_ends}."
+                    )
+                    cancelled_task_graphs.add(task_graph_name)
+                else:
+                    # The TaskGraph has not been reconsidered for too long. Keep it.
+                    self._logger.debug(
+                        f"[{current_time.time}] Keeping TaskGraph {task_graph_name} "
+                        f"released at {task_graph.release_time} with deadline "
+                        f"{task_graph.deadline}, and it will be reconsidered until "
+                        f"{time_until_reconsideration_ends}."
+                    )
+        return cancelled_task_graphs
+
+    def _get_plan_ahead_this_cycle(
+        self,
+        current_time: EventTime,
+        workload: Workload,
+        tasks: List[Task],
+        task_graph_names: Set[str],
+        cancelled_task_graphs: Set[str],
+    ) -> EventTime:
+        """Returns the plan-ahead for this scheduling cycle.
+
+        Args:
+            current_time (`EventTime`): The current time in the simulation.
+            workload (`Workload`): The Workload to be used to retrieve the TaskGraphs.
+            tasks (`List[Task]`): The tasks to be scheduled in this cycle.
+            task_graph_names (`Set[str]`): The names of the TaskGraphs available for
+                scheduling in this cycle.
+            cancelled_task_graphs (`Set[str]`): The names of the TaskGraphs that were
+                cancelled upfront.
+
+        Returns:
+            `EventTime`: The plan-ahead for this scheduling cycle.
+        """
+        plan_ahead_this_cycle = None
+        if self.enforce_deadlines:
+            plan_ahead_this_cycle = max(task.deadline for task in tasks)
+        else:
+            if self._plan_ahead.is_invalid():
+                # If no plan-ahead was provided, we use a configurable multiple of the
+                # maximum remaining time across all the schedulable TaskGraphs.
+                # Earlier iterations of this code used the sum of the remainder of the
+                # critical paths for each of the TaskGraphs available to the scheduler
+                # for this cycle. However, this led to an extraordinary amount of time
+                # being stuck in presolve, and not actually solving the model using
+                # branch and bound. We did not see any significant difference in the
+                # goodput using this approach. For cases where the TaskGraphs are
+                # not released, we use the sum of the remaining runtimes of all
+                # the available tasks for scheduling.
+                if self.release_taskgraphs:
+                    plan_ahead = EventTime.zero()
+                    for task_graph_name in task_graph_names:
+                        if task_graph_name not in cancelled_task_graphs:
+                            task_graph = workload.get_task_graph(task_graph_name)
+                            if task_graph is None:
+                                raise ValueError(
+                                    f"Could not find TaskGraph with name "
+                                    f"{task_graph_name}."
+                                )
+                            plan_ahead = max(
+                                task_graph.get_remaining_time(), plan_ahead
+                            )
+                    plan_ahead = plan_ahead * self._plan_ahead_multiplier
+                    self._logger.debug(
+                        "[%s] The plan-ahead for this cycle was computed based on the "
+                        "remaining time of the TaskGraphs and is %s.",
+                        current_time.time,
+                        plan_ahead,
+                    )
+                else:
+                    plan_ahead = sum(
+                        (task.remaining_time for task in tasks),
+                        start=EventTime.zero(),
+                    )
+                    self._logger.debug(
+                        "[%s] The plan-ahead for this cycle was computed based on "
+                        "the runtimes of the schedulable tasks and is %s.",
+                        current_time.time,
+                        plan_ahead,
+                    )
+                plan_ahead_this_cycle = current_time + plan_ahead
+            else:
+                plan_ahead_this_cycle = current_time + self._plan_ahead
+        return plan_ahead_this_cycle
+
     def schedule(
         self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools
     ) -> Placements:
@@ -326,85 +495,18 @@ class TetriSchedScheduler(BaseScheduler):
         # Find the TaskGraphs that are past their reconsideration deadline and cancel
         # those upfront.
         cancelled_task_graphs: Set[str] = set()
-        if self._release_taskgraphs:
-            for task_graph_name in task_graph_names:
-                task_graph = workload.get_task_graph(task_graph_name)
-                if task_graph is None:
-                    raise ValueError(
-                        f"Could not find TaskGraph with name {task_graph_name}."
-                    )
+        if self.release_taskgraphs and self.enforce_deadlines:
+            cancelled_task_graphs = self._cancel_task_graphs(
+                current_time=sim_time,
+                task_graph_names=task_graph_names,
+                workload=workload,
+            )
 
-                # TaskGraphs that have been previously scheduled cannot be cancelled
-                # upfront since they already have a feasible placement. The scheduler
-                # must choose to cancel or keep them later.
-                if task_graph.is_scheduled():
-                    # The TaskGraph has been scheduled before. Keep it.
-                    self._logger.debug(
-                        f"[{sim_time.time}] Keeping TaskGraph {task_graph_name} "
-                        f"released at {task_graph.release_time} with deadline "
-                        f"{task_graph.deadline} since it has been scheduled before."
-                    )
-                    continue
-
-                # Check if the TaskGraph needs to be cancelled.
-                if task_graph_name not in self._previously_considered_task_graphs:
-                    # If this is a new TaskGraph, check if it needs to be cancelled
-                    # upfront as decided by the predicate
-                    if self._cancel_task_graph_predicate(task_graph):
-                        self._logger.debug(
-                            f"[{sim_time.time}] Cancelling TaskGraph {task_graph_name} "
-                            f"since the predicate that decides whether to cancel it is "
-                            f"True."
-                        )
-                        # If the predicate says that we should cancel the TaskGraph
-                        # without trying, we just add all of its nodes to the cancelled
-                        # TaskGraphs.
-                        for task in tasks_to_be_scheduled:
-                            if task.task_graph == task_graph_name:
-                                placements.append(
-                                    Placement.create_task_cancellation(task=task)
-                                )
-                        self._previously_considered_task_graphs.add(task_graph_name)
-                        cancelled_task_graphs.add(task_graph_name)
-                        continue
-                else:
-                    # The TaskGraph has not been scheduled before, and is being
-                    # reconsidered for scheduling. Calculate the slack between the
-                    # release time and the deadline and decide whether the TaskGraph
-                    # should be dropped.
-                    slack = task_graph.deadline - task_graph.release_time
-                    time_until_reconsideration_ends = (
-                        task_graph.release_time
-                        + EventTime(
-                            ceil(slack.time * self._task_graph_reconsideration_period),
-                            EventTime.Unit.US,
-                        )
-                    )
-                    if sim_time > time_until_reconsideration_ends:
-                        # The TaskGraph has been reconsidered for too long. Cancel it.
-                        self._logger.debug(
-                            f"[{sim_time.time}] Cancelling TaskGraph {task_graph_name} "
-                            f"because it has been reconsidered for too long. It was "
-                            f"released at {task_graph.release_time} with deadline "
-                            f"{task_graph.deadline}, and was reconsidered until "
-                            f"{time_until_reconsideration_ends}."
-                        )
-                        # Emit TASK_CANCEL events for all the tasks in the TaskGraph.
-                        for task in tasks_to_be_scheduled:
-                            if task.task_graph == task_graph_name:
-                                placements.append(
-                                    Placement.create_task_cancellation(task=task)
-                                )
-                        # Add the TaskGraph to the cancelled TaskGraphs.
-                        cancelled_task_graphs.add(task_graph_name)
-                    else:
-                        # The TaskGraph has not been reconsidered for too long. Keep it.
-                        self._logger.debug(
-                            f"[{sim_time.time}] Keeping TaskGraph {task_graph_name} "
-                            f"released at {task_graph.release_time} with deadline "
-                            f"{task_graph.deadline}, and it will be reconsidered until "
-                            f"{time_until_reconsideration_ends}."
-                        )
+            # Find the tasks that belong to any of these TaskGraphs and emit a
+            # TASK_CANCEL event for each one of them.
+            for task in tasks_to_be_scheduled:
+                if task.task_graph in cancelled_task_graphs:
+                    placements.append(Placement.create_task_cancellation(task=task))
 
         # Find the currently running and scheduled tasks to inform
         # the scheduler of previous placements.
@@ -456,18 +558,18 @@ class TetriSchedScheduler(BaseScheduler):
             # Find the plan-ahead window to normalize the rewards for the tasks.
             # If enforce_deadlines is set to true, then we use the maximum deadline
             # across all the jobs in this scheduling cycle to decide the plan-ahead.
-            plan_ahead_this_cycle = None
-            if self.enforce_deadlines:
-                plan_ahead_this_cycle = max(
-                    task.deadline for task in tasks_to_be_scheduled
-                )
-            else:
-                if self._plan_ahead.is_invalid():
-                    raise RuntimeError(
-                        "A Plan-Ahead value must be specified "
-                        "if deadlines are not being enforced."
-                    )
-                plan_ahead_this_cycle = sim_time + self._plan_ahead
+            plan_ahead_this_cycle = self._get_plan_ahead_this_cycle(
+                sim_time,
+                workload,
+                tasks_to_be_scheduled,
+                task_graph_names,
+                cancelled_task_graphs,
+            )
+            self._logger.debug(
+                "[%s] The plan-ahead for this scheduling cycle was set to %s.",
+                sim_time.time,
+                plan_ahead_this_cycle,
+            )
 
             if not self._adaptive_discretization:
                 placement_reward_discretizations = self._get_time_discretizations_until(
@@ -518,7 +620,22 @@ class TetriSchedScheduler(BaseScheduler):
                     (t, 1) for t in placement_reward_discretizations
                 ]
 
+            # Keep track of the Tasks that have not been considered for scheduling.
+            skipped_task_names = set()
             if self.release_taskgraphs:
+                # Find the TaskGraphs that are available for scheduling.
+                task_graphs_for_scheduling = self._choose_task_graphs_for_scheduling(
+                    sim_time, workload, task_graph_names
+                )
+                self._logger.debug(
+                    "[%s] A total of %s TaskGraphs were chosen for scheduling out of "
+                    "%s. These were: %s",
+                    sim_time.time,
+                    len(task_graphs_for_scheduling),
+                    len(task_graph_names),
+                    task_graphs_for_scheduling,
+                )
+
                 # Construct the STRL expressions for each TaskGraph and add them
                 # together in a single objective expression.
                 task_strls: Mapping[str, tetrisched.strl.Expression] = {}
@@ -536,8 +653,46 @@ class TetriSchedScheduler(BaseScheduler):
                         )
                         continue
 
-                    # Construct the STRL.
+                    # Retrieve the TaskGraph.
                     task_graph = workload.get_task_graph(task_graph_name)
+
+                    # If the TaskGraph has already been scheduled, then we see if we
+                    # need to allow it to be rescheduled based on the given predicate.
+                    if (
+                        self._selectively_choose_task_graphs_for_rescheduling
+                        and task_graph_name not in task_graphs_for_scheduling
+                    ):
+                        self._logger.debug(
+                            f"[{sim_time.time}] Converting TaskGraph {task_graph_name} "
+                            f"to an AllocationExpression because is_scheduled: "
+                            f"{task_graph.is_scheduled()} "
+                            f"and the predicate decided not to reschedule it."
+                        )
+
+                        # This TaskGraph is not to be rescheduled. Just add Allocation
+                        # Expressions for the tasks that have already been placed.
+                        for task in tasks_to_be_scheduled:
+                            if task.task_graph == task_graph_name:
+                                task_strl = self.construct_task_strl(
+                                    sim_time,
+                                    task,
+                                    partitions,
+                                    placement_times_and_rewards,
+                                    retract_schedules=False,
+                                )
+                                if task_strl is not None:
+                                    objective_strl.addChild(task_strl)
+                                else:
+                                    raise RuntimeError(
+                                        f"Could not construct STRL for Task "
+                                        f"{task.unique_name}. This is required for "
+                                        f"previously placed tasks to account for "
+                                        f"correct Allocations."
+                                    )
+                                skipped_task_names.add(task.unique_name)
+                        continue
+
+                    # Construct the STRL.
                     task_graph_strl = self.construct_task_graph_strl(
                         current_time=sim_time,
                         task_graph=task_graph,
@@ -676,6 +831,14 @@ class TetriSchedScheduler(BaseScheduler):
 
                 # Retrieve the Placements for each task.
                 for task in tasks_to_be_scheduled:
+                    if task.unique_name in skipped_task_names:
+                        # If the task was skipped, then we honor the previous placement.
+                        self._logger.debug(
+                            f"[{sim_time.time}] Honoring prior placement for Task "
+                            f"{task.unique_name} because it was skipped."
+                        )
+                        continue
+
                     task_placement = solverSolution.getPlacement(task.unique_name)
                     if task_placement is None or not task_placement.isPlaced():
                         self._logger.error(
@@ -765,9 +928,11 @@ class TetriSchedScheduler(BaseScheduler):
                             execution_strategy=None,
                         )
                     )
+                # There were no Placements from the Scheduler. We just skip the
+                # placement of any of the tasks, and wait for the next invocation.
                 self._logger.warning(f"[{sim_time.time}] Failed to place any tasks.")
 
-        # if sim_time == EventTime(136, EventTime.Unit.US):
+        # if sim_time == EventTime(210, EventTime.Unit.US):
         #     raise RuntimeError("Stopping the Simulation.")
 
         scheduler_end_time = time.time()
@@ -871,6 +1036,7 @@ class TetriSchedScheduler(BaseScheduler):
         task: Task,
         partitions: Partitions,
         placement_times_and_rewards: List[Tuple[EventTime, float]],
+        retract_schedules: Optional[bool] = None,
     ) -> tetrisched.strl.Expression:
         """Constructs the STRL expression subtree for a given Task.
 
@@ -892,11 +1058,23 @@ class TetriSchedScheduler(BaseScheduler):
             self._individual_task_strls[task.id] = None
             return None
 
+        # Set the retract_schedules flag.
+        if retract_schedules is None:
+            retract_schedules = self.retract_schedules
+
+        self._logger.debug(
+            "[%s] Constructing STRL for %s in state %s with retract_schedules %s.",
+            current_time.time,
+            task.unique_name,
+            task.state,
+            retract_schedules,
+        )
+
         # If the task is already running or scheduled and we're not reconsidering
         # previous schedulings, we block off all the time discretizations from the
         # task's start until it completes.
         if task.state == TaskState.RUNNING or (
-            task.state == TaskState.SCHEDULED and not self.retract_schedules
+            task.state == TaskState.SCHEDULED and not retract_schedules
         ):
             # Find the Partition where the task is running or to be scheduled.
             scheduled_partition = partitions.get_partition_for_worker_id(
@@ -1026,6 +1204,9 @@ class TetriSchedScheduler(BaseScheduler):
                 )
                 continue
 
+            # Validate that a hint was provided if required.
+            was_hint_provided = False
+
             if not self._use_windowed_choose or len(time_discretizations) == 1:
                 # We now construct the Choose expressions for each possible placement
                 # choice of this Task, and collate them under a MaxExpression.
@@ -1036,6 +1217,56 @@ class TetriSchedScheduler(BaseScheduler):
                         # If the placement time is in the past, then we cannot
                         # place the task.
                         continue
+
+                    # If the Task was scheduled before, and this time corresponds to
+                    # the previous scheduling time, we provide a hint to the Scheduler
+                    # so that it can reduce the overall solver time.
+                    choose_expression_status = (
+                        tetrisched.strl.ExpressionStatus.EXPR_STATUS_UNKNOWN
+                    )
+                    placement_hint = None
+                    if task.state == TaskState.SCHEDULED:
+                        choose_expression_status = (
+                            tetrisched.strl.ExpressionStatus.EXPR_STATUS_UNSATISFIED
+                        )
+                        if (
+                            task.current_placement.execution_strategy
+                            == execution_strategy
+                            and task.current_placement.placement_time == placement_time
+                        ):
+                            choose_expression_status = (
+                                tetrisched.strl.ExpressionStatus.EXPR_STATUS_SATISFIED
+                            )
+
+                            # Retrieve the partition for the previous placement.
+                            scheduled_partition = (
+                                partitions.get_partition_for_worker_id(
+                                    task.current_placement.worker_id
+                                )
+                            )
+                            if scheduled_partition is None:
+                                raise RuntimeError(
+                                    f"Could not find the Partition for "
+                                    f"the Task {task.unique_name} in state "
+                                    f"{task.state} that was previously placed on "
+                                    f"{task.current_placement.worker_id}."
+                                )
+
+                            placement_hint = [(scheduled_partition, quantity)]
+
+                    if choose_expression_status == (
+                        tetrisched.strl.ExpressionStatus.EXPR_STATUS_SATISFIED
+                    ):
+                        self._logger.debug(
+                            "[%s] Hinting the placement of %s in state %s for time "
+                            "%s with the previous placement %s.",
+                            current_time.to(EventTime.Unit.US).time,
+                            task.unique_name,
+                            task.state,
+                            placement_time,
+                            placement_hint,
+                        )
+                        was_hint_provided = True
 
                     # Construct a ChooseExpression for placement at this time.
                     # TODO (Sukrit): We just assume for now that all Slots are the same
@@ -1050,6 +1281,8 @@ class TetriSchedScheduler(BaseScheduler):
                             placement_time.to(EventTime.Unit.US).time,
                             execution_strategy.runtime.to(EventTime.Unit.US).time,
                             reward_for_this_placement,
+                            choose_expression_status,
+                            placement_hint,
                         )
                     )
                     if (
@@ -1122,6 +1355,26 @@ class TetriSchedScheduler(BaseScheduler):
                     f"for {quantity} slots for duration {execution_strategy.runtime}."
                 )
                 task_execution_strategy_strls.append(task_windowed_choose)
+
+            if (
+                task.state == TaskState.SCHEDULED
+                and not was_hint_provided
+                and task.current_placement.execution_strategy == execution_strategy
+            ):
+                self._logger.error(
+                    "[%s] Task %s was in state %s with the prior placement "
+                    "time %s, but no corresponding hint was provided. The "
+                    "ChooseExpressions were generated for times: %s.",
+                    current_time.to(EventTime.Unit.US).time,
+                    task.unique_name,
+                    task.state,
+                    task.current_placement.placement_time,
+                    [t.time for t, _ in time_discretizations],
+                )
+                raise RuntimeError(
+                    f"No hint was provided for {task.unique_name}, but one "
+                    f"was expected at {task.current_placement.placement_time}."
+                )
 
         # Construct the STRL MAX expression for this Task.
         # This enforces the choice of only one placement for this Task.
@@ -1201,6 +1454,13 @@ class TetriSchedScheduler(BaseScheduler):
             task_expression = self.construct_task_strl(
                 current_time, task, partitions, placement_times_and_rewards
             )
+            if not task_expression:
+                self._logger.warn(
+                    f"[{current_time.time}] Could not construct the STRL for "
+                    f"Task {task.unique_name}. Failing the construction of STRL "
+                    f"for the TaskGraph {task_graph.name} rooted at {task.unique_name}."
+                )
+                return None
         else:
             # If this Task is not in the set of Tasks that we are required to schedule,
             # then we just return a None expression.
@@ -1280,6 +1540,125 @@ class TetriSchedScheduler(BaseScheduler):
         # Cache and return the expression for this Task.
         task_strls[task.id] = task_graph_expression
         return task_graph_expression
+
+    def _choose_task_graphs_for_scheduling(
+        self,
+        current_time: EventTime,
+        workload: Workload,
+        task_graph_names: List[str],
+    ) -> List[str]:
+        """Find the TaskGraphs that are to be scheduled in this cycle.
+
+        Args:
+            current_time (`EventTime`): The time at which the scheduling is occurring.
+            workload (`Workload`): The workload instance associated with this run of
+                the scheduling cycle.
+            task_graph_names (`List[str]`): The names of the TaskGraphs that are
+                available for scheduling in this cycle.
+        """
+        reschedulable_task_graphs = []
+        task_graphs_for_scheduling = []
+        for task_graph_name in task_graph_names:
+            # Find the TaskGraph.
+            task_graph = workload.get_task_graph(task_graph_name)
+            if task_graph is None:
+                raise ValueError(
+                    f"Could not find the TaskGraph {task_graph_name} in the workload."
+                )
+
+            # If the Taskgraph hasn't been previously scheduled, then it's always
+            # available for scheduling.
+            if not task_graph.is_scheduled():
+                task_graphs_for_scheduling.append(task_graph_name)
+                continue
+            reschedulable_task_graphs.append(task_graph_name)
+
+        # If we have less than the sample size, just consider all of them.
+        if (
+            len(reschedulable_task_graphs)
+            <= self._selectively_choose_task_graphs_sample_size
+        ):
+            task_graphs_for_scheduling.extend(reschedulable_task_graphs)
+            return task_graphs_for_scheduling
+
+        # Strategy 1: We do not reconsider the TaskGraphs for scheduling that have
+        # a very low slack between their release time and the deadline given their
+        # critical path.
+        # allowed_slack = 1.20 # 20% slack from critical path runtime.
+        # should_reschedule = (
+        #     task_graph.deadline.time
+        #     >= task_graph.release_time.time
+        #     + task_graph.critical_path_runtime.time * allowed_slack
+        # )
+
+        # Strategy 2: We try to only allow rescheduling of the TaskGraphs whose prior
+        # placements of the sinks have a large slack between their deadline as a
+        # percentage of their critical path runtime.
+        # allowed_slack = 0.20  # 20% slack from critical path runtime.
+        # completion_slack = min(
+        #     [
+        #         task_graph.deadline.time
+        #         - (
+        #             task.current_placement.placement_time.time
+        #             + task.current_placement.execution_strategy.runtime.time
+        #         )
+        #         for task in task_graph.get_sink_tasks()
+        #     ]
+        # )
+        # should_reschedule = (
+        #     completion_slack >= task_graph.critical_path_runtime.time * allowed_slack
+        # )
+
+        # Strategy 3: Choose the TaskGraphs to be scheduled randomly with the given
+        # sample size.
+        task_graphs_for_scheduling.extend(
+            np.random.choice(
+                reschedulable_task_graphs,
+                self._selectively_choose_task_graphs_sample_size,
+                replace=False,
+            )
+        )
+
+        # Strategy 4: Flip a random biased coin with a probability proportional to the
+        # remaining slack in the task graph. The higher the slack, the higher the
+        # probability of rescheduling.
+        # slacks = []
+        # total_slack = 0
+        # for task_graph_name in reschedulable_task_graphs:
+        #     schedulable_task_graph = workload.get_task_graph(task_graph_name)
+        #     if schedulable_task_graph is None:
+        #         raise ValueError(
+        #             f"Could not find the TaskGraph {task_graph_name} in the workload."
+        #         )
+        #     slack = max(0, (schedulable_task_graph.deadline - current_time).time)
+        #     slacks.append(slack)
+        #     total_slack += slack
+
+        # task_graphs_for_scheduling.extend(
+        #     np.random.choice(
+        #         reschedulable_task_graphs,
+        #         self._selectively_choose_task_graphs_sample_size,
+        #         replace=False,
+        #         p=[slack / total_slack for slack in slacks],
+        #     )
+        # )
+
+        # coin_probability = 0.5
+        # total_slack = sum(slacks)
+        # if total_slack > 0:
+        #     coin_probability = (task_graph.deadline - current_time).time / total_slack
+        # self._logger.debug(
+        #     "[%s] The slack for TaskGraph %s was %s. The total slack was %s. "
+        #     "The coin probability was %s.",
+        #     current_time.time,
+        #     task_graph.name,
+        #     task_graph.deadline - current_time,
+        #     total_slack,
+        #     coin_probability,
+        # )
+        # should_reschedule = random.random() < coin_probability
+
+        return task_graphs_for_scheduling
 
     def construct_task_graph_strl(
         self,
@@ -1366,20 +1745,20 @@ class TetriSchedScheduler(BaseScheduler):
         # TaskGraph expression to scale the utility.
         should_scale = (
             self._previously_placed_reward_scale_factor > 1.0 and previously_placed
-        ) or self._use_task_graph_indicator_uility
+        ) or self._use_task_graph_indicator_utility
 
         if should_scale:
             self._logger.debug(
                 "[%s] Scaling the %s of %s by %s.",
                 current_time.to(EventTime.Unit.US).time,
-                "indicator" if self._use_task_graph_indicator_uility else "utility",
+                "indicator" if self._use_task_graph_indicator_utility else "utility",
                 task_graph.name,
                 self._previously_placed_reward_scale_factor,
             )
             scale_expression = tetrisched.strl.ScaleExpression(
                 f"{task_graph.name}_scale",
                 self._previously_placed_reward_scale_factor if previously_placed else 1,
-                self._use_task_graph_indicator_uility,
+                self._use_task_graph_indicator_utility,
             )
             scale_expression.addChild(task_graph_strl)
             return scale_expression

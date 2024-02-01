@@ -81,9 +81,9 @@ class AlibabaLoader(BaseWorkloadLoader):
         self._workload_paths_and_release_policies = (
             self._construct_workload_definitions()
         )
-        self._job_graph_generators: Mapping[
-            str, Callable
-        ] = self._initialize_job_graph_generators()
+        self._job_graph_generators: Mapping[str, Callable] = (
+            self._initialize_job_graph_generators()
+        )
         self._release_times_and_profiles = self._construct_release_times()
 
         self._job_graphs: Mapping[str, Mapping[str, JobGraph]] = {}
@@ -633,17 +633,23 @@ class AlibabaLoader(BaseWorkloadLoader):
                         )
 
         return JobGraph(
-            name=job_graph_name
-            if profile_label is None
-            else f"{job_graph_name}_{profile_label}",
+            name=(
+                job_graph_name
+                if profile_label is None
+                else f"{job_graph_name}_{profile_label}"
+            ),
             jobs=jobs_to_children,
             deadline_variance=(
-                self._flags.min_deadline_variance
-                if min_deadline_variance is None
-                else min_deadline_variance,
-                self._flags.max_deadline_variance
-                if max_deadline_variance is None
-                else max_deadline_variance,
+                (
+                    self._flags.min_deadline_variance
+                    if min_deadline_variance is None
+                    else min_deadline_variance
+                ),
+                (
+                    self._flags.max_deadline_variance
+                    if max_deadline_variance is None
+                    else max_deadline_variance
+                ),
             ),
         )
 

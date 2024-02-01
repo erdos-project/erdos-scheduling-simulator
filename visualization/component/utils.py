@@ -172,11 +172,11 @@ def visualize_task_graph(task_graph_id, df_tasks, trace_data):
                 + f"slowest_runtime={row['slowest_execution_time'].item()}",
                 size=25,
                 shape="dot",
-                color="red"
-                if row["cancelled"].item()
-                else "orange"
-                if row["missed_deadline"].item()
-                else "green",
+                color=(
+                    "red"
+                    if row["cancelled"].item()
+                    else "orange" if row["missed_deadline"].item() else "green"
+                ),
             )
         )
 

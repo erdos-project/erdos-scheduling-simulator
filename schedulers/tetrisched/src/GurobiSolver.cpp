@@ -105,13 +105,16 @@ void GurobiSolver::setParameters(GRBModel& gurobiModel,
   gurobiModel.set(GRB_IntParam_Cuts, 3);
 
   // Ask Gurobi to conservatively presolve the model.
-  // gurobiModel.set(GRB_IntParam_Presolve, 2);
+  gurobiModel.set(GRB_IntParam_Presolve, 1);
+  gurobiModel.set(GRB_IntParam_PrePasses, 2);
 
   // Ask Gurobi to find new incumbent solutions rather than prove bounds.
   gurobiModel.set(GRB_IntParam_MIPFocus, 1);
 
   // Increase the time spent on Heuristics.
   gurobiModel.set(GRB_DoubleParam_Heuristics, 0.5);
+
+  gurobiModel.set(GRB_DoubleParam_NodefileStart, 0.5);
 
   // Set PreSparsify to 1 to enable presolve sparsification.
   // gurobiModel.set(GRB_IntParam_PreSparsify, 1);

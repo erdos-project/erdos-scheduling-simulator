@@ -62,6 +62,11 @@ void VariableT<T>::hint(T hintValue) {
 }
 
 template <typename T>
+std::optional<T> VariableT<T>::getHint() const {
+  return initialValue;
+}
+
+template <typename T>
 std::string VariableT<T>::toString() const {
   switch (variableType) {
     case VAR_CONTINUOUS:
@@ -401,7 +406,7 @@ T ObjectiveFunctionT<T>::getValue() const {
 
 template <typename T>
 void SolverModelT<T>::addVariable(std::shared_ptr<VariableT<T>> variable) {
-  {
+  if (!TETRISCHED_INFER_HINTS_FROM_LEAVES) {
     // Check if variable name exists in the solutionValueCache
     typename decltype(solutionValueCache)::accessor solutionValueCacheAccessor;
 
@@ -417,8 +422,9 @@ void SolverModelT<T>::addVariable(std::shared_ptr<VariableT<T>> variable) {
       variable->hint(solutionValueCacheAccessor->second);
     }
   }
+
+  // Insert the variable into the map.
   {
-    // Insert the variable into the map.
     typename decltype(modelVariables)::accessor modelVariablesAccessor;
     modelVariables.insert(modelVariablesAccessor, variable->getId());
     modelVariablesAccessor->second = variable;
@@ -537,7 +543,8 @@ void SolverModelT<T>::clear() {
   // invocation of the solver.
   {
     TETRISCHED_SCOPE_TIMER("SolverModel::clear::solutionValueCache");
-    solutionValueCache = tbb::concurrent_hash_map<std::string, T>();
+    solutionValueCache.clear();
+    // solutionValueCache = tbb::concurrent_hash_map<std::string, T>();
   }
 
   {
@@ -569,8 +576,10 @@ void SolverModelT<T>::clear() {
     TETRISCHED_SCOPE_TIMER("SolverModel::clear::modelVariables");
     // Clear the model now.
     std::lock_guard<std::mutex> lock(modelMutex);
-    modelVariables = tbb::concurrent_hash_map<uint32_t, VariablePtr>();
-    modelConstraints = tbb::concurrent_hash_map<uint32_t, ConstraintPtr>();
+    modelVariables.clear();
+    modelConstraints.clear();
+    // modelVariables = tbb::concurrent_hash_map<uint32_t, VariablePtr>();
+    // modelConstraints = tbb::concurrent_hash_map<uint32_t, ConstraintPtr>();
     objectiveFunction.reset();
   }
 }

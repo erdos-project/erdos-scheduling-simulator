@@ -288,6 +288,7 @@ flags.DEFINE_enum(
         "TetriSched_Gurobi",
         "Clockwork",
         "TetriSched",
+        "GraphenePrime",
     ],
     "The scheduler to use for this execution.",
 )
@@ -405,7 +406,7 @@ flags.DEFINE_enum(
     "ilp_goal",
     "max_goodput",
     ["max_slack", "min_placement_delay", "max_goodput"],
-    "Sets the goal of the ILP solver.",
+    "Sets the goal of the mathematical optimization-backed solvers.",
 )
 flags.DEFINE_enum(
     "clockwork_goal",
@@ -449,6 +450,24 @@ flags.DEFINE_bool(
     False,
     "If `True`, the scheduler runs pre/post-translation optimization passes"
     "when registering STRL expression.",
+)
+flags.DEFINE_bool(
+    "scheduler_selective_rescheduling",
+    False,
+    "If `True`, the supported schedulers will follow some pre-defined strategies for "
+    "selectively sampling TaskGraphs to reschedule.",
+)
+flags.DEFINE_integer(
+    "scheduler_selective_rescheduling_sample_size",
+    5,
+    "If `scheduler_selective_rescheduling` is True, then this flag defines the number "
+    "of TaskGraphs to sample for rescheduling.",
+)
+flags.DEFINE_float(
+    "scheduler_reconsideration_period",
+    0.1,
+    "The percentage of critical path duration until which the scheduler will try "
+    "placing the TaskGraph, and drop the TaskGraph if it cannot be placed after.",
 )
 
 # Workload definition related flags.
@@ -791,6 +810,27 @@ def main(args):
             max_occupancy_threshold=FLAGS.scheduler_max_occupancy_threshold,
             finer_discretization_at_prev_solution=FLAGS.finer_discretization_at_prev_solution,
             finer_discretization_window=EventTime(FLAGS.finer_discretization_window, EventTime.Unit.US)
+        )
+    elif FLAGS.scheduler == "GraphenePrime":
+        scheduler = TetriSchedScheduler(
+            preemptive=FLAGS.preemption,
+            runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
+            lookahead=EventTime(FLAGS.scheduler_lookahead, EventTime.Unit.US),
+            # Graphene does not have a notion of deadlines, so we do not enforce them.
+            enforce_deadlines=False,
+            retract_schedules=FLAGS.retract_schedules,
+            # Graphene is a DAG-aware scheduler, so we force the release of TaskGraphs
+            # when any of the tasks in the graph are released.
+            release_taskgraphs=True,
+            # Graphene aims to minimize the makespan of the schedule, so we force the
+            # goal of the Scheduler to be the minimum placement delay.
+            goal="min_placement_delay",
+            time_discretization=EventTime(
+                FLAGS.scheduler_time_discretization, EventTime.Unit.US
+            ),
+            plan_ahead=EventTime(FLAGS.scheduler_plan_ahead, EventTime.Unit.US),
+            log_to_file=FLAGS.scheduler_log_to_file,
+            _flags=FLAGS,
         )
     else:
         raise ValueError(

@@ -711,6 +711,9 @@ class Simulator(object):
                 )
                 self._event_queue.remove_event(future_placement_event)
                 del self._future_placement_events[placement.task.id]
+
+                # Unschedule the Task.
+                placement.task.unschedule(time)
             else:
                 self._logger.warning(
                     "[%s] Failed to place %s, skipping it for future reconsideration.",
@@ -1548,9 +1551,11 @@ class Simulator(object):
 
             next_update_event = Event(
                 event_type=EventType.UPDATE_WORKLOAD,
-                time=max_release_time + EventTime(1, EventTime.Unit.US)
-                if self._workload_update_interval.is_invalid()
-                else self._simulator_time + self._workload_update_interval,
+                time=(
+                    max_release_time + EventTime(1, EventTime.Unit.US)
+                    if self._workload_update_interval.is_invalid()
+                    else self._simulator_time + self._workload_update_interval
+                ),
             )
             self._event_queue.add_event(next_update_event)
             self._logger.info(

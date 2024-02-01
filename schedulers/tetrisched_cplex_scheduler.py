@@ -1286,9 +1286,9 @@ class TetriSchedCPLEXScheduler(BaseScheduler):
             # the scheduler.
             task_not_placed_penalty = []
             if self._batching:
-                tasks_to_batch_tasks: Mapping[
-                    Task, Set[TaskOptimizerVariables]
-                ] = defaultdict(set)
+                tasks_to_batch_tasks: Mapping[Task, Set[TaskOptimizerVariables]] = (
+                    defaultdict(set)
+                )
                 for batch_task_variable in tasks_to_variables.values():
                     for task in batch_task_variable.task.tasks:
                         tasks_to_batch_tasks[task].add(batch_task_variable)

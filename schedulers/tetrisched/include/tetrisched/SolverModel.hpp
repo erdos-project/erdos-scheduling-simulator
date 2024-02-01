@@ -87,6 +87,9 @@ class VariableT {
   /// search.
   void hint(T hintValue);
 
+  /// Retrieves the hinted value for the variable, if available.
+  std::optional<T> getHint() const;
+
   /// Retrieve a string representation of this VariableT.
   std::string toString() const;
 

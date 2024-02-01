@@ -103,8 +103,22 @@ if (EXISTS "${GUROBI_DIR}")
      LIST(APPEND SOLVER_BACKEND_LINK_DIRS
           "${GUROBI_DIR}/lib/")
      LIST(APPEND SOLVER_BACKEND_LINK_LIBRARIES
-          "gurobi_c++"
-          "gurobi100")
+          "gurobi_c++")
+     if (NOT DEFINED TETRISCHED_GUROBI_VER)
+          message("-- Using Gurobi version 10.0.0")
+          LIST(APPEND SOLVER_BACKEND_LINK_LIBRARIES
+               "gurobi100")
+     elseif (${TETRISCHED_GUROBI_VER} EQUAL 10)
+          message("-- Using Gurobi version 10.0.0")
+          LIST(APPEND SOLVER_BACKEND_LINK_LIBRARIES
+               "gurobi100")
+     elseif (${TETRISCHED_GUROBI_VER} EQUAL 11)
+	  message("-- Using Gurobi version 11.0.0")
+	  LIST(APPEND SOLVER_BACKEND_LINK_LIBRARIES
+	       "gurobi110")
+     else()
+	  message(FATAL_ERROR "The linking for Gurobi Version ${TETRISCHED_GUROBI_VER} is not defined.")
+     endif()
 else()
      message("-- Not Adding GUROBI")
 endif()

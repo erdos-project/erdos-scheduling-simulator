@@ -119,10 +119,9 @@ def extract_variables_from_filename_v2(filename):
             break
 
     if variables["scheduler"] == "TetriSched":
-        variables[
-            "scheduler"
-        ] = f'TetriSched_time_dis_{variables["scheduler_time_discretization"]}' + (
-            "_DAG_aware" if variables["DAG_aware"] else ""
+        variables["scheduler"] = (
+            f'TetriSched_time_dis_{variables["scheduler_time_discretization"]}'
+            + ("_DAG_aware" if variables["DAG_aware"] else "")
         )
     return variables
 

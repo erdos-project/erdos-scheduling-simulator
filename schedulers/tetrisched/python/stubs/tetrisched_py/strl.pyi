@@ -1,6 +1,7 @@
 """
 STRL primitives for the TetriSched Python API.
 """
+
 from __future__ import annotations
 
 import typing
@@ -11,6 +12,7 @@ __all__ = [
     "AllocationExpression",
     "ChooseExpression",
     "Expression",
+    "ExpressionStatus",
     "ExpressionType",
     "LessThanExpression",
     "MalleableChooseExpression",
@@ -52,19 +54,29 @@ class ChooseExpression(Expression):
         startTime: int,
         duration: int,
         utility: float,
+        status: ExpressionStatus,
+        priorPlacements: list[tuple[tetrisched_py.Partition, int]] | None,
     ) -> None:
         """
-        Initializes a ChooseExpression for the given task to be placed on `numRequiredMachines` from the given partition at the given startTime, running for the given duration.
+        Initializes a ChooseExpression for the given task to be placed on
+        `numRequiredMachines` from the given partition at the given
+        startTime, running for the given duration.
 
         Args:
           taskName (str): The name of the task to be placed.
           strategyName (str): The name of the strategy of the Choose.
           partitions (Partitions): The Partitions to be placed on.
-          numRequiredMachines (int): The number of machines required for the task.
+          numRequiredMachines (int): The number of machines required
+             for the task.
           startTime (int): The start time of the task.
           duration (int): The duration of the task.
           utility (TETRISCHED_ILP_TYPE): The utility of the task.
+           status (ExpressionStatus): The status of the expression in a
+             previous cycle, if available.
+          priorPlacements (PriorPlacement): The prior placements of the
+             expression in a previous cycle, if available.
         """
+
     @typing.overload
     def __init__(
         self,
@@ -74,17 +86,26 @@ class ChooseExpression(Expression):
         startTime: int,
         duration: int,
         utility: float,
+        status: ExpressionStatus,
+        priorPlacements: list[tuple[tetrisched_py.Partition, int]] | None,
     ) -> None:
         """
-        Initializes a ChooseExpression for the given task to be placed on `numRequiredMachines` from the given partition at the given startTime, running for the given duration.
+        Initializes a ChooseExpression for the given task to be placed on
+        `numRequiredMachines` from the given partition at the given
+        startTime, running for the given duration.
 
         Args:
           taskName (str): The name of the task to be placed.
           partitions (Partitions): The Partitions to be placed on.
-          numRequiredMachines (int): The number of machines required for the task.
+          numRequiredMachines (int): The number of machines required
+             for the task.
           startTime (int): The start time of the task.
           duration (int): The duration of the task.
           utility (TETRISCHED_ILP_TYPE): The utility of the task.
+          status (ExpressionStatus): The status of the expression in a
+             previous cycle, if available.
+          priorPlacements (PriorPlacement): The prior placements of the
+             expression in a previous cycle, if available.
         """
 
 class Expression:
@@ -96,6 +117,7 @@ class Expression:
         Args:
           child (Expression): The child to add to this Expression.
         """
+
     def exportToDot(self, fileName: str, emitChooseExpressions: bool = False) -> None:
         """
         Exports the Expression to a dot file.
@@ -105,30 +127,74 @@ class Expression:
           emitChooseExpressions (bool): If True, ChooseExpressions are
             included in the dot file. If False, they are not included.
         """
+
     def getChildren(self) -> list[Expression]:
         """
         Returns the children of this Expression.
         """
+
     def getNumChildren(self) -> int:
         """
         Returns the number of children of this Expression.
         """
+
     def getNumParents(self) -> int:
         """
         Returns the number of parents of this Expression.
         """
+
     def getSolution(self) -> SolutionResult | None:
         """
         Returns the solution for this Expression.
         """
+
     def getType(self) -> ExpressionType:
         """
         Returns the type of this Expression.
         """
+
     @property
     def id(self) -> str: ...
     @property
     def name(self) -> str: ...
+
+class ExpressionStatus:
+    """
+    Members:
+
+      EXPR_STATUS_UNKNOWN
+
+      EXPR_STATUS_SATISFIED
+
+      EXPR_STATUS_UNSATISFIED
+    """
+
+    EXPR_STATUS_SATISFIED: typing.ClassVar[
+        ExpressionStatus
+    ]  # value = <ExpressionStatus.EXPR_STATUS_SATISFIED: 1>
+    EXPR_STATUS_UNKNOWN: typing.ClassVar[
+        ExpressionStatus
+    ]  # value = <ExpressionStatus.EXPR_STATUS_UNKNOWN: 2>
+    EXPR_STATUS_UNSATISFIED: typing.ClassVar[
+        ExpressionStatus
+    ]  # value = <ExpressionStatus.EXPR_STATUS_UNSATISFIED: 0>
+    __members__: typing.ClassVar[
+        dict[str, ExpressionStatus]
+    ]  # value = {'EXPR_STATUS_UNKNOWN': <ExpressionStatus.EXPR_STATUS_UNKNOWN: 2>, 'EXPR_STATUS_SATISFIED': <ExpressionStatus.EXPR_STATUS_SATISFIED: 1>, 'EXPR_STATUS_UNSATISFIED': <ExpressionStatus.EXPR_STATUS_UNSATISFIED: 0>}
+    def __eq__(self, other: typing.Any) -> bool: ...
+    def __getstate__(self) -> int: ...
+    def __hash__(self) -> int: ...
+    def __index__(self) -> int: ...
+    def __init__(self, value: int) -> None: ...
+    def __int__(self) -> int: ...
+    def __ne__(self, other: typing.Any) -> bool: ...
+    def __repr__(self) -> str: ...
+    def __setstate__(self, state: int) -> None: ...
+    def __str__(self) -> str: ...
+    @property
+    def name(self) -> str: ...
+    @property
+    def value(self) -> int: ...
 
 class ExpressionType:
     """
@@ -257,15 +323,18 @@ class Placement:
         """
         Returns the Partition assignments for this Placement.
         """
+
     def isPlaced(self) -> bool:
         """
         Returns true if the Placement was placed, false otherwise.
         """
+
     @property
     def name(self) -> str:
         """
         The name of the Placement.
         """
+
     @property
     def startTime(self) -> int | None:
         """
@@ -282,6 +351,7 @@ class ScaleExpression(Expression):
           name (str): The name of the ScaleExpression.
           scaleFactor (TETRISCHED_ILP_TYPE): The scaling factor of the ScaleExpression.
         """
+
     @typing.overload
     def __init__(self, name: str, scaleFactor: float, disregardUtility: bool) -> None:
         """
@@ -303,16 +373,19 @@ class SolutionResult:
         Args:
           taskName (str): The name of the task to get the Placement for.
         """
+
     @property
     def endTime(self) -> int | None:
         """
         The end time of the expression.
         """
+
     @property
     def startTime(self) -> int | None:
         """
         The start time of the expression.
         """
+
     @property
     def utility(self) -> float | None:
         """

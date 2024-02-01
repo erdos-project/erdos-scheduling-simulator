@@ -132,9 +132,11 @@ flags.DEFINE_boolean(
 )
 flags.register_validator(
     "with_placement_issues",
-    lambda value: (FLAGS.chrome_trace == "resource" and FLAGS.between_time is not None)
-    if value
-    else True,
+    lambda value: (
+        (FLAGS.chrome_trace == "resource" and FLAGS.between_time is not None)
+        if value
+        else True
+    ),
     message="Placement issues require resource traces with limited interval.",
 )
 
@@ -265,9 +267,9 @@ flags.DEFINE_bool(
 )
 flags.register_multi_flags_validator(
     ["aggregate_stats", "conf_files"],
-    lambda values: values["conf_files"] is not None
-    if values["aggregate_stats"]
-    else True,
+    lambda values: (
+        values["conf_files"] is not None if values["aggregate_stats"] else True
+    ),
     message="Config files must be provided to invoke the aggregate_stats mode.",
 )
 
@@ -772,15 +774,19 @@ def log_detailed_task_statistics(
             results.append(
                 tuple(
                     map(
-                        lambda val: R + str(val) + D
-                        if task.missed_deadline
-                        else G + str(val) + D,
+                        lambda val: (
+                            R + str(val) + D
+                            if task.missed_deadline
+                            else G + str(val) + D
+                        ),
                         (
                             task.timestamp,
                             str(task.id),
-                            task.intended_release_time / 1000
-                            if task.intended_release_time != -1
-                            else "-",
+                            (
+                                task.intended_release_time / 1000
+                                if task.intended_release_time != -1
+                                else "-"
+                            ),
                             task.release_time / 1000,
                             task.placement_time / 1000,
                             task.start_time / 1000,
@@ -791,9 +797,11 @@ def log_detailed_task_statistics(
                             len(task.skipped_times) > 0,
                             task.get_deadline_delay() / 1000,
                             task.get_placement_delay() / 1000,
-                            task.get_release_delay() / 1000
-                            if task.intended_release_time != -1
-                            else "-",
+                            (
+                                task.get_release_delay() / 1000
+                                if task.intended_release_time != -1
+                                else "-"
+                            ),
                         ),
                     )
                 )
@@ -995,9 +1003,11 @@ def log_basic_task_statistics(
                 len(skipped_tasks),
                 stat_function(release_delays),
                 stat_function(placement_delays),
-                stat_function(missed_deadline_delays)
-                if len(missed_deadline_delays) != 0
-                else 0.0,
+                (
+                    stat_function(missed_deadline_delays)
+                    if len(missed_deadline_delays) != 0
+                    else 0.0
+                ),
             )
         )
     results.append(
@@ -1008,9 +1018,11 @@ def log_basic_task_statistics(
             len(total_skipped),
             stat_function(total_release_delays),
             stat_function(total_placement_delays),
-            stat_function(total_missed_deadline_delays)
-            if len(total_missed_deadline_delays) != 0
-            else 0.0,
+            (
+                stat_function(total_missed_deadline_delays)
+                if len(total_missed_deadline_delays) != 0
+                else 0.0
+            ),
         )
     )
 
@@ -1249,12 +1261,12 @@ def main(argv):
                 output_path,
                 between_time=between_time,
                 trace_fmt=FLAGS.chrome_trace,
-                show_release_times=FLAGS.show_release_times
-                if FLAGS.show_release_times
-                else "never",
-                show_deadlines=FLAGS.show_deadlines
-                if FLAGS.show_deadlines
-                else "missed",
+                show_release_times=(
+                    FLAGS.show_release_times if FLAGS.show_release_times else "never"
+                ),
+                show_deadlines=(
+                    FLAGS.show_deadlines if FLAGS.show_deadlines else "missed"
+                ),
                 with_placement_issues=FLAGS.with_placement_issues,
             )
 
