@@ -2471,7 +2471,7 @@ ParseResultPtr ScaleExpression::parse(
       if (!childParseResult->utility) {
         throw tetrisched::exceptions::ExpressionConstructionException(
             "ScaleExpression applied to a child that does not have any "
-            "utility.");
+            "utility. Scale Expr Name: " + this->getDescriptiveName() + " Child Name: " + children[0]->getDescriptiveName());
       }
       TETRISCHED_DEBUG(
           "[" << name << "] is amplifying the utility for the child "

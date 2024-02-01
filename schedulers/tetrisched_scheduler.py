@@ -233,7 +233,7 @@ class TetriSchedScheduler(BaseScheduler):
         self._scheduler_configuration = tetrisched.SchedulerConfig()
         self._scheduler_configuration.optimize = self._enable_optimization_passes
         self._scheduler_configuration.newSolutionTimeMs = 1 * 60 * 1000
-        self._scheduler_configuration.totalSolverTimeMs = 1 * 60 * 1000
+        self._scheduler_configuration.totalSolverTimeMs = 1 * 10 * 1000
 
         # NOTE (Sukrit): We observe that solving each TaskGraph independently usually
         # leads to more missed deadlines than required. To offset this, the following
