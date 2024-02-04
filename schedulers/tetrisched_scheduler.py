@@ -232,7 +232,7 @@ class TetriSchedScheduler(BaseScheduler):
         # Scheduler configuration.
         self._scheduler_configuration = tetrisched.SchedulerConfig()
         self._scheduler_configuration.optimize = self._enable_optimization_passes
-        self._scheduler_configuration.newSolutionTimeMs = (
+        self._scheduler_configuration.totalSolverTimeMs = (
             # 1 minute interrupt by default.
             1 * 60 * 1000
             if _flags is None or _flags.scheduler_time_limit == -1
@@ -501,6 +501,26 @@ class TetriSchedScheduler(BaseScheduler):
             for task in tasks_to_be_scheduled:
                 if task.task_graph in cancelled_task_graphs:
                     placements.append(Placement.create_task_cancellation(task=task))
+        elif self.enforce_deadlines:
+            # If we are not releasing TaskGraphs, then we just cancel the tasks that
+            # cannot be finished by their deadlines.
+            for task in tasks_to_be_scheduled:
+                fastest_strategy = (
+                    task.available_execution_strategies.get_fastest_strategy()
+                )
+                if task.deadline < sim_time + fastest_strategy.runtime:
+                    placements.append(Placement.create_task_cancellation(task=task))
+                    cancelled_task_graphs.add(task.task_graph)
+                    self._logger.debug(
+                        "[%s] Cancelled Task %s belonging to TaskGraph %s since its "
+                        "deadline is at %s, and the fastest strategy can finish it in "
+                        "%s.",
+                        sim_time.time,
+                        task.unique_name,
+                        task.task_graph,
+                        task.deadline,
+                        fastest_strategy.runtime,
+                    )
 
         # Find the currently running and scheduled tasks to inform
         # the scheduler of previous placements.
@@ -535,9 +555,11 @@ class TetriSchedScheduler(BaseScheduler):
         scheduler_start_time = time.time()
         if len(tasks_to_be_scheduled) > 0 and any(
             # If there is a Task belonging to a TaskGraph that hasn't been previously
-            # considered for scheduling, then we run the scheduler.
+            # considered for scheduling and belongs to a TaskGraph that hasn't been
+            # cancelled, then we run the scheduler.
             task.state != TaskState.SCHEDULED
             and task.task_graph not in self._previously_considered_task_graphs
+            and task.task_graph not in cancelled_task_graphs
             for task in tasks_to_be_scheduled
         ):
             # Construct the partitions from the Workers in the WorkerPool.
