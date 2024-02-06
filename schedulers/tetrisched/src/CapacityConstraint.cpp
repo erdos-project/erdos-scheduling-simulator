@@ -204,9 +204,10 @@ void CapacityConstraintMap::setDynamicDiscretization(
 }
 
 void CapacityConstraintMap::registerUsageForDuration(
-    const Expression* expression, const Partition& partition,
+    const Expression *expression, const Partition &partition,
     const Time startTime, const Time duration, const IndicatorT usageIndicator,
-    const PartitionUsageT variable, std::optional<Time> granularity) {
+    const PartitionUsageT variable, std::optional<Time> granularity, bool print, std::string exprName)
+{
   if (!useDynamicDiscretization) {
     // If we are not using dynamic discretization, then we can just
     // register the usage at the provided granularity.
@@ -252,6 +253,13 @@ void CapacityConstraintMap::registerUsageForDuration(
     // Time currentTime = startTime;
     Time currentTime = timeRangeToGranularities[granularityIndex].first.first;
     Time remainderTime = duration + (startTime - currentTime);
+    // if (print)
+    //   {
+    //     std::cout << "[CapConstraint] Registering usage for expression: " << exprName << " starting at "
+    //                      << startTime << " with duration " << duration
+    //                      << " at time: " << currentTime
+    //                      << " and remainder time: " << remainderTime << "." << std::endl;
+    //   }
     while (remainderTime > 0) {
       auto& timeRange = timeRangeToGranularities[granularityIndex].first;
       auto& granularity = timeRangeToGranularities[granularityIndex].second;
@@ -279,6 +287,15 @@ void CapacityConstraintMap::registerUsageForDuration(
           currentTime += granularity;
           remainderTime = 0;
         }
+        // if(print){
+        //   std::cout << "\t[CapConstraintInside] Registering usage for expression starting at "
+        //                    << startTime << " with duration " << duration
+        //                    << " at time: " << currentTime
+        //                    << " within the time range [" << timeRange.first << ", "
+        //                    << timeRange.second
+        //                    << "] with granularity: " << granularity
+        //                    << " and remainder time: " << remainderTime << "." << std::endl;
+        // }
         if (remainderTime!=0 && currentTime >= std::min(startTime + duration, timeRange.second) &&   granularityIndex == timeRangeToGranularities.size() - 1)
         {
           remainderTime = 0;

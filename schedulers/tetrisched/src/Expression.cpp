@@ -1503,7 +1503,7 @@ ParseResultPtr AllocationExpression::parse(
   // Add the allocation variables to the CapacityConstraintMap.
   for (const auto& [partition, allocation] : allocatedResources) {
     capacityConstraints->registerUsageForDuration(
-        this, *partition, startTime, duration, 1, allocation, std::nullopt);
+        this, *partition, startTime, duration, 1, allocation, std::nullopt, true, getDescriptiveName());
   }
   TETRISCHED_DEBUG("Finished parsing AllocationExpression for "
                    << name << " to be placed starting at time " << startTime

@@ -1142,6 +1142,8 @@ class TetriSchedScheduler(BaseScheduler):
                 scheduled_discretization.to(EventTime.Unit.US).time,
                 task_remaining_time.to(EventTime.Unit.US).time,
             )
+            if task.state == TaskState.SCHEDULED:
+                task_allocation_expression.setPreviouslySatisfied(True)
             self._logger.debug(
                 f"[{current_time.time}] Generated an AllocationExpression for "
                 f"task {task.unique_name} in state {task.state} starting at "

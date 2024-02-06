@@ -475,7 +475,7 @@ void DiscretizationSelectorOptimizationPass::runPass(
   firstStack.push(strlExpression);
 
   std::vector<ExpressionPtr> maxOverNckExprs;
-  std::vector<ExpressionPtr> independentNcks;
+  std::vector<ExpressionPtr> independentLeafExprs;
   std::set<Time> chooseExprStartTimes;
 
   while (!firstStack.empty()) {
@@ -487,23 +487,26 @@ void DiscretizationSelectorOptimizationPass::runPass(
       isMaxExpr = true;
     } else if (currentExpression->getType() == ExpressionType::EXPR_CHOOSE ||
                 currentExpression->getType() ==
-                    ExpressionType::EXPR_WINDOWED_CHOOSE) {
+                    ExpressionType::EXPR_WINDOWED_CHOOSE || currentExpression->getType() == ExpressionType::EXPR_ALLOCATION) {
       // TODO(Alind): Actual check should be that MAX has all children NCK for
       // EXPR_CHOOSE
-      if (finerDiscretizationAtPrevSolution && currentExpression->isPreviouslySatisfied()){
+      if ((currentExpression->getType() == ExpressionType::EXPR_CHOOSE ||
+           currentExpression->getType() ==
+               ExpressionType::EXPR_WINDOWED_CHOOSE ||
+           currentExpression->getType() == ExpressionType::EXPR_ALLOCATION) &&
+          finerDiscretizationAtPrevSolution && currentExpression->isPreviouslySatisfied())
+      {
+        
         // register the start time of prev solved choose expr +- finerDiscretizationWindow
         Time startTimeChooseExpr = currentExpression->getTimeBounds().startTimeRange.first;
-        Time tbegin = 0;
-        Time tend = startTimeChooseExpr + finerDiscretizationWindow;
-        if(startTimeChooseExpr > finerDiscretizationWindow){
-          tbegin = startTimeChooseExpr - finerDiscretizationWindow;
-        }
+        Time tbegin = startTimeChooseExpr;
+        Time tend = startTimeChooseExpr;
         for (auto finerTime = tbegin; finerTime <= tend; finerTime++)
           chooseExprStartTimes.insert(finerTime);
       }
       if (currentExpression->getParents()[0]->getType() !=
-          ExpressionType::EXPR_MAX){
-        independentNcks.push_back(currentExpression);
+          ExpressionType::EXPR_MAX || currentExpression->getType() == ExpressionType::EXPR_ALLOCATION){
+        independentLeafExprs.push_back(currentExpression);
       }
       
     }
@@ -526,7 +529,7 @@ void DiscretizationSelectorOptimizationPass::runPass(
       maxOverNckExprs.push_back(currentExpression);
     }
   }
-  if (maxOverNckExprs.size() == 0 && independentNcks.size() == 0) {
+  if (maxOverNckExprs.size() == 0 && independentLeafExprs.size() == 0) {
     throw tetrisched::exceptions::RuntimeException(
         "Inside Discretization Optimization pass: but no max over nck or "
         "independent ncks found!");
@@ -551,8 +554,8 @@ void DiscretizationSelectorOptimizationPass::runPass(
     // Push the occupancy request range into the vector.
     occupancyRequestRanges.push_back({occupancyRequestRange, numResources});
   }
-  for (auto iNck : independentNcks) {
-    auto timeBounds = iNck->getTimeBounds();
+  for (auto iLeafExpr : independentLeafExprs) {
+    auto timeBounds = iLeafExpr->getTimeBounds();
     TimeRange occupancyRequestRange = std::make_pair(
         timeBounds.startTimeRange.first, timeBounds.endTimeRange.second);
 
@@ -563,7 +566,7 @@ void DiscretizationSelectorOptimizationPass::runPass(
     if (occupancyRequestRange.second > maxOccupancyTime) {
       maxOccupancyTime = occupancyRequestRange.second;
     }
-    auto numResources = iNck->getResourceQuantity();
+    auto numResources = iLeafExpr->getResourceQuantity();
     // Push the occupancy request range into the vector.
     occupancyRequestRanges.push_back({occupancyRequestRange, numResources});
   }
@@ -625,7 +628,10 @@ void DiscretizationSelectorOptimizationPass::runPass(
     if (planAheadIndex > -1) {
       Time endTime = timeRangeToGranularities[planAheadIndex].first.second;
       Time currentTime = minOccupancyTime + i;
-      if (currentTime < endTime) {
+      if (finerDiscretizationAtPrevSolution && chooseExprStartTimes.contains(currentTime)) {
+        timeRangeToGranularities[planAheadIndex].first.second = currentTime;
+        timeRangeToGranularities[planAheadIndex].second = currentTime - timeRangeToGranularities[planAheadIndex].first.first;
+      } else if (currentTime < endTime) {
         continue;
       }
     }
@@ -635,11 +641,6 @@ void DiscretizationSelectorOptimizationPass::runPass(
     uint32_t predictedDiscretization = linearDecayFunction(currentOccupancy);
     auto nextPlanAhead =
         std::min(i + predictedDiscretization, occupancyRequests.size());
-    if (finerDiscretizationAtPrevSolution && chooseExprStartTimes.contains(i+minOccupancyTime)){
-      nextPlanAhead =
-          std::min(i + 1, occupancyRequests.size());
-    }
-
     // find the right discretization such that average occupancy for that
     // period predicts same discretization
     while (nextPlanAhead >= (i + 1)) {
