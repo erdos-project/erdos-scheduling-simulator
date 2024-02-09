@@ -490,6 +490,7 @@ class AllocationExpression : public Expression {
                        Time currentTime) override;
   SolutionResultPtr populateResults(SolverModelPtr solverModel) override;
   std::string getDescriptiveName() const override;
+  uint32_t getResourceQuantity() const override;
 };
 
 /// An `ObjectiveExpression` collates the objectives from its children and

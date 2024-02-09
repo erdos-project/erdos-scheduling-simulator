@@ -1525,6 +1525,14 @@ std::string AllocationExpression::getDescriptiveName() const {
          ", F=" + std::to_string(endTime) + ")";
 }
 
+uint32_t AllocationExpression::getResourceQuantity() const { 
+  uint32_t numResources = 0;
+  for (const auto& [partition, allocation] : allocatedResources) {
+    numResources += allocation;
+  }
+  return numResources; 
+}
+
 /* Method definitions for ObjectiveExpression */
 
 ObjectiveExpression::ObjectiveExpression(std::string name)
