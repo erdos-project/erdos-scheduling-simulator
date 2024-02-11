@@ -1,0 +1,24 @@
+// ERDOS Scheduler RPC Service.
+// This service is aimed for systems to schedule tasks by exploiting the
+// scheduler backends and the Simulator types available in ERDOS.
+
+syntax = "proto3";
+
+package erdos;
+
+// The `SchedulerService` is the main service for scheduling tasks.
+service SchedulerService {
+    // Registers a new framework with the backend scheduler.
+    // This is the entry point for a new instance of Spark / Flink to register
+    // itself with the backend scheduler, and is intended as an EHLO.
+    rpc RegisterFramework(RegisterFrameworkRequest) returns (RegisterFrameworkResponse) {}
+}
+
+message RegisterFrameworkRequest {
+    string framework_name = 1;
+    string framework_id = 2;
+}
+
+message RegisterFrameworkResponse {
+    string framework_id = 1;
+}
