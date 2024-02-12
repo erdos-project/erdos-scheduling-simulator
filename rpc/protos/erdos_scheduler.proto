@@ -15,11 +15,12 @@ service SchedulerService {
 }
 
 message RegisterFrameworkRequest {
-    string framework_name = 1;
-    string framework_uri = 2;
+    string name = 1;
+    string uri = 2;
+    uint64 timestamp = 3;
 }
 
 message RegisterFrameworkResponse {
     bool success = 1;
-    string response_message = 2;
+    string message = 2;
 }
