@@ -40,6 +40,11 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         itself with the backend scheduler, and is intended as an EHLO.
         """
         if self._initialized:
+            self._logger.warning(
+                "Framework already registered at %s with the address %s",
+                self._initialization_time,
+                self._master_uri,
+            )
             return erdos_scheduler_pb2.RegisterFrameworkResponse(
                 success=False,
                 message=f"Framework already registered at "
@@ -50,10 +55,51 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         framework_name = request.name
         self._master_uri = request.uri
         self._initialization_time = request.timestamp
-        print("Registering framework %s with URI %s", framework_name, self._master_uri)
+        self._initialized = True
+        self._logger.info(
+            "Registering framework %s with URI %s at %s",
+            framework_name,
+            self._master_uri,
+            self._initialization_time,
+        )
         return erdos_scheduler_pb2.RegisterFrameworkResponse(
             success=True,
             message=f"{framework_name} at {self._master_uri} registered successfully!",
+        )
+
+    def DeregisterFramework(self, request, context):
+        """Deregisters the framework with the backend scheduler.
+        This is the exit point for a running instance of Spark / Flink to deregister"""
+        if not self._initialized:
+            self._logger.warning(
+                "Trying to deregister the framework at %s, "
+                "but no framework is registered yet.",
+                request.uri,
+            )
+            return erdos_scheduler_pb2.DeregisterFrameworkResponse(
+                success=False, message="Framework not registered yet."
+            )
+
+        if not self._master_uri == request.uri:
+            self._logger.warning(
+                "Trying to deregister the framework at %s, "
+                "but the registered framework is at %s.",
+                request.uri,
+                self._master_uri,
+            )
+            return erdos_scheduler_pb2.DeregisterFrameworkResponse(
+                success=False,
+                message=f"Framework not registered at {request.uri} yet.",
+            )
+
+        # Deregister the framework.
+        self._initialization_time = None
+        self._master_uri = None
+        self._initialized = False
+        self._logger.info("Deregistering framework at %s", request.uri)
+        return erdos_scheduler_pb2.DeregisterFrameworkResponse(
+            success=True,
+            message=f"Framework at {request.uri} deregistered successfully!",
         )
 
 

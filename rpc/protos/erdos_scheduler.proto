@@ -12,6 +12,10 @@ service SchedulerService {
     // This is the entry point for a new instance of Spark / Flink to register
     // itself with the backend scheduler, and is intended as an EHLO.
     rpc RegisterFramework(RegisterFrameworkRequest) returns (RegisterFrameworkResponse) {}
+
+    /// Deregisters the framework with the backend scheduler.
+    /// This is meant for the framework to signal its intent to shut down.
+    rpc DeregisterFramework(DeregisterFrameworkRequest) returns (DeregisterFrameworkResponse) {}
 }
 
 message RegisterFrameworkRequest {
@@ -21,6 +25,17 @@ message RegisterFrameworkRequest {
 }
 
 message RegisterFrameworkResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message DeregisterFrameworkRequest {
+    string name = 1;
+    string uri = 2;
+    uint64 timestamp = 3;
+}
+
+message DeregisterFrameworkResponse {
     bool success = 1;
     string message = 2;
 }
