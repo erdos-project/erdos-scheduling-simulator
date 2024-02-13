@@ -1,3 +1,4 @@
+import asyncio
 import os
 import sys
 import time
@@ -56,7 +57,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
 
         super().__init__()
 
-    def RegisterFramework(self, request, context):
+    async def RegisterFramework(self, request, context):
         """Registers a new framework with the backend scheduler.
         This is the entry point for a new instance of Spark / Flink to register
         itself with the backend scheduler, and is intended as an EHLO.
@@ -95,7 +96,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             message=f"{framework_name} at {self._master_uri} registered successfully!",
         )
 
-    def RegisterDriver(self, request, context):
+    async def RegisterDriver(self, request, context):
         if not self._initialized:
             self._logger.warning(
                 "Trying to register a driver with name %s and id %s, "
@@ -187,7 +188,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                 worker_id="",
             )
 
-    def DeregisterDriver(self, request, context):
+    async def DeregisterDriver(self, request, context):
         if not self._initialized:
             self._logger.warning(
                 "Trying to deregister a driver with id %s, "
@@ -220,7 +221,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             message=f"Driver with id {request.id} deregistered successfully!",
         )
 
-    def RegisterTaskGraph(self, request, context):
+    async def RegisterTaskGraph(self, request, context):
         """Registers a new TaskGraph with the backend scheduler.
         This is the entry point for a new application of Spark to register
         itself with the backend scheduler, and is intended as an EHLO.
@@ -263,7 +264,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             f"{app_name} registered successfully!",
         )
 
-    def DeregisterFramework(self, request, context):
+    async def DeregisterFramework(self, request, context):
         """Deregisters the framework with the backend scheduler.
         This is the exit point for a running instance of Spark / Flink to deregister"""
         if not self._initialized:
@@ -298,7 +299,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             message=f"Framework at {request.uri} deregistered successfully!",
         )
 
-    def RegisterWorker(self, request, context):
+    async def RegisterWorker(self, request, context):
         """Registers a new worker with the backend scheduler."""
         if not self._initialized:
             self._logger.warning(
@@ -340,20 +341,26 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         )
 
 
-def serve(args):
+async def serve():
     """Serves the ERDOS Scheduling RPC Server."""
     # Initialize the server.
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=FLAGS.max_workers))
+    server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=FLAGS.max_workers))
     erdos_scheduler_pb2_grpc.add_SchedulerServiceServicer_to_server(
         SchedulerServiceServicer(), server
     )
 
     # Start the server.
     server.add_insecure_port(f"[::]:{FLAGS.port}")
-    server.start()
+    await server.start()
     print("Initialized ERDOS Scheduling RPC Server on port", FLAGS.port)
-    server.wait_for_termination()
+    await server.wait_for_termination()
+
+
+def main(argv):
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(serve())
+    loop.close()
 
 
 if __name__ == "__main__":
-    app.run(serve)
+    app.run(main)
