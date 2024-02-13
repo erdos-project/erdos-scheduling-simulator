@@ -13,6 +13,11 @@ service SchedulerService {
     // itself with the backend scheduler, and is intended as an EHLO.
     rpc RegisterFramework(RegisterFrameworkRequest) returns (RegisterFrameworkResponse) {}
 
+    // Registers a new application with the backend scheduler.
+    // This is the entry point for a new taskgraph (application) to register
+    // itself with the backend scheduler, and is intended as an EHLO.
+    rpc RegisterTaskGraph(RegisterTaskGraphRequest) returns (RegisterTaskGraphResponse) {}
+
     /// Deregisters the framework with the backend scheduler.
     /// This is meant for the framework to signal its intent to shut down.
     rpc DeregisterFramework(DeregisterFrameworkRequest) returns (DeregisterFrameworkResponse) {}
@@ -45,6 +50,19 @@ message DeregisterFrameworkRequest {
 }
 
 message DeregisterFrameworkResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+/// Application related RPC structures.
+/// The following structures represent the data that an application (TaskGraph)
+/// must pass to the scheduling backend.
+message RegisterTaskGraphRequest {
+    string id = 1;
+    string name = 2;
+}
+
+message RegisterTaskGraphResponse {
     bool success = 1;
     string message = 2;
 }

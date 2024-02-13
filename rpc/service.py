@@ -2,6 +2,7 @@ import os
 import sys
 from concurrent import futures
 from urllib.parse import urlparse
+import time
 
 sys.path.append(
     os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir))
@@ -38,6 +39,9 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
 
         # The simulator types maintained by the Servicer.
         self._worker_pool = None
+
+        # Application (TaskGraph) information maintained by the Servicer.
+        self._all_task_graphs = {}
 
         super().__init__()
 
@@ -78,6 +82,43 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         return erdos_scheduler_pb2.RegisterFrameworkResponse(
             success=True,
             message=f"{framework_name} at {self._master_uri} registered successfully!",
+        )
+    
+    def RegisterTaskGraph(self, request, context):
+        """Registers a new TaskGraph with the backend scheduler.
+        This is the entry point for a new application of Spark to register
+        itself with the backend scheduler, and is intended as an EHLO.
+        """
+        app_id = request.id
+        app_name = request.name
+        received_ts = time.time()
+        if app_id in self._all_task_graphs:
+            self._logger.warning(
+                "Registration failed for app_id %s and name %s. Was already registered!",
+                app_id,
+                app_name,
+            )
+            return erdos_scheduler_pb2.RegisterTaskGraphResponse(
+                success=False,
+                message=f"Application ID {app_id} with name {app_name} already registered!"
+            )
+
+        # Setup a new TaskGraph (application).
+        self._logger.info(
+            "Registering application ID %s with name %s at received_ts %s",
+            app_id,
+            app_name,
+            received_ts,
+        )
+
+        # Setup application information for servicer.
+        new_application = {"app_id": app_id, "app_name": app_name, "received_ts": received_ts}
+        self._all_task_graphs[app_id] = new_application
+
+        # Return the response.
+        return erdos_scheduler_pb2.RegisterTaskGraphResponse(
+            success=True,
+            message=f"Application ID {app_id} with name {app_name} registered successfully!",
         )
 
     def DeregisterFramework(self, request, context):
