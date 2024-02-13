@@ -65,6 +65,7 @@ message DeregisterFrameworkResponse {
 /// URI, the number of resources required by the driver, and other general
 /// information.
 message RegisterDriverRequest {
+    string id = 1;
     string uri = 2;
     int32 cores = 3;
     int32 memory = 4;
