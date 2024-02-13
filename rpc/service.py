@@ -2,6 +2,7 @@ import os
 import sys
 import time
 from concurrent import futures
+from typing import Mapping
 from urllib.parse import urlparse
 
 sys.path.append(
@@ -13,9 +14,17 @@ import erdos_scheduler_pb2_grpc
 import grpc
 from absl import app, flags
 
-from utils import setup_logging
+from utils import EventTime, setup_logging
 from workers import Worker, WorkerPool
-from workload import Resource, Resources
+from workload import (
+    ExecutionStrategies,
+    ExecutionStrategy,
+    Job,
+    Resource,
+    Resources,
+    Task,
+    WorkProfile,
+)
 
 FLAGS = flags.FLAGS
 
@@ -39,6 +48,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
 
         # The simulator types maintained by the Servicer.
         self._worker_pool = None
+        self._drivers: Mapping[str, Task] = {}
 
         # Application (TaskGraph) information maintained by the Servicer.
         self._all_task_graphs = {}
@@ -83,6 +93,83 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             success=True,
             message=f"{framework_name} at {self._master_uri} registered successfully!",
         )
+
+    def RegisterDriver(self, request, context):
+        if not self._initialized:
+            self._logger.warning(
+                "Trying to register a driver with name %s and id %s, "
+                "but no framework is registered yet.",
+                request.name,
+                request.id,
+            )
+            return erdos_scheduler_pb2.RegisterDriverResponse(
+                success=False,
+                message="Framework not registered yet.",
+                worker_name="",
+                worker_id="",
+            )
+
+        # Create a Task for the Driver, and add it to the list of drivers.
+        # TODO (Sukrit): We drop the memory requirements for now, we should use
+        # them to do multi-dimensional packing using STRL.
+        self._logger.info(
+            "Received a request to register a driver with name %s, URI: %s. "
+            "The driver requires %s cores and %s memory.",
+            request.id,
+            request.uri,
+            request.cores,
+            request.memory,
+        )
+        driver_resources = Resources(
+            resource_vector={Resource(name="Slot_CPU", _id="any"): request.cores}
+        )
+        driver_job = Job(
+            name=request.id,
+            profile=WorkProfile(
+                name=f"WorkProfile_{request.id}",
+                execution_strategies=ExecutionStrategies(
+                    [
+                        ExecutionStrategy(
+                            resources=driver_resources,
+                            batch_size=1,
+                            # NOTE (Sukrit): Drivers are long running, and have no
+                            # fixed runtime. We set it to invalid to indicate this.
+                            runtime=EventTime.invalid(),
+                        )
+                    ]
+                ),
+            ),
+        )
+        driver = Task(
+            name=request.id,
+            task_graph=request.uri,
+            job=driver_job,
+            deadline=EventTime.invalid(),
+        )
+        self._drivers[request.id] = driver
+
+        # Iterate over the Workers and find a Worker that can accomodate the driver.
+        placement_found = False
+        for worker in self._worker_pool.workers:
+            for execution_strategy in driver.available_execution_strategies:
+                if worker.can_accomodate_strategy(execution_strategy):
+                    # This Worker can accomodate the Driver, we assign it here.
+                    placement_found = True
+                    worker.place_task(driver, execution_strategy)
+                    return erdos_scheduler_pb2.RegisterDriverResponse(
+                        success=True,
+                        message=f"Driver {request.id} registered successfully!",
+                        worker_name=worker.name,
+                        worker_id=worker.name,
+                    )
+
+        if not placement_found:
+            return erdos_scheduler_pb2.RegisterDriverResponse(
+                success=False,
+                message=f"No Worker can accomodate the driver {request.id} yet.",
+                worker_name="",
+                worker_id="",
+            )
 
     def RegisterTaskGraph(self, request, context):
         """Registers a new TaskGraph with the backend scheduler.

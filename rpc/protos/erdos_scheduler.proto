@@ -76,7 +76,6 @@ message RegisterDriverResponse {
     string message = 2;
     // The following fields are used to communicate the worker that the driver
     // has been scheduled on.
-    string worker_name = 3;
     string worker_id = 4;
 }
 
