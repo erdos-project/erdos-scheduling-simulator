@@ -101,6 +101,7 @@ message DeregisterDriverResponse {
 message RegisterTaskGraphRequest {
     string id = 1;
     string name = 2;
+    uint64 timestamp = 3;
 }
 
 message RegisterTaskGraphResponse {
