@@ -80,10 +80,9 @@ message RegisterDriverRequest {
 message RegisterDriverResponse {
     bool success = 1;
     string message = 2;
-    uint64 timestamp = 3;
     // The following fields are used to communicate the worker that the driver
     // has been scheduled on.
-    string worker_id = 4;
+    string worker_id = 3;
 }
 
 message DeregisterDriverRequest {

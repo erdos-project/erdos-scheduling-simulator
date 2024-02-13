@@ -20,6 +20,7 @@ from workload import (
     ExecutionStrategies,
     ExecutionStrategy,
     Job,
+    Placement,
     Resource,
     Resources,
     Task,
@@ -133,8 +134,9 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                             resources=driver_resources,
                             batch_size=1,
                             # NOTE (Sukrit): Drivers are long running, and have no
-                            # fixed runtime. We set it to invalid to indicate this.
-                            runtime=EventTime.invalid(),
+                            # fixed runtime. Setting it to zero helps us unload the
+                            # driver from the Worker whenever we need it.
+                            runtime=EventTime.zero(),
                         )
                     ]
                 ),
@@ -155,7 +157,22 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                 if worker.can_accomodate_strategy(execution_strategy):
                     # This Worker can accomodate the Driver, we assign it here.
                     placement_found = True
-                    worker.place_task(driver, execution_strategy)
+                    self._worker_pool.place_task(driver, execution_strategy, worker.id)
+
+                    # Update the Task's state and placement information.
+                    driver.schedule(
+                        time=EventTime(request.timestamp, EventTime.Unit.S),
+                        placement=Placement(
+                            type=Placement.PlacementType.PLACE_TASK,
+                            computation=driver,
+                            worker_pool_id=self._worker_pool.id,
+                            worker_id=worker.id,
+                            strategy=execution_strategy,
+                        ),
+                    )
+                    driver.start()
+
+                    # Tell the framework to start the driver.
                     return erdos_scheduler_pb2.RegisterDriverResponse(
                         success=True,
                         message=f"Driver {request.id} registered successfully!",
@@ -170,6 +187,39 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                 worker_name="",
                 worker_id="",
             )
+
+    def DeregisterDriver(self, request, context):
+        if not self._initialized:
+            self._logger.warning(
+                "Trying to deregister a driver with id %s, "
+                "but no framework is registered yet.",
+                request.id,
+            )
+            return erdos_scheduler_pb2.DeregisterDriverResponse(
+                success=False, message="Framework not registered yet."
+            )
+
+        if request.id not in self._drivers:
+            self._logger.warning(
+                "Trying to deregister a driver with id %s, "
+                "but no driver with that id is registered.",
+                request.id,
+            )
+            return erdos_scheduler_pb2.DeregisterDriverResponse(
+                success=False,
+                message=f"Driver with id {request.id} not registered yet.",
+            )
+
+        # Deregister the driver.
+        driver = self._drivers[request.id]
+        completion_time = EventTime(request.timestamp, EventTime.Unit.S)
+        self._worker_pool.remove_task(completion_time, driver)
+        driver.finish(completion_time)
+        del self._drivers[request.id]
+        return erdos_scheduler_pb2.DeregisterDriverResponse(
+            success=True,
+            message=f"Driver with id {request.id} deregistered successfully!",
+        )
 
     def RegisterTaskGraph(self, request, context):
         """Registers a new TaskGraph with the backend scheduler.
