@@ -17,6 +17,8 @@ service SchedulerService {
     /// This is meant for the framework to signal its intent to shut down.
     rpc DeregisterFramework(DeregisterFrameworkRequest) returns (DeregisterFrameworkResponse) {}
 
+    /// Registers a new Worker with the backend scheduler.
+    /// This is invoked whenever a new Worker joins the framework.
     rpc RegisterWorker(RegisterWorkerRequest) returns (RegisterWorkerResponse) {}
 }
 
