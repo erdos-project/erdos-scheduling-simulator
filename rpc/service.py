@@ -106,7 +106,6 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             return erdos_scheduler_pb2.RegisterDriverResponse(
                 success=False,
                 message="Framework not registered yet.",
-                worker_name="",
                 worker_id="",
             )
 
@@ -160,23 +159,24 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                     self._worker_pool.place_task(driver, execution_strategy, worker.id)
 
                     # Update the Task's state and placement information.
+                    placement_time = EventTime(request.timestamp, EventTime.Unit.S)
                     driver.schedule(
-                        time=EventTime(request.timestamp, EventTime.Unit.S),
+                        time=placement_time,
                         placement=Placement(
                             type=Placement.PlacementType.PLACE_TASK,
                             computation=driver,
+                            placement_time=placement_time,
                             worker_pool_id=self._worker_pool.id,
                             worker_id=worker.id,
                             strategy=execution_strategy,
                         ),
                     )
-                    driver.start()
+                    driver.start(placement_time)
 
                     # Tell the framework to start the driver.
                     return erdos_scheduler_pb2.RegisterDriverResponse(
                         success=True,
                         message=f"Driver {request.id} registered successfully!",
-                        worker_name=worker.name,
                         worker_id=worker.name,
                     )
 
@@ -184,7 +184,6 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             return erdos_scheduler_pb2.RegisterDriverResponse(
                 success=False,
                 message=f"No Worker can accomodate the driver {request.id} yet.",
-                worker_name="",
                 worker_id="",
             )
 

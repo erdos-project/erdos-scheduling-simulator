@@ -273,9 +273,9 @@ class Task(object):
             raise ValueError(
                 f"Only SCHEDULED tasks can be started. Task is in state {self.state}."
             )
-        if type(time) != EventTime:
+        if time is not None and type(time) != EventTime:
             raise ValueError(f"Invalid type received for time: {type(time)}")
-        if time is None and self._start_time == -1:
+        if time is None and self._start_time == EventTime.invalid():
             raise ValueError(
                 "Start time should be specified either while "
                 "creating the Task or when starting it."
