@@ -16,8 +16,15 @@ service SchedulerService {
     /// Deregisters the framework with the backend scheduler.
     /// This is meant for the framework to signal its intent to shut down.
     rpc DeregisterFramework(DeregisterFrameworkRequest) returns (DeregisterFrameworkResponse) {}
+
+    rpc RegisterWorker(RegisterWorkerRequest) returns (RegisterWorkerResponse) {}
 }
 
+
+/// Framework related RPC structures.
+/// The following structures represent the data that the framework as a whole
+/// must pass to the scheduling backend. This may involve things like the URI,
+/// the initialization time, and other general static information.
 message RegisterFrameworkRequest {
     string name = 1;
     string uri = 2;
@@ -36,6 +43,23 @@ message DeregisterFrameworkRequest {
 }
 
 message DeregisterFrameworkResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+/// Worker related RPC structures.
+/// The following structures represent the data that a Worker's addition to the
+/// framework must pass to the scheduling backend. This may involve things like
+/// the name of the Worker, the URI, the number of resources available to the
+/// Worker, and other general static information.
+message RegisterWorkerRequest {
+    string name = 1;
+    string id = 2;
+    int32 cores = 3;
+    int32 memory = 4;
+}
+
+message RegisterWorkerResponse {
     bool success = 1;
     string message = 2;
 }
