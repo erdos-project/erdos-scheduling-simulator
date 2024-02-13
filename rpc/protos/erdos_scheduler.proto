@@ -13,14 +13,19 @@ service SchedulerService {
     // itself with the backend scheduler, and is intended as an EHLO.
     rpc RegisterFramework(RegisterFrameworkRequest) returns (RegisterFrameworkResponse) {}
 
+    /// Deregisters the framework with the backend scheduler.
+    /// This is meant for the framework to signal its intent to shut down.
+    rpc DeregisterFramework(DeregisterFrameworkRequest) returns (DeregisterFrameworkResponse) {}
+
+    /// Registers the driver with the backend scheduler.
+    /// Drivers are long running entities that are allocated resources indefinitely
+    /// by the backend.
+    rpc RegisterDriver(RegisterDriverRequest) returns (RegisterDriverResponse) {}
+
     // Registers a new application with the backend scheduler.
     // This is the entry point for a new taskgraph (application) to register
     // itself with the backend scheduler, and is intended as an EHLO.
     rpc RegisterTaskGraph(RegisterTaskGraphRequest) returns (RegisterTaskGraphResponse) {}
-
-    /// Deregisters the framework with the backend scheduler.
-    /// This is meant for the framework to signal its intent to shut down.
-    rpc DeregisterFramework(DeregisterFrameworkRequest) returns (DeregisterFrameworkResponse) {}
 
     /// Registers a new Worker with the backend scheduler.
     /// This is invoked whenever a new Worker joins the framework.
@@ -50,6 +55,22 @@ message DeregisterFrameworkRequest {
 }
 
 message DeregisterFrameworkResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+/// Driver related RPC structures.
+/// The following structures represent the data that a driver must pass to the
+/// scheduling backend. This may involve things like the name of the driver, the
+/// URI, the number of resources required by the driver, and other general
+/// information.
+message RegisterDriverRequest {
+    string uri = 2;
+    int32 cores = 3;
+    int32 memory = 4;
+}
+
+message RegisterDriverResponse {
     bool success = 1;
     string message = 2;
 }
