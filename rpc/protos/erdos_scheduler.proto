@@ -74,6 +74,7 @@ message RegisterDriverRequest {
     string uri = 2;
     int32 cores = 3;
     int32 memory = 4;
+    uint64 timestamp = 5;
 }
 
 message RegisterDriverResponse {
