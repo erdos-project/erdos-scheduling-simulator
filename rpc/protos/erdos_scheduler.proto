@@ -143,5 +143,7 @@ message Placement {
 }
 
 message GetPlacementsResponse {
-    repeated Placement placements = 1;
+    bool success = 1;
+    repeated Placement placements = 2;
+    string message = 3;
 }

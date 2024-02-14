@@ -1,9 +1,8 @@
 import asyncio
 import os
 import sys
-import time
 from concurrent import futures
-from typing import Mapping
+from typing import Mapping, Sequence
 from urllib.parse import urlparse
 
 sys.path.append(
@@ -55,12 +54,13 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         self._drivers: Mapping[str, Task] = {}
         self._workload = None
 
-        # Application (TaskGraph) information maintained by the Servicer.
-        self._all_task_graphs = {}
-
         # Scheduler information maintained by the servicer.
         self._scheduler_running_lock = asyncio.Lock()
         self._scheduler_running = False
+
+        # Placement information maintained by the servicer.
+        # NOTE (Sukrit): This must always be sorted by the Placement time.
+        self._placements: Sequence[Placement] = []
 
         super().__init__()
 
@@ -417,6 +417,45 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
 
         return erdos_scheduler_pb2.RegisterWorkerResponse(
             success=True, message=f"Worker {request.name} registered successfully!"
+        )
+
+    async def GetPlacements(self, request, context):
+        """Retrieves the placements applicable at the specified time."""
+        if not self._initialized:
+            self._logger.warning(
+                "Trying to get placements at time %s, "
+                "but no framework is registered yet.",
+                request.timestamp,
+            )
+            return erdos_scheduler_pb2.GetPlacementsResponse(
+                success=False, message="Framework not registered yet."
+            )
+
+        # Construct and return the placements.
+        placements = []
+        clip_at = 0
+        for index, placement in enumerate(self._placements):
+            if placement.placement_time <= request.timestamp:
+                clip_at = index
+                resources = placement.execution_strategy.resources
+                placements.append(
+                    erdos_scheduler_pb2.Placement(
+                        worker_id=placement.worker_id,
+                        application_id=placement.name,
+                        cores=resources.get_allocated_quantity(
+                            resource=Resource(name="Slot_CPU", _id="any")
+                        ),
+                    )
+                )
+        self._placements = self._placements[clip_at + 1 :]
+        self._logger.info(
+            "Constructed %s placements at time %s.", len(placements), request.timestamp
+        )
+        return erdos_scheduler_pb2.GetPlacementsResponse(
+            success=True,
+            placements=placements,
+            message=f"Constructed {len(placements)} "
+            f"placements at time {request.timestamp}.",
         )
 
 
