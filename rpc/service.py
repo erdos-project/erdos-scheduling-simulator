@@ -25,6 +25,7 @@ from workload import (
     Resource,
     Resources,
     Task,
+    TaskGraph,
     Workload,
     WorkProfile,
 )
@@ -57,7 +58,41 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         # Application (TaskGraph) information maintained by the Servicer.
         self._all_task_graphs = {}
 
+        # Scheduler information maintained by the servicer.
+        self._scheduler_running_lock = asyncio.Lock()
+        self._scheduler_running = False
+
         super().__init__()
+
+    async def schedule(self) -> None:
+        """Schedules the tasks that have been added to the Workload."""
+        async with self._scheduler_running_lock:
+            if self._scheduler_running:
+                self._logger.error(
+                    "Scheduler already running, this should never be reached."
+                )
+                return
+            self._scheduler_running = True
+
+        self._logger.info(
+            "Starting a scheduling cycle with %s TaskGraphs and %s Workers.",
+            len(self._workload.task_graphs),
+            len(self._worker_pool.workers),
+        )
+
+        # TODO (Sukrit): Change this to a better implementation.
+        # Let's do some simple scheduling for now, that gives a fixed number of
+        # executors to all the available applications in intervals of 10 seconds.
+
+        self._logger.info("Finished a scheduling cycle.")
+        async with self._scheduler_running_lock:
+            self._scheduler_running = False
+
+    async def run_scheduler(self) -> None:
+        """Checks if the scheduler is running, and if not, starts it."""
+        async with self._scheduler_running_lock:
+            if not self._scheduler_running:
+                asyncio.create_task(self.schedule())
 
     async def RegisterFramework(self, request, context):
         """Registers a new framework with the backend scheduler.
@@ -229,45 +264,79 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         This is the entry point for a new application of Spark to register
         itself with the backend scheduler, and is intended as an EHLO.
         """
-        app_id = request.id
-        app_name = request.name
-        app_deadline = request.deadline
-        received_ts = time.time()
-        if app_id in self._all_task_graphs:
+        if not self._initialized:
+            self._logger.warning(
+                "Trying to register a task graph with ID %s and name %s, "
+                "but no framework is registered yet.",
+                request.id,
+                request.name,
+            )
+            return erdos_scheduler_pb2.RegisterTaskGraphResponse(
+                success=False, message="Framework not registered yet."
+            )
+
+        if request.id in self._workload.task_graphs:
             self._logger.warning(
                 "The application with ID %s and name %s was already registered.",
-                app_id,
-                app_name,
+                request.id,
+                request.name,
             )
             return erdos_scheduler_pb2.RegisterTaskGraphResponse(
                 success=False,
-                message=f"Application ID {app_id} with name {app_name} "
+                message=f"Application ID {request.id} with name {request.name} "
                 f"already registered!",
             )
 
-        # Setup a new TaskGraph (application).
-        self._logger.info(
-            "Registering app_id %s, name %s, deadline %s at received_ts %s",
-            app_id,
-            app_name,
-            app_deadline,
-            received_ts,
+        # Add a new TaskGraph to the Workload.
+        # TODO (Sukrit): Check that this is properly populated with the Tasks.
+        # Right now, we just make a singular task with the TaskGraph's name, and the
+        # given deadline.
+        task = Task(
+            name=request.name,
+            task_graph=request.id,
+            job=Job(
+                name=request.name,
+                profile=WorkProfile(
+                    name=f"WorkProfile_{request.name}",
+                    execution_strategies=ExecutionStrategies(
+                        [
+                            ExecutionStrategy(
+                                resources=Resources(
+                                    resource_vector={
+                                        # TODO (Sukrit): This also needs to be
+                                        # communicated by the framework.
+                                        Resource(name="Slot_CPU", _id="any"): 1
+                                    }
+                                ),
+                                batch_size=1,
+                                # TODO (Sukrit): For now, we just set the runtime to
+                                # be zero. But this also needs to come from the
+                                # framework.
+                                runtime=EventTime.zero(),
+                            )
+                        ]
+                    ),
+                ),
+            ),
+            deadline=EventTime(request.deadline, EventTime.Unit.S),
         )
-
-        # Setup application information for servicer.
-        new_application = {
-            "app_id": app_id,
-            "app_name": app_name,
-            "app_deadline": app_deadline,
-            "received_ts": received_ts,
-        }
-        self._all_task_graphs[app_id] = new_application
+        task.release(EventTime(request.timestamp, EventTime.Unit.S))
+        task_graph = TaskGraph(
+            name=request.id,
+            tasks={task: []},
+        )
+        self._workload.add_task_graph(task_graph)
+        self._logger.info(
+            "Added the TaskGraph(name=%s, id=%s) to the Workload.",
+            request.name,
+            request.id,
+        )
 
         # Return the response.
         return erdos_scheduler_pb2.RegisterTaskGraphResponse(
             success=True,
-            message=f"Application ID {app_id} with name "
-            f"{app_name} and deadline {app_deadline} registered successfully!",
+            message=f"Application ID {request.id} with name "
+            f"{request.name} and deadline {request.deadline} registered successfully!",
         )
 
     async def DeregisterFramework(self, request, context):
@@ -341,6 +410,10 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             worker.name,
             worker_resources,
         )
+
+        # Run the scheduler since the Resource set has changed, and new task graphs
+        # may become eligible to run.
+        await self.run_scheduler()
 
         return erdos_scheduler_pb2.RegisterWorkerResponse(
             success=True, message=f"Worker {request.name} registered successfully!"
