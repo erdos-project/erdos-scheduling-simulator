@@ -228,6 +228,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         """
         app_id = request.id
         app_name = request.name
+        app_deadline = request.deadline
         received_ts = time.time()
         if app_id in self._all_task_graphs:
             self._logger.warning(
@@ -243,9 +244,10 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
 
         # Setup a new TaskGraph (application).
         self._logger.info(
-            "Registering application ID %s with name %s at received_ts %s",
+            "Registering app_id %s, name %s, deadline %s at received_ts %s",
             app_id,
             app_name,
+            app_deadline,
             received_ts,
         )
 
@@ -253,6 +255,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         new_application = {
             "app_id": app_id,
             "app_name": app_name,
+            "app_deadline": app_deadline,
             "received_ts": received_ts,
         }
         self._all_task_graphs[app_id] = new_application
@@ -261,7 +264,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         return erdos_scheduler_pb2.RegisterTaskGraphResponse(
             success=True,
             message=f"Application ID {app_id} with name "
-            f"{app_name} registered successfully!",
+            f"{app_name} and deadline {app_deadline} registered successfully!",
         )
 
     async def DeregisterFramework(self, request, context):
