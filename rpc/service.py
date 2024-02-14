@@ -1,6 +1,7 @@
 import asyncio
 import os
 import sys
+import time
 from concurrent import futures
 from typing import Mapping, Sequence
 from urllib.parse import urlparse
@@ -83,6 +84,23 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         # TODO (Sukrit): Change this to a better implementation.
         # Let's do some simple scheduling for now, that gives a fixed number of
         # executors to all the available applications in intervals of 10 seconds.
+        if len(self._workload.task_graphs) > 0:
+            task_graph = next(iter(self._workload.task_graphs.values()))
+            task = task_graph.get_source_tasks()[0]
+            strategy = task.available_execution_strategies.get_fastest_strategy()
+            for i in range(5, 30, 6):
+                self._placements.append(
+                    Placement(
+                        type=Placement.PlacementType.PLACE_TASK,
+                        computation=task,
+                        placement_time=EventTime(
+                            int(time.time()) + i, EventTime.Unit.S
+                        ),
+                        worker_pool_id=self._worker_pool.id,
+                        worker_id=self._worker_pool.workers[0].name,
+                        strategy=strategy,
+                    )
+                )
 
         self._logger.info("Finished a scheduling cycle.")
         async with self._scheduler_running_lock:
@@ -332,6 +350,9 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             request.id,
         )
 
+        # Run the scheduler since the Workload has changed.
+        await self.run_scheduler()
+
         # Return the response.
         return erdos_scheduler_pb2.RegisterTaskGraphResponse(
             success=True,
@@ -433,21 +454,24 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
 
         # Construct and return the placements.
         placements = []
-        clip_at = 0
+        clip_at = -1
+        request_timestamp = EventTime(request.timestamp, EventTime.Unit.S)
         for index, placement in enumerate(self._placements):
-            if placement.placement_time <= request.timestamp:
+            if placement.placement_time <= request_timestamp:
                 clip_at = index
-                resources = placement.execution_strategy.resources
+                # resources = placement.execution_strategy.resources
                 placements.append(
                     erdos_scheduler_pb2.Placement(
                         worker_id=placement.worker_id,
-                        application_id=placement.name,
-                        cores=resources.get_allocated_quantity(
-                            resource=Resource(name="Slot_CPU", _id="any")
-                        ),
+                        application_id=placement.task.task_graph,
+                        cores=1,
                     )
                 )
+        self._logger.info(
+            "Currently %s placements, clipping at %s.", len(placements), clip_at
+        )
         self._placements = self._placements[clip_at + 1 :]
+        self._logger.info("Clipped placements length: %s", len(self._placements))
         self._logger.info(
             "Constructed %s placements at time %s.", len(placements), request.timestamp
         )
