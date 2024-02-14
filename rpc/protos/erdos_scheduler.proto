@@ -35,6 +35,11 @@ service SchedulerService {
     /// Registers a new Worker with the backend scheduler.
     /// This is invoked whenever a new Worker joins the framework.
     rpc RegisterWorker(RegisterWorkerRequest) returns (RegisterWorkerResponse) {}
+
+    /// Retrieves the scheduler's placements at a particular time.
+    /// This RPC is invoked periodically by the framework along with the current timestamp
+    /// and the backend scheduler informs the framework about the current allocations.
+    rpc GetPlacements(GetPlacementsRequest) returns (GetPlacementsResponse) {}
 }
 
 
@@ -125,4 +130,18 @@ message RegisterWorkerRequest {
 message RegisterWorkerResponse {
     bool success = 1;
     string message = 2;
+}
+
+message GetPlacementsRequest {
+    uint64 timestamp = 1;
+}
+
+message Placement {
+    string worker_id = 1;
+    string application_id = 2;
+    uint32 cores = 3;
+}
+
+message GetPlacementsResponse {
+    repeated Placement placements = 1;
 }
