@@ -25,6 +25,7 @@ from workload import (
     Resource,
     Resources,
     Task,
+    Workload,
     WorkProfile,
 )
 
@@ -51,6 +52,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         # The simulator types maintained by the Servicer.
         self._worker_pool = None
         self._drivers: Mapping[str, Task] = {}
+        self._workload = None
 
         # Application (TaskGraph) information maintained by the Servicer.
         self._all_task_graphs = {}
@@ -89,6 +91,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         # Setup the simulator types.
         parsed_uri = urlparse(self._master_uri)
         self._worker_pool = WorkerPool(name=f"WorkerPool_{parsed_uri.netloc}")
+        self._workload = Workload.from_task_graphs({})
 
         # Return the response.
         return erdos_scheduler_pb2.RegisterFrameworkResponse(
