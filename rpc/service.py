@@ -38,6 +38,11 @@ flags.DEFINE_integer(
 )
 flags.DEFINE_string("log_file", None, "Path to the log file.", short_name="log")
 flags.DEFINE_string("log_level", "debug", "The level to log.")
+flags.DEFINE_integer(
+    "initial_executors",
+    10,
+    "The initial number of executors that are requested by each application.",
+)
 
 
 # Implement the service.
@@ -88,7 +93,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             task_graph = next(iter(self._workload.task_graphs.values()))
             task = task_graph.get_source_tasks()[0]
             strategy = task.available_execution_strategies.get_fastest_strategy()
-            for i in range(5, 30, 6):
+            for i in range(5, 10, 6):
                 self._placements.append(
                     Placement(
                         type=Placement.PlacementType.PLACE_TASK,
@@ -178,7 +183,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             request.memory,
         )
         driver_resources = Resources(
-            resource_vector={Resource(name="Slot_CPU", _id="any"): request.cores}
+            resource_vector={Resource(name="Slot_CPU", _id="any"): 1}
         )
         driver_job = Job(
             name=request.id,
@@ -290,7 +295,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                 request.name,
             )
             return erdos_scheduler_pb2.RegisterTaskGraphResponse(
-                success=False, message="Framework not registered yet."
+                success=False, message="Framework not registered yet.", num_executors=0
             )
 
         if request.id in self._workload.task_graphs:
@@ -303,6 +308,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                 success=False,
                 message=f"Application ID {request.id} with name {request.name} "
                 f"already registered!",
+                num_executors=0,
             )
 
         # Add a new TaskGraph to the Workload.
@@ -358,6 +364,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             success=True,
             message=f"Application ID {request.id} with name "
             f"{request.name} and deadline {request.deadline} registered successfully!",
+            num_executors=FLAGS.initial_executors,
         )
 
     async def DeregisterFramework(self, request, context):

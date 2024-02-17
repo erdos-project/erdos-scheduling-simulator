@@ -113,6 +113,9 @@ message RegisterTaskGraphRequest {
 message RegisterTaskGraphResponse {
     bool success = 1;
     string message = 2;
+    // Respond to the driver with how many executors it should request initially
+    // from the Master.
+    int32 num_executors = 3;
 }
 
 /// Worker related RPC structures.
