@@ -344,7 +344,6 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             ),
             deadline=EventTime(request.deadline, EventTime.Unit.S),
         )
-        task.release(EventTime(request.timestamp, EventTime.Unit.S))
         task_graph = TaskGraph(
             name=request.id,
             tasks={task: []},
@@ -365,6 +364,60 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             message=f"Application ID {request.id} with name "
             f"{request.name} and deadline {request.deadline} registered successfully!",
             num_executors=FLAGS.initial_executors,
+        )
+
+    async def RegisterEnvironmentReady(self, request, context):
+        """Registers that the environment (i.e., executors) are ready for the given
+        TaskGraph at the specified time.
+
+        This is intended to release the sources of the TaskGraph to the scheduling
+        backend, to consider the application in this scheduling cycle.
+        """
+        if not self._initialized:
+            self._logger.warning(
+                "Trying to register that the environment is ready for the TaskGraph "
+                "with ID %s, but no framework is registered yet.",
+                request.id,
+            )
+            return erdos_scheduler_pb2.RegisterEnvironmentReadyResponse(
+                success=False, message="Framework not registered yet."
+            )
+
+        task_graph = self._workload.get_task_graph(request.id)
+        if task_graph is None:
+            self._logger.warning(
+                "Trying to register that the environment is ready for the TaskGraph "
+                "with ID %s, but no TaskGraph with that ID is registered.",
+                request.id,
+            )
+            return erdos_scheduler_pb2.RegisterEnvironmentReadyResponse(
+                success=False,
+                message=f"TaskGraph with ID {request.id} not registered yet.",
+            )
+
+        if request.num_executors != FLAGS.initial_executors:
+            self._logger.warning(
+                "The TaskGraph %s requires %s executors, but the environment is ready "
+                "with %s executors.",
+                request.id,
+                FLAGS.initial_executors,
+                request.num_executors,
+            )
+            return erdos_scheduler_pb2.RegisterEnvironmentReadyResponse(
+                success=False,
+                message=f"Number of executors not {FLAGS.initial_executors}.",
+            )
+
+        # Release all the sources of the TaskGraph at the given time.
+        for source_task in task_graph.get_source_tasks():
+            source_task.release(EventTime(request.timestamp, EventTime.Unit.S))
+
+        # TODO (Sukrit): A new application has arrived, we need to queue up the
+        # execution of the scheduler.
+
+        return erdos_scheduler_pb2.RegisterEnvironmentReadyResponse(
+            success=True,
+            message=f"Environment ready for TaskGraph with ID {request.id}!",
         )
 
     async def DeregisterFramework(self, request, context):

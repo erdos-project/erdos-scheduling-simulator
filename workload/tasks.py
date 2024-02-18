@@ -156,7 +156,7 @@ class Task(object):
         """
         if time and type(time) != EventTime:
             raise ValueError(f"Invalid type received for time: {type(time)}")
-        if time is None and self._release_time == EventTime(-1, EventTime.Unit.US):
+        if time is None and self._release_time.is_invalid():
             raise ValueError(
                 "Release time should be specified either while "
                 "creating the Task or when releasing it."
