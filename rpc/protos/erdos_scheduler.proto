@@ -32,6 +32,10 @@ service SchedulerService {
     // itself with the backend scheduler, and is intended as an EHLO.
     rpc RegisterTaskGraph(RegisterTaskGraphRequest) returns (RegisterTaskGraphResponse) {}
 
+    /// Informs the backend that the environment for the TaskGraph is ready.
+    /// This RPC call enables the backend to begin considering the TaskGraph for scheduling.
+    rpc RegisterEnvironmentReady(RegisterEnvironmentReadyRequest) returns (RegisterEnvironmentReadyResponse) {}
+
     /// Registers a new Worker with the backend scheduler.
     /// This is invoked whenever a new Worker joins the framework.
     rpc RegisterWorker(RegisterWorkerRequest) returns (RegisterWorkerResponse) {}
@@ -115,7 +119,21 @@ message RegisterTaskGraphResponse {
     string message = 2;
     // Respond to the driver with how many executors it should request initially
     // from the Master.
-    int32 num_executors = 3;
+    uint32 num_executors = 3;
+}
+
+message RegisterEnvironmentReadyRequest {
+    /// The ID of the Application / TaskGraph that is ready for scheduling.
+    string id = 1;
+    /// The number of executors that were registered to be ready.
+    uint32 num_executors = 2;
+    /// The timestamp at which the environment was considered ready.
+    uint64 timestamp = 3;
+}
+
+message RegisterEnvironmentReadyResponse {
+    bool success = 1;
+    string message = 2;
 }
 
 /// Worker related RPC structures.
