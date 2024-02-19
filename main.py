@@ -414,6 +414,12 @@ flags.DEFINE_bool(
     "If True, the scheduler writes the status of each run to a seperate"
     "log file in a format unique to every scheduler.",
 )
+flags.DEFINE_bool(
+    "decompose_deadlines",
+    False,
+    "If True, the task deadline is decided by decomposing the TaskGraph's deadline "
+    "according to the critical path of the TaskGraph.",
+)
 flags.DEFINE_list(
     "scheduler_log_times",
     [],
