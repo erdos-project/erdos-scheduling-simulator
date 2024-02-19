@@ -107,11 +107,22 @@ message DeregisterDriverResponse {
 /// Application related RPC structures.
 /// The following structures represent the data that an application (TaskGraph)
 /// must pass to the scheduling backend.
+message Task {
+    uint32 id = 1;
+    string name = 2;
+}
+
+message TaskDependencies {
+    Task key = 1;
+    repeated uint32 children_ids = 2;
+}
+
 message RegisterTaskGraphRequest {
     string id = 1;
     string name = 2;
     uint64 timestamp = 3;
-    int32 deadline = 4;
+    repeated TaskDependencies dependencies = 4;
+    int32 deadline = 5;
 }
 
 message RegisterTaskGraphResponse {
