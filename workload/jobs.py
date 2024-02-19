@@ -886,7 +886,7 @@ class JobGraph(Graph[Job]):
         task_graph_deadline = release_time + weighted_task_graph_length.fuzz(
             deadline_variance, deadline_bounds
         )
-        if _flags and _flags.enable_deadline_decomposition:
+        if _flags and _flags.decompose_deadlines:
             stages_info = {}
             stages = set([])
             for task in task_graph.topological_sort():
@@ -899,21 +899,36 @@ class JobGraph(Graph[Job]):
             critical_path = task_graph.get_longest_path(
                 weights=lambda task: (task.slowest_execution_strategy.runtime.time)
             )
-            critical_path_time = sum(
-                [t.slowest_execution_strategy.runtime.time for t in critical_path]
+            critical_path_time = (
+                sum(
+                    [t.slowest_execution_strategy.runtime for t in critical_path],
+                    start=EventTime.zero(),
+                )
+                .to(EventTime.Unit.US)
+                .time
             )
             stage_wise_deadline = {}
             for critical_task in critical_path:
                 stage_deadline = int(
-                    task_graph_deadline.time
-                    * critical_task.slowest_execution_strategy.runtime.time
+                    task_graph_deadline.to(EventTime.Unit.US).time
+                    * critical_task.slowest_execution_strategy.runtime.to(
+                        EventTime.Unit.US
+                    ).time
                     / critical_path_time
                 )
                 stage_wise_deadline[stages_info[critical_task]] = stage_deadline
 
             for task in task_graph.get_nodes():
+                # For the tasks that do not fall on the critical path of the
+                # computation, we heuristically find the closest stage and assign it
+                # to that stage's deadline.
                 task_stage = min(
-                    stage_wise_deadline.keys(), key=lambda s: abs(s - stages_info[task] if s>=stages_info[task] else float("inf") )
+                    stage_wise_deadline.keys(),
+                    key=lambda s: abs(
+                        s - stages_info[task]
+                        if s >= stages_info[task]
+                        else float("inf")
+                    ),
                 )
                 deadline = EventTime(
                     stage_wise_deadline[task_stage], unit=EventTime.Unit.US
