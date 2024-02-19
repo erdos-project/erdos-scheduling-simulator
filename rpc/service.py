@@ -311,48 +311,66 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                 num_executors=0,
             )
 
-        # Add a new TaskGraph to the Workload.
-        # TODO (Sukrit): Check that this is properly populated with the Tasks.
-        # Right now, we just make a singular task with the TaskGraph's name, and the
-        # given deadline.
-        task = Task(
-            name=request.name,
-            task_graph=request.id,
-            job=Job(
-                name=request.name,
-                profile=WorkProfile(
-                    name=f"WorkProfile_{request.name}",
-                    execution_strategies=ExecutionStrategies(
-                        [
-                            ExecutionStrategy(
-                                resources=Resources(
-                                    resource_vector={
-                                        # TODO (Sukrit): This also needs to be
-                                        # communicated by the framework.
-                                        Resource(name="Slot_CPU", _id="any"): 1
-                                    }
-                                ),
-                                batch_size=1,
-                                # TODO (Sukrit): For now, we just set the runtime to
-                                # be zero. But this also needs to come from the
-                                # framework.
-                                runtime=EventTime.zero(),
-                            )
-                        ]
+        # Construct all the Tasks for the TaskGraph.
+        task_ids_to_task: Mapping[int, Task] = {}
+        for task_dependency in request.dependencies:
+            framework_task = task_dependency.key
+            task_ids_to_task[framework_task.id] = Task(
+                name=framework_task.name,
+                task_graph=request.id,
+                job=Job(
+                    name=framework_task.name,
+                    profile=WorkProfile(
+                        name=f"WorkProfile_{framework_task.name}",
+                        execution_strategies=ExecutionStrategies(
+                            [
+                                # TODO (Sukrit): Find the actual resource requirements
+                                # for the particular TaskGraph, along with the expected
+                                # runtime and set it here.
+                                ExecutionStrategy(
+                                    resources=Resources(
+                                        resource_vector={
+                                            Resource(name="Slot_CPU", _id="any"): 1
+                                        }
+                                    ),
+                                    batch_size=1,
+                                    runtime=EventTime(20, EventTime.Unit.US),
+                                )
+                            ]
+                        ),
                     ),
                 ),
-            ),
-            deadline=EventTime(request.deadline, EventTime.Unit.S),
-        )
+                deadline=EventTime(request.deadline, EventTime.Unit.S),
+                # TODO (Sukrit): We should maintain a counter for each application
+                # type so that we can correlate the Tasks with a particular invocation.
+                timestamp=1,
+            )
+            self._logger.info(
+                "Constructed Task %s for the TaskGraph %s.",
+                framework_task.name,
+                request.id,
+            )
+
+        # Construct the TaskGraph from the Tasks.
+        task_graph_structure: Mapping[Task, Sequence[Task]] = {}
+        for task_dependency in request.dependencies:
+            task_graph_structure[task_ids_to_task[task_dependency.key.id]] = [
+                task_ids_to_task[task_id] for task_id in task_dependency.children_ids
+            ]
         task_graph = TaskGraph(
             name=request.id,
-            tasks={task: []},
+            tasks=task_graph_structure,
         )
         self._workload.add_task_graph(task_graph)
         self._logger.info(
             "Added the TaskGraph(name=%s, id=%s) to the Workload.",
             request.name,
             request.id,
+        )
+        self._logger.info(
+            "The structure of the TaskGraph %s is \n%s.",
+            request.id,
+            str(task_graph),
         )
 
         # Run the scheduler since the Workload has changed.
