@@ -166,6 +166,7 @@ message RegisterWorkerResponse {
 
 message GetPlacementsRequest {
     uint64 timestamp = 1;
+    string id = 2;
 }
 
 message Placement {
