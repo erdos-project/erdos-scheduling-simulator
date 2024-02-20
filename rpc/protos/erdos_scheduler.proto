@@ -172,7 +172,8 @@ message GetPlacementsRequest {
 message Placement {
     string worker_id = 1;
     string application_id = 2;
-    uint32 cores = 3;
+    uint32 task_id = 3;
+    uint32 cores = 4;
 }
 
 message GetPlacementsResponse {
