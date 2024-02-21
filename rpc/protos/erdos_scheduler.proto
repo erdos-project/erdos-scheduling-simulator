@@ -176,6 +176,11 @@ message RegisterWorkerRequest {
 message RegisterWorkerResponse {
     bool success = 1;
     string message = 2;
+    // The RPC backend informs the Master what the worker's intended resources
+    // should be. This is used to allow the Master to allow us to spawn executors
+    // more than the actual resources available in the machine would allow.
+    int32 cores = 3;
+    int32 memory = 4;
 }
 
 message GetPlacementsRequest {
