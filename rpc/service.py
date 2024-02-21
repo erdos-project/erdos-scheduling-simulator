@@ -4,6 +4,7 @@ import sys
 import time
 from collections import defaultdict
 from concurrent import futures
+from operator import attrgetter
 from typing import Mapping, Sequence
 from urllib.parse import urlparse
 
@@ -16,6 +17,7 @@ import erdos_scheduler_pb2_grpc
 import grpc
 from absl import app, flags
 
+from schedulers import EDFScheduler
 from utils import EventTime, setup_logging
 from workers import Worker, WorkerPool, WorkerPools
 from workload import (
@@ -66,6 +68,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         self._scheduler_running_lock = asyncio.Lock()
         self._scheduler_running = False
         self._rerun_scheduler = False
+        self._scheduler = EDFScheduler()
 
         # Placement information maintained by the servicer.
         # The placements map the application IDs to the Placement retrieved from the
@@ -97,34 +100,34 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         # TODO (Sukrit): Change this to a better implementation.
         # Let's do some simple scheduling for now, that gives a fixed number of
         # executors to all the available applications in intervals of 10 seconds.
-        if len(self._workload.task_graphs) > 0:
-            tasks = self._workload.get_schedulable_tasks(
-                current_time, worker_pools=self._worker_pools
+        if len(self._workload.task_graphs) >= 2:
+            placements = self._scheduler.schedule(
+                sim_time=current_time,
+                workload=self._workload,
+                worker_pools=self._worker_pools,
             )
-            self._logger.info(
-                "Found %s tasks that can be scheduled at %s: %s",
-                len(tasks),
-                current_time,
-                [task.unique_name for task in tasks],
+            # Filter the placements that are not of type PLACE_TASK and that have not
+            # been placed.
+            filtered_placements = filter(
+                lambda p: p.placement_type == Placement.PlacementType.PLACE_TASK
+                and p.is_placed(),
+                placements,
             )
-            if len(tasks) > 0:
-                task = tasks[0]
-                strategy = task.available_execution_strategies.get_fastest_strategy()
-                placement = Placement(
-                    type=Placement.PlacementType.PLACE_TASK,
-                    computation=tasks[0],
-                    placement_time=EventTime(int(time.time()) + 5, EventTime.Unit.S),
-                    worker_pool_id=self._worker_pool.id,
-                    worker_id=self._worker_pool.workers[0].name,
-                    strategy=strategy,
-                )
-                self._placements[task.task_graph].append(placement)
-                task.schedule(
+            for placement in sorted(
+                filtered_placements, key=attrgetter("placement_time")
+            ):
+                self._placements[placement.task.task_graph].append(placement)
+                # Schedule the task here since marking it as running requires it to be
+                # scheduled before. We mark it to be running when we inform the
+                # framework of the placement.
+                placement.task.schedule(
                     time=placement.placement_time,
                     placement=placement,
                 )
 
-        self._logger.info("Finished a scheduling cycle.")
+        self._logger.info(
+            "Finished the scheduling cycle initiated at %s.", current_time
+        )
 
         # Check if another run of the Scheduler has been requested, and if so, create
         # a task for it. Otherwise, mark the scheduler as not running.
@@ -360,7 +363,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                                 ExecutionStrategy(
                                     resources=Resources(
                                         resource_vector={
-                                            Resource(name="Slot_CPU", _id="any"): 1
+                                            Resource(name="Slot_CPU", _id="any"): 30
                                         }
                                     ),
                                     batch_size=1,
@@ -648,15 +651,12 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                         cores=1,
                     )
                 )
-        self._logger.info(
-            "Currently %s placements, clipping at %s.", len(placements), clip_at
-        )
         self._placements[request.id] = self._placements[request.id][clip_at + 1 :]
         self._logger.info(
-            "Clipped placements length: %s", len(self._placements[request.id])
-        )
-        self._logger.info(
-            "Constructed %s placements at time %s.", len(placements), request.timestamp
+            "Constructed %s placements at time %s for application with ID %s.",
+            len(placements),
+            request.timestamp,
+            request.id,
         )
         return erdos_scheduler_pb2.GetPlacementsResponse(
             success=True,
