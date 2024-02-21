@@ -1,5 +1,4 @@
 import os
-import random
 import time
 from collections import defaultdict
 from math import ceil
@@ -1673,9 +1672,6 @@ class TetriSchedScheduler(BaseScheduler):
                 previously placed. Defaults to `False`.
         """
         # Maintain a cache to be used across the construction of the TaskGraph to make
-        # it DAG-aware, if not provided.
-        if task_strls is None:
-            task_strls = {}
         # it DAG-aware, if not provided.
         if task_strls is None:
             task_strls = {}

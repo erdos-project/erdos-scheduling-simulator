@@ -19,6 +19,7 @@ from schedulers import (
     ClockworkScheduler,
     EDFScheduler,
     FIFOScheduler,
+    GrapheneScheduler,
     ILPScheduler,
     LSFScheduler,
     TetriSchedCPLEXScheduler,
@@ -289,6 +290,7 @@ flags.DEFINE_enum(
         "Clockwork",
         "TetriSched",
         "GraphenePrime",
+        "Graphene",
     ],
     "The scheduler to use for this execution.",
 )
@@ -817,6 +819,20 @@ def main(args):
             # Graphene aims to minimize the makespan of the schedule, so we force the
             # goal of the Scheduler to be the minimum placement delay.
             goal="min_placement_delay",
+            time_discretization=EventTime(
+                FLAGS.scheduler_time_discretization, EventTime.Unit.US
+            ),
+            plan_ahead=EventTime(FLAGS.scheduler_plan_ahead, EventTime.Unit.US),
+            log_to_file=FLAGS.scheduler_log_to_file,
+            _flags=FLAGS,
+        )
+    elif FLAGS.scheduler == "Graphene":
+        scheduler = GrapheneScheduler(
+            preemptive=FLAGS.preemption,
+            runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
+            lookahead=EventTime(FLAGS.scheduler_lookahead, EventTime.Unit.US),
+            retract_schedules=FLAGS.retract_schedules,
+            goal=FLAGS.ilp_goal,
             time_discretization=EventTime(
                 FLAGS.scheduler_time_discretization, EventTime.Unit.US
             ),

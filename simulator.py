@@ -1981,6 +1981,10 @@ class Simulator(object):
             self._workload,
             self._worker_pools,
         )
+        if placements is None:
+            raise ValueError(
+                f"Received no Placements object from the Scheduler at {event.time}.",
+            )
 
         # Calculate the time at which the placements need to be applied.
         placement_time = event.time + placements.runtime
