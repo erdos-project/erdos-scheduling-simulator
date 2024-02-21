@@ -44,6 +44,9 @@ service SchedulerService {
     /// This RPC is invoked periodically by the framework along with the current timestamp
     /// and the backend scheduler informs the framework about the current allocations.
     rpc GetPlacements(GetPlacementsRequest) returns (GetPlacementsResponse) {}
+
+    /// Notifies the Scheduler that a Task from a particular TaskGraph has completed.option
+    rpc NotifyTaskCompletion(NotifyTaskCompletionRequest) returns (NotifyTaskCompletionResponse) {}
 }
 
 
@@ -143,6 +146,17 @@ message RegisterEnvironmentReadyRequest {
 }
 
 message RegisterEnvironmentReadyResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message NotifyTaskCompletionRequest {
+    string app_id = 1;
+    uint32 task_id = 2;
+    uint64 timestamp = 3;
+}
+
+message NotifyTaskCompletionResponse {
     bool success = 1;
     string message = 2;
 }
