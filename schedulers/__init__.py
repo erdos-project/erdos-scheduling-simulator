@@ -15,4 +15,9 @@ try:
     from .tetrisched_scheduler import TetriSchedScheduler
 except ImportError:
     pass
+
+try:
+    from .graphene_scheduler import GrapheneScheduler
+except ImportError:
+    pass
 from .z3_scheduler import Z3Scheduler
