@@ -4,7 +4,7 @@
 
 namespace py = pybind11;
 
-void defineSTRLExpressions(py::module_& tetrisched_m) {
+void defineSTRLExpressions(py::module_ &tetrisched_m) {
   // Define the ExpressionType enum.
   py::enum_<tetrisched::ExpressionType>(tetrisched_m, "ExpressionType")
       .value("EXPR_CHOOSE", tetrisched::ExpressionType::EXPR_CHOOSE)
@@ -46,61 +46,56 @@ void defineSTRLExpressions(py::module_& tetrisched_m) {
       tetrisched_m, "SolutionResult")
       .def_property_readonly(
           "startTime",
-          [](const tetrisched::SolutionResult &result)
-          {
-               return result.startTime;
+          [](const tetrisched::SolutionResult &result) {
+            return result.startTime;
           },
           "The start time of the expression.")
       .def_property_readonly(
           "endTime",
-          [](const tetrisched::SolutionResult &result)
-          {
-               return result.endTime;
+          [](const tetrisched::SolutionResult &result) {
+            return result.endTime;
           },
           "The end time of the expression.")
       .def_property_readonly(
           "utility",
-          [](const tetrisched::SolutionResult &result)
-          {
-               return result.utility;
+          [](const tetrisched::SolutionResult &result) {
+            return result.utility;
           },
           "The utility of the expression.")
       .def_property_readonly(
           "satsifiedExpressionNames",
-          [](const tetrisched::SolutionResult &result)
-          {
-               return result.satsifiedExpressionNames;
+          [](const tetrisched::SolutionResult &result) {
+            return result.satsifiedExpressionNames;
           },
           "The choose expressions that were satisfied.")
       .def(
           "getPlacement",
           [](const tetrisched::SolutionResult &result,
-             std::string taskName) -> std::optional<tetrisched::PlacementPtr>
-          {
-               if (result.placements.find(taskName) == result.placements.end())
-               {
-                    return std::nullopt;
-               }
-               return result.placements.at(taskName);
+             std::string taskName) -> std::optional<tetrisched::PlacementPtr> {
+            if (result.placements.find(taskName) == result.placements.end()) {
+              return std::nullopt;
+            }
+            return result.placements.at(taskName);
           },
           "Returns the Placement for the given task.\n"
           "\nArgs:\n"
           "  taskName (str): The name of the task to get the Placement for.",
           py::arg("taskName"))
-      .def("__str__", [](const tetrisched::SolutionResult &result)
-           { return "Placement<start=" +
-                    (result.startTime.has_value()
-                         ? std::to_string(result.startTime.value())
-                         : "None") +
-                    ", end=" +
-                    (result.endTime.has_value()
-                         ? std::to_string(result.endTime.value())
-                         : "None") +
-                    ", utility=" +
-                    (result.utility.has_value()
-                         ? std::to_string(result.utility.value())
-                         : "None") +
-                    ">"; });
+      .def("__str__", [](const tetrisched::SolutionResult &result) {
+        return "Placement<start=" +
+               (result.startTime.has_value()
+                    ? std::to_string(result.startTime.value())
+                    : "None") +
+               ", end=" +
+               (result.endTime.has_value()
+                    ? std::to_string(result.endTime.value())
+                    : "None") +
+               ", utility=" +
+               (result.utility.has_value()
+                    ? std::to_string(result.utility.value())
+                    : "None") +
+               ">";
+      });
 
   // Define the base Expression.
   py::class_<tetrisched::Expression, tetrisched::ExpressionPtr>(tetrisched_m,
@@ -120,7 +115,8 @@ void defineSTRLExpressions(py::module_& tetrisched_m) {
            py::arg("child"))
       .def("getSolution", &tetrisched::Expression::getSolution,
            "Returns the solution for this Expression.")
-      .def("setPreviouslySatisfied", &tetrisched::Expression::setPreviouslySatisfied,
+      .def("setPreviouslySatisfied",
+           &tetrisched::Expression::setPreviouslySatisfied,
            "Sets the flag that this expression was previously satisfied.")
       .def("exportToDot", &tetrisched::Expression::exportToDot,
            "Exports the Expression to a dot file.\n"
@@ -130,13 +126,13 @@ void defineSTRLExpressions(py::module_& tetrisched_m) {
            "    included in the dot file. If False, they are not included.",
            py::arg("fileName"), py::arg("emitChooseExpressions") = false)
       .def("__str__",
-           [](const tetrisched::Expression &expr)
-           {
-                return "Expression<name=" + expr.getName() +
-                       ", type=" + expr.getTypeString() + ">";
+           [](const tetrisched::Expression &expr) {
+             return "Expression<name=" + expr.getName() +
+                    ", type=" + expr.getTypeString() + ">";
            })
       .def_property_readonly("name", &tetrisched::Expression::getName)
-      .def_property_readonly("discriptiveName", &tetrisched::Expression::getDescriptiveName)
+      .def_property_readonly("discriptiveName",
+                             &tetrisched::Expression::getDescriptiveName)
       .def_property_readonly("id", &tetrisched::Expression::getId);
 
   // Define the ChooseExpression.

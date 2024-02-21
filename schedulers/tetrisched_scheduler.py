@@ -263,7 +263,8 @@ class TetriSchedScheduler(BaseScheduler):
         # sure that no optimization passes remove it.
         # Reset at the beginning of each Scheduler invocation (`schedule()`).
         self._individual_task_strls: Mapping[str, tetrisched.Expression] = {}
-        # a cache for previously selected choose expressions, this is done for providing better hints to the solver
+        # A cache for previously selected choose expressions, this is done for
+        # providing better hints to the solver
         self._previously_satisfied_choose_exprs = set([])
         if (
             self._adaptive_discretization
@@ -821,7 +822,8 @@ class TetriSchedScheduler(BaseScheduler):
                     solverSolution.satsifiedExpressionNames
                 )
                 self._logger.info(
-                    f"The satisfied Choose Expressions: {self._previously_satisfied_choose_exprs}"
+                    f"The satisfied Choose Expressions: "
+                    f"{self._previously_satisfied_choose_exprs}"
                 )
                 self._logger.info(
                     f"[{sim_time.time}] Solver returned utility of "
@@ -1497,9 +1499,6 @@ class TetriSchedScheduler(BaseScheduler):
         # If there are no children, cache and return the expression for this Task.
         if len(child_expressions) == 0:
             task_strls[task.id] = task_expression
-            # self._logger.info(
-            #     f"[FoundLeafExpr] Found Task's LeafExpr: {task_expression.discriptiveName} , previously satisfied: {self._previously_satisfied_choose_exprs}"
-            # )
             return task_expression
 
         # Construct the subtree for the children of this Task.

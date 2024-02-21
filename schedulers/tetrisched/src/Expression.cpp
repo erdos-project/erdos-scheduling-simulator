@@ -139,7 +139,8 @@ Expression::Expression(std::string name, ExpressionType type,
       id(tetrisched::uuid::generate_uuid()),
       type(type),
       timeBounds(ExpressionTimeBounds()),
-      status(status), previouslySatisfied(false) {}
+      status(status),
+      previouslySatisfied(false) {}
 
 std::string Expression::getName() const { return name; }
 
@@ -384,7 +385,8 @@ SolutionResultPtr Expression::populateResults(SolverModelPtr solverModel) {
       solution->placements[taskName] = placement;
     }
     // the child was satisfied, merge its satisfied leaf expressions
-    for (auto & leafExprName: childExpressionSolution.value()->satsifiedExpressionNames) {
+    for (auto& leafExprName :
+         childExpressionSolution.value()->satsifiedExpressionNames) {
       solution->satsifiedExpressionNames.insert(leafExprName);
     }
   }
@@ -1503,7 +1505,8 @@ ParseResultPtr AllocationExpression::parse(
   // Add the allocation variables to the CapacityConstraintMap.
   for (const auto& [partition, allocation] : allocatedResources) {
     capacityConstraints->registerUsageForDuration(
-        this, *partition, startTime, duration, 1, allocation, std::nullopt, true, getDescriptiveName());
+        this, *partition, startTime, duration, 1, allocation, std::nullopt,
+        true, getDescriptiveName());
   }
   TETRISCHED_DEBUG("Finished parsing AllocationExpression for "
                    << name << " to be placed starting at time " << startTime
@@ -1525,12 +1528,12 @@ std::string AllocationExpression::getDescriptiveName() const {
          ", F=" + std::to_string(endTime) + ")";
 }
 
-uint32_t AllocationExpression::getResourceQuantity() const { 
+uint32_t AllocationExpression::getResourceQuantity() const {
   uint32_t numResources = 0;
   for (const auto& [partition, allocation] : allocatedResources) {
     numResources += allocation;
   }
-  return numResources; 
+  return numResources;
 }
 
 /* Method definitions for ObjectiveExpression */
@@ -2757,7 +2760,9 @@ ParseResultPtr ScaleExpression::parse(
       if (!childParseResult->utility) {
         throw tetrisched::exceptions::ExpressionConstructionException(
             "ScaleExpression applied to a child that does not have any "
-            "utility. Scale Expr Name: " + this->getDescriptiveName() + " Child Name: " + children[0]->getDescriptiveName());
+            "utility. Scale Expr Name: " +
+            this->getDescriptiveName() +
+            " Child Name: " + children[0]->getDescriptiveName());
       }
       TETRISCHED_DEBUG(
           "[" << name << "] is amplifying the utility for the child "
