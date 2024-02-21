@@ -151,7 +151,7 @@ message RegisterEnvironmentReadyResponse {
 }
 
 message NotifyTaskCompletionRequest {
-    string app_id = 1;
+    string application_id = 1;
     uint32 task_id = 2;
     uint64 timestamp = 3;
 }
