@@ -809,7 +809,9 @@ def main(args):
             dynamic_discretization=FLAGS.scheduler_dynamic_discretization,
             max_occupancy_threshold=FLAGS.scheduler_max_occupancy_threshold,
             finer_discretization_at_prev_solution=FLAGS.finer_discretization_at_prev_solution,
-            finer_discretization_window=EventTime(FLAGS.finer_discretization_window, EventTime.Unit.US)
+            finer_discretization_window=EventTime(
+                FLAGS.finer_discretization_window, EventTime.Unit.US
+            ),
         )
     elif FLAGS.scheduler == "GraphenePrime":
         scheduler = TetriSchedScheduler(
