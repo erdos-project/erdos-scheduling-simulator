@@ -69,7 +69,7 @@ class EDFScheduler(BaseScheduler):
 
         for worker_pool in schedulable_worker_pools.worker_pools:
             self._logger.debug(
-                f"[{sim_time.to(EventTime.Unit.US).time}] The state of {worker_pool} "
+                f"[{sim_time.time}] The state of {worker_pool} "
                 f"is:{os.linesep} {os.linesep.join(worker_pool.get_utilization())}"
             )
 
@@ -86,8 +86,7 @@ class EDFScheduler(BaseScheduler):
             f"{task.unique_name} ({task.deadline})" for task in ordered_tasks
         ]
         self._logger.debug(
-            f"[{sim_time.to(EventTime.Unit.US).time}] The order of the "
-            f"tasks is {task_descriptions}."
+            f"[{sim_time.time}] The order of the tasks is {task_descriptions}."
         )
 
         # Run the scheduling loop.
@@ -99,8 +98,8 @@ class EDFScheduler(BaseScheduler):
         placements = []
         for task in ordered_tasks:
             self._logger.debug(
-                f"[{sim_time.to(EventTime.Unit.US).time}] EDFScheduler trying to "
-                f"schedule {task} with the available execution strategies: "
+                f"[{sim_time.time}] EDFScheduler trying to schedule {task} with the "
+                f"available execution strategies: "
                 f"{task.available_execution_strategies}."
             )
 
@@ -117,9 +116,9 @@ class EDFScheduler(BaseScheduler):
                 self._logger.debug(
                     "[%s] Task %s has a deadline of %s, which has been missed. "
                     "Cancelling the task.",
-                    sim_time.to(EventTime.Unit.US).time,
+                    sim_time.time,
                     task,
-                    task.deadline.to(EventTime.Unit.US).time,
+                    task.deadline.time,
                 )
                 continue
 
@@ -141,10 +140,9 @@ class EDFScheduler(BaseScheduler):
                             )
                         )
                         self._logger.debug(
-                            f"[{sim_time.to(EventTime.Unit.US).time}] Placed {task} on "
-                            f"Worker Pool ({worker_pool.id}) to be started at "
-                            f"{sim_time} with the execution strategy: "
-                            f"{execution_strategy}."
+                            f"[{sim_time.time}] Placed {task} on Worker Pool "
+                            f"({worker_pool.id}) to be started at {sim_time} with the "
+                            f"execution strategy: {execution_strategy}."
                         )
                         break
                 if is_task_placed:
@@ -153,15 +151,14 @@ class EDFScheduler(BaseScheduler):
             if is_task_placed:
                 for worker_pool in schedulable_worker_pools.worker_pools:
                     self._logger.debug(
-                        f"[{sim_time.to(EventTime.Unit.US).time}] The state of "
-                        f"{worker_pool} is:{os.linesep}"
+                        f"[{sim_time.time}] The state of {worker_pool} is:{os.linesep}"
                         f"{os.linesep.join(worker_pool.get_utilization())}"
                     )
             else:
                 self._logger.debug(
                     "[%s] Failed to place %s because no worker pool "
                     "could accomodate the resource requirements.",
-                    sim_time.to(EventTime.Unit.US).time,
+                    sim_time.time,
                     task,
                 )
                 placements.append(Placement.create_task_placement(task=task))

@@ -156,7 +156,7 @@ class Task(object):
         """
         if time and type(time) != EventTime:
             raise ValueError(f"Invalid type received for time: {type(time)}")
-        if time is None and self._release_time == EventTime(-1, EventTime.Unit.US):
+        if time is None and self._release_time.is_invalid():
             raise ValueError(
                 "Release time should be specified either while "
                 "creating the Task or when releasing it."
@@ -273,9 +273,9 @@ class Task(object):
             raise ValueError(
                 f"Only SCHEDULED tasks can be started. Task is in state {self.state}."
             )
-        if type(time) != EventTime:
+        if time is not None and type(time) != EventTime:
             raise ValueError(f"Invalid type received for time: {type(time)}")
-        if time is None and self._start_time == -1:
+        if time is None and self._start_time == EventTime.invalid():
             raise ValueError(
                 "Start time should be specified either while "
                 "creating the Task or when starting it."
@@ -1588,6 +1588,28 @@ class TaskGraph(Graph[Task]):
 
         # Find the maximum remaining time across all the sink nodes.
         return max([remaining_time[sink] for sink in self.get_sink_tasks()])
+
+    def get_task(self, name: str) -> Optional[Task]:
+        """Retrieve the Task with the given name from the TaskGraph.
+
+        Returns `None` if no such Task exists in the TaskGraph.
+
+        Args:
+            name (`str`): The name of the Task to retrieve.
+
+        Returns:
+            The `Task` with the given name, if it exists in the TaskGraph.
+
+        Raises:
+            `ValueError` if multiple tasks with the same name are found.
+        """
+        matched_task = None
+        for task in self.get_nodes():
+            if task.name == name:
+                if matched_task:
+                    raise ValueError(f"Multiple tasks with the name {name} found.")
+                matched_task = task
+        return matched_task
 
     @property
     def deadline(self) -> EventTime:
