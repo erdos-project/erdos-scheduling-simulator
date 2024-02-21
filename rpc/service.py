@@ -46,6 +46,21 @@ flags.DEFINE_integer(
     10,
     "The initial number of executors that are requested by each application.",
 )
+flags.DEFINE_integer(
+    "virtualized_cores",
+    500,
+    "The number of virtualized cores that must be created in each Worker on the "
+    "framework. This allows us to spawn a higher number of executors than the number "
+    "possible with actual available resources. Thus, we can spawn the executors for "
+    "each application, and only selectively activate them according to the actual "
+    "available resources.",
+)
+flags.DEFINE_integer(
+    "virtualized_memory",
+    500,
+    "The amount of virtualized memory (in GB) that must be created in each Worker on "
+    "the framework. Refer to the `virtualized_cores` flag for more information.",
+)
 
 
 # Implement the service.
@@ -548,7 +563,10 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         await self.run_scheduler()
 
         return erdos_scheduler_pb2.RegisterWorkerResponse(
-            success=True, message=f"Worker {request.name} registered successfully!"
+            success=True,
+            message=f"Worker {request.name} registered successfully!",
+            cores=FLAGS.virtualized_cores,
+            memory=FLAGS.virtualized_memory * 1024,
         )
 
     async def NotifyTaskCompletion(self, request, context):
