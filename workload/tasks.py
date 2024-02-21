@@ -1589,6 +1589,28 @@ class TaskGraph(Graph[Task]):
         # Find the maximum remaining time across all the sink nodes.
         return max([remaining_time[sink] for sink in self.get_sink_tasks()])
 
+    def get_task(self, name: str) -> Optional[Task]:
+        """Retrieve the Task with the given name from the TaskGraph.
+
+        Returns `None` if no such Task exists in the TaskGraph.
+
+        Args:
+            name (`str`): The name of the Task to retrieve.
+
+        Returns:
+            The `Task` with the given name, if it exists in the TaskGraph.
+
+        Raises:
+            `ValueError` if multiple tasks with the same name are found.
+        """
+        matched_task = None
+        for task in self.get_nodes():
+            if task.name == name:
+                if matched_task:
+                    raise ValueError(f"Multiple tasks with the name {name} found.")
+                matched_task = task
+        return matched_task
+
     @property
     def deadline(self) -> EventTime:
         """Retrieve the deadline to which the TaskGraph is being subjected to.
