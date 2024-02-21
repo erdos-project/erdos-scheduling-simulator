@@ -17,7 +17,7 @@ import erdos_scheduler_pb2_grpc
 import grpc
 from absl import app, flags
 
-from schedulers import EDFScheduler
+from schedulers import EDFScheduler, FIFOScheduler
 from utils import EventTime, setup_logging
 from workers import Worker, WorkerPool, WorkerPools
 from workload import (
@@ -61,6 +61,9 @@ flags.DEFINE_integer(
     "The amount of virtualized memory (in GB) that must be created in each Worker on "
     "the framework. Refer to the `virtualized_cores` flag for more information.",
 )
+flags.DEFINE_enum(
+    "scheduler", "EDF", ["FIFO", "EDF"], "The scheduler to use for this execution."
+)
 
 
 # Implement the service.
@@ -83,7 +86,12 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         self._scheduler_running_lock = asyncio.Lock()
         self._scheduler_running = False
         self._rerun_scheduler = False
-        self._scheduler = EDFScheduler()
+        if FLAGS.scheduler == "EDF":
+            self._scheduler = EDFScheduler()
+        elif FLAGS.scheduler == "FIFO":
+            self._scheduler = FIFOScheduler()
+        else:
+            raise ValueError(f"Unknown scheduler {FLAGS.scheduler}.")
 
         # Placement information maintained by the servicer.
         # The placements map the application IDs to the Placement retrieved from the
