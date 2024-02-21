@@ -139,7 +139,8 @@ Expression::Expression(std::string name, ExpressionType type,
       id(tetrisched::uuid::generate_uuid()),
       type(type),
       timeBounds(ExpressionTimeBounds()),
-      status(status) {}
+      status(status),
+      previouslySatisfied(false) {}
 
 std::string Expression::getName() const { return name; }
 
@@ -170,6 +171,14 @@ void Expression::removeChild(ExpressionPtr child) {
 
 void Expression::replaceChildren(std::vector<ExpressionPtr> children) {
   this->children = children;
+}
+
+void Expression::setPreviouslySatisfied(bool satisfied) {
+  this->previouslySatisfied = satisfied;
+}
+
+bool Expression::isPreviouslySatisfied() {
+  return this->previouslySatisfied == true;
 }
 
 ExpressionType Expression::getType() const { return type; }
@@ -374,6 +383,11 @@ SolutionResultPtr Expression::populateResults(SolverModelPtr solverModel) {
     for (auto& [taskName, placement] :
          childExpressionSolution.value()->placements) {
       solution->placements[taskName] = placement;
+    }
+    // the child was satisfied, merge its satisfied leaf expressions
+    for (auto& leafExprName :
+         childExpressionSolution.value()->satsifiedExpressionNames) {
+      solution->satsifiedExpressionNames.insert(leafExprName);
     }
   }
 
@@ -696,6 +710,7 @@ SolutionResultPtr ChooseExpression::populateResults(
                                       variableValue.value());
   }
   solution->placements[name] = std::move(placement);
+  solution->satsifiedExpressionNames.insert(getDescriptiveName());
   return solution;
 }
 
@@ -1041,6 +1056,7 @@ SolutionResultPtr WindowedChooseExpression::populateResults(
     placement->setEndTime(chooseTime + duration);
   }
   solution->placements[name] = std::move(placement);
+  solution->satsifiedExpressionNames.insert(getDescriptiveName());
   return solution;
 }
 
@@ -1422,6 +1438,7 @@ SolutionResultPtr MalleableChooseExpression::populateResults(
     placement->addPartitionAllocation(partitionId, time, variableValue.value());
   }
   solution->placements[name] = std::move(placement);
+  solution->satsifiedExpressionNames.insert(getDescriptiveName());
   return solution;
 }
 
@@ -1488,7 +1505,8 @@ ParseResultPtr AllocationExpression::parse(
   // Add the allocation variables to the CapacityConstraintMap.
   for (const auto& [partition, allocation] : allocatedResources) {
     capacityConstraints->registerUsageForDuration(
-        this, *partition, startTime, duration, 1, allocation, std::nullopt);
+        this, *partition, startTime, duration, 1, allocation, std::nullopt,
+        true, getDescriptiveName());
   }
   TETRISCHED_DEBUG("Finished parsing AllocationExpression for "
                    << name << " to be placed starting at time " << startTime
@@ -1508,6 +1526,14 @@ SolutionResultPtr AllocationExpression::populateResults(
 std::string AllocationExpression::getDescriptiveName() const {
   return "Allocation(" + name + ", S=" + std::to_string(startTime) +
          ", F=" + std::to_string(endTime) + ")";
+}
+
+uint32_t AllocationExpression::getResourceQuantity() const {
+  uint32_t numResources = 0;
+  for (const auto& [partition, allocation] : allocatedResources) {
+    numResources += allocation;
+  }
+  return numResources;
 }
 
 /* Method definitions for ObjectiveExpression */
@@ -2734,7 +2760,9 @@ ParseResultPtr ScaleExpression::parse(
       if (!childParseResult->utility) {
         throw tetrisched::exceptions::ExpressionConstructionException(
             "ScaleExpression applied to a child that does not have any "
-            "utility.");
+            "utility. Scale Expr Name: " +
+            this->getDescriptiveName() +
+            " Child Name: " + children[0]->getDescriptiveName());
       }
       TETRISCHED_DEBUG(
           "[" << name << "] is amplifying the utility for the child "

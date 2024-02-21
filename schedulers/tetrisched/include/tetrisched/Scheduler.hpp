@@ -46,7 +46,9 @@ class Scheduler {
   /// Initialize the scheduler with a solver backend.
   Scheduler(Time discretization, SolverBackendType solverBackend,
             std::string logDir = "./", bool enableDynamicDiscretization = false,
-            Time maxDiscretization = 5, float maxOccupancyThreshold = 0.8);
+            Time maxDiscretization = 5, float maxOccupancyThreshold = 0.8,
+            bool finerDiscretizationAtPrevSolution = false,
+            Time finerDiscretizationWindow = 5);
 
   /// Registers the STRL expression for the scheduler to schedule from
   /// and parses it to populate the SolverModel.

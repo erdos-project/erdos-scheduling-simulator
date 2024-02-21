@@ -13,7 +13,9 @@
 namespace tetrisched {
 Scheduler::Scheduler(Time discretization, SolverBackendType solverBackend,
                      std::string logDir, bool enableDynamicDiscretization,
-                     Time maxDiscretization, float maxOccupancyThreshold)
+                     Time maxDiscretization, float maxOccupancyThreshold,
+                     bool finerDiscretizationAtPrevSolution,
+                     Time finerDiscretizationWindow)
     : solverBackend(solverBackend),
       discretization(discretization),
       logDir(logDir) {
@@ -34,9 +36,10 @@ Scheduler::Scheduler(Time discretization, SolverBackendType solverBackend,
           "The solver backend type is not supported.");
   }
   solverModel = solver->getModel();
-  optimizationPasses =
-      OptimizationPassRunner(false, enableDynamicDiscretization, discretization,
-                             maxDiscretization, maxOccupancyThreshold);
+  optimizationPasses = OptimizationPassRunner(
+      false, enableDynamicDiscretization, discretization, maxDiscretization,
+      maxOccupancyThreshold, finerDiscretizationAtPrevSolution,
+      finerDiscretizationWindow);
   solverConfig = std::make_shared<SolverConfig>();
 }
 

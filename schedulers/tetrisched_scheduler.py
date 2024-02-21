@@ -180,6 +180,8 @@ class TetriSchedScheduler(BaseScheduler):
         max_time_discretization: EventTime = EventTime(5, EventTime.Unit.US),
         dynamic_discretization: bool = False,
         max_occupancy_threshold: float = 0.8,
+        finer_discretization_at_prev_solution: bool = False,
+        finer_discretization_window: EventTime = EventTime(5, EventTime.Unit.US),
     ):
         if preemptive:
             raise ValueError("TetrischedScheduler does not support preemption.")
@@ -215,6 +217,8 @@ class TetriSchedScheduler(BaseScheduler):
             self._dynamic_discretization,  # enable dynamic discretization
             self._max_discretization.time,
             max_occupancy_threshold,
+            finer_discretization_at_prev_solution,
+            finer_discretization_window.to(EventTime.Unit.US).time,
         )
         self._use_task_graph_indicator_utility = self._goal == "max_goodput"
         self._previously_placed_reward_scale_factor = 1.0
@@ -259,6 +263,9 @@ class TetriSchedScheduler(BaseScheduler):
         # sure that no optimization passes remove it.
         # Reset at the beginning of each Scheduler invocation (`schedule()`).
         self._individual_task_strls: Mapping[str, tetrisched.Expression] = {}
+        # A cache for previously selected choose expressions, this is done for
+        # providing better hints to the solver
+        self._previously_satisfied_choose_exprs = set([])
         if (
             self._adaptive_discretization
             and self._max_discretization.time < self._time_discretization.time
@@ -831,7 +838,15 @@ class TetriSchedScheduler(BaseScheduler):
 
             # Retrieve the solution and check if we were able to schedule anything.
             solverSolution = objective_strl.getSolution()
+
             if solverSolution is not None and solverSolution.utility > 0:
+                self._previously_satisfied_choose_exprs = (
+                    solverSolution.satsifiedExpressionNames
+                )
+                self._logger.info(
+                    f"The satisfied Choose Expressions: "
+                    f"{self._previously_satisfied_choose_exprs}"
+                )
                 self._logger.info(
                     f"[{sim_time.time}] Solver returned utility of "
                     f"{solverSolution.utility} and took {solver_time} to solve. The "
@@ -925,6 +940,18 @@ class TetriSchedScheduler(BaseScheduler):
                         task_placement.execution_strategy,
                     )
             else:
+                # There were no Placements from the Scheduler. Inform the Simulator.
+                self._previously_satisfied_choose_exprs = set([])
+                for task in tasks_to_be_scheduled:
+                    placements.append(
+                        Placement.create_task_placement(
+                            task=task,
+                            placement_time=None,
+                            worker_pool_id=None,
+                            worker_id=None,
+                            execution_strategy=None,
+                        )
+                    )
                 # There were no Placements from the Scheduler. We just skip the
                 # placement of any of the tasks, and wait for the next invocation.
                 self._logger.warning(f"[{sim_time.time}] Failed to place any tasks.")
@@ -1139,6 +1166,8 @@ class TetriSchedScheduler(BaseScheduler):
                 scheduled_discretization.to(EventTime.Unit.US).time,
                 task_remaining_time.to(EventTime.Unit.US).time,
             )
+            if task.state == TaskState.SCHEDULED:
+                task_allocation_expression.setPreviouslySatisfied(True)
             self._logger.debug(
                 f"[{current_time.time}] Generated an AllocationExpression for "
                 f"task {task.unique_name} in state {task.state} starting at "
@@ -1282,6 +1311,11 @@ class TetriSchedScheduler(BaseScheduler):
                             placement_hint,
                         )
                     )
+                    if (
+                        task_choose_expressions[-1].discriptiveName
+                        in self._previously_satisfied_choose_exprs
+                    ):
+                        task_choose_expressions[-1].setPreviouslySatisfied(True)
                     choice_placement_times_and_rewards.append(
                         (placement_time.time, reward_for_this_placement)
                     )

@@ -144,7 +144,8 @@ class CapacityConstraintMap {
                                 const Time startTime, const Time duration,
                                 const IndicatorT usageIndicator,
                                 const PartitionUsageT usageVariable,
-                                std::optional<Time> granularity);
+                                std::optional<Time> granularity,
+                                bool print = false, std::string exprName = "");
 
   /// Translate the CapacityConstraintMap by moving its constraints
   /// to the given model.

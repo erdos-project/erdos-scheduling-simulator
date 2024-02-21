@@ -334,6 +334,18 @@ flags.DEFINE_bool(
     "The discretization is dynamically decided based on the occupancy request for "
     "each time slice. (default: False)",
 )
+flags.DEFINE_bool(
+    "finer_discretization_at_prev_solution",
+    False,
+    "If `True`, the scheduler keeps discretization of 1 around previous solution. "
+    "The discretization is dynamically decided based on the occupancy request for "
+    "each time slice. (default: False)",
+)
+flags.DEFINE_integer(
+    "finer_discretization_window",
+    5,
+    "The window around previous solution that keeps discretization of 1.",
+)
 flags.DEFINE_integer(
     "scheduler_max_time_discretization",
     5,
@@ -782,6 +794,7 @@ def main(args):
             _flags=FLAGS,
         )
     elif FLAGS.scheduler == "TetriSched":
+        finer_discretization = FLAGS.finer_discretization_at_prev_solution
         scheduler = TetriSchedScheduler(
             preemptive=FLAGS.preemption,
             runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
@@ -802,6 +815,10 @@ def main(args):
             ),
             dynamic_discretization=FLAGS.scheduler_dynamic_discretization,
             max_occupancy_threshold=FLAGS.scheduler_max_occupancy_threshold,
+            finer_discretization_at_prev_solution=finer_discretization,
+            finer_discretization_window=EventTime(
+                FLAGS.finer_discretization_window, EventTime.Unit.US
+            ),
         )
     elif FLAGS.scheduler == "GraphenePrime":
         scheduler = TetriSchedScheduler(

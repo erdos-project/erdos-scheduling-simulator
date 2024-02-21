@@ -92,13 +92,17 @@ class DiscretizationSelectorOptimizationPass : public OptimizationPass {
   Time minDiscretization;
   Time maxDiscretization;
   float maxOccupancyThreshold;
+  bool finerDiscretizationAtPrevSolution;
+  Time finerDiscretizationWindow;
 
  public:
   /// Instantiate the DiscretizationSelectorOptimizationPass.
   DiscretizationSelectorOptimizationPass();
-  DiscretizationSelectorOptimizationPass(Time minDiscretization = 1,
-                                         Time maxDiscretization = 5,
-                                         float maxOccupancyThreshold = 0.8);
+  DiscretizationSelectorOptimizationPass(
+      Time minDiscretization = 1, Time maxDiscretization = 5,
+      float maxOccupancyThreshold = 0.8,
+      bool finerDiscretizationAtPrevSolution = false,
+      Time finerDiscretizationWindow = 5);
 
   /// Run the DiscretizationSelectorOptimizationPass on the given STRL
   /// expression.
@@ -163,7 +167,9 @@ class OptimizationPassRunner {
   OptimizationPassRunner(bool debug = false,
                          bool enableDynamicDiscretization = false,
                          Time minDiscretization = 1, Time maxDiscretization = 5,
-                         float maxOccupancyThreshold = 0.8);
+                         float maxOccupancyThreshold = 0.8,
+                         bool finerDiscretizationAtPrevSolution = false,
+                         Time finerDiscretizationWindow = 5);
 
   /// Run the pre-translation optimization passes on the given STRL expression.
   void runPreTranslationPasses(Time currentTime, ExpressionPtr strlExpression,
