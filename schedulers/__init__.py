@@ -12,7 +12,9 @@ from .tetrisched_cplex_scheduler import TetriSchedCPLEXScheduler
 from .tetrisched_gurobi_scheduler import TetriSchedGurobiScheduler
 
 try:
+    from .graphene_scheduler import GrapheneScheduler
     from .tetrisched_scheduler import TetriSchedScheduler
 except ImportError:
     pass
+
 from .z3_scheduler import Z3Scheduler

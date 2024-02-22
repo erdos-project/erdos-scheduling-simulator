@@ -1504,6 +1504,14 @@ class Simulator(object):
             self._csv_logger.info("%s,UPDATE_WORKLOAD,0,0", self._simulator_time.time)
         else:
             self._workload = updated_workload
+            # Notify the Scheduler of the updated Workload.
+            self._scheduler.notify_workload_updated(
+                sim_time=self._simulator_time,
+                workload=self._workload,
+                worker_pools=self._worker_pools,
+            )
+
+            # Release the Tasks that have become available.
             releasable_tasks = self._workload.get_releasable_tasks()
             self._logger.info(
                 "[%s] The WorkloadLoader %s has %s TaskGraphs that released %s tasks.",
@@ -1981,6 +1989,10 @@ class Simulator(object):
             self._workload,
             self._worker_pools,
         )
+        if placements is None:
+            raise ValueError(
+                f"Received no Placements object from the Scheduler at {event.time}.",
+            )
 
         # Calculate the time at which the placements need to be applied.
         placement_time = event.time + placements.runtime

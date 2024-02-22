@@ -1,0 +1,73 @@
+# Implementation of the example workload specified in the Graphene paper.
+# This workload is being used to test the Offline and Online stages of the
+# ILP-based reimplementation of the Graphene algorithm.
+graphs:
+  - name: GrapheneMotivation
+    graph:
+      - name: "Task0"
+        work_profile: "Task0Profile"
+        children: ["Task6"]
+      - name: "Task1"
+        work_profile: "Task1Profile"
+        children: ["Task2"]
+      - name: "Task2"
+        work_profile: "Task2Profile"
+        children: ["Task6"]
+      - name: "Task3"
+        work_profile: "Task3Profile"
+        children: ["Task4"]
+      - name: "Task4"
+        work_profile: "Task4Profile"
+        children: ["Task5"]
+      - name: "Task5"
+        work_profile: "Task5Profile"
+        children: ["Task6"]
+      - name: "Task6"
+        work_profile: "Task6Profile"
+    release_policy: fixed
+    period: 0 # In us for now.
+    invocations: 1
+    deadline_variance: [2000, 2000]
+profiles:
+  - name: Task0Profile
+    execution_strategies:
+      - batch_size: 1
+        runtime: 100
+        resource_requirements:
+          Slot:any: 1
+  - name: Task1Profile
+    execution_strategies:
+      - batch_size: 1
+        runtime: 20
+        resource_requirements:
+          Slot:any: 3
+  - name: Task2Profile
+    execution_strategies:
+      - batch_size: 1
+        runtime: 100
+        resource_requirements:
+          Slot:any: 1
+  - name: Task3Profile
+    execution_strategies:
+      - batch_size: 1
+        runtime: 20
+        resource_requirements:
+          Slot:any: 3
+  - name: Task4Profile
+    execution_strategies:
+      - batch_size: 1
+        runtime: 20
+        resource_requirements:
+          Slot:any: 3
+  - name: Task5Profile
+    execution_strategies:
+      - batch_size: 1
+        runtime: 100
+        resource_requirements:
+          Slot:any: 1
+  - name: Task6Profile
+    execution_strategies:
+      - batch_size: 1
+        runtime: 20
+        resource_requirements:
+          Slot:any: 1
