@@ -1615,7 +1615,7 @@ class TaskGraph(Graph[Task]):
 
     def update_edges(self, tasks: Mapping[Task, Sequence[Task]]) -> None:
         """Updates the edges inside the TaskGraph according to the new set of tasks.
-        
+
         This is used to transform the TaskGraph without changing the references that
         may be held by other objects to this TaskGraph.
 
