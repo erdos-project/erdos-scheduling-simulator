@@ -276,8 +276,8 @@ class GrapheneScheduler(TetriSchedScheduler):
                             )
                             if previous_task is None:
                                 raise ValueError(
-                                    f"Failed to find the Task {previous_placement.name} "
-                                    f"in TaskGraph {task_graph.name}."
+                                    f"Failed to find the Task {previous_placement.name}"
+                                    f" in TaskGraph {task_graph.name}."
                                 )
                             strategies = previous_task.available_execution_strategies
                             fastest_strategy = strategies.get_fastest_strategy()
