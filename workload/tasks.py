@@ -1589,13 +1589,15 @@ class TaskGraph(Graph[Task]):
         # Find the maximum remaining time across all the sink nodes.
         return max([remaining_time[sink] for sink in self.get_sink_tasks()])
 
-    def get_task(self, name: str) -> Optional[Task]:
+    def get_task(self, name: str, unique: bool = False) -> Optional[Task]:
         """Retrieve the Task with the given name from the TaskGraph.
 
         Returns `None` if no such Task exists in the TaskGraph.
 
         Args:
             name (`str`): The name of the Task to retrieve.
+            unique (`bool`): If `True`, then the Task will be matched by its unique
+                name instead of the name.
 
         Returns:
             The `Task` with the given name, if it exists in the TaskGraph.
@@ -1605,11 +1607,23 @@ class TaskGraph(Graph[Task]):
         """
         matched_task = None
         for task in self.get_nodes():
-            if task.name == name:
+            if task.name == name or (unique and task.unique_name == name):
                 if matched_task:
                     raise ValueError(f"Multiple tasks with the name {name} found.")
                 matched_task = task
         return matched_task
+
+    def update_edges(self, tasks: Mapping[Task, Sequence[Task]]) -> None:
+        """Updates the edges inside the TaskGraph according to the new set of tasks.
+        
+        This is used to transform the TaskGraph without changing the references that
+        may be held by other objects to this TaskGraph.
+
+        Args:
+            tasks (`Mapping[Task, Sequence[Task]]`): A mapping of tasks to their
+                children tasks.
+        """
+        super(TaskGraph, self).__init__(tasks)
 
     @property
     def deadline(self) -> EventTime:
