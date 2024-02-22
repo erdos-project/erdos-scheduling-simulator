@@ -87,9 +87,11 @@ class GrapheneScheduler(TetriSchedScheduler):
         # critical path length of the TaskGraph to determine the plan-ahead window.
         self._plan_ahead_multiplier = 2
 
-    def schedule(
+    def notify_workload_updated(
         self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools
-    ) -> Placements:
+    ) -> None:
+        """The Graphene scheduler uses this method to transform the TaskGraphs that
+        have been added to the Workload, but have not been released yet."""
         # Create a Partitions object from the WorkerPools that are available.
         partitions = Partitions(worker_pools=worker_pools)
 
@@ -307,6 +309,10 @@ class GrapheneScheduler(TetriSchedScheduler):
                     task_graph.to_dot(
                         os.path.join(self._log_dir, f"{task_graph_name}_updated.dot")
                     )
+
+                # Add the TaskGraph to the set of transformed TaskGraphs, so that it
+                # is not transformed again.
+                self._transformed_taskgraphs.add(task_graph_name)
             else:
                 self._logger.error(
                     "[%s] Failed to find a minimum makespan solution for TaskGraph %s.",
@@ -317,11 +323,14 @@ class GrapheneScheduler(TetriSchedScheduler):
                     f"Failed to find a minimum makespan solution "
                     f"for the TaskGraph {task_graph_name}."
                 )
-
-        raise NotImplementedError(
-            "Saving of the transformed TaskGraphs is not yet done."
+        self._logger.debug(
+            "[%s] Completed the transformation of TaskGraphs in the Workload.",
+            sim_time.time,
         )
 
+    def schedule(
+        self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools
+    ) -> Placements:
         # All the TaskGraphs have been transformed, call the TetriSched scheduler and
         # return the Placements.
         return super(GrapheneScheduler, self).schedule(sim_time, workload, worker_pools)
