@@ -179,6 +179,25 @@ class BaseScheduler(object):
             placements=placements,
         )
 
+    def notify_workload_updated(
+        self,
+        sim_time: EventTime,
+        workload: Workload,
+        worker_pools: "WorkerPools",  # noqa: F821
+    ) -> None:
+        """Notifies the Scheduler that the Workload has been updated.
+
+        The Simulator invokes this method to notify the Scheduler that it can do
+        any necessary bookkeeping or updates to its internal state.
+
+        Args:
+            sim_time (`EventTime`): The time at which the workload was updated.
+            workload (`Workload`): The `Workload` that was updated.
+            worker_pools (`WorkerPools`): The set of worker pools available to the
+                Scheduler at the update of the Workload.
+        """
+        pass
+
     def schedule(
         self,
         sim_time: EventTime,

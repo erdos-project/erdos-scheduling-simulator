@@ -1,5 +1,4 @@
 import os
-import random
 import time
 from collections import defaultdict
 from math import ceil
@@ -716,6 +715,7 @@ class TetriSchedScheduler(BaseScheduler):
                         continue
 
                     # Construct the STRL.
+                    scale_factor = self._previously_placed_reward_scale_factor
                     task_graph_strl = self.construct_task_graph_strl(
                         current_time=sim_time,
                         task_graph=task_graph,
@@ -726,6 +726,8 @@ class TetriSchedScheduler(BaseScheduler):
                         task_strls=task_strls,
                         previously_placed=task_graph_name
                         in previously_placed_task_graphs,
+                        use_indicator_utility=self._use_task_graph_indicator_utility,
+                        scale_reward_previously_placed=scale_factor,
                     )
                     if task_graph_strl is not None:
                         objective_strl.addChild(task_graph_strl)
@@ -1692,6 +1694,8 @@ class TetriSchedScheduler(BaseScheduler):
         tasks_to_be_scheduled: Optional[List[Task]] = None,
         task_strls: Optional[Mapping[str, tetrisched.strl.Expression]] = None,
         previously_placed: Optional[bool] = False,
+        use_indicator_utility: Optional[bool] = False,
+        scale_reward_previously_placed: float = 1.0,
     ) -> tetrisched.strl.Expression:
         """Constructs the STRL expression subtree for a given TaskGraph.
 
@@ -1705,11 +1709,14 @@ class TetriSchedScheduler(BaseScheduler):
                 considered. Defaults to `None`.
             previously_placed (`Optional[bool]`): Whether the TaskGraph has been
                 previously placed. Defaults to `False`.
+            use_indicator_utility (`Optional[bool]`): Whether to use the indicator of
+                the placement of the TaskGraph as the utility. If False, the utility
+                of the individual Task placements is utilized instead.
+            scale_reward_previously_placed (`float`): The factor by which to scale the
+                reward of the TaskGraph if it has been previously placed. Defaults to
+                1.0.
         """
         # Maintain a cache to be used across the construction of the TaskGraph to make
-        # it DAG-aware, if not provided.
-        if task_strls is None:
-            task_strls = {}
         # it DAG-aware, if not provided.
         if task_strls is None:
             task_strls = {}
@@ -1767,21 +1774,21 @@ class TetriSchedScheduler(BaseScheduler):
         # utilities to be scaled, or if we are using the indicator from the topmost
         # TaskGraph expression to scale the utility.
         should_scale = (
-            self._previously_placed_reward_scale_factor > 1.0 and previously_placed
-        ) or self._use_task_graph_indicator_utility
+            scale_reward_previously_placed > 1.0 and previously_placed
+        ) or use_indicator_utility
 
         if should_scale:
             self._logger.debug(
                 "[%s] Scaling the %s of %s by %s.",
                 current_time.to(EventTime.Unit.US).time,
-                "indicator" if self._use_task_graph_indicator_utility else "utility",
+                "indicator" if use_indicator_utility else "utility",
                 task_graph.name,
-                self._previously_placed_reward_scale_factor,
+                scale_reward_previously_placed,
             )
             scale_expression = tetrisched.strl.ScaleExpression(
                 f"{task_graph.name}_scale",
-                self._previously_placed_reward_scale_factor if previously_placed else 1,
-                self._use_task_graph_indicator_utility,
+                scale_reward_previously_placed if previously_placed else 1,
+                use_indicator_utility,
             )
             scale_expression.addChild(task_graph_strl)
             return scale_expression
