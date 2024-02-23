@@ -48,12 +48,10 @@ def pre_process_task_duration(task_duration):
 
 
 def get_all_stage_info_for_query(query_num):
-    dirname = os.path.dirname(__file__)
     task_durations = np.load(os.path.join(HOME_TPCH_DIR, TPCH_SUBDIR,'task_duration_' + str(query_num) + '.npy'), 
                             allow_pickle=True).item()
 
     num_nodes = len(task_durations)
-    # nodes = []
 
     stage_info = {}
 
@@ -72,17 +70,6 @@ def get_all_stage_info_for_query(query_num):
             [i for l in task_duration['first_wave'].values() for i in l] + \
             [i for l in task_duration['rest_wave'].values() for i in l] + \
             [i for l in task_duration['fresh_durations'].values() for i in l])
-
-        # generate tasks in a node
-        # tasks = []
-        # for j in range(num_tasks):
-        #     # task = Task(j, rough_duration, wall_time)
-        #     tasks.append([j, rough_duration])
-
-        # generate a node
-        # print("created a node: ", n, " with tasks: ", tasks, " , task_duration: ", task_duration)
-        # node = Node(n, tasks, task_duration, wall_time, np_random)
-        # nodes.append([n, tasks, task_duration])
 
         curr_stage = {"stage_id": n, "num_tasks": num_tasks, "avg_task_duration": round(rough_duration)}
         stage_info[n] = curr_stage
