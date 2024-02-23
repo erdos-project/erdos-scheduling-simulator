@@ -19,6 +19,7 @@ from absl import app, flags
 
 from schedulers import EDFScheduler, FIFOScheduler
 from utils import EventTime, setup_logging
+from utils_tpch import get_all_stage_info_for_query
 from workers import Worker, WorkerPool, WorkerPools
 from workload import (
     ExecutionStrategies,
@@ -366,11 +367,41 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                 f"already registered!",
                 num_executors=0,
             )
+        
+        self._logger.info(
+            "Attempting to register application ID %s with name %s",
+            request.id,
+            request.name,
+        )
+        # Check if query is from TPC-H workload. 
+        # If yes, retrieve profiled slots and runtime info. If no, use default values
+        is_tpch_query = False
+        tpch_query_all_stage_info = None
+        if(request.name.startswith("TPCH_")):
+            is_tpch_query = True
+            # retrieve tasks-per-stage and runtime info based on query number
+            tpch_query_num = request.name.split("TPCH_Q",1)[1]
+            tpch_query_all_stage_info = get_all_stage_info_for_query(tpch_query_num)
 
         # Construct all the Tasks for the TaskGraph.
         task_ids_to_task: Mapping[int, Task] = {}
+        default_resource = Resources(resource_vector={
+                                        Resource(name="Slot_CPU", _id="any"): 30
+                                        }
+                                    )
+        default_runtime = EventTime(20, EventTime.Unit.US)
+        
         for task_dependency in request.dependencies:
             framework_task = task_dependency.key
+            if is_tpch_query:
+                task_slots = tpch_query_all_stage_info[framework_task.id]["num_tasks"]
+                task_runtime = tpch_query_all_stage_info[framework_task.id]["avg_task_duration"]
+                self._logger.info(
+                    "Creating Task for TPCH stage: %s with tasks: %s and avg runtime: %s",
+                    framework_task.id,
+                    task_slots,
+                    task_runtime,
+                )
             task_ids_to_task[framework_task.id] = Task(
                 name=framework_task.name,
                 task_graph=request.id,
@@ -380,17 +411,22 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                         name=f"WorkProfile_{framework_task.name}",
                         execution_strategies=ExecutionStrategies(
                             [
-                                # TODO (Sukrit): Find the actual resource requirements
-                                # for the particular TaskGraph, along with the expected
-                                # runtime and set it here.
                                 ExecutionStrategy(
                                     resources=Resources(
                                         resource_vector={
                                             Resource(name="Slot_CPU", _id="any"): 30
                                         }
+                                    ) if not is_tpch_query else Resources(
+                                        resource_vector={
+                                            Resource(name="Slot_CPU", _id="any"): task_slots
+                                        }
                                     ),
                                     batch_size=1,
-                                    runtime=EventTime(20, EventTime.Unit.US),
+                                    runtime=EventTime(
+                                        20, EventTime.Unit.US
+                                        ) if not is_tpch_query else EventTime(
+                                            task_runtime, EventTime.Unit.US
+                                        ),
                                 )
                             ]
                         ),
