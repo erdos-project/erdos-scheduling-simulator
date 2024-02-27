@@ -19,7 +19,10 @@ from absl import app, flags
 
 from schedulers import EDFScheduler, FIFOScheduler
 from utils import EventTime, setup_logging
-from utils_tpch import get_all_stage_info_for_query
+from tpch_utils import (
+    get_all_stage_info_for_query,
+    verify_and_relable_tpch_app_graph
+)
 from workers import Worker, WorkerPool, WorkerPools
 from workload import (
     ExecutionStrategies,
@@ -382,6 +385,25 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             # retrieve tasks-per-stage and runtime info based on query number
             tpch_query_num = request.name.split("TPCH_Q",1)[1]
             tpch_query_all_stage_info = get_all_stage_info_for_query(tpch_query_num)
+            same_structure, stage_id_mapping = verify_and_relable_tpch_app_graph(
+                query_num = tpch_query_num,
+                dependencies = request.dependencies
+                )
+            
+            # return failure message if not tpch app isnt of same DAG structure
+            if not same_structure:
+                self._logger.warning(
+                    "TPCH application with ID %s and name %s couldn't be registered."
+                    "DAG structure mismatch!",
+                    request.id,
+                    request.name,
+                )
+                return erdos_scheduler_pb2.RegisterTaskGraphResponse(
+                    success=False,
+                    message=f"TPCH application ID {request.id} with name {request.name} "
+                    f"couldn't be registered. DAG structure mismatch!",
+                    num_executors=0,
+                )
 
         # Construct all the Tasks for the TaskGraph.
         task_ids_to_task: Mapping[int, Task] = {}
@@ -394,11 +416,16 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         for task_dependency in request.dependencies:
             framework_task = task_dependency.key
             if is_tpch_query:
-                task_slots = tpch_query_all_stage_info[framework_task.id]["num_tasks"]
-                task_runtime = tpch_query_all_stage_info[framework_task.id]["avg_task_duration"]
+                mapped_stage_id = stage_id_mapping[framework_task.id]
+                task_slots = tpch_query_all_stage_info[
+                    mapped_stage_id]["num_tasks"]
+                task_runtime = tpch_query_all_stage_info[
+                    mapped_stage_id]["avg_task_duration"]
                 self._logger.info(
-                    "Creating Task for TPCH stage: %s with tasks: %s and avg runtime: %s",
+                    "Creating Task for given app TPCH stage: %s, mapped to "
+                    "original stage id %s, with tasks: %s and avg runtime: %s",
                     framework_task.id,
+                    mapped_stage_id,
                     task_slots,
                     task_runtime,
                 )
@@ -412,21 +439,16 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                         execution_strategies=ExecutionStrategies(
                             [
                                 ExecutionStrategy(
-                                    resources=Resources(
+                                    resources=default_resource if not is_tpch_query 
+                                    else Resources(
                                         resource_vector={
-                                            Resource(name="Slot_CPU", _id="any"): 30
-                                        }
-                                    ) if not is_tpch_query else Resources(
-                                        resource_vector={
-                                            Resource(name="Slot_CPU", _id="any"): task_slots
+                                            Resource(name="Slot_CPU", 
+                                                     _id="any"): task_slots
                                         }
                                     ),
                                     batch_size=1,
-                                    runtime=EventTime(
-                                        20, EventTime.Unit.US
-                                        ) if not is_tpch_query else EventTime(
-                                            task_runtime, EventTime.Unit.US
-                                        ),
+                                    runtime=default_runtime if not is_tpch_query 
+                                    else EventTime(task_runtime, EventTime.Unit.US),
                                 )
                             ]
                         ),
