@@ -18,11 +18,11 @@ import grpc
 from absl import app, flags
 
 from schedulers import EDFScheduler, FIFOScheduler
-from utils import EventTime, setup_logging
 from tpch_utils import (
     get_all_stage_info_for_query,
     verify_and_relable_tpch_app_graph
 )
+from utils import EventTime, setup_logging
 from workers import Worker, WorkerPool, WorkerPools
 from workload import (
     ExecutionStrategies,

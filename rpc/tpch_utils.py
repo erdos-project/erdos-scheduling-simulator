@@ -1,10 +1,10 @@
 # Code adopted from decima-sim to use their profiles of TPC-H queries
 
-import numpy as np
-import os
 import ast
 import json
 import networkx as nx
+import numpy as np
+import os
 from typing import Mapping, Sequence
 
 
