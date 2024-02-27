@@ -18,10 +18,7 @@ import grpc
 from absl import app, flags
 
 from schedulers import EDFScheduler, FIFOScheduler
-from tpch_utils import (
-    get_all_stage_info_for_query,
-    verify_and_relable_tpch_app_graph
-)
+from tpch_utils import get_all_stage_info_for_query, verify_and_relable_tpch_app_graph
 from utils import EventTime, setup_logging
 from workers import Worker, WorkerPool, WorkerPools
 from workload import (
@@ -370,26 +367,25 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                 f"already registered!",
                 num_executors=0,
             )
-        
+
         self._logger.info(
             "Attempting to register application ID %s with name %s",
             request.id,
             request.name,
         )
-        # Check if query is from TPC-H workload. 
+        # Check if query is from TPC-H workload.
         # If yes, retrieve profiled slots and runtime info. If no, use default values
         is_tpch_query = False
         tpch_query_all_stage_info = None
-        if(request.name.startswith("TPCH_")):
+        if request.name.startswith("TPCH_"):
             is_tpch_query = True
             # retrieve tasks-per-stage and runtime info based on query number
-            tpch_query_num = request.name.split("TPCH_Q",1)[1]
+            tpch_query_num = request.name.split("TPCH_Q", 1)[1]
             tpch_query_all_stage_info = get_all_stage_info_for_query(tpch_query_num)
             same_structure, stage_id_mapping = verify_and_relable_tpch_app_graph(
-                query_num = tpch_query_num,
-                dependencies = request.dependencies
-                )
-            
+                query_num=tpch_query_num, dependencies=request.dependencies
+            )
+
             # return failure message if not tpch app isnt of same DAG structure
             if not same_structure:
                 self._logger.warning(
@@ -407,20 +403,19 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
 
         # Construct all the Tasks for the TaskGraph.
         task_ids_to_task: Mapping[int, Task] = {}
-        default_resource = Resources(resource_vector={
-                                        Resource(name="Slot_CPU", _id="any"): 30
-                                        }
-                                    )
+        default_resource = Resources(
+            resource_vector={Resource(name="Slot_CPU", _id="any"): 30}
+        )
         default_runtime = EventTime(20, EventTime.Unit.US)
-        
+
         for task_dependency in request.dependencies:
             framework_task = task_dependency.key
             if is_tpch_query:
                 mapped_stage_id = stage_id_mapping[framework_task.id]
-                task_slots = tpch_query_all_stage_info[
-                    mapped_stage_id]["num_tasks"]
-                task_runtime = tpch_query_all_stage_info[
-                    mapped_stage_id]["avg_task_duration"]
+                task_slots = tpch_query_all_stage_info[mapped_stage_id]["num_tasks"]
+                task_runtime = tpch_query_all_stage_info[mapped_stage_id][
+                    "avg_task_duration"
+                ]
                 self._logger.info(
                     "Creating Task for given app TPCH stage: %s, mapped to "
                     "original stage id %s, with tasks: %s and avg runtime: %s",
@@ -439,16 +434,23 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                         execution_strategies=ExecutionStrategies(
                             [
                                 ExecutionStrategy(
-                                    resources=default_resource if not is_tpch_query 
-                                    else Resources(
-                                        resource_vector={
-                                            Resource(name="Slot_CPU", 
-                                                     _id="any"): task_slots
-                                        }
+                                    resources=(
+                                        default_resource
+                                        if not is_tpch_query
+                                        else Resources(
+                                            resource_vector={
+                                                Resource(
+                                                    name="Slot_CPU", _id="any"
+                                                ): task_slots
+                                            }
+                                        )
                                     ),
                                     batch_size=1,
-                                    runtime=default_runtime if not is_tpch_query 
-                                    else EventTime(task_runtime, EventTime.Unit.US),
+                                    runtime=(
+                                        default_runtime
+                                        if not is_tpch_query
+                                        else EventTime(task_runtime, EventTime.Unit.US)
+                                    ),
                                 )
                             ]
                         ),
