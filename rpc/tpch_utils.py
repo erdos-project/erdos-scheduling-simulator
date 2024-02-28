@@ -80,9 +80,9 @@ def get_all_stage_info_for_query(query_num):
         # drag nearest neighbor first wave duration to empty spots
         pre_process_task_duration(task_duration)
         rough_duration = np.mean(
-            [i for l in task_duration["first_wave"].values() for i in l]
-            + [i for l in task_duration["rest_wave"].values() for i in l]
-            + [i for l in task_duration["fresh_durations"].values() for i in l]
+            [i for t in task_duration["first_wave"].values() for i in t]
+            + [i for t in task_duration["rest_wave"].values() for i in t]
+            + [i for t in task_duration["fresh_durations"].values() for i in t]
         )
 
         curr_stage = {
@@ -153,7 +153,7 @@ def are_structurally_same(graph1, graph2):
 
             return True, reversed_mapping
 
-    print(f"DAG structure mismatch! No mapping could be found")
+    print("DAG structure mismatch! No mapping could be found")
     return False, None
 
 

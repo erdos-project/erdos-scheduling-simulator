@@ -396,8 +396,8 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                 )
                 return erdos_scheduler_pb2.RegisterTaskGraphResponse(
                     success=False,
-                    message=f"TPCH application ID {request.id} with name {request.name} "
-                    f"couldn't be registered. DAG structure mismatch!",
+                    message=f"TPCH application ID {request.id} with name {request.name}"
+                    f" couldn't be registered. DAG structure mismatch!",
                     num_executors=0,
                 )
 
