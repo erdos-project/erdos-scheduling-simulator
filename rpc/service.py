@@ -16,9 +16,9 @@ import erdos_scheduler_pb2
 import erdos_scheduler_pb2_grpc
 import grpc
 from absl import app, flags
+from tpch_utils import get_all_stage_info_for_query, verify_and_relable_tpch_app_graph
 
 from schedulers import EDFScheduler, FIFOScheduler
-from tpch_utils import get_all_stage_info_for_query, verify_and_relable_tpch_app_graph
 from utils import EventTime, setup_logging
 from workers import Worker, WorkerPool, WorkerPools
 from workload import (

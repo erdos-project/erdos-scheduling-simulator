@@ -2,11 +2,11 @@
 
 import ast
 import json
-import networkx as nx
-import numpy as np
 import os
 from typing import Mapping, Sequence
 
+import networkx as nx
+import numpy as np
 
 HOME_TPCH_DIR = "../profiles/workload/tpch_decima/"
 TPCH_SUBDIR = "2g/"
