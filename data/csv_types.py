@@ -299,7 +299,7 @@ class TaskGraph(object):
             + f"critical_path_time={self.critical_path_time}, slack={self.slack},"
             + f"cancelled={self.cancelled}, cancelled_at={self.cancelled_at},"
             + f"completion_at={self.completion_at},"
-            + f"deadline_miss_detected_at={self.deadline_miss_detected_at}"
+            + f"deadline_miss_detected_at={self.deadline_miss_detected_at})"
         )
 
 

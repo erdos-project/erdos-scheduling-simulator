@@ -239,6 +239,14 @@ flags.DEFINE_string(
 )
 
 flags.DEFINE_bool(
+    "plot_goodresource_utilization",
+    False,
+    "Plot a timeline of the good resource utilization. "
+    "A good resource utilization is defined as the utilization of the resource "
+    "for the use of a TaskGraph that meets its deadline.",
+)
+
+flags.DEFINE_bool(
     "end_to_end_response_time",
     False,
     "Analyzes the end-to-end response time for each timestamp.",
@@ -1066,6 +1074,72 @@ def plot_goodput(
     plt.savefig(output, bbox_inches="tight")
 
 
+def plot_goodresource_utilization(csv_reader, csv_files, scheduler_labels, output_dir):
+    """Plots the timeline of the resource utilization.
+
+    A good resource utilization is defined as the utilization of the resource for the
+    purposes of meeting the deadline of a TaskGraph."""
+    # Retrieve the Tasks that were released into the system.
+    for csv_file, scheduler_label in zip(csv_files, scheduler_labels):
+        tasks = csv_reader.get_tasks(csv_file)
+        task_graphs = csv_reader.get_task_graph(csv_file)
+        good_resource_utilization = {}
+        for task in tasks:
+            if task.task_graph not in task_graphs:
+                raise ValueError(f"Graph {task.task_graph} not found in {csv_file}.")
+            task_graph = task_graphs[task.task_graph]
+            if not task_graph.was_completed or task_graph.missed_deadline:
+                continue
+            for placement in task.placements:
+                for resource in placement.resources_used:
+                    if resource.name not in good_resource_utilization:
+                        good_resource_utilization[resource.name] = defaultdict(int)
+
+                    for t in range(placement.placement_time, placement.completion_time):
+                        good_resource_utilization[resource.name][t] += resource.quantity
+
+        for resource in good_resource_utilization.keys():
+            worker_pools = csv_reader.get_worker_pools(csv_file)
+            max_resource_available = 0
+            for worker_pool in worker_pools:
+                for wp_resource in worker_pool.resources:
+                    if resource == wp_resource.name:
+                        max_resource_available += wp_resource.quantity
+            usage_map = []
+            wasted_map = []
+            for t in range(0, csv_reader.get_simulator_end_time(csv_file)):
+                if t in good_resource_utilization[resource]:
+                    utilization = good_resource_utilization[resource][t]
+                    usage_map.append(utilization)
+                    wasted_map.append(max_resource_available - utilization)
+                else:
+                    usage_map.append(0)
+                    wasted_map.append(max_resource_available)
+            plt.figure(figsize=(8, 8))
+            plt.bar(
+                np.arange(0, len(usage_map)),
+                usage_map,
+                color="green",
+                width=1.0,
+            )
+            plt.bar(
+                np.arange(0, len(usage_map)),
+                wasted_map,
+                bottom=usage_map,
+                color="red",
+                width=1.0,
+            )
+            plt.xlabel("Time")
+            plt.ylabel("Resource Utilization")
+            plt.savefig(
+                os.path.join(
+                    output_dir,
+                    f"{resource}_{scheduler_label}_goodresource_utilization.png",
+                ),
+                bbox_inches="tight",
+            )
+
+
 def log_aggregate_stats(
     csv_reader, csv_files, conf_files, scheduler_labels, task_name_regex, stat="p50"
 ):
@@ -1384,6 +1458,13 @@ def main(argv):
             plot=FLAGS.plot,
             figure_size=figure_size,
             stats=statistics,
+        )
+    if FLAGS.plot_goodresource_utilization or FLAGS.all:
+        plot_goodresource_utilization(
+            csv_reader,
+            FLAGS.csv_files,
+            scheduler_labels,
+            FLAGS.output_dir,
         )
 
     if FLAGS.aggregate_stats:

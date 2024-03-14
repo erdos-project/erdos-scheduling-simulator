@@ -95,21 +95,6 @@ flags.DEFINE_list(
     "the same length as the list of workload profile paths. This is used to annotate "
     "the TaskGraphs with the corresponding workload profile path label.",
 )
-flags.register_multi_flags_validator(
-    ["workload_profile_path", "workload_profile_paths"],
-    lambda flags: not (
-        len(flags["workload_profile_paths"]) > 0
-        and flags["workload_profile_path"] is not None
-    ),
-    message="Only one of workload_profile_path and workload_profile_paths must be set.",
-)
-flags.register_multi_flags_validator(
-    ["workload_profile_path", "workload_profile_paths"],
-    lambda flags: len(flags["workload_profile_paths"]) > 0
-    or flags["workload_profile_path"] is not None,
-    message="At least one of workload_profile_path and workload_profile_paths must be "
-    "set.",
-)
 flags.DEFINE_string(
     "worker_profile_path",
     "./profiles/workers/worker_profile.json",
@@ -507,13 +492,6 @@ flags.DEFINE_list(
     "If provided, the list must be of the same length as the list of workload "
     "profile paths. For a single workload profile path, use `override_release_policy`.",
 )
-flags.register_validator(
-    "override_release_policies",
-    lambda override_release_policies: all(
-        policy in JobGraph.RELEASE_POLICIES for policy in override_release_policies
-    ),
-    "All release policies must be one of {}".format(JobGraph.RELEASE_POLICIES),
-)
 flags.DEFINE_integer(
     "override_num_invocation",
     0,
@@ -525,13 +503,6 @@ flags.DEFINE_list(
     "Override the number of invocations for all TaskGraphs defined in each Workload."
     "If provided, the list must be of the same length as the list of workload "
     "profile paths. For a single workload profile path, use `override_num_invocation`.",
-)
-flags.register_validator(
-    "override_num_invocations",
-    lambda override_num_invocations: all(
-        num_invocations.isdigit() for num_invocations in override_num_invocations
-    ),
-    "All number of invocations must be an integer.",
 )
 flags.DEFINE_float(
     "override_poisson_arrival_rate",
