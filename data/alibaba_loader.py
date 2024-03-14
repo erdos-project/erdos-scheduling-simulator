@@ -50,6 +50,9 @@ class AlibabaTaskUnpickler(pickle.Unpickler):
         return super().find_class(module, name)
 
 
+FILTERED_DAGS = ("j_1442387",)
+
+
 class AlibabaLoader(BaseWorkloadLoader):
     """Loads the Alibaba trace from the provided file.
 
@@ -409,6 +412,8 @@ class AlibabaLoader(BaseWorkloadLoader):
                     new_pickled_file_name = f"{profile_label}_filtered.pkl"
                     new_pickle = {}
                 for job_graph_name, job_tasks in data.items():
+                    if job_graph_name in FILTERED_DAGS:
+                        continue
                     try:
                         job_graph = self._convert_job_data_to_job_graph(
                             job_graph_name,
