@@ -1084,6 +1084,7 @@ def plot_goodresource_utilization(csv_reader, csv_files, scheduler_labels, outpu
         tasks = csv_reader.get_tasks(csv_file)
         task_graphs = csv_reader.get_task_graph(csv_file)
         good_resource_utilization = {}
+        simulator_end_time = 0
         for task in tasks:
             if task.task_graph not in task_graphs:
                 raise ValueError(f"Graph {task.task_graph} not found in {csv_file}.")
@@ -1097,6 +1098,8 @@ def plot_goodresource_utilization(csv_reader, csv_files, scheduler_labels, outpu
 
                     for t in range(placement.placement_time, placement.completion_time):
                         good_resource_utilization[resource.name][t] += resource.quantity
+                        if t > simulator_end_time:
+                            simulator_end_time = t
 
         for resource in good_resource_utilization.keys():
             worker_pools = csv_reader.get_worker_pools(csv_file)
@@ -1107,7 +1110,8 @@ def plot_goodresource_utilization(csv_reader, csv_files, scheduler_labels, outpu
                         max_resource_available += wp_resource.quantity
             usage_map = []
             wasted_map = []
-            for t in range(0, csv_reader.get_simulator_end_time(csv_file)):
+            print(f"Resource {resource} used between 0 and {simulator_end_time}.")
+            for t in range(0, simulator_end_time):
                 if t in good_resource_utilization[resource]:
                     utilization = good_resource_utilization[resource][t]
                     usage_map.append(utilization)
