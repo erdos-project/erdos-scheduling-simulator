@@ -201,6 +201,11 @@ flags.DEFINE_bool(
     False,
     "If true, we use heterogeneous resource types with %difference in runtime.",
 )
+flags.DEFINE_bool(
+    "alibaba_dump_filtered_dags",
+    False,
+    "If True, we dump the filtered DAGs into a separate file to speed up processing.",
+)
 
 # Task related flags.
 flags.DEFINE_integer(

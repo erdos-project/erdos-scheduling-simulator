@@ -81,9 +81,9 @@ class AlibabaLoader(BaseWorkloadLoader):
         self._workload_paths_and_release_policies = (
             self._construct_workload_definitions()
         )
-        self._job_graph_generators: Mapping[str, Callable] = (
-            self._initialize_job_graph_generators()
-        )
+        self._job_graph_generators: Mapping[
+            str, Callable
+        ] = self._initialize_job_graph_generators()
         self._release_times_and_profiles = self._construct_release_times()
 
         self._job_graphs: Mapping[str, Mapping[str, JobGraph]] = {}
@@ -405,6 +405,9 @@ class AlibabaLoader(BaseWorkloadLoader):
                     pickled_file
                 ).load()
                 skipped_job_graphs = 0
+                if self._flags.alibaba_dump_filtered_dags:
+                    new_pickled_file_name = f"{profile_label}_filtered.pkl"
+                    new_pickle = {}
                 for job_graph_name, job_tasks in data.items():
                     try:
                         job_graph = self._convert_job_data_to_job_graph(
@@ -422,6 +425,8 @@ class AlibabaLoader(BaseWorkloadLoader):
                                 < max_critical_path_runtime
                             ):
                                 self._job_graphs[path][job_graph_name] = job_graph
+                                if self._flags.alibaba_dump_filtered_dags:
+                                    new_pickle[job_graph_name] = job_tasks
                             else:
                                 skipped_job_graphs += 1
                                 # self._logger.debug(
@@ -444,6 +449,9 @@ class AlibabaLoader(BaseWorkloadLoader):
                     f"[0] Skipped {skipped_job_graphs} job graphs from path {path}, "
                     f"loaded {len(self._job_graphs[path])} job graphs."
                 )
+                if self._flags.alibaba_dump_filtered_dags:
+                    with open(new_pickled_file_name, "wb") as f2:
+                        pickle.dump(new_pickle, f2)
 
         path_to_job_graph_generator_mapping = {}
         for index, (path, _) in enumerate(self._workload_paths_and_release_policies):
@@ -570,11 +578,11 @@ class AlibabaLoader(BaseWorkloadLoader):
             #     random_task_duration =
             #       round(self._sample_normal_distribution_random(1, 50, 15)[0])
 
+            job_name = task.name.split("_")[0]
             if task.actual_duration <= 0:
                 # Some loaded TaskGraphs have no duration, skip those.
                 return None
 
-            job_name = task.name.split("_")[0]
             job_runtime_1 = EventTime(
                 int(math.ceil(task.actual_duration)),
                 EventTime.Unit.US,
