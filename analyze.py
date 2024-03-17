@@ -245,6 +245,11 @@ flags.DEFINE_bool(
     "A good resource utilization is defined as the utilization of the resource "
     "for the use of a TaskGraph that meets its deadline.",
 )
+flags.DEFINE_bool(
+    "consider_all_utilization_good",
+    False,
+    "If True, considers any utilization of the resource as good.",
+)
 
 flags.DEFINE_bool(
     "end_to_end_response_time",
@@ -1074,7 +1079,13 @@ def plot_goodput(
     plt.savefig(output, bbox_inches="tight")
 
 
-def plot_goodresource_utilization(csv_reader, csv_files, scheduler_labels, output_dir):
+def plot_goodresource_utilization(
+    csv_reader,
+    csv_files,
+    scheduler_labels,
+    output_dir,
+    consider_all_utilization_good=False,
+):
     """Plots the timeline of the resource utilization.
 
     A good resource utilization is defined as the utilization of the resource for the
@@ -1089,7 +1100,9 @@ def plot_goodresource_utilization(csv_reader, csv_files, scheduler_labels, outpu
             if task.task_graph not in task_graphs:
                 raise ValueError(f"Graph {task.task_graph} not found in {csv_file}.")
             task_graph = task_graphs[task.task_graph]
-            if not task_graph.was_completed or task_graph.missed_deadline:
+            if not consider_all_utilization_good and (
+                not task_graph.was_completed or task_graph.missed_deadline
+            ):
                 continue
             for placement in task.placements:
                 for resource in placement.resources_used:
@@ -1469,6 +1482,7 @@ def main(argv):
             FLAGS.csv_files,
             scheduler_labels,
             FLAGS.output_dir,
+            FLAGS.consider_all_utilization_good,
         )
 
     if FLAGS.aggregate_stats:
