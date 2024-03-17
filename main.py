@@ -161,6 +161,12 @@ flags.DEFINE_integer(
     "trace. Num slots will be in powers of 2 and picked at random from "
     "[1, alibaba_loader_task_max_pow2_slots].",
 )
+flags.DEFINE_integer(
+    "alibaba_loader_task_cpu_usage_max",
+    sys.maxsize,
+    "The maximum CPU usage of a task that can be released by the Alibaba trace. "
+    "This property is verified AFTER the task CPU divisor is applied.",
+)
 flags.DEFINE_float(
     "alibaba_task_duration_multiplier",
     1,

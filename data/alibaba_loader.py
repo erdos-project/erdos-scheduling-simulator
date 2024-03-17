@@ -50,7 +50,7 @@ class AlibabaTaskUnpickler(pickle.Unpickler):
         return super().find_class(module, name)
 
 
-FILTERED_DAGS = ("j_1442387",)
+FILTERED_DAGS = ("j_1442387", "j_2583299", "j_425976")
 
 
 class AlibabaLoader(BaseWorkloadLoader):
@@ -102,6 +102,7 @@ class AlibabaLoader(BaseWorkloadLoader):
 
         self._task_cpu_divisor = self._flags.alibaba_loader_task_cpu_divisor
         self._task_max_pow2_slots = self._flags.alibaba_loader_task_max_pow2_slots
+        self._task_cpu_usage_max = self._flags.alibaba_loader_task_cpu_usage_max
 
     def _construct_workload_definitions(
         self,
@@ -442,9 +443,7 @@ class AlibabaLoader(BaseWorkloadLoader):
                                 #     f" {max_critical_path_runtime})."
                                 # )
                         else:
-                            self._logger.warning(
-                                f"Failed to create job graph {job_graph_name}."
-                            )
+                            skipped_job_graphs += 1
                     except ValueError as e:
                         self._logger.warning(
                             f"Failed to convert job graph {job_graph_name} "
@@ -528,9 +527,13 @@ class AlibabaLoader(BaseWorkloadLoader):
         # Create the individual Job instances corresponding to each Task.
         task_name_to_simulator_job_mapping = {}
         for task in job_tasks:
+            # The name of the Job from the Task.
+            job_name = task.name.split("_")[0]
+
             if self._task_max_pow2_slots == 0:
                 # This code will use the cpu requirements from
                 # the alibaba trace and adjust slots
+                resource_usage = int(math.ceil(task.cpu_usage / self._task_cpu_divisor))
                 job_resources_1 = Resources(
                     resource_vector={
                         # Note: We divide the CPU by some self._task_cpu_divisor instead
@@ -540,19 +543,24 @@ class AlibabaLoader(BaseWorkloadLoader):
                         # would end up using 1 slot, which is not very interesting and
                         # makes no chance for DAG_Sched to do effective packing that
                         # would beat EDF by a significant margin.
-                        Resource(name="Slot_1", _id="any"): int(
-                            math.ceil(task.cpu_usage / self._task_cpu_divisor)
-                        ),
+                        Resource(name="Slot_1", _id="any"): resource_usage,
                     }
                 )
-
                 job_resources_2 = Resources(
                     resource_vector={
-                        Resource(name="Slot_2", _id="any"): int(
-                            math.ceil(task.cpu_usage / self._task_cpu_divisor)
-                        ),
+                        Resource(name="Slot_2", _id="any"): resource_usage,
                     }
                 )
+                if resource_usage > self._task_cpu_usage_max:
+                    self._logger.debug(
+                        "Skipping JobGraph %s because the Job %s required %s units "
+                        "of the resource, but the maximum allowed is %s",
+                        job_graph_name,
+                        job_name,
+                        resource_usage,
+                        self._task_cpu_usage_max,
+                    )
+                    return None
             else:
                 # This code will override cpu requirements from
                 # the alibaba trace and assign random number of slots
@@ -583,9 +591,14 @@ class AlibabaLoader(BaseWorkloadLoader):
             #     random_task_duration =
             #       round(self._sample_normal_distribution_random(1, 50, 15)[0])
 
-            job_name = task.name.split("_")[0]
             if task.actual_duration <= 0:
                 # Some loaded TaskGraphs have no duration, skip those.
+                self._logger.debug(
+                    "Skipping JobGraph %s because the Job %s has duration %s",
+                    job_graph_name,
+                    job_name,
+                    task.actual_duration,
+                )
                 return None
 
             job_runtime_1 = EventTime(
