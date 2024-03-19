@@ -50,7 +50,7 @@ class AlibabaTaskUnpickler(pickle.Unpickler):
         return super().find_class(module, name)
 
 
-FILTERED_DAGS = ("j_1442387", "j_2583299", "j_425976")
+FILTERED_DAGS = ("j_1442387", "j_2583299", "j_425976", "j_3357093")
 
 
 class AlibabaLoader(BaseWorkloadLoader):
