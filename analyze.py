@@ -239,16 +239,16 @@ flags.DEFINE_string(
 )
 
 flags.DEFINE_bool(
-    "plot_goodresource_utilization",
+    "goodresource_utilization",
     False,
     "Plot a timeline of the good resource utilization. "
     "A good resource utilization is defined as the utilization of the resource "
     "for the use of a TaskGraph that meets its deadline.",
 )
-flags.DEFINE_bool(
-    "consider_all_utilization_good",
-    False,
-    "If True, considers any utilization of the resource as good.",
+flags.DEFINE_string(
+    "goodresource_utilization_plot_name",
+    "goodresource_utilization.png",
+    "The filename of the good resource utilization plot.",
 )
 
 flags.DEFINE_bool(
@@ -1083,8 +1083,9 @@ def plot_goodresource_utilization(
     csv_reader,
     csv_files,
     scheduler_labels,
-    output_dir,
-    consider_all_utilization_good=False,
+    plot=False,
+    output_dir="./",
+    output_file_name="goodresource_utilization.png",
 ):
     """Plots the timeline of the resource utilization.
 
@@ -1094,27 +1095,34 @@ def plot_goodresource_utilization(
     for csv_file, scheduler_label in zip(csv_files, scheduler_labels):
         tasks = csv_reader.get_tasks(csv_file)
         task_graphs = csv_reader.get_task_graph(csv_file)
-        good_resource_utilization = {}
+        resource_utilization = {}
         simulator_end_time = 0
         for task in tasks:
             if task.task_graph not in task_graphs:
                 raise ValueError(f"Graph {task.task_graph} not found in {csv_file}.")
             task_graph = task_graphs[task.task_graph]
-            if not consider_all_utilization_good and (
-                not task_graph.was_completed or task_graph.missed_deadline
-            ):
-                continue
+            is_task_good = task_graph.was_completed and not task_graph.missed_deadline
             for placement in task.placements:
                 for resource in placement.resources_used:
-                    if resource.name not in good_resource_utilization:
-                        good_resource_utilization[resource.name] = defaultdict(int)
+                    if resource.name not in resource_utilization:
+                        # The format is (good, bad) utilization.
+                        resource_utilization[resource.name] = defaultdict(
+                            lambda: [0, 0]
+                        )
 
                     for t in range(placement.placement_time, placement.completion_time):
-                        good_resource_utilization[resource.name][t] += resource.quantity
+                        if is_task_good:
+                            resource_utilization[resource.name][t][
+                                0
+                            ] += resource.quantity
+                        else:
+                            resource_utilization[resource.name][t][
+                                1
+                            ] += resource.quantity
                         if t > simulator_end_time:
                             simulator_end_time = t
 
-        for resource in good_resource_utilization.keys():
+        for resource in resource_utilization.keys():
             worker_pools = csv_reader.get_worker_pools(csv_file)
             max_resource_available = 0
             for worker_pool in worker_pools:
@@ -1122,39 +1130,51 @@ def plot_goodresource_utilization(
                     if resource == wp_resource.name:
                         max_resource_available += wp_resource.quantity
             usage_map = []
-            wasted_map = []
             print(f"Resource {resource} used between 0 and {simulator_end_time}.")
+            total_good_utilization = 0
+            total_utilization = 0
             for t in range(0, simulator_end_time):
-                if t in good_resource_utilization[resource]:
-                    utilization = good_resource_utilization[resource][t]
-                    usage_map.append(utilization)
-                    wasted_map.append(max_resource_available - utilization)
+                if t in resource_utilization[resource]:
+                    good_utilization = resource_utilization[resource][t][0]
+                    total_good_utilization += good_utilization
+                    bad_utilization = resource_utilization[resource][t][1]
+                    total_utilization += good_utilization + bad_utilization
+                    usage_map.append((good_utilization, bad_utilization))
                 else:
-                    usage_map.append(0)
-                    wasted_map.append(max_resource_available)
-            plt.figure(figsize=(8, 8))
-            plt.bar(
-                np.arange(0, len(usage_map)),
-                usage_map,
-                color="green",
-                width=1.0,
-            )
-            plt.bar(
-                np.arange(0, len(usage_map)),
-                wasted_map,
-                bottom=usage_map,
-                color="red",
-                width=1.0,
-            )
-            plt.xlabel("Time")
-            plt.ylabel("Resource Utilization")
-            plt.savefig(
-                os.path.join(
-                    output_dir,
-                    f"{resource}_{scheduler_label}_goodresource_utilization.png",
-                ),
-                bbox_inches="tight",
-            )
+                    usage_map.append((0, 0))
+
+            average_good_utilization = (
+                total_good_utilization / (max_resource_available * simulator_end_time)
+            ) * 100
+            print(f"Average Good Utilization: {average_good_utilization}")
+            average_total_utilization = (
+                total_utilization / (max_resource_available * simulator_end_time)
+            ) * 100
+            print(f"Average Utilization: {average_total_utilization}")
+            if plot:
+                plt.figure(figsize=(8, 8))
+                plt.bar(
+                    np.arange(0, len(usage_map)),
+                    [good_utilization for good_utilization, _ in usage_map],
+                    color="green",
+                    width=1.0,
+                )
+                plt.bar(
+                    np.arange(0, len(usage_map)),
+                    [bad_utilization for _, bad_utilization in usage_map],
+                    bottom=[good_utilization for good_utilization, _ in usage_map],
+                    color="red",
+                    width=1.0,
+                )
+                plt.xlabel("Time")
+                plt.ylabel("Resource Utilization")
+                plt.savefig(
+                    os.path.join(
+                        output_dir,
+                        f"{resource}_{scheduler_label}_{output_file_name}",
+                    ),
+                    bbox_inches="tight",
+                )
 
 
 def log_aggregate_stats(
@@ -1476,13 +1496,14 @@ def main(argv):
             figure_size=figure_size,
             stats=statistics,
         )
-    if FLAGS.plot_goodresource_utilization or FLAGS.all:
+    if FLAGS.goodresource_utilization or FLAGS.all:
         plot_goodresource_utilization(
             csv_reader,
             FLAGS.csv_files,
             scheduler_labels,
+            FLAGS.plot,
             FLAGS.output_dir,
-            FLAGS.consider_all_utilization_good,
+            FLAGS.goodresource_utilization_plot_name,
         )
 
     if FLAGS.aggregate_stats:
