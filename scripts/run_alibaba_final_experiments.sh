@@ -16,12 +16,13 @@ fi
 # Random seeds.
 # We use different seeds so that we can run with a different set of TaskGraphs
 # being chosen from the trace, along with different arrival patterns.
-RANDOM_SEEDS=(420665456)
+RANDOM_SEEDS=(420665456 9498742983472934)
 
 # Schedulers
 # We use the following baseline schedulers to compare the performance of DAGSched with.
 #SCHEDULERS=(EDF DAGSched_Dyn)
-SCHEDULERS=(EDF)
+#SCHEDULERS=(EDF DAGSched_Dyn)
+SCHEDULERS=(EDF DAGSched_Dyn)
 
 # Poisson arrival rates.
 # We use the following arrival rates for the Poisson arrival process.
@@ -29,8 +30,24 @@ SCHEDULERS=(EDF)
 #HARD_ARRIVAL_RATES=(0.0125 0.015 0.015 0.0175 0.0175 0.02 0.015)
 #MEDIUM_ARRIVAL_RATES=(0.035 0.038 0.04 0.042 0.04 0.05 0.045 0.045 0.075 0.06 0.055)
 #HARD_ARRIVAL_RATES=(0.022 0.025 0.0275 0.028 0.028 0.035 0.03 0.025 0.055 0.04 0.038)
-MEDIUM_ARRIVAL_RATES=(0.035 0.032 0.03 0.038 0.04 0.0425 0.045 0.034 0.033 0.032 0.035 0.035 0.034 0.034 0.028 0.03)
-HARD_ARRIVAL_RATES=(0.022 0.02 0.0175 0.025 0.0275 0.029 0.031 0.021 0.02 0.019 0.02 0.021 0.022 0.021 0.024 0.021)
+#MEDIUM_ARRIVAL_RATES=(0.035 0.032 0.03 0.038 0.04 0.0425 0.045 0.034 0.033 0.032 0.035 0.035 0.034 0.034 0.028 0.03)
+#HARD_ARRIVAL_RATES=(0.022 0.02 0.0175 0.025 0.0275 0.029 0.031 0.021 0.02 0.019 0.02 0.021 0.022 0.021 0.024 0.021)
+#MEDIUM_ARRIVAL_RATES=(0.034 0.033 0.032 0.04 0.029 0.029 0.01)
+#HARD_ARRIVAL_RATES=(0.022 0.021 0.022 0.015 0.02 0.018 0.06)
+#MEDIUM_ARRIVAL_RATES=(0.01 0.01 0.01 0.01 0.01  0.01 0.01    0.01   0.01   0.01    0.01   0.01)
+#HARD_ARRIVAL_RATES=(  0.06 0.05 0.04 0.03 0.045 0.055 0.0425 0.0525 0.0535 0.0545  0.053  0.054)
+#MEDIUM_ARRIVAL_RATES=(0.01 0.01)
+#HARD_ARRIVAL_RATES=(  0.06 0.05)
+#MEDIUM_ARRIVAL_RATES=(0.01 0.01  0.01    0.01   0.01   0.01    0.01   0.01 0.01 0.01)
+#HARD_ARRIVAL_RATES=(  0.06 0.05 0.055 0.0525 0.0535 0.0545  0.053  0.054 0.0475 0.045)
+#MEDIUM_ARRIVAL_RATES=( 0.032 0.022 0.015 0.01  0.0075 0.005 0.0025 0.0025 0.0025  0.0025  0.0025)
+#HARD_ARRIVAL_RATES=(   0.045 0.045 0.045 0.045  0.045 0.045  0.045 0.04   0.035   0.03    0.025)
+#MEDIUM_ARRIVAL_RATES=( 0.032 0.022 0.015 0.01  0.0075 0.005 0.0025 0.0025)
+#HARD_ARRIVAL_RATES=(   0.045 0.045 0.045 0.045  0.045 0.045  0.045 0.04)
+#MEDIUM_ARRIVAL_RATES=( 0.032 0.022 0.032 0.042)
+#HARD_ARRIVAL_RATES=(   0.045 0.045 0.05  0.05)
+MEDIUM_ARRIVAL_RATES=( 0.032 0.032 0.042)
+HARD_ARRIVAL_RATES=(   0.045 0.05  0.05)
 
 # Parallel Factor
 # The number of experiments to run in parallel.
@@ -74,7 +91,7 @@ execute_experiment () {
   --workload_profile_paths=traces/alibaba-cluster-trace-v2018/alibaba_filtered_new_alind_easy_dags_till_30k_cpu_usage.pkl,traces/alibaba-cluster-trace-v2018/medium_filtered.pkl,traces/alibaba-cluster-trace-v2018/hard_filtered.pkl
   --workload_profile_path_labels=easy,medium,hard
   --override_release_policies=poisson,poisson,poisson
-  --override_num_invocations=0,400,250
+  --override_num_invocations=0,350,650
   --override_poisson_arrival_rates=0.0075,${MEDIUM_ARRIVAL_RATE},${HARD_ARRIVAL_RATE}
   --randomize_start_time_max=50
   --min_deadline=5
