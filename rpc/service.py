@@ -723,10 +723,11 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             matched_task.start_time.time + matched_task.remaining_time.time
         )
 
+        current_time = time.time()
         self._logger.info(
                 "Received task for completion at time: %s , task.start_time: %s ,"
                 "task.remaining_time (=runtime):  %s ,  actual completion time: %s ",
-                time.time(),
+                round(current_time),
                 matched_task.start_time.time,
                 matched_task.remaining_time.time,
                 actual_task_completion_time,
@@ -747,8 +748,9 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
 
         return erdos_scheduler_pb2.NotifyTaskCompletionResponse(
             success=True,
-            message=f"Task with ID {request.task_id} completed successfully! "
-            f"Will be removed based on actual_task_completion_time",
+            message=f"Task with ID {request.task_id} marked for completion at "
+            f"{round(current_time)}! It will be removed on actual "
+            f"task completion time at {actual_task_completion_time}",
         )
 
     async def GetPlacements(self, request, context):
