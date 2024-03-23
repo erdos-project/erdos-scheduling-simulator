@@ -84,9 +84,9 @@ class AlibabaLoader(BaseWorkloadLoader):
         self._workload_paths_and_release_policies = (
             self._construct_workload_definitions()
         )
-        self._job_graph_generators: Mapping[
-            str, Callable
-        ] = self._initialize_job_graph_generators()
+        self._job_graph_generators: Mapping[str, Callable] = (
+            self._initialize_job_graph_generators()
+        )
         self._release_times_and_profiles = self._construct_release_times()
 
         self._job_graphs: Mapping[str, Mapping[str, JobGraph]] = {}
