@@ -725,13 +725,13 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
 
         current_time = time.time()
         self._logger.info(
-                "Received task for completion at time: %s , task.start_time: %s ,"
-                "task.remaining_time (=runtime):  %s ,  actual completion time: %s ",
-                round(current_time),
-                matched_task.start_time.time,
-                matched_task.remaining_time.time,
-                actual_task_completion_time,
-            )
+            "Received task for completion at time: %s , task.start_time: %s ,"
+            "task.remaining_time (=runtime):  %s ,  actual completion time: %s ",
+            round(current_time),
+            matched_task.start_time.time,
+            matched_task.remaining_time.time,
+            actual_task_completion_time,
+        )
 
         # TODO DG: remaining_time assumes execution of the slowest strategy
         # Should be updated to reflect correct remaining_time based on chosen strategy?
