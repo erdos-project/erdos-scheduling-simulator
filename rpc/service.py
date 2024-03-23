@@ -714,7 +714,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                 message=f"Task with ID {request.task_id} "
                 f"not found in TaskGraph {request.application_id}.",
             )
-        
+
         # Instead of completing & removing the task immediately, check
         # if it is actually complete or will complete in the future
 
@@ -741,7 +741,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         # Else it will be dequeued at its actual task completion time
         self._tasks_marked_for_completion.put(
             TimedItem(actual_task_completion_time, matched_task)
-            )
+        )
 
         # NOTE: task.finish() and run_scheduler() invocations are postponed
         # until it is time for the task to be actually marked as complete.
@@ -830,7 +830,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                     popped_item.task.update_remaining_time(EventTime.zero())
                     popped_item.task.finish(
                         EventTime(round(current_time), EventTime.Unit.S)
-                        )
+                    )
 
                     # Run the scheduler since the Workload has changed.
                     await self.run_scheduler()
