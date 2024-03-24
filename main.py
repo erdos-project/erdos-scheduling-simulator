@@ -377,6 +377,13 @@ flags.DEFINE_integer(
     "deadline for each batch of available tasks.",
 )
 flags.DEFINE_integer(
+    "scheduler_plan_ahead_no_consideration_gap",
+    0,
+    "The length of time gap (in µs) for which the reconsiderations are frozen. "
+    "From the current time to the consideration gap, any tasks placed will not be "
+    "reconsidered for rescheduling.",
+)
+flags.DEFINE_integer(
     "scheduler_time_discretization",
     1,
     "The length of each slot in the space-time matrix to consider for scheduling the "

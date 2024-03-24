@@ -160,6 +160,10 @@ class TetriSchedScheduler(BaseScheduler):
             log to files with the format "gurobi_{sim_time}.log".
         _flags (`Optional[absl.flags]`): The runtime flags that are used to initialize
             a logger instance.
+        plan_ahead_no_consideration_gap (`EventTime`): The time gap after the current
+            time for which plan ahead is not considered malleable. Any tasks placed
+            during this time will not be reconsidered for scheduling in a particular
+            run.
     """
 
     def __init__(
@@ -181,6 +185,7 @@ class TetriSchedScheduler(BaseScheduler):
         max_occupancy_threshold: float = 0.8,
         finer_discretization_at_prev_solution: bool = False,
         finer_discretization_window: EventTime = EventTime(5, EventTime.Unit.US),
+        plan_ahead_no_consideration_gap: EventTime = EventTime.zero(),
     ):
         if preemptive:
             raise ValueError("TetrischedScheduler does not support preemption.")
@@ -231,6 +236,7 @@ class TetriSchedScheduler(BaseScheduler):
             _flags.scheduler_selective_rescheduling_sample_size if _flags else 5
         )
         self._plan_ahead_multiplier: int = 2
+        self._plan_ahead_no_consideration_gap = plan_ahead_no_consideration_gap
 
         # Scheduler configuration.
         self._scheduler_configuration = tetrisched.SchedulerConfig()
@@ -1096,11 +1102,21 @@ class TetriSchedScheduler(BaseScheduler):
             retract_schedules,
         )
 
-        # If the task is already running or scheduled and we're not reconsidering
-        # previous schedulings, we block off all the time discretizations from the
-        # task's start until it completes.
-        if task.state == TaskState.RUNNING or (
-            task.state == TaskState.SCHEDULED and not retract_schedules
+        # We block off all the time discretizations from the task's start until it
+        # completes if any one of the following conditions hold:
+        # 1. The Task is already running (we do not consider preemption for now).
+        # 2. The Task is scheduled and the scheduler was specifically requested to
+        #    not retract schedules.
+        # 3. The intended start time of the task falls within the no consideration
+        #    period from the current time.
+        if (
+            task.state == TaskState.RUNNING  # 1.
+            or (task.state == TaskState.SCHEDULED and not retract_schedules)  # 2.
+            or (  # 3.
+                task.state == TaskState.SCHEDULED
+                and task.current_placement.placement_time
+                < current_time + self._plan_ahead_no_consideration_gap
+            )
         ):
             # Find the Partition where the task is running or to be scheduled.
             scheduled_partition = partitions.get_partition_for_worker_id(
