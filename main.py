@@ -810,6 +810,9 @@ def main(args):
             finer_discretization_window=EventTime(
                 FLAGS.finer_discretization_window, EventTime.Unit.US
             ),
+            plan_ahead_no_consideration_gap=EventTime(
+                FLAGS.scheduler_plan_ahead_no_consideration_gap, EventTime.Unit.US
+            ),
         )
     elif FLAGS.scheduler == "GraphenePrime":
         scheduler = TetriSchedScheduler(
