@@ -413,7 +413,7 @@ class TetriSchedScheduler(BaseScheduler):
             `EventTime`: The plan-ahead for this scheduling cycle.
         """
         plan_ahead_this_cycle = None
-        if self.enforce_deadlines:
+        if self.enforce_deadlines and self._plan_ahead.is_invalid():
             plan_ahead_this_cycle = max(task.deadline for task in tasks)
         else:
             if self._plan_ahead.is_invalid():
