@@ -2736,8 +2736,8 @@ ParseResultPtr ScaleExpression::parse(
   // Parse the child expression.
   auto childParseResult = children[0]->parse(solverModel, availablePartitions,
                                              capacityConstraints, currentTime);
+  parsedResult = std::make_shared<ParseResult>();
   if (childParseResult->type == ParseResultType::EXPRESSION_UTILITY) {
-    parsedResult = std::make_shared<ParseResult>();
     parsedResult->type = ParseResultType::EXPRESSION_UTILITY;
 
     if (disregardUtility) {
@@ -2788,10 +2788,14 @@ ParseResultPtr ScaleExpression::parse(
     if (childParseResult->indicator) {
       parsedResult->indicator.emplace(childParseResult->indicator.value());
     }
-    return parsedResult;
   } else {
-    throw tetrisched::exceptions::ExpressionConstructionException(
-        "ScaleExpression applied to a child that does not have any utility.");
+    // throw tetrisched::exceptions::ExpressionConstructionException(
+    //     "ScaleExpression applied to a child that does not have any "
+    //     "utility. Scale Expr Name: " +
+    //     this->getDescriptiveName() +
+    //     " Child Name: " + children[0]->getDescriptiveName());
+    parsedResult->type = ParseResultType::EXPRESSION_NO_UTILITY;
   }
+  return parsedResult;
 }
 }  // namespace tetrisched

@@ -16,13 +16,13 @@ fi
 # Random seeds.
 # We use different seeds so that we can run with a different set of TaskGraphs
 # being chosen from the trace, along with different arrival patterns.
-RANDOM_SEEDS=(420665456 9498742983472934)
+RANDOM_SEEDS=(420665456)
 
 # Schedulers
 # We use the following baseline schedulers to compare the performance of DAGSched with.
 #SCHEDULERS=(EDF DAGSched_Dyn)
 #SCHEDULERS=(EDF DAGSched_Dyn)
-SCHEDULERS=(EDF DAGSched_Dyn)
+SCHEDULERS=(DAGSched_Dyn)
 
 # Poisson arrival rates.
 # We use the following arrival rates for the Poisson arrival process.
@@ -161,6 +161,7 @@ execute_experiment () {
     --finer_discretization_at_prev_solution
     --finer_discretization_window=4
     --scheduler_selective_rescheduling
+    --scheduler_reconsideration_period=0.8
     "
   else
     echo "[x] ERROR: Unknown scheduler ${SCHEDULER}"
