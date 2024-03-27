@@ -333,6 +333,21 @@ class TetriSchedScheduler(BaseScheduler):
                     f"Could not find TaskGraph with name {task_graph_name}."
                 )
 
+            # If we are enforcing deadlines and there is no way to meet this TaskGraph's
+            # deadline, then we cancel it upfront.
+            if (
+                self.enforce_deadlines
+                and current_time + task_graph.get_remaining_time() > task_graph.deadline
+            ):
+                self._logger.debug(
+                    f"[{current_time.time}] Cancelling TaskGraph {task_graph_name} "
+                    f"since the remaining time is {task_graph.get_remaining_time()} "
+                    f"and the deadline is {task_graph.deadline}. The earliest it "
+                    f"could finish is {current_time + task_graph.get_remaining_time()}"
+                )
+                cancelled_task_graphs.add(task_graph_name)
+                continue
+
             # TaskGraphs that have been previously scheduled cannot be cancelled
             # upfront since they already have a feasible placement. The scheduler
             # must choose to cancel or keep them later.
