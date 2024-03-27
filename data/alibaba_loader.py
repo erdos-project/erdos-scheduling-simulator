@@ -50,7 +50,14 @@ class AlibabaTaskUnpickler(pickle.Unpickler):
         return super().find_class(module, name)
 
 
-FILTERED_DAGS = ("j_1442387", "j_2583299", "j_425976", "j_3357093", "j_1803334")
+FILTERED_DAGS = (
+    "j_1442387",
+    "j_2583299",
+    "j_425976",
+    "j_3357093",
+    "j_1803334",
+    "j_3968360",
+)
 
 
 class AlibabaLoader(BaseWorkloadLoader):
@@ -101,8 +108,9 @@ class AlibabaLoader(BaseWorkloadLoader):
         self._heterogeneous = self._flags.alibaba_enable_heterogeneous_resource_type
 
         self._task_cpu_divisor = self._flags.alibaba_loader_task_cpu_divisor
-        self._task_max_pow2_slots = self._flags.alibaba_loader_task_max_pow2_slots
+        self._task_cpu_usage_min = self._flags.alibaba_loader_task_cpu_usage_min
         self._task_cpu_usage_max = self._flags.alibaba_loader_task_cpu_usage_max
+        self._task_cpu_usage_random = self._flags.alibaba_loader_task_cpu_usage_random
 
     def _construct_workload_definitions(
         self,
@@ -530,7 +538,22 @@ class AlibabaLoader(BaseWorkloadLoader):
             # The name of the Job from the Task.
             job_name = task.name.split("_")[0]
 
-            if self._task_max_pow2_slots == 0:
+            if self._task_cpu_usage_random:
+                # We randomly generate the task CPU utilization between the bounds.
+                resource_usage = self._rng.randint(
+                    self._task_cpu_usage_min, self._task_cpu_usage_max
+                )
+                job_resources_1 = Resources(
+                    resource_vector={
+                        Resource(name="Slot_1", _id="any"): resource_usage,
+                    }
+                )
+                job_resources_2 = Resources(
+                    resource_vector={
+                        Resource(name="Slot_2", _id="any"): resource_usage,
+                    }
+                )
+            else:
                 # This code will use the cpu requirements from
                 # the alibaba trace and adjust slots
                 resource_usage = int(math.ceil(task.cpu_usage / self._task_cpu_divisor))
@@ -551,7 +574,17 @@ class AlibabaLoader(BaseWorkloadLoader):
                         Resource(name="Slot_2", _id="any"): resource_usage,
                     }
                 )
-                if resource_usage > self._task_cpu_usage_max:
+                if resource_usage < self._task_cpu_usage_min:
+                    self._logger.debug(
+                        "Skipping JobGraph %s because the Job %s required %s units "
+                        "of the resource, but the minimum allowed is %s",
+                        job_graph_name,
+                        job_name,
+                        resource_usage,
+                        self._task_cpu_usage_min,
+                    )
+                    return None
+                elif resource_usage > self._task_cpu_usage_max:
                     self._logger.debug(
                         "Skipping JobGraph %s because the Job %s required %s units "
                         "of the resource, but the maximum allowed is %s",
@@ -561,23 +594,6 @@ class AlibabaLoader(BaseWorkloadLoader):
                         self._task_cpu_usage_max,
                     )
                     return None
-            else:
-                # This code will override cpu requirements from
-                # the alibaba trace and assign random number of slots
-                # in powers of 2 upto a limit of self._task_max_pow2_slots
-                max_pow2_for_slot = math.log2(self._task_max_pow2_slots)
-                slots_for_task = 2 ** (self._rng.randint(0, max_pow2_for_slot))
-                job_resources_1 = Resources(
-                    resource_vector={
-                        Resource(name="Slot_1", _id="any"): slots_for_task,
-                    }
-                )
-
-                job_resources_2 = Resources(
-                    resource_vector={
-                        Resource(name="Slot_2", _id="any"): slots_for_task,
-                    }
-                )
 
             # If we want to try randomizing the duration of the tasks.
             # random_task_duration = round(

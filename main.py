@@ -154,12 +154,16 @@ flags.DEFINE_integer(
     "The divisor used when converting alibaba trace tasks task.cpu to slot. The lower "
     "the number, the higher the slots.",
 )
+flags.DEFINE_bool(
+    "alibaba_loader_task_cpu_usage_random",
+    False,
+    "If True, the task CPU usage is randomly generated between the min and max values.",
+)
 flags.DEFINE_integer(
-    "alibaba_loader_task_max_pow2_slots",
+    "alibaba_loader_task_cpu_usage_min",
     0,
-    "Used IFF value not equal to 0. The max number of slots a task can use for alibaba "
-    "trace. Num slots will be in powers of 2 and picked at random from "
-    "[1, alibaba_loader_task_max_pow2_slots].",
+    "The minimum CPU usage of a task that can be released by the Alibaba trace. "
+    "This property is verified AFTER the task CPU divisor is applied.",
 )
 flags.DEFINE_integer(
     "alibaba_loader_task_cpu_usage_max",
