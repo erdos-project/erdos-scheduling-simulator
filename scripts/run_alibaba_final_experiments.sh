@@ -22,7 +22,8 @@ RANDOM_SEEDS=(420665456)
 # We use the following baseline schedulers to compare the performance of DAGSched with.
 #SCHEDULERS=(EDF DAGSched_Dyn)
 #SCHEDULERS=(EDF DAGSched_Dyn)
-SCHEDULERS=(DAGSched_Dyn)
+#SCHEDULERS=(DAGSched_Dyn TetriSched_1 TetriSched_5)
+SCHEDULERS=(EDF DAGSched_Dyn TetriSched_0)
 
 # Poisson arrival rates.
 # We use the following arrival rates for the Poisson arrival process.
@@ -46,8 +47,10 @@ SCHEDULERS=(DAGSched_Dyn)
 #HARD_ARRIVAL_RATES=(   0.045 0.045 0.045 0.045  0.045 0.045  0.045 0.04)
 #MEDIUM_ARRIVAL_RATES=( 0.032 0.022 0.032 0.042)
 #HARD_ARRIVAL_RATES=(   0.045 0.045 0.05  0.05)
-MEDIUM_ARRIVAL_RATES=( 0.032 0.032 0.042)
-HARD_ARRIVAL_RATES=(   0.045 0.05  0.05)
+#MEDIUM_ARRIVAL_RATES=( 0.032 0.032 0.042 0.04 0.03 0.025 0.02 0.015 0.01)
+#HARD_ARRIVAL_RATES=(   0.045 0.05  0.05  0.06 0.04 0.035 0.03 0.03  0.02)
+MEDIUM_ARRIVAL_RATES=( 0.03 0.025 0.02 0.015 0.01 0.012 0.014 0.015 0.016 0.015 0.018)
+HARD_ARRIVAL_RATES=(   0.04 0.035 0.03 0.03  0.02 0.021 0.022 0.024 0.025 0.028 0.025)
 
 # Parallel Factor
 # The number of experiments to run in parallel.
@@ -100,7 +103,8 @@ execute_experiment () {
   --max_deadline_variances=50,100,25
 
   # Loader configuration.
-  --alibaba_loader_task_cpu_divisor=10
+  --alibaba_loader_task_cpu_usage_random
+  --alibaba_loader_task_cpu_usage_min=2
   --alibaba_loader_task_cpu_usage_max=25
   --alibaba_loader_min_critical_path_runtimes=200,500,600
   --alibaba_loader_max_critical_path_runtimes=500,1000,1000
@@ -161,7 +165,101 @@ execute_experiment () {
     --finer_discretization_at_prev_solution
     --finer_discretization_window=4
     --scheduler_selective_rescheduling
-    --scheduler_reconsideration_period=0.8
+    --scheduler_reconsideration_period=0.6
+    "
+  elif [[ ${SCHEDULER} == "TetriSched_1" ]]; then
+    EXPERIMENT_CONF+="
+    # Scheduler configuration.
+    --scheduler=TetriSched
+    --enforce_deadlines
+    --scheduler_time_discretization=1
+    --scheduler_enable_optimization_pass
+    --retract_schedules
+    --scheduler_plan_ahead=1
+    "
+  elif [[ ${SCHEDULER} == "TetriSched_5" ]]; then
+    EXPERIMENT_CONF+="
+    # Scheduler configuration.
+    --scheduler=TetriSched
+    --enforce_deadlines
+    --scheduler_time_discretization=1
+    --scheduler_enable_optimization_pass
+    --retract_schedules
+    --scheduler_plan_ahead=5
+    "
+  elif [[ ${SCHEDULER} == "TetriSched_0" ]]; then
+    EXPERIMENT_CONF+="
+    # Scheduler configuration.
+    --scheduler=TetriSched
+    --enforce_deadlines
+    --scheduler_time_discretization=1
+    --scheduler_enable_optimization_pass
+    --retract_schedules
+    --scheduler_plan_ahead=0
+    "
+  elif [[ ${SCHEDULER} == "TetriSched_10" ]]; then
+    EXPERIMENT_CONF+="
+    # Scheduler configuration.
+    --scheduler=TetriSched
+    --enforce_deadlines
+    --scheduler_time_discretization=1
+    --scheduler_enable_optimization_pass
+    --retract_schedules
+    --scheduler_plan_ahead=10
+    "
+  elif [[ ${SCHEDULER} == "TetriSched_20" ]]; then
+    EXPERIMENT_CONF+="
+    # Scheduler configuration.
+    --scheduler=TetriSched
+    --enforce_deadlines
+    --scheduler_time_discretization=1
+    --scheduler_enable_optimization_pass
+    --retract_schedules
+    --scheduler_plan_ahead=20
+    "
+  elif [[ ${SCHEDULER} == "TetriSched_1_n" ]]; then
+    EXPERIMENT_CONF+="
+    # Scheduler configuration.
+    --scheduler=TetriSched
+    --enforce_deadlines
+    --scheduler_time_discretization=1
+    --scheduler_enable_optimization_pass
+    --retract_schedules
+    --scheduler_plan_ahead=1
+    --ilp_goal=min_placement_delay
+    "
+  elif [[ ${SCHEDULER} == "TetriSched_5_n" ]]; then
+    EXPERIMENT_CONF+="
+    # Scheduler configuration.
+    --scheduler=TetriSched
+    --enforce_deadlines
+    --scheduler_time_discretization=1
+    --scheduler_enable_optimization_pass
+    --retract_schedules
+    --scheduler_plan_ahead=5
+    --ilp_goal=min_placement_delay
+    "
+  elif [[ ${SCHEDULER} == "TetriSched_10_n" ]]; then
+    EXPERIMENT_CONF+="
+    # Scheduler configuration.
+    --scheduler=TetriSched
+    --enforce_deadlines
+    --scheduler_time_discretization=1
+    --scheduler_enable_optimization_pass
+    --retract_schedules
+    --scheduler_plan_ahead=10
+    --ilp_goal=min_placement_delay
+    "
+  elif [[ ${SCHEDULER} == "TetriSched_20_n" ]]; then
+    EXPERIMENT_CONF+="
+    # Scheduler configuration.
+    --scheduler=TetriSched
+    --enforce_deadlines
+    --scheduler_time_discretization=1
+    --scheduler_enable_optimization_pass
+    --retract_schedules
+    --scheduler_plan_ahead=20
+    --ilp_goal=min_placement_delay
     "
   else
     echo "[x] ERROR: Unknown scheduler ${SCHEDULER}"
