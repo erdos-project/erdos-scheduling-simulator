@@ -107,6 +107,7 @@ class AlibabaLoader(BaseWorkloadLoader):
         self._workload = Workload.empty(flags)
         self._heterogeneous = self._flags.alibaba_enable_heterogeneous_resource_type
 
+        self._task_cpu_multiplier = self._flags.alibaba_loader_task_cpu_multiplier
         self._task_cpu_divisor = self._flags.alibaba_loader_task_cpu_divisor
         self._task_cpu_usage_min = self._flags.alibaba_loader_task_cpu_usage_min
         self._task_cpu_usage_max = self._flags.alibaba_loader_task_cpu_usage_max
@@ -540,8 +541,11 @@ class AlibabaLoader(BaseWorkloadLoader):
 
             if self._task_cpu_usage_random:
                 # We randomly generate the task CPU utilization between the bounds.
-                resource_usage = self._rng.randint(
-                    self._task_cpu_usage_min, self._task_cpu_usage_max
+                resource_usage = (
+                    self._rng.randint(
+                        self._task_cpu_usage_min, self._task_cpu_usage_max
+                    )
+                    * self._task_cpu_multiplier
                 )
                 job_resources_1 = Resources(
                     resource_vector={

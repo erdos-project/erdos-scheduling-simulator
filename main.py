@@ -149,6 +149,12 @@ flags.DEFINE_integer(
 
 # AlibabaLoader related flags.
 flags.DEFINE_integer(
+    "alibaba_loader_task_cpu_multiplier",
+    1,
+    "The multiplier used on the resources after all the minimum and maximum clipping "
+    "has been done.",
+)
+flags.DEFINE_integer(
     "alibaba_loader_task_cpu_divisor",
     25,
     "The divisor used when converting alibaba trace tasks task.cpu to slot. The lower "
