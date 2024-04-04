@@ -229,8 +229,7 @@ ExpressionTimeBounds Expression::getTimeBounds() const {
           children[0]->getTimeBounds().startTimeRange,
           children[1]->getTimeBounds().endTimeRange,
           children[0]->getTimeBounds().duration +
-            children[1]->getTimeBounds().duration,
-      );
+            children[1]->getTimeBounds().duration);
     } else {
       // For multiple children, we merge their time bounds, and find the
       // minimum duration.
@@ -270,8 +269,7 @@ ExpressionTimeBounds Expression::getTimeBounds() const {
       return ExpressionTimeBounds(
           startTimeRange,
           endTimeRange,
-          minDuration,
-      );
+          minDuration);
     }
   }
 }
