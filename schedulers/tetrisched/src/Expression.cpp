@@ -225,12 +225,12 @@ ExpressionTimeBounds Expression::getTimeBounds() const {
 
       // The start and end time ranges of a LessThanExpression are defined
       // by the start of the first child and the end of the second.
-      return {
-          .startTimeRange = children[0]->getTimeBounds().startTimeRange,
-          .endTimeRange = children[1]->getTimeBounds().endTimeRange,
-          .duration = children[0]->getTimeBounds().duration +
-                      children[1]->getTimeBounds().duration,
-      };
+      return ExpressionTimeBounds(
+          children[0]->getTimeBounds().startTimeRange,
+          children[1]->getTimeBounds().endTimeRange,
+          children[0]->getTimeBounds().duration +
+            children[1]->getTimeBounds().duration,
+      );
     } else {
       // For multiple children, we merge their time bounds, and find the
       // minimum duration.
@@ -267,11 +267,11 @@ ExpressionTimeBounds Expression::getTimeBounds() const {
         }
       }
 
-      return {
-          .startTimeRange = startTimeRange,
-          .endTimeRange = endTimeRange,
-          .duration = minDuration,
-      };
+      return ExpressionTimeBounds(
+          startTimeRange,
+          endTimeRange,
+          minDuration,
+      );
     }
   }
 }
