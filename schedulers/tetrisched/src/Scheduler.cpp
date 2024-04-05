@@ -95,7 +95,7 @@ void Scheduler::registerSTRL(
   }
 
   {
-    TETRISCHED_SCOPE_TIMER("Scheduler::registerSTRL::parse," +
+    TETRISCHED_SCOPE_NECESSARY_TIMER("Scheduler::registerSTRL::parse," +
                            std::to_string(currentTime));
     // Parse the ExpressionTree to populate the solver model.
     TETRISCHED_DEBUG("Beginning the parsing of the ExpressionTree rooted at "
@@ -144,21 +144,21 @@ void Scheduler::schedule(Time currentTime) {
 
   // Translate the model to the solver backend.
   {
-    TETRISCHED_SCOPE_TIMER("Scheduler::schedule::translateModel," +
+    TETRISCHED_SCOPE_NECESSARY_TIMER("Scheduler::schedule::translateModel," +
                            std::to_string(currentTime));
     this->solver->translateModel(solverConfig);
   }
 
   // Solve the model.
   {
-    TETRISCHED_SCOPE_TIMER("Scheduler::schedule::solveModel," +
+    TETRISCHED_SCOPE_NECESSARY_TIMER("Scheduler::schedule::solveModel," +
                            std::to_string(currentTime));
     solverSolution = this->solver->solveModel();
   }
 
   // Populate the results from the solver into the expression tree.
   {
-    TETRISCHED_SCOPE_TIMER("Scheduler::schedule::populateResults," +
+    TETRISCHED_SCOPE_NECESSARY_TIMER("Scheduler::schedule::populateResults," +
                            std::to_string(currentTime));
     if (solverSolution.has_value() && solverSolution.value()->isValid()) {
       this->expression.value()->populateResults(solverModel);

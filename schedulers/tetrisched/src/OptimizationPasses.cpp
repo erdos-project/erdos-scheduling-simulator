@@ -415,6 +415,7 @@ void CriticalPathOptimizationPass::runPass(
     ExpressionPtr strlExpression,
     CapacityConstraintMapPtr /* capacityConstraints */,
     std::optional<std::string> /* debugFile */) {
+  TETRISCHED_SCOPE_NECESSARY_TIMER("CriticalPathOptimizationPass::runPass");
   /* Preprocessing: We first compute the post-order traversal of the
   Expression graph since all subsequent steps use it. */
   auto postOrderTraversal = computePostOrderTraversal(strlExpression);
@@ -475,6 +476,7 @@ DiscretizationSelectorOptimizationPass::DiscretizationSelectorOptimizationPass(
 void DiscretizationSelectorOptimizationPass::runPass(
     ExpressionPtr strlExpression, CapacityConstraintMapPtr capacityConstraints,
     std::optional<std::string> /* debugFile */) {
+  TETRISCHED_SCOPE_NECESSARY_TIMER("DiscretizationSelectorOptimizationPass::runPass");
   /* Do a Post-Order Traversal of the DAG. */
   std::stack<ExpressionPtr> firstStack;
   firstStack.push(strlExpression);
@@ -1085,6 +1087,8 @@ void CapacityConstraintMapPurgingOptimizationPass::
 void CapacityConstraintMapPurgingOptimizationPass::runPass(
     ExpressionPtr strlExpression, CapacityConstraintMapPtr capacityConstraints,
     std::optional<std::string> debugFile) {
+  TETRISCHED_SCOPE_NECESSARY_TIMER(
+    "CapacityConstraintMapPurgingOptimizationPass::runPass")
   /* Preprocessing: Compute the post-order to compute the cliques. */
   auto postOrderTraversal = computePostOrderTraversal(strlExpression);
   childLeafExpressions.reserve(postOrderTraversal.size());

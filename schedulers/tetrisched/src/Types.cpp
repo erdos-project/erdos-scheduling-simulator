@@ -106,7 +106,7 @@ ScopeTimer::~ScopeTimer() {
   std::lock_guard<std::mutex> lock(sharedLock);  // Acquire the shared lock
   getOutputFileStream() << "END," << scopeTimerName << ","
                         << startTimeMicroseconds << "," << endtimeMicroseconds
-                        << "," << duration << "\n";
+                        << "," << duration << std::endl;
 }
 
 }  // namespace timing

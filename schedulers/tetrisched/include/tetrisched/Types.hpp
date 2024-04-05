@@ -42,13 +42,14 @@
 
 // Macros for timing.
 #define TETRISCHED_TIMING_FILE_NAME "libtetrisched_performance.csv"
-#ifdef _TETRISCHED_PERF_ENABLED_
-
 #define CONCAT_INTERNAL(x, y) x##y
 #define CONCAT(x, y) CONCAT_INTERNAL(x, y)
-#define TETRISCHED_SCOPE_TIMER(TIMER_NAME) \
+#define TETRISCHED_SCOPE_NECESSARY_TIMER(TIMER_NAME) \
   tetrisched::timing::ScopeTimer CONCAT(timer, __LINE__)(TIMER_NAME);
 
+#ifdef _TETRISCHED_PERF_ENABLED_
+#define TETRISCHED_SCOPE_TIMER(TIMER_NAME) \
+  tetrisched::timing::ScopeTimer CONCAT(timer, __LINE__)(TIMER_NAME);
 #else
 #define TETRISCHED_SCOPE_TIMER(TIMER_NAME)
 #endif
@@ -62,7 +63,7 @@
 #define TETRISCHED_ILP_TYPE double
 
 
-// Macro for hinting the variables. 
+// Macro for hinting the variables.
 // We have two strategies for hinting the variables.
 // 1. We can hint the variables from a solution value cache saved from the previous
 //    iteration. This is the default behavior.

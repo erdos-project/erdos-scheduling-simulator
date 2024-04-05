@@ -284,7 +284,7 @@ execute_experiment () {
 
   echo "[x] Constructed configuration for ${EXPERIMENT_DIR}. Beginning experiment"
 
-  if ! python3 main.py --flagfile=${EXPERIMENT_DIR}/alibaba_trace_replay.conf > ${EXPERIMENT_DIR}/alibaba_trace_replay.output; then
+  if ! TETRISCHED_LOGGING_DIR=${EXPERIMENT_DIR} python3 main.py --flagfile=${EXPERIMENT_DIR}/alibaba_trace_replay.conf > ${EXPERIMENT_DIR}/alibaba_trace_replay.output; then
       echo "[x] Failed in the execution of ${LOG_BASE}. Exiting."
       exit 3
   fi
