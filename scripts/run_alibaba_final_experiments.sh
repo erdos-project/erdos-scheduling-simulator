@@ -156,9 +156,63 @@ execute_experiment () {
     --enforce_deadlines
     --scheduler_time_discretization=1
     --scheduler_enable_optimization_pass
-    --scheduler_reconsideration_period=0.2
+    --scheduler_reconsideration_period=0.6
     --retract_schedules
-    --scheduler_time_limit=120
+    "
+  elif [[ ${SCHEDULER} == "DAGSched_2" ]]; then
+    EXPERIMENT_CONF+="
+    # Scheduler configuration.
+    --scheduler=TetriSched
+    --release_taskgraphs
+    --enforce_deadlines
+    --scheduler_time_discretization=2
+    --scheduler_enable_optimization_pass
+    --scheduler_reconsideration_period=0.6
+    --retract_schedules
+    "
+  elif [[ ${SCHEDULER} == "DAGSched_4" ]]; then
+    EXPERIMENT_CONF+="
+    # Scheduler configuration.
+    --scheduler=TetriSched
+    --release_taskgraphs
+    --enforce_deadlines
+    --scheduler_time_discretization=4
+    --scheduler_enable_optimization_pass
+    --scheduler_reconsideration_period=0.6
+    --retract_schedules
+    "
+  elif [[ ${SCHEDULER} == "DAGSched_8" ]]; then
+    EXPERIMENT_CONF+="
+    # Scheduler configuration.
+    --scheduler=TetriSched
+    --release_taskgraphs
+    --enforce_deadlines
+    --scheduler_time_discretization=8
+    --scheduler_enable_optimization_pass
+    --scheduler_reconsideration_period=0.6
+    --retract_schedules
+    "
+  elif [[ ${SCHEDULER} == "DAGSched_16" ]]; then
+    EXPERIMENT_CONF+="
+    # Scheduler configuration.
+    --scheduler=TetriSched
+    --release_taskgraphs
+    --enforce_deadlines
+    --scheduler_time_discretization=16
+    --scheduler_enable_optimization_pass
+    --scheduler_reconsideration_period=0.6
+    --retract_schedules
+    "
+  elif [[ ${SCHEDULER} == "DAGSched_32" ]]; then
+    EXPERIMENT_CONF+="
+    # Scheduler configuration.
+    --scheduler=TetriSched
+    --release_taskgraphs
+    --enforce_deadlines
+    --scheduler_time_discretization=32
+    --scheduler_enable_optimization_pass
+    --scheduler_reconsideration_period=0.6
+    --retract_schedules
     "
   elif [[ ${SCHEDULER} == "DAGSched_Dyn" ]]; then
     EXPERIMENT_CONF+="
