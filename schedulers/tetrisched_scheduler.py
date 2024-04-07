@@ -1260,8 +1260,6 @@ class TetriSchedScheduler(BaseScheduler):
                     and placement_time <= time_until_choices_end
                 ):
                     time_discretizations.append((placement_time, reward))
-                else:
-                    break
 
             if len(time_discretizations) == 0:
                 self._logger.warn(
