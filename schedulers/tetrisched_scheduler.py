@@ -1015,11 +1015,7 @@ class TetriSchedScheduler(BaseScheduler):
         """
         time_discretization = self._time_discretization.to(EventTime.Unit.US).time
         start_time = (
-            (
-                current_time.to(EventTime.Unit.US).time
-                + self._plan_ahead_no_consideration_gap.to(EventTime.Unit.US).time
-            )
-            // time_discretization
+            (current_time.to(EventTime.Unit.US).time) // time_discretization
         ) * time_discretization
         end_time = end_time.to(EventTime.Unit.US).time
 
@@ -1246,6 +1242,11 @@ class TetriSchedScheduler(BaseScheduler):
                 )
                 continue
 
+            # Find the time at which we start enumerating the choices.
+            time_until_choices_start = current_time.to(
+                EventTime.Unit.US
+            ) + self._plan_ahead_no_consideration_gap.to(EventTime.Unit.US)
+
             # Find the time until which we need to enumerate the choices.
             time_until_choices_end = placement_times_and_rewards[-1][0]
             if self.enforce_deadlines:
@@ -1254,7 +1255,10 @@ class TetriSchedScheduler(BaseScheduler):
             # Enumerate the time discretizations that are valid for this Task.
             time_discretizations = []
             for placement_time, reward in placement_times_and_rewards:
-                if placement_time <= time_until_choices_end:
+                if (
+                    placement_time >= time_until_choices_start
+                    and placement_time <= time_until_choices_end
+                ):
                     time_discretizations.append((placement_time, reward))
                 else:
                     break
