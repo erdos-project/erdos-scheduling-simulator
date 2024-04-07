@@ -1015,7 +1015,11 @@ class TetriSchedScheduler(BaseScheduler):
         """
         time_discretization = self._time_discretization.to(EventTime.Unit.US).time
         start_time = (
-            current_time.to(EventTime.Unit.US).time // time_discretization
+            (
+                current_time.to(EventTime.Unit.US).time
+                + self._plan_ahead_no_consideration_gap.to(EventTime.Unit.US).time
+            )
+            // time_discretization
         ) * time_discretization
         end_time = end_time.to(EventTime.Unit.US).time
 
