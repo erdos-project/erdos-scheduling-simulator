@@ -1317,14 +1317,16 @@ class Simulator(object):
                 del self._future_placement_events[task.id]
                 if task.state != TaskState.CANCELLED:
                     # If the TaskGraph was cancelled, but the Task was not, then we
-                    # emit a specific cancellation event so that the status is
-                    # correctly available to the schedulers.
-                    task_cancellation_event = Event(
-                        event_type=EventType.TASK_CANCEL,
-                        time=event.time,
-                        task=task,
-                    )
-                    self._event_queue.add_event(task_cancellation_event)
+                    # emit a specific cancellation event for all the tasks from this
+                    # task so that the status is correctly available to the schedulers.
+                    for cancelled_task in task_graph.cancel(task, event.time):
+                        self._event_queue.add_event(
+                            Event(
+                                event_type=EventType.TASK_CANCEL,
+                                time=cancelled_task.cancellation_time,
+                                task=cancelled_task,
+                            )
+                        )
                 return
             else:
                 # If the Task is not ready to run and wasn't cancelled,
