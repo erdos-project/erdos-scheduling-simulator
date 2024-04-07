@@ -8,8 +8,9 @@ from typing import Mapping, Sequence
 import networkx as nx
 import numpy as np
 
-HOME_TPCH_DIR = "../profiles/workload/tpch_decima/"
-TPCH_SUBDIR = "2g/"
+DECIMA_TPCH_DIR = "../profiles/workload/tpch/decima/"
+TPCH_SUBDIR = "100g/"
+CLOUDLAB_TPCH_DIR = "../profiles/workload/tpch/cloudlab/"
 
 
 class SetWithCount(object):
@@ -55,10 +56,46 @@ def pre_process_task_duration(task_duration):
                 fresh_durations.remove(d)
 
 
-def get_all_stage_info_for_query(query_num):
+def get_all_stage_info_for_query(query_num, profile_type, dataset_size, max_executors):
+    stage_info = {}
+    if profile_type == "Decima":
+        stage_info = use_decima_tpch_profile(query_num, dataset_size)
+    elif profile_type == "Cloudlab":
+        stage_info = use_cloudlab_profile(query_num, dataset_size, max_executors)
+    else:
+        print("## FATAL ERROR ## Could not find TPCH profile to use")
+
+    return stage_info
+
+
+def use_cloudlab_profile(query_num, dataset_size, max_executors):
+    cloudlab_profile_json = os.path.join(
+        CLOUDLAB_TPCH_DIR, "cloudlab_22query_tpch_profiles.json")
+    with open(cloudlab_profile_json, 'r') as file:
+        data = json.load(file)
+    
+    query_key_to_extract = ("tpch_q" + str(query_num) +
+                            "_" + str(dataset_size) +
+                            "_maxCores_" + str(max_executors))
+    required_query_profile = data[query_key_to_extract]
+
+    stage_info = {}
+
+    for i, stage_profile in enumerate(required_query_profile):
+        curr_stage = {
+            "stage_id": i,
+            "num_tasks": stage_profile["num_tasks"],
+            "avg_task_duration_ms": round(stage_profile["average_runtime_ms"]),
+        }
+        stage_info[i] = curr_stage
+    
+    return stage_info
+
+
+def use_decima_tpch_profile(query_num, dataset_size):
     task_durations = np.load(
         os.path.join(
-            HOME_TPCH_DIR, TPCH_SUBDIR, "task_duration_" + str(query_num) + ".npy"
+            DECIMA_TPCH_DIR, dataset_size, "task_duration_" + str(query_num) + ".npy"
         ),
         allow_pickle=True,
     ).item()
@@ -85,10 +122,11 @@ def get_all_stage_info_for_query(query_num):
             + [i for t in task_duration["fresh_durations"].values() for i in t]
         )
 
+        # NOTE: Runtime per task is given in milliseconds
         curr_stage = {
             "stage_id": n,
             "num_tasks": num_tasks,
-            "avg_task_duration": round(rough_duration),
+            "avg_task_duration_ms": round(rough_duration),
         }
         stage_info[n] = curr_stage
 
@@ -97,7 +135,7 @@ def get_all_stage_info_for_query(query_num):
 
 def get_base_tpch_graph_structure(query_num):
     # use query_num to read string from file
-    with open(os.path.join(HOME_TPCH_DIR, "query_dag.json")) as f:
+    with open(os.path.join(DECIMA_TPCH_DIR, "query_dag.json")) as f:
         tpch_query_json = json.load(f)
 
     # get query dependency from file

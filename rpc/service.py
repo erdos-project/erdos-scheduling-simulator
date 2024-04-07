@@ -1,5 +1,6 @@
 import asyncio
 import heapq
+import math
 import os
 import sys
 import time
@@ -19,7 +20,7 @@ import grpc
 from absl import app, flags
 from tpch_utils import get_all_stage_info_for_query, verify_and_relable_tpch_app_graph
 
-from schedulers import EDFScheduler, FIFOScheduler
+from schedulers import EDFScheduler, FIFOScheduler, TetriSchedScheduler
 from utils import EventTime, setup_logging
 from workers import Worker, WorkerPool, WorkerPools
 from workload import (
@@ -41,12 +42,20 @@ flags.DEFINE_integer("port", 50051, "Port to serve the ERDOS Scheduling RPC Serv
 flags.DEFINE_integer(
     "max_workers", 10, "Maximum number of workers to use for the RPC server."
 )
-flags.DEFINE_string("log_file", None, "Path to the log file.", short_name="log")
+flags.DEFINE_string("log_file_name", None, "Name of the log file.", short_name="log")
 flags.DEFINE_string("log_level", "debug", "The level to log.")
 flags.DEFINE_integer(
     "initial_executors",
     10,
     "The initial number of executors that are requested by each application.",
+)
+flags.DEFINE_float(
+    "spark_task_duration_multiplier",
+    1,
+    "The multiplier used for spark job task runtimes. Buffer time is added "
+    "to ensure that tasks complete before the scheduler expects it to complete. "
+    "Completion of tasks after the scheduler's expected task completion time "
+    "is detrimental for scheduler's planning and could invalidate some schedules",
 )
 flags.DEFINE_integer(
     "virtualized_cores",
@@ -64,15 +73,167 @@ flags.DEFINE_integer(
     "the framework. Refer to the `virtualized_cores` flag for more information.",
 )
 flags.DEFINE_enum(
-    "scheduler", "EDF", ["FIFO", "EDF"], "The scheduler to use for this execution."
+    "scheduler", "DAGSched", ["FIFO", "EDF", "DAGSched"], "The scheduler to use for "
+    "this execution."
+)
+flags.DEFINE_enum(
+    "tpch_profile_type", "Cloudlab", ["Decima", "Cloudlab"], "The set of profiles to "
+    "use for execution of tpch queries. Note that Cloudlab profile has all 22 queries. "
+    "From the Decima profile we support only 15 queries (1-10, 12-14, 16, 19). The "
+    "rest might also run but DAG structure might not match Decima profiles."
+)
+flags.DEFINE_enum(
+    "tpch_dataset_size", "50g", ["50g", "100g", "250g", "500g"], "Options for "
+    "dataset size of TPCH query. The Cloudlab profile will be picked accordingly. "
+)
+flags.DEFINE_enum(
+    "tpch_max_executors_per_job", "50", ["50", "75", "100", "200"], "Options for "
+    "max executors to use for tpch queries. The Cloudlab profile will be picked "
+    "accordingly."
+)
+flags.DEFINE_bool(
+    "override_worker_cpu_count",
+    False,
+    "If True, worker CPU count will be set to INT_MAX. This allows us to scale up "
+    "spark experiments without actually deploying a large spark cluster.",
+)
+flags.DEFINE_bool(
+    "use_profile_to_scale_executors",
+    False,
+    "If True, it means that a fixed number of (max) executors was given to the "
+    "spark job to run. With this profile, we can directly use the profiled "
+    "stage runtime, while setting the number of required slots or executors "
+    "to 1 per stage. This allows us do the same scheduling but creates less "
+    "overhead for this rpc service while running the experiments.",
+)
+flags.DEFINE_bool(
+    "release_taskgraphs",
+    False,
+    "If True, all tasks from a graph are released if any of the tasks have "
+    "reached their release time.",
+)
+flags.DEFINE_bool(
+    "enforce_deadlines",
+    False,
+    "True if the ILP formulation must ensure that deadlines are met.",
+)
+flags.DEFINE_integer(
+    "scheduler_time_discretization",
+    1,
+    "The length of each slot in the space-time matrix to consider for scheduling the "
+    "tasks (in µs). The default value is 1µs, and a higher value can lead to faster "
+    "solutions but a potentially lower goodput due to resources being blocked for the "
+    "entirety of the slot.",
+)
+flags.DEFINE_bool(
+    "scheduler_enable_optimization_pass",
+    False,
+    "If `True`, the scheduler runs pre/post-translation optimization passes"
+    "when registering STRL expression.",
+)
+flags.DEFINE_float(
+    "scheduler_reconsideration_period",
+    0.1,
+    "The percentage of critical path duration until which the scheduler will try "
+    "placing the TaskGraph, and drop the TaskGraph if it cannot be placed after.",
+)
+flags.DEFINE_bool(
+    "retract_schedules", False, "Enable the retraction of previously decided schedules."
+)
+flags.DEFINE_integer(
+    "scheduler_time_limit",
+    -1,
+    "The time limit (in seconds) to allow the scheduler to keep "
+    "searching for solutions without finding a better one.",
+)
+flags.DEFINE_bool(
+    "scheduler_dynamic_discretization",
+    False,
+    "If `True`, the scheduler creates space-time matrix non-uniformly. "
+    "The discretization is dynamically decided based on the occupancy request for "
+    "each time slice. (default: False)",
+)
+flags.DEFINE_integer(
+    "scheduler_max_time_discretization",
+    5,
+    "The maximum discretization that the scheduler can have (in µs). "
+    "Only used when scheduler_adaptive_discretization flag is enabled. (default: 5)",
+)
+flags.DEFINE_float(
+    "scheduler_max_occupancy_threshold",
+    0.8,
+    "The percentage b/w 0 and 1 of maximum occupancy beyond which the discretization "
+    "would always be 1 incase of dynamic discretization. "
+    "This flag is only used when dynamic discretization is enabled (default: 0.8)",
+)
+flags.DEFINE_bool(
+    "finer_discretization_at_prev_solution",
+    False,
+    "If `True`, the scheduler keeps discretization of 1 around previous solution. "
+    "The discretization is dynamically decided based on the occupancy request for "
+    "each time slice. (default: False)",
+)
+flags.DEFINE_integer(
+    "finer_discretization_window",
+    5,
+    "The window around previous solution that keeps discretization of 1.",
+)
+flags.DEFINE_bool(
+    "scheduler_selective_rescheduling",
+    False,
+    "If `True`, the supported schedulers will follow some pre-defined strategies for "
+    "selectively sampling TaskGraphs to reschedule.",
+)
+flags.DEFINE_integer(
+    "scheduler_plan_ahead_no_consideration_gap",
+    10,
+    "The length of time gap (in µs) for which the reconsiderations are frozen. "
+    "From the current time to the consideration gap, any tasks placed will not be "
+    "reconsidered for rescheduling.",
+)
+flags.DEFINE_list(
+    "scheduler_log_times",
+    [],
+    "A list of timestamps (in µs) at which to request extra logging from the Scheduler."
+    "If scheduler_log_to_file is `True`, then extra information will be requested for "
+    "all timestamps.",
+)
+flags.DEFINE_integer(
+    "scheduler_selective_rescheduling_sample_size",
+    5,
+    "If `scheduler_selective_rescheduling` is True, then this flag defines the number "
+    "of TaskGraphs to sample for rescheduling.",
 )
 
 
 # Define an item containing completion timestamp and task
 class TimedItem:
+    _next_id = 0
+    _id_threshold = 99999
+
     def __init__(self, timestamp, task):
         self.timestamp = timestamp
         self.task = task
+        self.id = TimedItem._next_id
+        TimedItem._next_id += 1
+
+        # Reset _next_id if it crosses the threshold
+        # We keep _next_id bounded to avoid very large numbers
+        # which could lead to slightly slower comparions
+        if TimedItem._next_id > TimedItem._id_threshold:
+            TimedItem._next_id = 0
+
+    def __lt__(self, other):
+        """Less than comparison for TimedItem instances."""
+        if self.timestamp == other.timestamp:
+            # Unique ID for each TimedItem acts as tie-breaker
+            # for inserting into PriorityQueue
+            return self.id < other.id
+        return self.timestamp < other.timestamp
+
+    def __eq__(self, other):
+        """Equality comparison for TimedItem instances."""
+        return self.timestamp == other.timestamp and self.id == other.id
 
 
 # Define a priority queue based on heapq module
@@ -96,7 +257,14 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
     def __init__(self) -> None:
         """Initialize the service, and setup the logger."""
         # Values used by the Servicer.
-        self._logger = setup_logging(name=FLAGS.log_file, log_level=FLAGS.log_level)
+        self._logger = setup_logging(name=FLAGS.log_file_name,
+                                     log_level=FLAGS.log_level)
+        # self._logger = setup_logging(
+        #     name=__name__,
+        #     log_dir=FLAGS.log_dir,
+        #     log_file=FLAGS.log_file_name,
+        #     log_level=FLAGS.log_level
+        #     )
         self._initialized = False
         self._initialization_time = -1
         self._master_uri = None
@@ -112,9 +280,52 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         self._scheduler_running = False
         self._rerun_scheduler = False
         if FLAGS.scheduler == "EDF":
-            self._scheduler = EDFScheduler()
+            self._scheduler = EDFScheduler(
+                enforce_deadlines=FLAGS.enforce_deadlines,
+            )
         elif FLAGS.scheduler == "FIFO":
-            self._scheduler = FIFOScheduler()
+            self._scheduler = FIFOScheduler(
+                enforce_deadlines=FLAGS.enforce_deadlines,
+            )
+        elif FLAGS.scheduler == "DAGSched":
+            # --scheduler=TetriSched
+            # --release_taskgraphs
+            # --enforce_deadlines
+            # --scheduler_time_discretization=1 ====> Conv to EventTime & passed through diff arg name
+            # --scheduler_enable_optimization_pass ====> Passed through _flags
+            # --retract_schedules
+            # --scheduler_dynamic_discretization ====> Passed through different argument name
+            # --scheduler_max_time_discretization=8 ====> Conv to EventTime & passed through diff arg name
+            # --scheduler_max_occupancy_threshold=0.999 ====> Passed through different argument name
+            # --finer_discretization_at_prev_solution
+            # --finer_discretization_window=4
+            # --scheduler_selective_rescheduling ====> Passed through _flags
+            # --scheduler_reconsideration_period=0.6 ====> Passed through _flags
+
+            self._scheduler = TetriSchedScheduler(
+                release_taskgraphs=FLAGS.release_taskgraphs,
+                time_discretization=EventTime(
+                    FLAGS.scheduler_time_discretization, EventTime.Unit.US
+                ),
+                _flags=FLAGS,
+                max_time_discretization=EventTime(
+                    FLAGS.scheduler_max_time_discretization, EventTime.Unit.US
+                    ),
+                enforce_deadlines=FLAGS.enforce_deadlines,
+                dynamic_discretization=FLAGS.scheduler_dynamic_discretization,
+                max_occupancy_threshold=FLAGS.scheduler_max_occupancy_threshold,
+                retract_schedules=FLAGS.retract_schedules,
+                finer_discretization_at_prev_solution=(
+                    FLAGS.finer_discretization_at_prev_solution
+                ),
+                finer_discretization_window=EventTime(
+                    FLAGS.finer_discretization_window, EventTime.Unit.US
+                    ),
+                plan_ahead_no_consideration_gap=EventTime(
+                    FLAGS.scheduler_plan_ahead_no_consideration_gap, EventTime.Unit.US
+                    ),
+            )
+
         else:
             raise ValueError(f"Unknown scheduler {FLAGS.scheduler}.")
 
@@ -143,7 +354,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                 return
             self._scheduler_running = True
 
-        current_time = EventTime(int(time.time()), EventTime.Unit.S)
+        current_time = EventTime(int(time.time()), EventTime.Unit.US)
         self._logger.info(
             "Starting a scheduling cycle with %s TaskGraphs and %s Workers at %s.",
             len(self._workload.task_graphs),
@@ -156,7 +367,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         # executors to all the available applications in intervals of 10 seconds.
         if len(self._workload.task_graphs) >= 2:
             placements = self._scheduler.schedule(
-                sim_time=current_time,
+                sim_time=EventTime(current_time.time, EventTime.Unit.US),
                 workload=self._workload,
                 worker_pools=self._worker_pools,
             )
@@ -308,7 +519,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                     self._worker_pool.place_task(driver, execution_strategy, worker.id)
 
                     # Update the Task's state and placement information.
-                    placement_time = EventTime(request.timestamp, EventTime.Unit.S)
+                    placement_time = EventTime(request.timestamp, EventTime.Unit.US)
                     driver.schedule(
                         time=placement_time,
                         placement=Placement(
@@ -360,7 +571,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
 
         # Deregister the driver.
         driver = self._drivers[request.id]
-        completion_time = EventTime(request.timestamp, EventTime.Unit.S)
+        completion_time = EventTime(request.timestamp, EventTime.Unit.US)
         self._worker_pool.remove_task(completion_time, driver)
         driver.finish(completion_time)
         del self._drivers[request.id]
@@ -407,11 +618,15 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         # If yes, retrieve profiled slots and runtime info. If no, use default values
         is_tpch_query = False
         tpch_query_all_stage_info = None
-        if request.name.startswith("TPCH_"):
+        if request.name.startswith("TPCH Query"):
             is_tpch_query = True
             # retrieve tasks-per-stage and runtime info based on query number
-            tpch_query_num = request.name.split("TPCH_Q", 1)[1]
-            tpch_query_all_stage_info = get_all_stage_info_for_query(tpch_query_num)
+            tpch_query_num = request.name.split("TPCH Query ", 1)[1]
+            tpch_query_all_stage_info = get_all_stage_info_for_query(
+                tpch_query_num,
+                FLAGS.tpch_profile_type,
+                FLAGS.tpch_dataset_size,
+                FLAGS.tpch_max_executors_per_job)
             same_structure, stage_id_mapping = verify_and_relable_tpch_app_graph(
                 query_num=tpch_query_num, dependencies=request.dependencies
             )
@@ -436,23 +651,38 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         default_resource = Resources(
             resource_vector={Resource(name="Slot_CPU", _id="any"): 20}
         )
-        default_runtime = EventTime(20, EventTime.Unit.US)
+        default_runtime = EventTime(
+            math.ceil(20 * FLAGS.spark_task_duration_multiplier),
+            EventTime.Unit.US
+            )
+        
+        current_time = EventTime(int(time.time()), EventTime.Unit.US)
 
         for task_dependency in request.dependencies:
             framework_task = task_dependency.key
             if is_tpch_query:
                 mapped_stage_id = stage_id_mapping[framework_task.id]
-                task_slots = tpch_query_all_stage_info[mapped_stage_id]["num_tasks"]
-                task_runtime = tpch_query_all_stage_info[mapped_stage_id][
-                    "avg_task_duration"
-                ]
+                # Set task_slots to 1 if we are using a profile with fixed
+                task_slots = (
+                    tpch_query_all_stage_info[mapped_stage_id]["num_tasks"]
+                    )
+                # Profiled runtime (in ms) * duration_multiplier is converted
+                # to nearest second
+                task_runtime = math.ceil(
+                    (
+                        tpch_query_all_stage_info[mapped_stage_id]
+                        ["avg_task_duration_ms"]/1000
+                        ) * FLAGS.spark_task_duration_multiplier
+                        )
                 self._logger.info(
                     "Creating Task for given app TPCH stage: %s, mapped to "
-                    "original stage id %s, with tasks: %s and avg runtime: %s",
+                    "original stage id %s, with tasks: %s and avg runtime (s): %s. "
+                    "Used multiplier: %s",
                     framework_task.id,
                     mapped_stage_id,
                     task_slots,
                     task_runtime,
+                    FLAGS.spark_task_duration_multiplier,
                 )
             task_ids_to_task[framework_task.id] = Task(
                 name=framework_task.name,
@@ -486,7 +716,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                         ),
                     ),
                 ),
-                deadline=EventTime(request.deadline, EventTime.Unit.S),
+                deadline=EventTime((current_time.time + request.deadline), EventTime.Unit.US),
                 # TODO (Sukrit): We should maintain a counter for each application
                 # type so that we can correlate the Tasks with a particular invocation.
                 timestamp=1,
@@ -523,6 +753,8 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         )
 
         # Return the response.
+        # TODO: (DG) Might want to change the number of initial executors if it causes
+        # issues in scaled up expts
         return erdos_scheduler_pb2.RegisterTaskGraphResponse(
             success=True,
             message=f"Application ID {request.id} with name "
@@ -574,7 +806,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
 
         # Release all the sources of the TaskGraph at the given time.
         for source_task in task_graph.get_source_tasks():
-            source_task.release(EventTime(request.timestamp, EventTime.Unit.S))
+            source_task.release(EventTime(request.timestamp, EventTime.Unit.US))
 
         # Run the scheduler since the Workload has changed.
         await self.run_scheduler()
@@ -636,7 +868,11 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         # TODO (Sukrit): Right now, we drop the memory requirements, we should use
         # them to do multi-dimensional packing using STRL.
         cpu_resource = Resource(name="Slot_CPU")
-        worker_resources = Resources(resource_vector={cpu_resource: request.cores})
+        # TODO: (DG) Override the request.cores to avoid scaling up physical setup
+        worker_resources = Resources(resource_vector={
+            cpu_resource: request.cores if not FLAGS.override_worker_cpu_count
+            else sys.maxsize}
+            )
         self._logger.debug(
             "Successfully constructed the resources for the worker %s: %s.",
             request.name,
@@ -723,14 +959,16 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             matched_task.start_time.time + matched_task.remaining_time.time
         )
 
-        current_time = time.time()
+        current_time = EventTime(int(time.time()), EventTime.Unit.US)
         self._logger.info(
             "Received task for completion at time: %s , task.start_time: %s ,"
-            "task.remaining_time (=runtime):  %s ,  actual completion time: %s ",
-            round(current_time),
+            "task.remaining_time (=runtime):  %s ,  actual completion time: %s. "
+            "Task details: %s",
+            current_time.time,
             matched_task.start_time.time,
             matched_task.remaining_time.time,
             actual_task_completion_time,
+            matched_task,
         )
 
         # TODO DG: remaining_time assumes execution of the slowest strategy
@@ -749,13 +987,13 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         return erdos_scheduler_pb2.NotifyTaskCompletionResponse(
             success=True,
             message=f"Task with ID {request.task_id} marked for completion at "
-            f"{round(current_time)}! It will be removed on actual "
+            f"{current_time}! It will be removed on actual "
             f"task completion time at {actual_task_completion_time}",
         )
 
     async def GetPlacements(self, request, context):
         """Retrieves the placements applicable at the specified time."""
-        request_timestamp = EventTime(request.timestamp, EventTime.Unit.S)
+        request_timestamp = EventTime(request.timestamp, EventTime.Unit.US)
         if not self._initialized:
             self._logger.warning(
                 "Trying to get placements for %s at time %s, "
@@ -781,6 +1019,13 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         for index, placement in enumerate(self._placements[request.id]):
             if placement.placement_time <= request_timestamp:
                 clip_at = index
+                # TODO: (DG) Due to small dataset size, each stage automatically gets
+                # one data partition i.e. one task and one executor. But later for
+                # large datasets, we might leverage use_profile_to_scale_executors
+                self._logger.info(
+                    f"Going to set placement.task to run: {placement}"
+                )
+
                 # Mark the Task as RUNNING.
                 placement.task.start(request_timestamp)
 
@@ -815,26 +1060,25 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                 top_item = self._tasks_marked_for_completion._queue[0][1]
 
                 # Check if top item's timestamp is reached or passed by current time
-                current_time = time.time()
-                if top_item.timestamp <= current_time:
+                current_time = EventTime(int(time.time()), EventTime.Unit.US)
+                if top_item.timestamp <= current_time.time:
                     # Pop the top item
                     popped_item = self._tasks_marked_for_completion.get()
                     self._logger.info(
-                        "Removing tasks from pending completion queue: %s at time: %s",
-                        popped_item.task,
+                        "Removing task from pending completion queue at time: %s. "
+                        "Task details: %s",
                         current_time,
+                        popped_item.task,
                     )
 
                     # Mark the Task as completed.
                     # Also release the task from the scheduler service
                     popped_item.task.update_remaining_time(EventTime.zero())
-                    popped_item.task.finish(
-                        EventTime(round(current_time), EventTime.Unit.S)
-                    )
+                    popped_item.task.finish(current_time)
 
                     # Run the scheduler since the Workload has changed.
                     await self.run_scheduler()
-
+                
                 else:
                     # If the top item's timestamp hasn't been reached yet,
                     # sleep for a short duration
@@ -860,6 +1104,17 @@ async def serve():
 
 
 def main(argv):
+    # Parse the command-line flags
+    flags.FLAGS(argv)
+
+    # Access the value of the flag
+    multiplier = flags.FLAGS.spark_task_duration_multiplier
+    override_worker_cpus = flags.FLAGS.override_worker_cpu_count
+    
+    # Your application logic here
+    print("Multiplier:", multiplier)
+    print("Override worker CPUs:", override_worker_cpus)
+    
     # Create an asyncio event loop
     loop = asyncio.get_event_loop()
 

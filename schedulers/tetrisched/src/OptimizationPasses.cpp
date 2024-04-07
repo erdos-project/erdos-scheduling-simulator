@@ -540,9 +540,10 @@ void DiscretizationSelectorOptimizationPass::runPass(
     }
   }
   if (maxOverNckExprs.size() == 0 && independentLeafExprs.size() == 0) {
-    throw tetrisched::exceptions::RuntimeException(
+    TETRISCHED_INFO(
         "Inside Discretization Optimization pass: but no max over nck or "
         "independent ncks found!");
+    return;
   }
 
   std::vector<std::pair<TimeRange, uint32_t>> occupancyRequestRanges;
