@@ -257,6 +257,17 @@ class GrapheneScheduler(TetriSchedScheduler):
                         stage_start,
                         len(stage_to_task_map[index]),
                     )
+                    self._logger.debug(
+                        "[%s] The elements in Stage %s are: %s",
+                        sim_time.time,
+                        index,
+                        ", ".join(
+                            map(
+                                lambda x: f"{x.name} ({x.startTime})",
+                                stage_to_task_map[index],
+                            )
+                        ),
+                    )
 
                 # Now that the stages have been constructed, we can construct an
                 # adjacency matrix for the TaskGraph by adding a dependency between
@@ -272,30 +283,69 @@ class GrapheneScheduler(TetriSchedScheduler):
                                 f"Failed to find the Task {placement.name} "
                                 f"in TaskGraph {task_graph.name}."
                             )
-                        for previous_placement in stage_to_task_map.get(
-                            stage_index - 1, []
-                        ):
-                            previous_task = task_graph.get_task(
-                                previous_placement.name, unique=True
-                            )
-                            if previous_task is None:
-                                raise ValueError(
-                                    f"Failed to find the Task {previous_placement.name}"
-                                    f" in TaskGraph {task_graph.name}."
-                                )
-                            strategies = previous_task.available_execution_strategies
-                            fastest_strategy = strategies.get_fastest_strategy()
-                            task_runtime = fastest_strategy.runtime.time
-                            if (
-                                previous_placement.startTime + task_runtime
-                                <= placement.startTime
+                        self._logger.debug(
+                            "[%s] Finding new parents for %s.", sim_time.time, task.name
+                        )
+                        # Go over all the previous stages and find the Tasks that finish
+                        # before the current Task starts. Add a dependency between the
+                        # two Tasks in the adjacency matrix.
+                        for previous_stage in range(stage_index - 1, -1, -1):
+                            for previous_placement in stage_to_task_map.get(
+                                previous_stage, []
                             ):
-                                # This Task finishes before the current Task starts in
-                                # the offline order, so we add a dependency between
-                                # the two Tasks here.
-                                updated_tasks_adjacency_matrix[previous_task].append(
-                                    task
+                                previous_task = task_graph.get_task(
+                                    previous_placement.name, unique=True
                                 )
+                                if previous_task is None:
+                                    raise ValueError(
+                                        f"Failed to find the Task "
+                                        f"{previous_placement.name} in TaskGraph "
+                                        f"{task_graph.name}."
+                                    )
+                                strategies = (
+                                    previous_task.available_execution_strategies
+                                )
+                                fastest_strategy = strategies.get_fastest_strategy()
+                                task_runtime = fastest_strategy.runtime.time
+                                if (
+                                    previous_placement.startTime + task_runtime
+                                    <= placement.startTime
+                                ):
+                                    # This Task finishes before the current Task starts
+                                    # in the offline order, so we add a dependency
+                                    # between the two Tasks here.
+                                    updated_tasks_adjacency_matrix[
+                                        previous_task
+                                    ].append(task)
+                                    self._logger.debug(
+                                        "[%s] Adding dependency from %s to %s because "
+                                        "the start time of %s was %s and its fastest "
+                                        "strategy runs in %s. "
+                                        "Will meet start time %s of %s.",
+                                        sim_time.time,
+                                        previous_task.name,
+                                        task.name,
+                                        previous_task.name,
+                                        previous_placement.startTime,
+                                        task_runtime,
+                                        placement.startTime,
+                                        task.name,
+                                    )
+                                else:
+                                    self._logger.debug(
+                                        "[%s] Skipping dependency from %s to %s "
+                                        "because the start time of %s was %s and "
+                                        "its fastest strategy runs in %s. "
+                                        "Will not meet start time %s of %s.",
+                                        sim_time.time,
+                                        previous_task.name,
+                                        task.name,
+                                        previous_task.name,
+                                        previous_placement.startTime,
+                                        task_runtime,
+                                        placement.startTime,
+                                        task.name,
+                                    )
 
                 # Now that the adjacency matrix has been constructed, we construct a
                 # new TaskGraph with the updated adjacency matrix, and swap it with the
