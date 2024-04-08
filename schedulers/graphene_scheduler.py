@@ -76,6 +76,8 @@ class GrapheneScheduler(TetriSchedScheduler):
         self._min_makespan_scheduler_configuration.optimize = (
             self._enable_optimization_passes
         )
+        # 5 seconds interrupt by default for offline stage.
+        self._min_makespan_scheduler_configuration.totalSolverTimeMs = 5000
 
         # Keep a hash set of the TaskGraph names that have been transformed by the
         # scheduler already.
@@ -149,7 +151,12 @@ class GrapheneScheduler(TetriSchedScheduler):
                 placement_times_and_rewards=placement_times_and_rewards,
             )
             if task_graph_strl is None:
-                raise ValueError(f"Failed to construct the STRL for {task_graph_name}.")
+                self._logger.error(
+                    "[%s] Failed to construct the STRL for %s. "
+                    "Skipping structure modifications",
+                    sim_time.time,
+                    task_graph_name,
+                )
             self._logger.debug(
                 "[%s] Successfully constructed the minimum makespan "
                 "STRL for TaskGraph %s.",
@@ -186,23 +193,18 @@ class GrapheneScheduler(TetriSchedScheduler):
                 )
                 raise e
 
-            # TODO (Sukrit): Retrieve the order of placements from the solver, and
-            # construct the new TaskGraph with the placements.
             if not self._min_makespan_scheduler.getLastSolverSolution().isValid():
                 strl_file_name = f"{task_graph_name}_error.dot"
                 solver_model_file_name = f"{task_graph_name}_error.lp"
                 self._logger.error(
                     "[%s] The minimum makespan scheduler failed to find a solution "
                     "for the STRL expression of the TaskGraph %s. Dumping the model "
-                    "to %s and the STRL expression to %s.",
+                    "to %s and the STRL expression to %s. "
+                    "Skipping structure modifications.",
                     sim_time.time,
                     task_graph_name,
                     solver_model_file_name,
                     strl_file_name,
-                )
-                raise ValueError(
-                    f"Failed to find a minimum makespan solution "
-                    f"for the TaskGraph {task_graph_name}."
                 )
 
             # Retrieve the solution and check if we were able to find a valid solution.
@@ -315,13 +317,10 @@ class GrapheneScheduler(TetriSchedScheduler):
                 self._transformed_taskgraphs.add(task_graph_name)
             else:
                 self._logger.error(
-                    "[%s] Failed to find a minimum makespan solution for TaskGraph %s.",
+                    "[%s] Failed to find a minimum makespan solution for TaskGraph %s. "
+                    "Skipping structure modifications.",
                     sim_time.time,
                     task_graph_name,
-                )
-                raise ValueError(
-                    f"Failed to find a minimum makespan solution "
-                    f"for the TaskGraph {task_graph_name}."
                 )
         self._logger.debug(
             "[%s] Completed the transformation of TaskGraphs in the Workload.",
