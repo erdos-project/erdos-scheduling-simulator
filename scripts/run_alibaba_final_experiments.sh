@@ -18,15 +18,15 @@ fi
 # being chosen from the trace, along with different arrival patterns.
 #RANDOM_SEEDS=(420665456 6785649879 1232434 243243453453 3785432875 8984928429 4295429857 99854278957 32542345235 67676 1979879073895 1)
 #RANDOM_SEEDS=(1232434 42066545 6785649879 32434234353 106432512)
-#RANDOM_SEEDS=(1232434 42066545 106432512)
-RANDOM_SEEDS=(106432512)
+RANDOM_SEEDS=(1232434 42066545 106432512)
 
 # Schedulers
 # We use the following baseline schedulers to compare the performance of DAGSched with.
 #SCHEDULERS=(EDF DAGSched_Dyn)
 #SCHEDULERS=(EDF DAGSched_Dyn)
 #SCHEDULERS=(DAGSched_Dyn TetriSched_1 TetriSched_5)
-SCHEDULERS=(DAGSched_Dyn)
+#SCHEDULERS=(EDF TetriSched_0 DAGSched_Dyn Graphene)
+SCHEDULERS=(Graphene)
 
 # Poisson arrival rates.
 # We use the following arrival rates for the Poisson arrival process.
@@ -57,13 +57,13 @@ SCHEDULERS=(DAGSched_Dyn)
 
 #MEDIUM_ARRIVAL_RATES=( 0.01  0.01 0.008 0.01 0.025 0.02 0.012 0.014 0.015 0.016 0.01 0.01  0.006 0.008  0.01   0.01)
 #HARD_ARRIVAL_RATES=(  0.018 0.015  0.02 0.02 0.035 0.03 0.021 0.022 0.024 0.025 0.05 0.024 0.023 0.0225 0.0235 0.021)
-MEDIUM_ARRIVAL_RATES=(  0.01   0.01   0.01    0.01    0.01  0.015  0.012  0.0135  0.0135  0.013  0.014  0.0145  0.016   0.01    0.01    0.01  0.01   0.01  0.02  0.03)
-HARD_ARRIVAL_RATES=(   0.012  0.014  0.015  0.0165  0.0175  0.014   0.02    0.02   0.022  0.025  0.025   0.026  0.026  0.033  0.0345  0.0385  0.04  0.045  0.05  0.05)
+MEDIUM_ARRIVAL_RATES=(  0.01)
+HARD_ARRIVAL_RATES=(   0.012)
 #MEDIUM_ARRIVAL_RATES=(  0.01 0.02  0.03)
 #HARD_ARRIVAL_RATES=(   0.045 0.05  0.05)
 # Parallel Factor
 # The number of experiments to run in parallel.
-PARALLEL_FACTOR=1
+PARALLEL_FACTOR=3
 
 
 execute_experiment () {
@@ -93,7 +93,7 @@ execute_experiment () {
 
   EXPERIMENT_CONF+="
   # Worker configuration.
-  --worker_profile_path=profiles/workers/alibaba_cluster_final.yaml
+  --worker_profile_path=profiles/workers/alibaba_cluster_15k.yaml
   "
 
   EXPERIMENT_CONF+="
@@ -147,6 +147,16 @@ execute_experiment () {
     --scheduler_plan_ahead=1000
     --retract_schedules
     --scheduler_time_limit=120
+    "
+  elif [[ ${SCHEDULER} == "Graphene" ]]; then
+    EXPERIMENT_CONF+="
+    # Scheduler configuration.
+    --scheduler=Graphene
+    --scheduler_time_discretization=1
+    --scheduler_enable_optimization_pass
+    --retract_schedules
+    --scheduler_plan_ahead=0
+    --scheduler_time_limit=60
     "
   elif [[ ${SCHEDULER} == "DAGSched" ]]; then
     EXPERIMENT_CONF+="

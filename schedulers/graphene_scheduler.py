@@ -10,7 +10,7 @@ import tetrisched_py as tetrisched
 
 from utils import EventTime
 from workers import WorkerPools
-from workload import Placements, Task, TaskGraph, Workload
+from workload import Placements, Task, Workload
 
 from .tetrisched_scheduler import Partitions, TetriSchedScheduler
 
