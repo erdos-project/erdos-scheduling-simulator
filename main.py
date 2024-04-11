@@ -161,6 +161,11 @@ flags.DEFINE_integer(
     "the number, the higher the slots.",
 )
 flags.DEFINE_bool(
+    "alibaba_bump_resources_of_low_duration_task",
+    False,
+    "If True, the lower duration task resources would be bumped to max",
+)
+flags.DEFINE_bool(
     "alibaba_loader_task_cpu_usage_random",
     False,
     "If True, the task CPU usage is randomly generated between the min and max values.",
