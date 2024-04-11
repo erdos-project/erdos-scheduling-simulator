@@ -32,6 +32,7 @@ from workload import (
     Resources,
     Task,
     TaskGraph,
+    TaskState,
     Workload,
     WorkProfile,
 )
@@ -83,7 +84,7 @@ flags.DEFINE_enum(
     "rest might also run but DAG structure might not match Decima profiles."
 )
 flags.DEFINE_enum(
-    "tpch_dataset_size", "50g", ["50g", "100g", "250g", "500g"], "Options for "
+    "tpch_dataset_size", "50", ["50", "100", "250", "500"], "Options in GB eg. 50g for "
     "dataset size of TPCH query. The Cloudlab profile will be picked accordingly. "
 )
 flags.DEFINE_enum(
@@ -142,7 +143,7 @@ flags.DEFINE_bool(
 )
 flags.DEFINE_integer(
     "scheduler_time_limit",
-    -1,
+    4,
     "The time limit (in seconds) to allow the scheduler to keep "
     "searching for solutions without finding a better one.",
 )
@@ -186,7 +187,7 @@ flags.DEFINE_bool(
 )
 flags.DEFINE_integer(
     "scheduler_plan_ahead_no_consideration_gap",
-    10,
+    6,
     "The length of time gap (in µs) for which the reconsiderations are frozen. "
     "From the current time to the consideration gap, any tasks placed will not be "
     "reconsidered for rescheduling.",
@@ -203,6 +204,14 @@ flags.DEFINE_integer(
     5,
     "If `scheduler_selective_rescheduling` is True, then this flag defines the number "
     "of TaskGraphs to sample for rescheduling.",
+)
+flags.DEFINE_float(
+    "task_graph_slo_factor",
+    2.0,
+    "The multiplicative factor to be used with critical path length of the task graph. "
+    "This helps inform the deadline for the taskgraph and all tasks within the task "
+    "graph. The value be > 1.0 since the taskgraph would take atleast the critical path "
+    "time duration to complete.",
 )
 
 
@@ -255,16 +264,14 @@ class PriorityQueue:
 # Implement the service.
 class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
     def __init__(self) -> None:
-        """Initialize the service, and setup the logger."""
+        """Initialize the service, and setup the logger."""        
         # Values used by the Servicer.
-        self._logger = setup_logging(name=FLAGS.log_file_name,
-                                     log_level=FLAGS.log_level)
-        # self._logger = setup_logging(
-        #     name=__name__,
-        #     log_dir=FLAGS.log_dir,
-        #     log_file=FLAGS.log_file_name,
-        #     log_level=FLAGS.log_level
-        #     )
+        self._logger = setup_logging(
+            name=__name__,
+            log_dir=FLAGS.log_dir,
+            log_file=FLAGS.log_file_name,
+            log_level=FLAGS.log_level
+        )
         self._initialized = False
         self._initialization_time = -1
         self._master_uri = None
@@ -275,6 +282,14 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         self._drivers: Mapping[str, Task] = {}
         self._workload = None
 
+        # Track taskgraph completion progress.
+        self._total_taskgraphs_registered = 0
+        self._total_taskgraphs_missed = 0
+        self._total_taskgraphs_met = 0
+        self._total_taskgraphs_cancelled = 0
+        self._cancelled_taskgraphs = set()
+        self._task_graph_slo_factor = FLAGS.task_graph_slo_factor
+
         # Scheduler information maintained by the servicer.
         self._scheduler_running_lock = asyncio.Lock()
         self._scheduler_running = False
@@ -282,10 +297,12 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         if FLAGS.scheduler == "EDF":
             self._scheduler = EDFScheduler(
                 enforce_deadlines=FLAGS.enforce_deadlines,
+                _flags=FLAGS,
             )
         elif FLAGS.scheduler == "FIFO":
             self._scheduler = FIFOScheduler(
                 enforce_deadlines=FLAGS.enforce_deadlines,
+                _flags=FLAGS,
             )
         elif FLAGS.scheduler == "DAGSched":
             # --scheduler=TetriSched
@@ -324,6 +341,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                 plan_ahead_no_consideration_gap=EventTime(
                     FLAGS.scheduler_plan_ahead_no_consideration_gap, EventTime.Unit.US
                     ),
+                log_to_file=True,
             )
 
         else:
@@ -346,31 +364,104 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
 
     async def schedule(self) -> None:
         """Schedules the tasks that have been added to the Workload."""
+        current_time = EventTime(int(time.time()), EventTime.Unit.US) - self._initialization_time
+
         async with self._scheduler_running_lock:
             if self._scheduler_running:
                 self._logger.error(
-                    "Scheduler already running, this should never be reached."
+                    "[%s] Scheduler already running, this should never be reached.",
+                    current_time,
                 )
                 return
             self._scheduler_running = True
 
-        current_time = EventTime(int(time.time()), EventTime.Unit.US)
         self._logger.info(
-            "Starting a scheduling cycle with %s TaskGraphs and %s Workers at %s.",
+            "[%s] Starting a scheduling cycle with %s TaskGraphs and %s Workers.",
+            current_time,
             len(self._workload.task_graphs),
             len(self._worker_pool.workers),
-            current_time,
         )
 
         # TODO (Sukrit): Change this to a better implementation.
         # Let's do some simple scheduling for now, that gives a fixed number of
         # executors to all the available applications in intervals of 10 seconds.
-        if len(self._workload.task_graphs) >= 2:
+        if len(self._workload.task_graphs) >= 1:
             placements = self._scheduler.schedule(
                 sim_time=EventTime(current_time.time, EventTime.Unit.US),
                 workload=self._workload,
                 worker_pools=self._worker_pools,
             )
+            
+            # Filter the placements that are now in CANCEL_TASK state.
+            cancel_task_placements = list(filter(
+                lambda p: p.placement_type == Placement.PlacementType.CANCEL_TASK,
+                placements,
+            ))
+            self._logger.info(
+                "[%s] Received %s tasks to be cancelled: %s.",
+                current_time,
+                len(cancel_task_placements),
+                cancel_task_placements,
+            )
+            # Issue task cancellations for identified tasks and taskgraphs so that
+            # the taskgraphs are no longer in consideration
+            # TODO: (DG) Check with Sukrit if we need to iterate over sorted cancel_placements
+            for placement in cancel_task_placements:
+                # Add the task to self._placements so that we can stop responding to RPC
+                # calls from its driver based on CANCEL_TASK type
+
+                # TODO: (DG) Check if this is the correct usage
+                self._placements[placement.task.task_graph].append(placement)
+
+                # Since even one task getting cancelled, implies task-graph
+                # cancellation, we add the task-graph to cancelled set
+                if placement.task.task_graph not in self._cancelled_taskgraphs:
+                    self._cancelled_taskgraphs.add(placement.task.task_graph)
+                    self._total_taskgraphs_cancelled += 1
+                    self._logger.info(
+                            "[%s] RUN_STATS (registered, met, missed, cancelled): %s, %s, %s, %s",
+                            current_time,
+                            self._total_taskgraphs_registered,
+                            self._total_taskgraphs_met,
+                            self._total_taskgraphs_missed,
+                            self._total_taskgraphs_cancelled,
+                            )
+                
+                self._logger.info(
+                    "[%s] Cancelling task: %s from taskgraph: %s",
+                    current_time,
+                    placement.task.name,
+                    placement.task.task_graph,
+                )
+                # Sending tasks to cancel.
+                placement.task.cancel(
+                    time=current_time,
+                )
+
+                # Also cancel the task-graph so that all dependent tasks are removed
+                task_graph = self._workload.get_task_graph(placement.task.task_graph)
+                if task_graph is None:
+                    self._logger.error("[%s] No TaskGraph found for %s",
+                                       current_time,
+                                       placement.task.task_graph,
+                                       )
+                
+                for cancelled_task in task_graph.cancel(placement.task, current_time):
+                    self._logger.info(
+                        "[%s] Further cancelling dependent task: %s from taskgraph: %s",
+                        current_time,
+                        placement.task.name,
+                        placement.task.task_graph,
+                    )
+                    
+                    cancelled_task.cancel(
+                        time=current_time,
+                    )
+
+                # TODO: (DG): Ensure that task-graph is removed from the workload and
+                # doesn't show up in the next iteration of tetrisched scheduler?
+                
+            
             # Filter the placements that are not of type PLACE_TASK and that have not
             # been placed.
             filtered_placements = filter(
@@ -390,14 +481,21 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                     placement=placement,
                 )
 
+        scheduler_end_time = EventTime(int(time.time()), EventTime.Unit.US) - self._initialization_time
         self._logger.info(
-            "Finished the scheduling cycle initiated at %s.", current_time
+            "[%s] Finished the scheduling cycle initiated at %s.",
+            scheduler_end_time,
+            current_time,
         )
 
         # Check if another run of the Scheduler has been requested, and if so, create
         # a task for it. Otherwise, mark the scheduler as not running.
         async with self._scheduler_running_lock:
             self._scheduler_running = False
+            self._logger.info("[%s] self._rerun_scheduler: %s.",
+                              scheduler_end_time,
+                              self._rerun_scheduler,
+                              )
             if self._rerun_scheduler:
                 self._rerun_scheduler = False
                 asyncio.create_task(self.schedule())
@@ -421,9 +519,10 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         """
         if self._initialized:
             self._logger.warning(
-                "Framework already registered at %s with the address %s",
+                "Framework already registered at %s with the address %s at %s",
                 self._initialization_time,
                 self._master_uri,
+                self._initialization_time,
             )
             return erdos_scheduler_pb2.RegisterFrameworkResponse(
                 success=False,
@@ -434,18 +533,21 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         # Setup a new Framework instance.
         framework_name = request.name
         self._master_uri = request.uri
-        self._initialization_time = request.timestamp
+        self._initialization_time = EventTime(request.timestamp, EventTime.Unit.US)
         self._initialized = True
         self._logger.info(
-            "Registering framework %s with URI %s at %s",
+            "[%s] Registering framework %s with URI %s.",
+            self._initialization_time,
             framework_name,
             self._master_uri,
-            self._initialization_time,
         )
 
         # Setup the simulator types.
         parsed_uri = urlparse(self._master_uri)
-        self._worker_pool = WorkerPool(name=f"WorkerPool_{parsed_uri.netloc}")
+        self._worker_pool = WorkerPool(
+            name=f"WorkerPool_{parsed_uri.netloc}",
+            _logger=self._logger
+            )
         self._worker_pools = WorkerPools(worker_pools=[self._worker_pool])
         self._workload = Workload.from_task_graphs({})
 
@@ -456,10 +558,13 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         )
 
     async def RegisterDriver(self, request, context):
+        sim_time = EventTime(request.timestamp, EventTime.Unit.US) - self._initialization_time
+        
         if not self._initialized:
             self._logger.warning(
-                "Trying to register a driver with name %s and id %s, "
+                "[%s] Trying to register a driver with name %s and id %s, "
                 "but no framework is registered yet.",
+                sim_time,
                 request.name,
                 request.id,
             )
@@ -473,8 +578,9 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         # TODO (Sukrit): We drop the memory requirements for now, we should use
         # them to do multi-dimensional packing using STRL.
         self._logger.info(
-            "Received a request to register a driver with name %s, URI: %s. "
+            "[%s] Received a request to register a driver with name %s, URI: %s. "
             "The driver requires %s cores and %s memory.",
+            sim_time,
             request.id,
             request.uri,
             request.cores,
@@ -506,6 +612,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             task_graph=request.uri,
             job=driver_job,
             deadline=EventTime.invalid(),
+            _logger=self._logger,
         )
         self._drivers[request.id] = driver
 
@@ -519,7 +626,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                     self._worker_pool.place_task(driver, execution_strategy, worker.id)
 
                     # Update the Task's state and placement information.
-                    placement_time = EventTime(request.timestamp, EventTime.Unit.US)
+                    placement_time = sim_time
                     driver.schedule(
                         time=placement_time,
                         placement=Placement(
@@ -536,22 +643,25 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                     # Tell the framework to start the driver.
                     return erdos_scheduler_pb2.RegisterDriverResponse(
                         success=True,
-                        message=f"Driver {request.id} registered successfully!",
+                        message=f"[{sim_time}] Driver {request.id} registered successfully!",
                         worker_id=worker.name,
                     )
 
         if not placement_found:
             return erdos_scheduler_pb2.RegisterDriverResponse(
                 success=False,
-                message=f"No Worker can accomodate the driver {request.id} yet.",
+                message=f"[{sim_time}] No Worker can accomodate the driver {request.id} yet.",
                 worker_id="",
             )
 
     async def DeregisterDriver(self, request, context):
+        completion_time = EventTime(request.timestamp, EventTime.Unit.US) - self._initialization_time
+        
         if not self._initialized:
             self._logger.warning(
-                "Trying to deregister a driver with id %s, "
+                "[%s] Trying to deregister a driver with id %s, "
                 "but no framework is registered yet.",
+                completion_time,
                 request.id,
             )
             return erdos_scheduler_pb2.DeregisterDriverResponse(
@@ -560,24 +670,24 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
 
         if request.id not in self._drivers:
             self._logger.warning(
-                "Trying to deregister a driver with id %s, "
+                "[%s] Trying to deregister a driver with id %s, "
                 "but no driver with that id is registered.",
+                completion_time,
                 request.id,
             )
             return erdos_scheduler_pb2.DeregisterDriverResponse(
                 success=False,
-                message=f"Driver with id {request.id} not registered yet.",
+                message=f"[{completion_time}] Driver with id {request.id} not registered yet.",
             )
 
         # Deregister the driver.
         driver = self._drivers[request.id]
-        completion_time = EventTime(request.timestamp, EventTime.Unit.US)
         self._worker_pool.remove_task(completion_time, driver)
         driver.finish(completion_time)
         del self._drivers[request.id]
         return erdos_scheduler_pb2.DeregisterDriverResponse(
             success=True,
-            message=f"Driver with id {request.id} deregistered successfully!",
+            message=f"[{completion_time}] Driver with id {request.id} deregistered successfully!",
         )
 
     async def RegisterTaskGraph(self, request, context):
@@ -585,10 +695,13 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         This is the entry point for a new application of Spark to register
         itself with the backend scheduler, and is intended as an EHLO.
         """
+        sim_time = EventTime(request.timestamp, EventTime.Unit.US) - self._initialization_time
+
         if not self._initialized:
             self._logger.warning(
-                "Trying to register a task graph with ID %s and name %s, "
+                "[%s] Trying to register a task graph with ID %s and name %s, "
                 "but no framework is registered yet.",
+                sim_time,
                 request.id,
                 request.name,
             )
@@ -598,19 +711,21 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
 
         if request.id in self._workload.task_graphs:
             self._logger.warning(
-                "The application with ID %s and name %s was already registered.",
+                "[%s] The application with ID %s and name %s was already registered.",
+                sim_time,
                 request.id,
                 request.name,
             )
             return erdos_scheduler_pb2.RegisterTaskGraphResponse(
                 success=False,
-                message=f"Application ID {request.id} with name {request.name} "
-                f"already registered!",
+                message=f"[{sim_time}] Application ID {request.id} with name "
+                f"{request.name} already registered!",
                 num_executors=0,
             )
 
         self._logger.info(
-            "Attempting to register application ID %s with name %s",
+            "[%s] Attempting to register application ID %s with name %s",
+            sim_time,
             request.id,
             request.name,
         )
@@ -620,13 +735,32 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         tpch_query_all_stage_info = None
         if request.name.startswith("TPCH Query"):
             is_tpch_query = True
-            # retrieve tasks-per-stage and runtime info based on query number
-            tpch_query_num = request.name.split("TPCH Query ", 1)[1]
+            # retrieve tasks-per-stage and runtime info based on query specifications
+            # Split the string by spaces
+            query_parts = request.name.split()
+            
+            # Initialize dataset_size and max_executor variables with default
+            tpch_query_num = None
+            tpch_dataset_size = int(FLAGS.tpch_dataset_size)
+            tpch_max_executors_per_job = int(FLAGS.tpch_max_executors_per_job)
+            
+            # Check if the string has the required format
+            # Format 1: "TPCH Query <queryNum>"
+            # Format 2: "TPCH Query <queryNum> <datasetSize> <maxExecutors>"
+            if len(query_parts) >= 3 and query_parts[0] == "TPCH" and query_parts[1] == "Query":
+                tpch_query_num = int(query_parts[2])
+                
+                # If dataset size and max cores are provided
+                if len(query_parts) >= 5:
+                    tpch_dataset_size = int(query_parts[3])
+                    tpch_max_executors_per_job = int(query_parts[4])
+
             tpch_query_all_stage_info = get_all_stage_info_for_query(
-                tpch_query_num,
-                FLAGS.tpch_profile_type,
-                FLAGS.tpch_dataset_size,
-                FLAGS.tpch_max_executors_per_job)
+                query_num=tpch_query_num,
+                profile_type=FLAGS.tpch_profile_type,
+                dataset_size=tpch_dataset_size,
+                max_executors=tpch_max_executors_per_job)
+            
             same_structure, stage_id_mapping = verify_and_relable_tpch_app_graph(
                 query_num=tpch_query_num, dependencies=request.dependencies
             )
@@ -634,14 +768,15 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             # return failure message if not tpch app isnt of same DAG structure
             if not same_structure:
                 self._logger.warning(
-                    "TPCH application with ID %s and name %s couldn't be registered."
+                    "[%s] TPCH application with ID %s and name %s couldn't be registered."
                     "DAG structure mismatch!",
+                    sim_time,
                     request.id,
                     request.name,
                 )
                 return erdos_scheduler_pb2.RegisterTaskGraphResponse(
                     success=False,
-                    message=f"TPCH application ID {request.id} with name {request.name}"
+                    message=f"[{sim_time}] TPCH application ID {request.id} with name {request.name}"
                     f" couldn't be registered. DAG structure mismatch!",
                     num_executors=0,
                 )
@@ -656,28 +791,64 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             EventTime.Unit.US
             )
         
-        current_time = EventTime(int(time.time()), EventTime.Unit.US)
 
-        for task_dependency in request.dependencies:
+        for i, task_dependency in enumerate(request.dependencies):
             framework_task = task_dependency.key
             if is_tpch_query:
                 mapped_stage_id = stage_id_mapping[framework_task.id]
-                # Set task_slots to 1 if we are using a profile with fixed
-                task_slots = (
+                
+                # NOTE: task_slots and task_runtime given to scheduler might be updated
+                # based on tpch_max_executors_per_job. If task_slots >
+                # tpch_max_executors_per_job, we transform (task_slots * task_runtime)
+                # as tpch_max_executors_per_job * (
+                #           (task_slots * task_runtime)/tpch_max_executors_per_job
+                # )
+                # TODO: (DG) It is not foolproof since scheduler can give more than
+                # tpch_max_executors_per_job to app if it decides to run multiple
+                # independent stages in parallel
+
+                profiled_task_slots = (
                     tpch_query_all_stage_info[mapped_stage_id]["num_tasks"]
                     )
                 # Profiled runtime (in ms) * duration_multiplier is converted
                 # to nearest second
-                task_runtime = math.ceil(
+                profiled_task_runtime = math.ceil(
                     (
                         tpch_query_all_stage_info[mapped_stage_id]
                         ["avg_task_duration_ms"]/1000
                         ) * FLAGS.spark_task_duration_multiplier
                         )
+                
+                task_slots = (profiled_task_slots
+                              if profiled_task_slots <= tpch_max_executors_per_job
+                              else tpch_max_executors_per_job
+                              )
+                # Setting minimum task_runtime to 3s to allow stages to complete
+                task_runtime = max(3, (
+                    profiled_task_runtime
+                    if profiled_task_slots <= tpch_max_executors_per_job
+                    else math.ceil(
+                        (profiled_task_slots *
+                         profiled_task_runtime)/tpch_max_executors_per_job)
+                    )
+                )
+                if profiled_task_slots > tpch_max_executors_per_job:
+                    self._logger.info(
+                        "[%s] Profiled slots > tpch_max_executors_per_job: %s. Converted "
+                        "(slots,runtime) from (%s,%s) to (%s, %s)",
+                        sim_time,
+                        tpch_max_executors_per_job,
+                        profiled_task_slots,
+                        profiled_task_runtime,
+                        task_slots,
+                        task_runtime,
+                        )
+                    
                 self._logger.info(
-                    "Creating Task for given app TPCH stage: %s, mapped to "
+                    "[%s] Creating Task for given app TPCH stage: %s, mapped to "
                     "original stage id %s, with tasks: %s and avg runtime (s): %s. "
                     "Used multiplier: %s",
+                    sim_time,
                     framework_task.id,
                     mapped_stage_id,
                     task_slots,
@@ -685,10 +856,10 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                     FLAGS.spark_task_duration_multiplier,
                 )
             task_ids_to_task[framework_task.id] = Task(
-                name=framework_task.name,
+                name=f"task_{framework_task.name}_{i}",
                 task_graph=request.id,
                 job=Job(
-                    name=framework_task.name,
+                    name=f"job_{framework_task.name}_{i}",
                     profile=WorkProfile(
                         name=f"WorkProfile_{framework_task.name}",
                         execution_strategies=ExecutionStrategies(
@@ -716,16 +887,21 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                         ),
                     ),
                 ),
-                deadline=EventTime((current_time.time + request.deadline), EventTime.Unit.US),
+                # NOTE: (DG) Removed setting deadline here and will set deadline 
+                # based on taskgraphs critical path instead.
+                deadline=EventTime.invalid(),
+                
                 # TODO (Sukrit): We should maintain a counter for each application
                 # type so that we can correlate the Tasks with a particular invocation.
                 timestamp=1,
+                _logger=self._logger,
             )
             # NOTE (Sukrit): We maintain the StageID of the Task as a separate field
             # that is not accessible / used by the Simulator.
             task_ids_to_task[framework_task.id].stage_id = framework_task.id
             self._logger.info(
-                "Constructed Task %s for the TaskGraph %s.",
+                "[%s] Constructed Task %s for the TaskGraph %s.",
+                sim_time,
                 framework_task.name,
                 request.id,
             )
@@ -740,24 +916,68 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             name=request.id,
             tasks=task_graph_structure,
         )
+
+        # Calculating critical path time from task graph
+        critical_path = task_graph.get_longest_path(
+                weights=lambda task: (task.slowest_execution_strategy.runtime.time)
+            )
+        critical_path_time = (
+            sum(
+                [t.slowest_execution_strategy.runtime for t in critical_path],
+                start=EventTime.zero(),
+            )
+            .to(EventTime.Unit.US)
+            .time
+        )
+
+        # Setting taskgraph and task deadlines using critical_path_time * SLO factor
+        task_graph_slo_time = math.ceil(
+            critical_path_time * self._task_graph_slo_factor
+            )
+        
+        for task in task_graph.get_nodes():
+            deadline = EventTime(sim_time.time + task_graph_slo_time,
+                                 unit=EventTime.Unit.US
+                                 )
+            task.update_deadline(deadline)
+
+        task_graph.to_dot(f"{request.id}.dot")
         self._workload.add_task_graph(task_graph)
         self._logger.info(
-            "Added the TaskGraph(name=%s, id=%s) to the Workload.",
+            "[%s] Added the TaskGraph(name=%s, id=%s, deadline=%s, critical_path_time = %s, task_graph_slo_time = %s) to the Workload.",
+            sim_time,
             request.name,
             request.id,
+            task_graph.deadline,
+            critical_path_time,
+            task_graph_slo_time,
         )
         self._logger.info(
-            "The structure of the TaskGraph %s is \n%s.",
+            "[%s] The structure of the TaskGraph %s is \n%s.",
+            sim_time,
             request.id,
             str(task_graph),
         )
 
+        # Increment total number of taskgraphs registered.
+        self._total_taskgraphs_registered += 1
+
+        # Show current run statistics.
+        self._logger.info(
+            "[%s] RUN_STATS (registered, met, missed, cancelled): %s, %s, %s, %s",
+            sim_time,
+            self._total_taskgraphs_registered,
+            self._total_taskgraphs_met,
+            self._total_taskgraphs_missed,
+            self._total_taskgraphs_cancelled,
+            )
+        
         # Return the response.
         # TODO: (DG) Might want to change the number of initial executors if it causes
         # issues in scaled up expts
         return erdos_scheduler_pb2.RegisterTaskGraphResponse(
             success=True,
-            message=f"Application ID {request.id} with name "
+            message=f"[{sim_time}] Application ID {request.id} with name "
             f"{request.name} and deadline {request.deadline} registered successfully!",
             num_executors=FLAGS.initial_executors,
         )
@@ -769,32 +989,37 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         This is intended to release the sources of the TaskGraph to the scheduling
         backend, to consider the application in this scheduling cycle.
         """
+        sim_time = EventTime(request.timestamp, EventTime.Unit.US) - self._initialization_time
+
         if not self._initialized:
             self._logger.warning(
-                "Trying to register that the environment is ready for the TaskGraph "
+                "[%s] Trying to register that the environment is ready for the TaskGraph "
                 "with ID %s, but no framework is registered yet.",
+                sim_time,
                 request.id,
             )
             return erdos_scheduler_pb2.RegisterEnvironmentReadyResponse(
-                success=False, message="Framework not registered yet."
+                success=False, message=f"[{sim_time}] Framework not registered yet."
             )
-
+        
         task_graph = self._workload.get_task_graph(request.id)
         if task_graph is None:
             self._logger.warning(
-                "Trying to register that the environment is ready for the TaskGraph "
+                "[%s] Trying to register that the environment is ready for the TaskGraph "
                 "with ID %s, but no TaskGraph with that ID is registered.",
+                sim_time,
                 request.id,
             )
             return erdos_scheduler_pb2.RegisterEnvironmentReadyResponse(
                 success=False,
-                message=f"TaskGraph with ID {request.id} not registered yet.",
+                message=f"[{sim_time}] TaskGraph with ID {request.id} not registered yet.",
             )
 
         if request.num_executors != FLAGS.initial_executors:
             self._logger.warning(
-                "The TaskGraph %s requires %s executors, but the environment is ready "
+                "[%s] The TaskGraph %s requires %s executors, but the environment is ready "
                 "with %s executors.",
+                sim_time,
                 request.id,
                 FLAGS.initial_executors,
                 request.num_executors,
@@ -806,62 +1031,71 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
 
         # Release all the sources of the TaskGraph at the given time.
         for source_task in task_graph.get_source_tasks():
-            source_task.release(EventTime(request.timestamp, EventTime.Unit.US))
+            source_task.release(sim_time)
+
+        self._logger.info(f"[{sim_time}] Environment ready for TaskGraph with ID {request.id}!")
 
         # Run the scheduler since the Workload has changed.
         await self.run_scheduler()
 
         return erdos_scheduler_pb2.RegisterEnvironmentReadyResponse(
             success=True,
-            message=f"Environment ready for TaskGraph with ID {request.id}!",
+            message=f"[{sim_time}] Environment ready for TaskGraph with ID {request.id}!",
         )
 
     async def DeregisterFramework(self, request, context):
         """Deregisters the framework with the backend scheduler.
         This is the exit point for a running instance of Spark / Flink to deregister"""
+        sim_time = EventTime(request.timestamp, EventTime.Unit.US) - self._initialization_time
+        
         if not self._initialized:
             self._logger.warning(
-                "Trying to deregister the framework at %s, "
+                "[%s] Trying to deregister the framework at %s, "
                 "but no framework is registered yet.",
+                sim_time,
                 request.uri,
             )
             return erdos_scheduler_pb2.DeregisterFrameworkResponse(
-                success=False, message="Framework not registered yet."
+                success=False, message=f"[{sim_time}] Framework not registered yet."
             )
 
         if not self._master_uri == request.uri:
             self._logger.warning(
-                "Trying to deregister the framework at %s, "
+                "[%s] Trying to deregister the framework at %s, "
                 "but the registered framework is at %s.",
+                sim_time,
                 request.uri,
                 self._master_uri,
             )
             return erdos_scheduler_pb2.DeregisterFrameworkResponse(
                 success=False,
-                message=f"Framework not registered at {request.uri} yet.",
+                message=f"[{sim_time}] Framework not registered at {request.uri} yet.",
             )
 
         # Deregister the framework.
         self._initialization_time = None
         self._master_uri = None
         self._initialized = False
-        self._logger.info("Deregistering framework at %s", request.uri)
+        self._logger.info("[%s] Deregistering framework at %s", sim_time, request.uri)
         return erdos_scheduler_pb2.DeregisterFrameworkResponse(
             success=True,
-            message=f"Framework at {request.uri} deregistered successfully!",
+            message=f"[{sim_time}] Framework at {request.uri} deregistered successfully!",
         )
 
     async def RegisterWorker(self, request, context):
         """Registers a new worker with the backend scheduler."""
+        current_time = EventTime(int(time.time()), EventTime.Unit.US) - self._initialization_time
+        
         if not self._initialized:
             self._logger.warning(
-                "Trying to register a worker with name %s and id %s, "
+                "[%s] Trying to register a worker with name %s and id %s, "
                 "but no framework is registered yet.",
+                current_time,
                 request.name,
                 request.id,
             )
             return erdos_scheduler_pb2.RegisterWorkerResponse(
-                success=False, message="Framework not registered yet."
+                success=False, message=f"[{current_time}] Framework not registered yet."
             )
 
         # First, we construct the Resources with the given size.
@@ -871,10 +1105,11 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         # TODO: (DG) Override the request.cores to avoid scaling up physical setup
         worker_resources = Resources(resource_vector={
             cpu_resource: request.cores if not FLAGS.override_worker_cpu_count
-            else sys.maxsize}
+            else 640}
             )
         self._logger.debug(
-            "Successfully constructed the resources for the worker %s: %s.",
+            "[%s] Successfully constructed the resources for the worker %s: %s.",
+            current_time,
             request.name,
             worker_resources,
         )
@@ -887,7 +1122,8 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         self._worker_pool.add_workers([worker])
 
         self._logger.info(
-            "Registering worker with name %s, and resources %s.",
+            "[%s] Registering worker with name %s, and resources %s.",
+            current_time,
             worker.name,
             worker_resources,
         )
@@ -898,18 +1134,21 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
 
         return erdos_scheduler_pb2.RegisterWorkerResponse(
             success=True,
-            message=f"Worker {request.name} registered successfully!",
+            message=f"[{current_time}] Worker {request.name} registered successfully!",
             cores=FLAGS.virtualized_cores,
             memory=FLAGS.virtualized_memory * 1024,
         )
 
     async def NotifyTaskCompletion(self, request, context):
         """Notifies the backend scheduler that a task has completed."""
+        sim_time = EventTime(request.timestamp, EventTime.Unit.US) - self._initialization_time
+        
         if not self._initialized:
             self._logger.warning(
-                "Trying to notify the backend scheduler that the task with ID %s "
+                "[%s] Trying to notify the backend scheduler that the task with ID %s "
                 "from application %s has completed, "
                 "but no framework is registered yet.",
+                sim_time,
                 request.task_id,
                 request.application_id,
             )
@@ -920,15 +1159,16 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         task_graph = self._workload.get_task_graph(request.application_id)
         if task_graph is None:
             self._logger.warning(
-                "Trying to notify the backend scheduler that the task with ID %s "
+                "[%s] Trying to notify the backend scheduler that the task with ID %s "
                 "from application %s has completed, but the application "
                 "was not registered with the backend yet.",
+                sim_time,
                 request.task_id,
                 request.application_id,
             )
             return erdos_scheduler_pb2.NotifyTaskCompletionResponse(
                 success=False,
-                message=f"Application with ID {request.application_id} "
+                message=f"[{sim_time}] Application with ID {request.application_id} "
                 f"not registered yet.",
             )
 
@@ -939,15 +1179,16 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                 matched_task = task
         if matched_task is None:
             self._logger.warning(
-                "Trying to notify the backend scheduler that the task with ID %s "
+                "[%s] Trying to notify the backend scheduler that the task with ID %s "
                 "from application %s has completed, but the task "
                 "was not found in the TaskGraph.",
+                sim_time,
                 request.task_id,
                 request.application_id,
             )
             return erdos_scheduler_pb2.NotifyTaskCompletionResponse(
                 success=False,
-                message=f"Task with ID {request.task_id} "
+                message=f"[{sim_time}] Task with ID {request.task_id} "
                 f"not found in TaskGraph {request.application_id}.",
             )
 
@@ -959,12 +1200,11 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             matched_task.start_time.time + matched_task.remaining_time.time
         )
 
-        current_time = EventTime(int(time.time()), EventTime.Unit.US)
         self._logger.info(
-            "Received task for completion at time: %s , task.start_time: %s ,"
+            "[%s] Received task for completion. task.start_time: %s ,"
             "task.remaining_time (=runtime):  %s ,  actual completion time: %s. "
             "Task details: %s",
-            current_time.time,
+            sim_time.time,
             matched_task.start_time.time,
             matched_task.remaining_time.time,
             actual_task_completion_time,
@@ -987,19 +1227,20 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         return erdos_scheduler_pb2.NotifyTaskCompletionResponse(
             success=True,
             message=f"Task with ID {request.task_id} marked for completion at "
-            f"{current_time}! It will be removed on actual "
+            f"{sim_time}! It will be removed on actual "
             f"task completion time at {actual_task_completion_time}",
         )
 
     async def GetPlacements(self, request, context):
         """Retrieves the placements applicable at the specified time."""
-        request_timestamp = EventTime(request.timestamp, EventTime.Unit.US)
+        sim_time = EventTime(request.timestamp, EventTime.Unit.US) - self._initialization_time
+
         if not self._initialized:
             self._logger.warning(
-                "Trying to get placements for %s at time %s, "
+                "[%s] Trying to get placements for %s, "
                 "but no framework is registered yet.",
+                sim_time,
                 request.id,
-                request_timestamp,
             )
             return erdos_scheduler_pb2.GetPlacementsResponse(
                 success=False, message="Framework not registered yet."
@@ -1007,49 +1248,62 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
 
         if request.id not in self._placements:
             self._logger.warning(
-                "Trying to get placements for %s at time %s, but the application "
+                "[%s] Trying to get placements for %s, but the application "
                 "was not registered with the backend yet.",
+                sim_time,
                 request.id,
-                request_timestamp,
             )
 
         # Construct and return the placements.,
         placements = []
         clip_at = -1
         for index, placement in enumerate(self._placements[request.id]):
-            if placement.placement_time <= request_timestamp:
+            if placement.placement_time <= sim_time:
                 clip_at = index
                 # TODO: (DG) Due to small dataset size, each stage automatically gets
                 # one data partition i.e. one task and one executor. But later for
                 # large datasets, we might leverage use_profile_to_scale_executors
+                # to modify the placement before it is sent
                 self._logger.info(
-                    f"Going to set placement.task to run: {placement}"
+                    f"[{sim_time}] Going to set placement.task to run: {placement}"
                 )
 
                 # Mark the Task as RUNNING.
-                placement.task.start(request_timestamp)
+                # TODO: (DG) Fix it better. Why are repeated invocations happening?
+                # Right now we don't run task.start() if
+                # task is already in RUNNING or CANCELLED state.
+                # Only SCHEDULED -> RUNNING transition is allowed.
+                if placement.task.state == TaskState.SCHEDULED:
+                    try:
+                        placement.task.start(sim_time)
+                    except ValueError as e:
+                        # TODO: (DG) Fix the error where task already in running state is attempted to be
+                        # restarted. Need to remove already executed placements?
+                        self._logger.error(f"[{sim_time}] start() errored for task: {placement.task}")
+                        self._logger.error(f"[{sim_time}] Error: {e}")
 
-                # resources = placement.execution_strategy.resources
-                placements.append(
-                    erdos_scheduler_pb2.Placement(
-                        worker_id=placement.worker_id,
-                        application_id=request.id,
-                        task_id=placement.task.stage_id,
-                        cores=1,
+                    # NOTE: (DG) Moved the placements.append() into the IF
+                    # resources = placement.execution_strategy.resources
+                    placements.append(
+                        erdos_scheduler_pb2.Placement(
+                            worker_id=placement.worker_id,
+                            application_id=request.id,
+                            task_id=placement.task.stage_id,
+                            cores=1,
+                        )
                     )
-                )
-        self._placements[request.id] = self._placements[request.id][clip_at + 1 :]
+        self._placements[request.id] = self._placements[request.id][clip_at + 1:]
         self._logger.info(
-            "Constructed %s placements at time %s for application with ID %s.",
+            "[%s] Constructed %s placements for application with ID %s.",
+            sim_time,
             len(placements),
-            request.timestamp,
             request.id,
         )
         return erdos_scheduler_pb2.GetPlacementsResponse(
             success=True,
             placements=placements,
-            message=f"Constructed {len(placements)} "
-            f"placements at time {request.timestamp}.",
+            message=f"[{sim_time}] Constructed {len(placements)} "
+            f"placements.",
         )
 
     # Function to pop tasks from queue based on actual completion time
@@ -1060,12 +1314,12 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                 top_item = self._tasks_marked_for_completion._queue[0][1]
 
                 # Check if top item's timestamp is reached or passed by current time
-                current_time = EventTime(int(time.time()), EventTime.Unit.US)
+                current_time = EventTime(int(time.time()), EventTime.Unit.US) - self._initialization_time
                 if top_item.timestamp <= current_time.time:
                     # Pop the top item
                     popped_item = self._tasks_marked_for_completion.get()
                     self._logger.info(
-                        "Removing task from pending completion queue at time: %s. "
+                        "[%s] Removing task from pending completion queue. "
                         "Task details: %s",
                         current_time,
                         popped_item.task,
@@ -1075,6 +1329,28 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                     # Also release the task from the scheduler service
                     popped_item.task.update_remaining_time(EventTime.zero())
                     popped_item.task.finish(current_time)
+
+                    # Mark task graph completed
+                    task_graph = self._workload.get_task_graph(popped_item.task.task_graph)
+                    if task_graph is None:
+                        self._logger.error(f"[{current_time}] Taskgraph for task {popped_item.task} is None")
+                        raise RuntimeError(f"[{current_time}] Taskgraph for task {popped_item.task} is None")
+                    if task_graph.is_complete():
+                        self._logger.info(f"[{current_time}] Finished task_graph {task_graph}")
+                        if task_graph.deadline < current_time:
+                            self._logger.info(f"[{current_time}] Missed task_graph {task_graph} deadline")
+                            self._total_taskgraphs_missed += 1
+                        else:
+                            self._logger.info(f"[{current_time}] Met task_graph {task_graph} deadline")
+                            self._total_taskgraphs_met += 1
+                        self._logger.info(
+                            "[%s] RUN_STATS (registered, met, missed, cancelled): %s, %s, %s, %s",
+                            current_time,
+                            self._total_taskgraphs_registered,
+                            self._total_taskgraphs_met,
+                            self._total_taskgraphs_missed,
+                            self._total_taskgraphs_cancelled,
+                            )
 
                     # Run the scheduler since the Workload has changed.
                     await self.run_scheduler()
