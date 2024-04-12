@@ -699,65 +699,66 @@ void DiscretizationSelectorOptimizationPass::runPass(
   //             - minOccupancyTime] << std::endl;
   // }
 
-  // changing the STRL expressions
+  // changing the STRL expressions 
+  // for (auto &[discreteTimeRange, discreteGranularity] : timeRangeToGranularities)
   // Find Max expressions over NCK and remove NCK expressions with redundant
   // start times
-  for (auto &[discreteTimeRange, discreteGranularity] :
-       timeRangeToGranularities) {
-    auto startTime = discreteTimeRange.first;
-    auto endTime = discreteTimeRange.second;
-    for (auto maxNckExpr : maxOverNckExprs) {
-      // find ncks within startTime and endTime for this Max expr
-      std::vector<ExpressionPtr> ncksWithinTimeRange;
+  {
+    TETRISCHED_SCOPE_NECESSARY_TIMER("DiscretizationSelectorOptimizationPass::runPass:NckRemoval");
+    for (auto maxNckExpr : maxOverNckExprs){
+      std::vector<ExpressionPtr> savedChildren;
+      // only keep one nck within every time range
       auto expressionChildren = maxNckExpr->getChildren();
-      ExpressionPtr minStartTimeNckExpr = nullptr;
-      ExpressionPtr prevSolutionNckExpr = nullptr;
-      for (auto child = expressionChildren.rbegin();
-           child != expressionChildren.rend(); ++child) {
-        auto startTimeNck = (*child)->getTimeBounds().startTimeRange.first;
-        if (startTimeNck >= startTime && startTimeNck < endTime) {
-          ncksWithinTimeRange.push_back(*child);
-          if (prevSolutionNckExpr == nullptr &&
-              (*child)->isPreviouslySatisfied()) {
-            prevSolutionNckExpr = *child;
-          }
-          if (minStartTimeNckExpr != nullptr) {
-            if (minStartTimeNckExpr->getTimeBounds().startTimeRange.first >
-                startTimeNck) {
+      auto child = expressionChildren.begin();
+      for (auto &[discreteTimeRange, discreteGranularity] : timeRangeToGranularities)
+      {
+        auto startTime = discreteTimeRange.first;
+        auto endTime = discreteTimeRange.second;
+        // find ncks within startTime and endTime for this Max expr
+        // std::vector<ExpressionPtr> ncksWithinTimeRange;
+        
+        ExpressionPtr minStartTimeNckExpr = nullptr;
+        ExpressionPtr prevSolutionNckExpr = nullptr;
+        for (; child != expressionChildren.end(); ++child) {
+          auto startTimeNck = (*child)->getTimeBounds().startTimeRange.first;
+          if (startTimeNck >= startTime && startTimeNck < endTime) {
+            // ncksWithinTimeRange.push_back(*child);
+            if (prevSolutionNckExpr == nullptr &&
+                (*child)->isPreviouslySatisfied()) {
+              prevSolutionNckExpr = *child;
+              // break;
+            }
+            if (minStartTimeNckExpr != nullptr) {
+              if (minStartTimeNckExpr->getTimeBounds().startTimeRange.first >
+                  startTimeNck) {
+                minStartTimeNckExpr = *child;
+              }
+            } else {
               minStartTimeNckExpr = *child;
             }
-          } else {
-            minStartTimeNckExpr = *child;
+          } else{
+            if (startTimeNck < startTime)
+            {
+              throw exceptions::RuntimeException("No ncks for MAX expression: NckExpr: NckExpr(" + child->get()->getId() + ", " + child->get()->getName() + ")");
+            }
+            break;
           }
         }
-      }
-      ExpressionPtr chosenNckExpr = nullptr;
-      if (prevSolutionNckExpr != nullptr) {
-        chosenNckExpr = prevSolutionNckExpr;
-        // std::cout << "\t ***** "
-        //           << "[" << minOccupancyTime << "]"
-        //           << "[DiscretizationSelectorOptimizationPassDiscreteTime]
-        //           Not Removing Previous Solution: "
-        //           << chosenNckExpr->getDescriptiveName() << " Start Time: "
-        //           << chosenNckExpr->getTimeBounds().startTimeRange.first <<
-        //           std::endl;
-      } else {
-        chosenNckExpr = minStartTimeNckExpr;
-      }
-      if (ncksWithinTimeRange.size() > 1) {
-        // if more than one nck found within the time range, remove it as only
+        ExpressionPtr chosenNckExpr = nullptr;
+        if (prevSolutionNckExpr != nullptr) {
+          chosenNckExpr = prevSolutionNckExpr;
+        } else {
+          chosenNckExpr = minStartTimeNckExpr;
+        }
         // one nck within granularity is sufficient. Nck with minimum start
-        // time is kept within this time range
-        for (auto redundantNckExpr : ncksWithinTimeRange) {
-          if (redundantNckExpr->getId() != chosenNckExpr->getId()) {
-            maxNckExpr->removeChild(redundantNckExpr);
-            // std::cout << "[DiscretizationSelectorOptimizationPassRemoveNck]
-            // Removing NCK: " + redundantNckExpr->getName() + " From Max: " +
-            // maxNckExpr->getName() << "Time Range: [" << startTime << ", "
-            // << endTime << "]";
-          }
+        if(chosenNckExpr != nullptr){
+          savedChildren.push_back(chosenNckExpr);
         }
       }
+      if (savedChildren.size() == 0){
+        throw exceptions::RuntimeException("No ncks for MAX expression: MaxExprName: MaxExpr(" + maxNckExpr->getId() + ", " + maxNckExpr->getName()+")");
+      }
+      maxNckExpr->replaceChildren(std::move(savedChildren));
     }
   }
 }

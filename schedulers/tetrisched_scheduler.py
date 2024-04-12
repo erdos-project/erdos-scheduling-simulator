@@ -1277,7 +1277,7 @@ class TetriSchedScheduler(BaseScheduler):
                 # choice of this Task, and collate them under a MaxExpression.
                 task_choose_expressions = []
                 choice_placement_times_and_rewards = []
-                for placement_time, reward_for_this_placement in time_discretizations:
+                for placement_time, reward_for_this_placement in sorted(time_discretizations):
                     if placement_time < current_time:
                         # If the placement time is in the past, then we cannot
                         # place the task.
