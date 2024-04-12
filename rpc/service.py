@@ -17,9 +17,8 @@ import erdos_scheduler_pb2
 import erdos_scheduler_pb2_grpc
 import grpc
 from absl import app, flags
-from tpch_utils import get_all_stage_info_for_query, verify_and_relable_tpch_app_graph
-
 from schedulers import EDFScheduler, FIFOScheduler, TetriSchedScheduler
+from tpch_utils import get_all_stage_info_for_query, verify_and_relable_tpch_app_graph
 from utils import EventTime, setup_logging
 from workers import Worker, WorkerPool, WorkerPools
 from workload import (
@@ -273,6 +272,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         )
         self._initialized = False
         self._initialization_time = -1
+        self._last_schedule_invocation_time = EventTime.invalid()
         self._master_uri = None
 
         # The simulator types maintained by the Servicer.
@@ -372,6 +372,46 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         """Schedules the tasks that have been added to the Workload."""
         current_time = EventTime(int(time.time()), EventTime.Unit.US) - self._initialization_time
 
+        # Cumulate the resources from all the WorkerPools
+        for worker_pool in self._worker_pools.worker_pools:
+            worker_pool_resources = worker_pool.resources
+            for resource_name in set(
+                map(lambda value: value[0].name, worker_pool_resources.resources)
+            ):
+                resource = Resource(name=resource_name, _id="any")
+                self._logger.info(
+                    f"{current_time},WORKER_POOL_UTILIZATION,{worker_pool.id},"
+                    f"{resource_name},"
+                    f"{worker_pool_resources.get_allocated_quantity(resource)},"
+                    f"{worker_pool_resources.get_available_quantity(resource)}"
+                )
+        
+        # Get last schedule() invocation time, get time elapsed
+        if self._last_schedule_invocation_time == EventTime.invalid():
+            self._logger.warning(
+                "First invocation of schedule()? Setting time_elapsed to zero"
+                )
+            time_elapsed_since_last_schedule = EventTime.zero()
+        else:
+            time_elapsed_since_last_schedule = (
+                current_time - self._last_schedule_invocation_time
+            )
+        
+        # step up all tasks on the worker-pool to reflect correct remaining time
+        self._logger.info(
+            "[%s] Stepping for %s timesteps.",
+            current_time,
+            time_elapsed_since_last_schedule,
+        )
+        for worker_pool in self._worker_pools.worker_pools:
+            for task in worker_pool.step(
+                current_time, time_elapsed_since_last_schedule):
+                self._logger.info(
+                    "[%s] Task %s was now found complete.",
+                    current_time,
+                    task,
+                )
+
         async with self._scheduler_running_lock:
             if self._scheduler_running:
                 self._logger.error(
@@ -387,6 +427,9 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             len(self._workload.task_graphs),
             len(self._worker_pool.workers),
         )
+
+        # Update _last_schedule_invocation_time
+        self._last_schedule_invocation_time = current_time
 
         # TODO (Sukrit): Change this to a better implementation.
         # Let's do some simple scheduling for now, that gives a fixed number of
@@ -624,7 +667,8 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             request.memory,
         )
         driver_resources = Resources(
-            resource_vector={Resource(name="Slot_CPU", _id="any"): 1}
+            resource_vector={Resource(name="Slot_CPU", _id="any"): 1},
+            _logger=self._logger,
         )
         driver_job = Job(
             name=request.id,
@@ -821,7 +865,8 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         # Construct all the Tasks for the TaskGraph.
         task_ids_to_task: Mapping[int, Task] = {}
         default_resource = Resources(
-            resource_vector={Resource(name="Slot_CPU", _id="any"): 20}
+            resource_vector={Resource(name="Slot_CPU", _id="any"): 20},
+            _logger=self._logger,
         )
         default_runtime = EventTime(
             math.ceil(20 * FLAGS.spark_task_duration_multiplier),
@@ -909,7 +954,8 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                                                 Resource(
                                                     name="Slot_CPU", _id="any"
                                                 ): task_slots
-                                            }
+                                            },
+                                            _logger=self._logger,
                                         )
                                     ),
                                     batch_size=1,
@@ -1139,9 +1185,12 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         # them to do multi-dimensional packing using STRL.
         cpu_resource = Resource(name="Slot_CPU")
         # TODO: (DG) Override the request.cores to avoid scaling up physical setup
-        worker_resources = Resources(resource_vector={
-            cpu_resource: request.cores if not FLAGS.override_worker_cpu_count
-            else 640}
+        worker_resources = Resources(
+            resource_vector={
+                cpu_resource: request.cores if not FLAGS.override_worker_cpu_count
+                else 640
+                },
+            _logger=self._logger,
             )
         self._logger.debug(
             "[%s] Successfully constructed the resources for the worker %s: %s.",
@@ -1154,6 +1203,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         worker = Worker(
             name=request.id,
             resources=worker_resources,
+            _logger=self._logger,
         )
         self._worker_pool.add_workers([worker])
 
@@ -1319,8 +1369,35 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                 # Only SCHEDULED -> RUNNING transition is allowed.
                 if task.state == TaskState.SCHEDULED:
                     try:
-                        # add worker_pool start
-                        task.start(sim_time)
+                        # Initialize the task at the given placement time,
+                        # and place it on the WorkerPool.
+                        worker_pool = self._worker_pools.get_worker_pool(
+                            task_placement.worker_pool_id
+                            )
+                        assert (
+                            worker_pool is not None
+                        ), f"No WorkerPool found with ID: {task_placement.worker_pool_id}."
+                        success = worker_pool.place_task(
+                            task,
+                            execution_strategy=task_placement.execution_strategy,
+                            worker_id=task_placement.worker_id,
+                        )
+                        if success:
+                            task.start(sim_time)
+                            self._logger.info(
+                                "[%s] Successfully started task: %s on worker_pool: %s",
+                                sim_time,
+                                task,
+                                worker_pool,
+                            )
+                        else:
+                            self._logger.warning(
+                                "[%s] Could not start task: %s on worker_id: %s and execution strategy: %s",
+                                sim_time,
+                                task,
+                                task_placement.worker_id,
+                                task_placement.execution_strategy,
+                            )
                     except ValueError as e:
                         self._logger.error(f"[{sim_time}] start() errored for task: {task}")
                         self._logger.error(f"[{sim_time}] Error: {e}")
@@ -1389,6 +1466,14 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                         current_time,
                         popped_item.task,
                     )
+
+                    # Free the resources on the worker pool for the completed task
+                    task_placed_at_worker_pool = self._worker_pools.get_worker_pool(
+                        popped_item.task.worker_pool_id
+                    )
+                    task_placed_at_worker_pool.remove_task(
+                        current_time=current_time, task=popped_item.task
+                        )
 
                     # Mark the Task as completed.
                     # Also release the task from the scheduler service
