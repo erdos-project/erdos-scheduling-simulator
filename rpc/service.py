@@ -4,10 +4,9 @@ import math
 import os
 import sys
 import time
-from collections import defaultdict
 from concurrent import futures
 from operator import attrgetter
-from typing import Mapping, Sequence
+from typing import Dict, Mapping, Sequence
 from urllib.parse import urlparse
 
 sys.path.append(
@@ -349,10 +348,17 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
 
         # Placement information maintained by the servicer.
         # The placements map the application IDs to the Placement retrieved from the
-        # scheduler. The placements are automatically clipped at the time of informing
-        # the framework of applying them to the executors.
-        # NOTE (Sukrit): This must always be sorted by the Placement time.
-        self._placements: Mapping[str, Sequence[Placement]] = defaultdict(list)
+        # scheduler.
+        # NOTE: (DG) This is a new nested dict implementation.
+        # First level of dict is a mapping from app-id to all tasks in that app-id
+        # Second level of dict is a mapping from tasks to exact placement.
+        # TODO: (DG) This will no longer be ordered by time, so the check needs to be
+        # done for all tasks? Also, we might need to delete the placement once executed?
+        self._placements: Dict[str, Dict[str, Placement]] = {}
+
+        # _executed_placements keep a track of previously completed placements since
+        # placements are deleted after being released. Can be used for debugging.
+        self._executed_placements: Dict[str, Placement] = {}
 
         # Additional task information maintained by the servicer
         self._tasks_marked_for_completion = PriorityQueue()
@@ -386,16 +392,16 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         # Let's do some simple scheduling for now, that gives a fixed number of
         # executors to all the available applications in intervals of 10 seconds.
         if len(self._workload.task_graphs) >= 1:
-            placements = self._scheduler.schedule(
+            scheduler_placements = self._scheduler.schedule(
                 sim_time=EventTime(current_time.time, EventTime.Unit.US),
                 workload=self._workload,
                 worker_pools=self._worker_pools,
             )
             
-            # Filter the placements that are now in CANCEL_TASK state.
+            # Filter the scheduler_placements that are now in CANCEL_TASK state.
             cancel_task_placements = list(filter(
                 lambda p: p.placement_type == Placement.PlacementType.CANCEL_TASK,
-                placements,
+                scheduler_placements,
             ))
             self._logger.info(
                 "[%s] Received %s tasks to be cancelled: %s.",
@@ -405,13 +411,27 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             )
             # Issue task cancellations for identified tasks and taskgraphs so that
             # the taskgraphs are no longer in consideration
-            # TODO: (DG) Check with Sukrit if we need to iterate over sorted cancel_placements
             for placement in cancel_task_placements:
-                # Add the task to self._placements so that we can stop responding to RPC
-                # calls from its driver based on CANCEL_TASK type
+                # Update the task placement decision so that we can stop
+                # responding to RPC calls from its driver based on CANCEL_TASK type
 
-                # TODO: (DG) Check if this is the correct usage
-                self._placements[placement.task.task_graph].append(placement)
+                if placement.task.task_graph not in self._placements:
+                    self._placements[placement.task.task_graph] = {}
+                    self._logger.warn(
+                        "[%s] Came to cancel a placement but taskgraph %s was not in "
+                        "self._placements. Creating an empty dict entry.",
+                        current_time,
+                        placement.task.task_graph,
+                    )
+                self._placements[placement.task.task_graph][placement.task] = placement
+                self._logger.info(
+                        "[%s] Added cancel placement to taskgraph %s for task %s. "
+                        "Placement: %s",
+                        current_time,
+                        placement.task.task_graph,
+                        placement.task,
+                        placement,
+                    )
 
                 # Since even one task getting cancelled, implies task-graph
                 # cancellation, we add the task-graph to cancelled set
@@ -460,22 +480,39 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
 
                 # TODO: (DG): Ensure that task-graph is removed from the workload and
                 # doesn't show up in the next iteration of tetrisched scheduler?
-                
             
-            # Filter the placements that are not of type PLACE_TASK and that have not
-            # been placed.
+            # Filter the scheduler_placements that are not of type PLACE_TASK and 
+            # have not been placed.
             filtered_placements = filter(
                 lambda p: p.placement_type == Placement.PlacementType.PLACE_TASK
                 and p.is_placed(),
-                placements,
+                scheduler_placements,
             )
             for placement in sorted(
                 filtered_placements, key=attrgetter("placement_time")
             ):
-                self._placements[placement.task.task_graph].append(placement)
+                if placement.task.task_graph not in self._placements:
+                    self._placements[placement.task.task_graph] = {}
+                    self._logger.info(
+                        "[%s] Want to add a placement but taskgraph %s was not in "
+                        "self._placements. Creating an empty dict entry.",
+                        current_time,
+                        placement.task.task_graph,
+                    )
+                self._placements[placement.task.task_graph][placement.task] = placement
+                self._logger.info(
+                    "[%s] Added new placement to taskgraph %s for task %s. "
+                    "Placement: %s",
+                    current_time,
+                    placement.task.task_graph,
+                    placement.task,
+                    placement,
+                    )
                 # Schedule the task here since marking it as running requires it to be
                 # scheduled before. We mark it to be running when we inform the
                 # framework of the placement.
+
+                # TODO: (DG) ASK - dont think tasks need to be marked as unscheduled on cancellation?
                 placement.task.schedule(
                     time=placement.placement_time,
                     placement=placement,
@@ -790,7 +827,6 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             math.ceil(20 * FLAGS.spark_task_duration_multiplier),
             EventTime.Unit.US
             )
-        
 
         for i, task_dependency in enumerate(request.dependencies):
             framework_task = task_dependency.key
@@ -978,7 +1014,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         return erdos_scheduler_pb2.RegisterTaskGraphResponse(
             success=True,
             message=f"[{sim_time}] Application ID {request.id} with name "
-            f"{request.name} and deadline {request.deadline} registered successfully!",
+            f"{request.name} and deadline {task_graph.deadline} registered successfully!",
             num_executors=FLAGS.initial_executors,
         )
 
@@ -1249,50 +1285,79 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         if request.id not in self._placements:
             self._logger.warning(
                 "[%s] Trying to get placements for %s, but the application "
-                "was not registered with the backend yet.",
+                "was not registered with the backend yet OR was cancelled.",
                 sim_time,
                 request.id,
             )
-
+            return erdos_scheduler_pb2.GetPlacementsResponse(
+                success=False, 
+                message=f"[{sim_time}] Trying to get placements for "
+                f"{request.id}, but the application was not registered with the "
+                f"backend yet OR was cancelled."
+            )
+        
         # Construct and return the placements.,
         placements = []
-        clip_at = -1
-        for index, placement in enumerate(self._placements[request.id]):
-            if placement.placement_time <= sim_time:
-                clip_at = index
+        
+        # Keep track of app_ids and task_names to delete after placements are issued
+        to_delete = []
+        
+        for task in self._placements[request.id].keys():
+            task_placement = self._placements[request.id][task]
+            if task_placement.placement_time <= sim_time:
                 # TODO: (DG) Due to small dataset size, each stage automatically gets
                 # one data partition i.e. one task and one executor. But later for
                 # large datasets, we might leverage use_profile_to_scale_executors
                 # to modify the placement before it is sent
                 self._logger.info(
-                    f"[{sim_time}] Going to set placement.task to run: {placement}"
+                    f"[{sim_time}] Going to set placement.task to run: {task_placement}"
                 )
 
                 # Mark the Task as RUNNING.
-                # TODO: (DG) Fix it better. Why are repeated invocations happening?
                 # Right now we don't run task.start() if
                 # task is already in RUNNING or CANCELLED state.
                 # Only SCHEDULED -> RUNNING transition is allowed.
-                if placement.task.state == TaskState.SCHEDULED:
+                if task.state == TaskState.SCHEDULED:
                     try:
-                        placement.task.start(sim_time)
+                        # add worker_pool start
+                        task.start(sim_time)
                     except ValueError as e:
-                        # TODO: (DG) Fix the error where task already in running state is attempted to be
-                        # restarted. Need to remove already executed placements?
-                        self._logger.error(f"[{sim_time}] start() errored for task: {placement.task}")
+                        self._logger.error(f"[{sim_time}] start() errored for task: {task}")
                         self._logger.error(f"[{sim_time}] Error: {e}")
 
                     # NOTE: (DG) Moved the placements.append() into the IF
                     # resources = placement.execution_strategy.resources
                     placements.append(
                         erdos_scheduler_pb2.Placement(
-                            worker_id=placement.worker_id,
+                            worker_id=task_placement.worker_id,
                             application_id=request.id,
-                            task_id=placement.task.stage_id,
+                            task_id=task_placement.task.stage_id,
                             cores=1,
                         )
                     )
-        self._placements[request.id] = self._placements[request.id][clip_at + 1:]
+
+                    # Add to delete list for clearing placement after it has been released
+                    to_delete.append((request.id, task))
+                    self._logger.debug(
+                        "[%s] Added tuple (%s, %s) to to_delete list.",
+                        sim_time,
+                        request.id,
+                        task,
+                    )
+                    
+                    # Add task_placement to executed_placements since it is now complete
+                    self._executed_placements[task] = task_placement
+
+        # Remove issued placements from self._placements
+        for app_id, task_name in to_delete:
+            del self._placements[app_id][task_name]
+            self._logger.info(
+                "[%s] Removed placement (app_id=%s, task_name=%s) from self._placements",
+                sim_time,
+                app_id,
+                task_name,
+                )
+        
         self._logger.info(
             "[%s] Constructed %s placements for application with ID %s.",
             sim_time,
@@ -1336,12 +1401,12 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                         self._logger.error(f"[{current_time}] Taskgraph for task {popped_item.task} is None")
                         raise RuntimeError(f"[{current_time}] Taskgraph for task {popped_item.task} is None")
                     if task_graph.is_complete():
-                        self._logger.info(f"[{current_time}] Finished task_graph {task_graph}")
+                        self._logger.info(f"[{current_time}] Finished task_graph {task_graph.name}")
                         if task_graph.deadline < current_time:
-                            self._logger.info(f"[{current_time}] Missed task_graph {task_graph} deadline")
+                            self._logger.info(f"[{current_time}] Missed deadline for task_graph {task_graph.name}")
                             self._total_taskgraphs_missed += 1
                         else:
-                            self._logger.info(f"[{current_time}] Met task_graph {task_graph} deadline")
+                            self._logger.info(f"[{current_time}] Met deadline for task_graph {task_graph.name}")
                             self._total_taskgraphs_met += 1
                         self._logger.info(
                             "[%s] RUN_STATS (registered, met, missed, cancelled): %s, %s, %s, %s",
