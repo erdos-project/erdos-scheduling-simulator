@@ -1129,24 +1129,48 @@ void CapacityConstraintMapPurgingOptimizationPass::clean() { cliques.clear(); }
 
 /* Methods for OptimizationPassRunner */
 OptimizationPassRunner::OptimizationPassRunner(
-    bool debug, bool enableDynamicDiscretization, Time minDiscretization,
-    Time maxDiscretization, float maxOccupancyThreshold,
-    bool finerDiscretizationAtPrevSolution, Time finerDiscretizationWindow)
-    : debug(debug), enableDynamicDiscretization(enableDynamicDiscretization) {
+    bool debug, OptimizationPassConfigPtr optConfig)
+    : debug(debug), optConfig(optConfig)
+{
   // Register the Critical Path optimization pass.
-  registeredPasses.push_back(std::make_shared<CriticalPathOptimizationPass>());
+  // registeredPasses.push_back(std::make_shared<CriticalPathOptimizationPass>());
 
-  if (enableDynamicDiscretization) {
-    // Register the DiscretizationGenerator pass.
-    registeredPasses.push_back(
-        std::make_shared<DiscretizationSelectorOptimizationPass>(
-            minDiscretization, maxDiscretization, maxOccupancyThreshold,
-            finerDiscretizationAtPrevSolution, finerDiscretizationWindow));
+  // if (enableDynamicDiscretization) {
+  //   // Register the DiscretizationGenerator pass.
+  //   registeredPasses.push_back(
+  //       std::make_shared<DiscretizationSelectorOptimizationPass>(
+  //           minDiscretization, maxDiscretization, maxOccupancyThreshold,
+  //           finerDiscretizationAtPrevSolution, finerDiscretizationWindow));
+  // }
+
+  // // Register the CapacityConstraintMapPurging optimization pass.
+  // registeredPasses.push_back(
+  //     std::make_shared<CapacityConstraintMapPurgingOptimizationPass>());
+}
+
+void OptimizationPassRunner::addOptimizationPass(OptimizationPassCategory optPass) {
+  // Register the Critical Path optimization pass.
+
+  switch (optPass)
+  {
+    case OptimizationPassCategory::CRITICAL_PATH_PASS:
+      registeredPasses.push_back(std::make_shared<CriticalPathOptimizationPass>());
+      break;
+    case OptimizationPassCategory::DYNAMIC_DISCRETIZATION_PASS:
+      if (optConfig == nullptr) {
+        optConfig = std::make_shared<OptimizationPassConfig>();
+      }
+      registeredPasses.push_back(std::make_shared<DiscretizationSelectorOptimizationPass>(
+          optConfig->minDiscretization, optConfig->maxDiscretization, optConfig->maxOccupancyThreshold,
+          optConfig->finerDiscretizationAtPrevSolution, optConfig->finerDiscretizationWindow));
+      break;
+    case OptimizationPassCategory::CAPACITY_CONSTRAINT_PURGE_PASS:
+      registeredPasses.push_back(std::make_shared<CapacityConstraintMapPurgingOptimizationPass>());
+      break;
+
+    default:
+      break;
   }
-
-  // Register the CapacityConstraintMapPurging optimization pass.
-  registeredPasses.push_back(
-      std::make_shared<CapacityConstraintMapPurgingOptimizationPass>());
 }
 
 void OptimizationPassRunner::runPreTranslationPasses(

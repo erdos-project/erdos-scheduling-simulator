@@ -44,32 +44,32 @@ class Scheduler {
 
  public:
   /// Initialize the scheduler with a solver backend.
-  Scheduler(Time discretization, SolverBackendType solverBackend,
-            std::string logDir = "./", bool enableDynamicDiscretization = false,
-            Time maxDiscretization = 5, float maxOccupancyThreshold = 0.8,
-            bool finerDiscretizationAtPrevSolution = false,
-            Time finerDiscretizationWindow = 5);
+   Scheduler(Time discretization, SolverBackendType solverBackend,
+             std::string logDir = "./", OptimizationPassConfigPtr optConfig = nullptr);
 
-  /// Registers the STRL expression for the scheduler to schedule from
-  /// and parses it to populate the SolverModel.
-  void registerSTRL(
-      ExpressionPtr expression, Partitions availablePartitions,
-      Time currentTime, SchedulerConfigPtr schedulerConfig,
-      std::vector<std::pair<TimeRange, Time>> timeRangeToGranularities = {});
+   /// Add OptimizationPasses before STRL registration
+   void addOptimizationPass(OptimizationPassCategory optPass);
 
-  /// Invokes the solver to schedule the registered STRL expression
-  /// on the given partitions at the given time.
-  /// Use expression->getSolution() to retrieve the solution.
-  void schedule(Time currentTime);
+   /// Registers the STRL expression for the scheduler to schedule from
+   /// and parses it to populate the SolverModel.
+   void registerSTRL(
+       ExpressionPtr expression, Partitions availablePartitions,
+       Time currentTime, SchedulerConfigPtr schedulerConfig,
+       std::vector<std::pair<TimeRange, Time>> timeRangeToGranularities = {});
 
-  /// Retrieve the solution from the last invocation of the solver.
-  SolverSolutionPtr getLastSolverSolution() const;
+   /// Invokes the solver to schedule the registered STRL expression
+   /// on the given partitions at the given time.
+   /// Use expression->getSolution() to retrieve the solution.
+   void schedule(Time currentTime);
 
-  /// Exports the model from the last invocation of the solver.
-  void exportLastSolverModel(const std::string &fileName) const;
+   /// Retrieve the solution from the last invocation of the solver.
+   SolverSolutionPtr getLastSolverSolution() const;
 
-  /// Exports the solution from the last invocation of the solver.
-  void exportLastSolverSolution(const std::string &fileName) const;
+   /// Exports the model from the last invocation of the solver.
+   void exportLastSolverModel(const std::string &fileName) const;
+
+   /// Exports the solution from the last invocation of the solver.
+   void exportLastSolverSolution(const std::string &fileName) const;
 };
 }  // namespace tetrisched
 
