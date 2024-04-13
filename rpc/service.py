@@ -17,8 +17,9 @@ import erdos_scheduler_pb2
 import erdos_scheduler_pb2_grpc
 import grpc
 from absl import app, flags
-from schedulers import EDFScheduler, FIFOScheduler, TetriSchedScheduler
 from tpch_utils import get_all_stage_info_for_query, verify_and_relable_tpch_app_graph
+
+from schedulers import EDFScheduler, FIFOScheduler, TetriSchedScheduler
 from utils import EventTime, setup_logging
 from workers import Worker, WorkerPool, WorkerPools
 from workload import (
@@ -272,7 +273,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         )
         self._initialized = False
         self._initialization_time = -1
-        self._last_schedule_invocation_time = EventTime.invalid()
+        self._last_step_up_time = EventTime.zero()
         self._master_uri = None
 
         # The simulator types maintained by the Servicer.
@@ -372,46 +373,6 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         """Schedules the tasks that have been added to the Workload."""
         current_time = EventTime(int(time.time()), EventTime.Unit.US) - self._initialization_time
 
-        # Cumulate the resources from all the WorkerPools
-        for worker_pool in self._worker_pools.worker_pools:
-            worker_pool_resources = worker_pool.resources
-            for resource_name in set(
-                map(lambda value: value[0].name, worker_pool_resources.resources)
-            ):
-                resource = Resource(name=resource_name, _id="any")
-                self._logger.info(
-                    f"{current_time},WORKER_POOL_UTILIZATION,{worker_pool.id},"
-                    f"{resource_name},"
-                    f"{worker_pool_resources.get_allocated_quantity(resource)},"
-                    f"{worker_pool_resources.get_available_quantity(resource)}"
-                )
-        
-        # Get last schedule() invocation time, get time elapsed
-        if self._last_schedule_invocation_time == EventTime.invalid():
-            self._logger.warning(
-                "First invocation of schedule()? Setting time_elapsed to zero"
-                )
-            time_elapsed_since_last_schedule = EventTime.zero()
-        else:
-            time_elapsed_since_last_schedule = (
-                current_time - self._last_schedule_invocation_time
-            )
-        
-        # step up all tasks on the worker-pool to reflect correct remaining time
-        self._logger.info(
-            "[%s] Stepping for %s timesteps.",
-            current_time,
-            time_elapsed_since_last_schedule,
-        )
-        for worker_pool in self._worker_pools.worker_pools:
-            for task in worker_pool.step(
-                current_time, time_elapsed_since_last_schedule):
-                self._logger.info(
-                    "[%s] Task %s was now found complete.",
-                    current_time,
-                    task,
-                )
-
         async with self._scheduler_running_lock:
             if self._scheduler_running:
                 self._logger.error(
@@ -428,8 +389,26 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             len(self._worker_pool.workers),
         )
 
-        # Update _last_schedule_invocation_time
-        self._last_schedule_invocation_time = current_time
+        # Cumulate the resources from all the WorkerPools
+        for worker_pool in self._worker_pools.worker_pools:
+            worker_pool_resources = worker_pool.resources
+            for resource_name in set(
+                map(lambda value: value[0].name, worker_pool_resources.resources)
+            ):
+                resource = Resource(name=resource_name, _id="any")
+                self._logger.info(
+                    f"{current_time},WORKER_POOL_UTILIZATION,{worker_pool.id},"
+                    f"{resource_name},"
+                    f"{worker_pool_resources.get_allocated_quantity(resource)},"
+                    f"{worker_pool_resources.get_available_quantity(resource)}"
+                )
+        
+        # Perform worker pool step
+        self._logger.info(
+            "[%s] Need to perform a step before schedule().",
+            current_time,
+            )
+        self.PerformWorkerPoolStep(sim_time=current_time)
 
         # TODO (Sukrit): Change this to a better implementation.
         # Let's do some simple scheduling for now, that gives a fixed number of
@@ -460,7 +439,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
 
                 if placement.task.task_graph not in self._placements:
                     self._placements[placement.task.task_graph] = {}
-                    self._logger.warn(
+                    self._logger.warning(
                         "[%s] Came to cancel a placement but taskgraph %s was not in "
                         "self._placements. Creating an empty dict entry.",
                         current_time,
@@ -542,15 +521,26 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                         current_time,
                         placement.task.task_graph,
                     )
-                self._placements[placement.task.task_graph][placement.task] = placement
-                self._logger.info(
-                    "[%s] Added new placement to taskgraph %s for task %s. "
-                    "Placement: %s",
-                    current_time,
-                    placement.task.task_graph,
-                    placement.task,
-                    placement,
+                if placement.task not in self._placements[placement.task.task_graph]:
+                    self._logger.info(
+                        "[%s] Adding new placement to taskgraph %s for task %s. "
+                        "Placement: %s",
+                        current_time,
+                        placement.task.task_graph,
+                        placement.task,
+                        placement,
                     )
+                else:
+                    self._logger.info(
+                        "[%s] Updating an existing placement in taskgraph %s for task %s. "
+                        "Placement: %s",
+                        current_time,
+                        placement.task.task_graph,
+                        placement.task,
+                        placement,
+                    )
+                self._placements[placement.task.task_graph][placement.task] = placement
+                
                 # Schedule the task here since marking it as running requires it to be
                 # scheduled before. We mark it to be running when we inform the
                 # framework of the placement.
@@ -704,7 +694,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                 if worker.can_accomodate_strategy(execution_strategy):
                     # This Worker can accomodate the Driver, we assign it here.
                     placement_found = True
-                    self._worker_pool.place_task(driver, execution_strategy, worker.id)
+                    # self._worker_pool.place_task(driver, execution_strategy, worker.id)
 
                     # Update the Task's state and placement information.
                     placement_time = sim_time
@@ -763,7 +753,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
 
         # Deregister the driver.
         driver = self._drivers[request.id]
-        self._worker_pool.remove_task(completion_time, driver)
+        # self._worker_pool.remove_task(completion_time, driver)
         driver.finish(completion_time)
         del self._drivers[request.id]
         return erdos_scheduler_pb2.DeregisterDriverResponse(
@@ -1297,6 +1287,15 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             matched_task,
         )
 
+        if sim_time.time > actual_task_completion_time:
+            self._logger.warning(
+                "[%s] Task exceeded actual completion time by %s, "
+                "Task details: %s",
+                sim_time.time,
+                (sim_time.time - actual_task_completion_time),
+                matched_task,
+                )
+
         # TODO DG: remaining_time assumes execution of the slowest strategy
         # Should be updated to reflect correct remaining_time based on chosen strategy?
 
@@ -1377,6 +1376,30 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                         assert (
                             worker_pool is not None
                         ), f"No WorkerPool found with ID: {task_placement.worker_pool_id}."
+                        
+                        # Display worker pool utilization before placing task
+                        # Cumulate the resources from all the WorkerPools
+                        for worker_pool in self._worker_pools.worker_pools:
+                            worker_pool_resources = worker_pool.resources
+                            for resource_name in set(
+                                map(lambda value: value[0].name, worker_pool_resources.resources)
+                            ):
+                                resource = Resource(name=resource_name, _id="any")
+                                self._logger.info(
+                                    f"{sim_time},WORKER_POOL_UTILIZATION,{worker_pool.id},"
+                                    f"{resource_name},"
+                                    f"{worker_pool_resources.get_allocated_quantity(resource)},"
+                                    f"{worker_pool_resources.get_available_quantity(resource)}"
+                                )
+                                
+                        # Perform worker pool step
+                        self._logger.info(
+                            "[%s] Need to perform a step before place_task().",
+                            sim_time,
+                        )
+                        self.PerformWorkerPoolStep(sim_time=sim_time)
+                        
+                        # Place the task on the worker pool
                         success = worker_pool.place_task(
                             task,
                             execution_strategy=task_placement.execution_strategy,
@@ -1467,6 +1490,28 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                         popped_item.task,
                     )
 
+                    # Display worker pool utilization before removing task
+                    # Cumulate the resources from all the WorkerPools
+                    for worker_pool in self._worker_pools.worker_pools:
+                        worker_pool_resources = worker_pool.resources
+                        for resource_name in set(
+                            map(lambda value: value[0].name, worker_pool_resources.resources)
+                        ):
+                            resource = Resource(name=resource_name, _id="any")
+                            self._logger.info(
+                                f"{current_time},WORKER_POOL_UTILIZATION,{worker_pool.id},"
+                                f"{resource_name},"
+                                f"{worker_pool_resources.get_allocated_quantity(resource)},"
+                                f"{worker_pool_resources.get_available_quantity(resource)}"
+                            )
+
+                    # Perform worker pool step
+                    self._logger.info(
+                        "[%s] Need to perform a step before remove_task().",
+                        current_time,
+                        )
+                    self.PerformWorkerPoolStep(sim_time=current_time)
+
                     # Free the resources on the worker pool for the completed task
                     task_placed_at_worker_pool = self._worker_pools.get_worker_pool(
                         popped_item.task.worker_pool_id
@@ -1512,6 +1557,32 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             else:
                 # If the queue is empty, sleep for a short duration
                 await asyncio.sleep(0.1)  # TODO: Can adjust value, curr=0.1s
+
+    def PerformWorkerPoolStep(self, sim_time):
+        # Get time elapsed since last step up time
+        time_elapsed_since_last_step = (
+            sim_time - self._last_step_up_time
+        )
+        
+        # step up all tasks on the worker-pool to reflect correct remaining time
+        self._logger.info(
+            "[%s] Stepping for %s timesteps.",
+            sim_time,
+            time_elapsed_since_last_step,
+        )
+        for worker_pool in self._worker_pools.worker_pools:
+            # TODO: (DG) Check if this is correct. Why do we pass current time?
+            # Should pass last update time instead?
+            for task in worker_pool.step(
+                self._last_step_up_time, time_elapsed_since_last_step):
+                self._logger.info(
+                    "[%s] Task %s was now found complete.",
+                    sim_time,
+                    task,
+                )
+
+        # Update _last_step_up_time
+        self._last_step_up_time = sim_time
 
 
 async def serve():
