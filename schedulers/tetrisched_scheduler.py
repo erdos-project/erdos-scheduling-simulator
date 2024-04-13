@@ -223,7 +223,7 @@ class TetriSchedScheduler(BaseScheduler):
         self._opt_configuration.finerDiscretizationAtPrevSolution = finer_discretization_at_prev_solution
         self._opt_configuration.finerDiscretizationWindow = finer_discretization_window.to(EventTime.Unit.US).time
         
-        print(f"----- [PYTHON] {self._opt_configuration.toString()}")
+        # print(f"----- [PYTHON] {self._opt_configuration.toString()}")
         
         self._scheduler = tetrisched.Scheduler(
             self._time_discretization.time,
