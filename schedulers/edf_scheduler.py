@@ -50,6 +50,8 @@ class EDFScheduler(BaseScheduler):
             time=sim_time,
             preemption=self.preemptive,
             worker_pools=worker_pools,
+            debug=True,
+            scheduler_is_task_type=True,
         )
         task_description_string = [
             f"{t.unique_name} (" f"{t.deadline})" for t in tasks_to_be_scheduled
@@ -60,16 +62,17 @@ class EDFScheduler(BaseScheduler):
             f"deadlines were: {task_description_string}."
         )
 
-        if self.preemptive:
-            # Restart the state of the WorkerPool.
-            schedulable_worker_pools = deepcopy(worker_pools)
-        else:
-            # Create a virtual WorkerPool set to try scheduling decisions on.
-            schedulable_worker_pools = copy(worker_pools)
+        # if self.preemptive:
+        #     # Restart the state of the WorkerPool.
+        #     schedulable_worker_pools = deepcopy(worker_pools)
+        # else:
+        #     # Create a virtual WorkerPool set to try scheduling decisions on.
+        #     schedulable_worker_pools = copy(worker_pools)
+        schedulable_worker_pools = worker_pools
 
         for worker_pool in schedulable_worker_pools.worker_pools:
             self._logger.debug(
-                f"[{sim_time.time}] The state of {worker_pool} "
+                f"[{sim_time.time}] [BEGIN] The state of {worker_pool} "
                 f"is:{os.linesep} {os.linesep.join(worker_pool.get_utilization())}"
             )
 
@@ -151,7 +154,7 @@ class EDFScheduler(BaseScheduler):
             if is_task_placed:
                 for worker_pool in schedulable_worker_pools.worker_pools:
                     self._logger.debug(
-                        f"[{sim_time.time}] The state of {worker_pool} is:{os.linesep}"
+                        f"[{sim_time.time}] [END] The state of {worker_pool} is:{os.linesep}"
                         f"{os.linesep.join(worker_pool.get_utilization())}"
                     )
             else:

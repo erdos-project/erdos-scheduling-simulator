@@ -294,16 +294,19 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         self._scheduler_running_lock = asyncio.Lock()
         self._scheduler_running = False
         self._rerun_scheduler = False
+        self._scheduler_is_task_type = False
         if FLAGS.scheduler == "EDF":
             self._scheduler = EDFScheduler(
                 enforce_deadlines=FLAGS.enforce_deadlines,
                 _flags=FLAGS,
             )
+            self._scheduler_is_task_type = True
         elif FLAGS.scheduler == "FIFO":
             self._scheduler = FIFOScheduler(
                 enforce_deadlines=FLAGS.enforce_deadlines,
                 _flags=FLAGS,
             )
+            self._scheduler_is_task_type = True
         elif FLAGS.scheduler == "DAGSched":
             # --scheduler=TetriSched
             # --release_taskgraphs
@@ -343,7 +346,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                     ),
                 log_to_file=True,
             )
-
+            self._scheduler_is_task_type = not FLAGS.release_taskgraphs
         else:
             raise ValueError(f"Unknown scheduler {FLAGS.scheduler}.")
 
@@ -408,7 +411,14 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             "[%s] Need to perform a step before schedule().",
             current_time,
             )
-        self.PerformWorkerPoolStep(sim_time=current_time)
+        completed_tasks = self.PerformWorkerPoolStep(sim_time=current_time)
+        
+        # Finish all tasks that have now completed
+        for completed_task in completed_tasks:
+            self.CleanupTaskExecution(
+                task=completed_task,
+                sim_time=current_time
+                )
 
         # TODO (Sukrit): Change this to a better implementation.
         # Let's do some simple scheduling for now, that gives a fixed number of
@@ -550,6 +560,62 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                     time=placement.placement_time,
                     placement=placement,
                 )
+
+            
+            # Handle task placements that have returned with unplaced tasks
+            unplaced_placements = filter(
+                lambda p: p.placement_type == Placement.PlacementType.PLACE_TASK
+                and not p.is_placed(),
+                scheduler_placements,
+            )
+            for placement in unplaced_placements:
+                if placement.task.task_graph not in self._placements:
+                    self._logger.info(
+                        "[%s] taskgraph %s not found for task %s, couldn't invalidate it or"
+                        "it was previously invalidated.",
+                        current_time,
+                        placement.task.task_graph,
+                        placement.task,
+                    )
+                elif placement.task in self._placements[placement.task.task_graph]:
+                    self._logger.info(
+                        "[%s] Invalidated the placement (taskgraph %s and task %s)"
+                        "from self._placements along with entire taskgraph.",
+                        current_time,
+                        placement.task.task_graph,
+                        placement.task,
+                    )
+                    for task in self._placements[placement.task.task_graph]:
+                        self._logger.info(
+                            "[%s] Invalidating the placement for task %s "
+                            "from self._placements due to invalidation of %s.",
+                            current_time,
+                            task,
+                            placement.task,
+                        )
+                        # Unschedule the task
+                        if task.state is TaskState.SCHEDULED:
+                            task.unschedule(time=current_time)
+                        else:
+                            self._logger.warning(
+                                "[%s] Could not unschedule since task %s was "
+                                "found in state %s in during invalidation of %s.",
+                                current_time,
+                                task,
+                                task.state,
+                                placement.task,
+                            )
+                    # delete the taskgraph at once since we cant change size
+                    # of dict while iterating
+                    del self._placements[placement.task.task_graph]
+                else:
+                    self._logger.info(
+                        "[%s] Couldn't invalidate placement (taskgraph %s and task %s)."
+                        "It couldnt be found in self._placements.",
+                        current_time,
+                        placement.task.task_graph,
+                        placement.task,
+                    )
 
         scheduler_end_time = EventTime(int(time.time()), EventTime.Unit.US) - self._initialization_time
         self._logger.info(
@@ -1353,100 +1419,113 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         
         for task in self._placements[request.id].keys():
             task_placement = self._placements[request.id][task]
-            if task_placement.placement_time <= sim_time:
-                # TODO: (DG) Due to small dataset size, each stage automatically gets
-                # one data partition i.e. one task and one executor. But later for
-                # large datasets, we might leverage use_profile_to_scale_executors
-                # to modify the placement before it is sent
-                self._logger.info(
-                    f"[{sim_time}] Going to set placement.task to run: {task_placement}"
-                )
+            if task.state is TaskState.CANCELLED:
+                # Task cancelled, add to list to remove from self._placements
+                to_delete.append((request.id, task))
+            else:
+                if task_placement.placement_time <= sim_time:
+                    # TODO: (DG) Due to small dataset size, each stage automatically gets
+                    # one data partition i.e. one task and one executor. But later for
+                    # large datasets, we might leverage use_profile_to_scale_executors
+                    # to modify the placement before it is sent
+                    self._logger.info(
+                        f"[{sim_time}] Going to set placement.task to run: {task_placement}"
+                    )
 
-                # Mark the Task as RUNNING.
-                # Right now we don't run task.start() if
-                # task is already in RUNNING or CANCELLED state.
-                # Only SCHEDULED -> RUNNING transition is allowed.
-                if task.state == TaskState.SCHEDULED:
-                    try:
-                        # Initialize the task at the given placement time,
-                        # and place it on the WorkerPool.
-                        worker_pool = self._worker_pools.get_worker_pool(
-                            task_placement.worker_pool_id
+                    # Mark the Task as RUNNING.
+                    # Right now we don't run task.start() if
+                    # task is already in RUNNING or CANCELLED state.
+                    # Only SCHEDULED -> RUNNING transition is allowed.
+                    if task.state == TaskState.SCHEDULED:
+                        try:
+                            # Initialize the task at the given placement time,
+                            # and place it on the WorkerPool.
+                            worker_pool = self._worker_pools.get_worker_pool(
+                                task_placement.worker_pool_id
+                                )
+                            assert (
+                                worker_pool is not None
+                            ), f"No WorkerPool found with ID: {task_placement.worker_pool_id}."
+                            
+                            # Display worker pool utilization before placing task
+                            # Cumulate the resources from all the WorkerPools
+                            for worker_pool in self._worker_pools.worker_pools:
+                                worker_pool_resources = worker_pool.resources
+                                for resource_name in set(
+                                    map(lambda value: value[0].name, worker_pool_resources.resources)
+                                ):
+                                    resource = Resource(name=resource_name, _id="any")
+                                    self._logger.info(
+                                        f"{sim_time},WORKER_POOL_UTILIZATION,{worker_pool.id},"
+                                        f"{resource_name},"
+                                        f"{worker_pool_resources.get_allocated_quantity(resource)},"
+                                        f"{worker_pool_resources.get_available_quantity(resource)}"
+                                    )
+                                    
+                            # Perform worker pool step
+                            self._logger.info(
+                                "[%s] Need to perform a step before place_task() for %s.",
+                                sim_time,
+                                task,
                             )
-                        assert (
-                            worker_pool is not None
-                        ), f"No WorkerPool found with ID: {task_placement.worker_pool_id}."
-                        
-                        # Display worker pool utilization before placing task
-                        # Cumulate the resources from all the WorkerPools
-                        for worker_pool in self._worker_pools.worker_pools:
-                            worker_pool_resources = worker_pool.resources
-                            for resource_name in set(
-                                map(lambda value: value[0].name, worker_pool_resources.resources)
-                            ):
-                                resource = Resource(name=resource_name, _id="any")
+                            completed_tasks = self.PerformWorkerPoolStep(sim_time=sim_time)
+
+                            # Finish all tasks that have now completed
+                            for completed_task in completed_tasks:
+                                self.CleanupTaskExecution(
+                                    task=completed_task,
+                                    sim_time=sim_time
+                                    )
+                            
+                            # Place the task on the worker pool
+                            if self._scheduler_is_task_type:
+                                success = True
+                            else:
+                                success = worker_pool.place_task(
+                                    task,
+                                    execution_strategy=task_placement.execution_strategy,
+                                    worker_id=task_placement.worker_id,
+                                )
+                            if success:
+                                task.start(sim_time)
                                 self._logger.info(
-                                    f"{sim_time},WORKER_POOL_UTILIZATION,{worker_pool.id},"
-                                    f"{resource_name},"
-                                    f"{worker_pool_resources.get_allocated_quantity(resource)},"
-                                    f"{worker_pool_resources.get_available_quantity(resource)}"
+                                    "[%s] Successfully started task: %s on worker_pool: %s",
+                                    sim_time,
+                                    task,
+                                    worker_pool,
+                                )
+                                # resources = placement.execution_strategy.resources
+                                placements.append(
+                                    erdos_scheduler_pb2.Placement(
+                                        worker_id=task_placement.worker_id,
+                                        application_id=request.id,
+                                        task_id=task_placement.task.stage_id,
+                                        cores=1,
+                                    )
+                                )
+
+                                # Add to delete list for clearing placement after it has been released
+                                to_delete.append((request.id, task))
+                                self._logger.debug(
+                                    "[%s] Added tuple (%s, %s) to to_delete list.",
+                                    sim_time,
+                                    request.id,
+                                    task,
                                 )
                                 
-                        # Perform worker pool step
-                        self._logger.info(
-                            "[%s] Need to perform a step before place_task().",
-                            sim_time,
-                        )
-                        self.PerformWorkerPoolStep(sim_time=sim_time)
-                        
-                        # Place the task on the worker pool
-                        success = worker_pool.place_task(
-                            task,
-                            execution_strategy=task_placement.execution_strategy,
-                            worker_id=task_placement.worker_id,
-                        )
-                        if success:
-                            task.start(sim_time)
-                            self._logger.info(
-                                "[%s] Successfully started task: %s on worker_pool: %s",
-                                sim_time,
-                                task,
-                                worker_pool,
-                            )
-                        else:
-                            self._logger.warning(
-                                "[%s] Could not start task: %s on worker_id: %s and execution strategy: %s",
-                                sim_time,
-                                task,
-                                task_placement.worker_id,
-                                task_placement.execution_strategy,
-                            )
-                    except ValueError as e:
-                        self._logger.error(f"[{sim_time}] start() errored for task: {task}")
-                        self._logger.error(f"[{sim_time}] Error: {e}")
-
-                    # NOTE: (DG) Moved the placements.append() into the IF
-                    # resources = placement.execution_strategy.resources
-                    placements.append(
-                        erdos_scheduler_pb2.Placement(
-                            worker_id=task_placement.worker_id,
-                            application_id=request.id,
-                            task_id=task_placement.task.stage_id,
-                            cores=1,
-                        )
-                    )
-
-                    # Add to delete list for clearing placement after it has been released
-                    to_delete.append((request.id, task))
-                    self._logger.debug(
-                        "[%s] Added tuple (%s, %s) to to_delete list.",
-                        sim_time,
-                        request.id,
-                        task,
-                    )
-                    
-                    # Add task_placement to executed_placements since it is now complete
-                    self._executed_placements[task] = task_placement
+                                # Add task_placement to executed_placements since it is now complete
+                                self._executed_placements[task] = task_placement
+                            else:
+                                self._logger.warning(
+                                    "[%s] Could not start task: %s on worker_id: %s and execution strategy: %s",
+                                    sim_time,
+                                    task,
+                                    task_placement.worker_id,
+                                    task_placement.execution_strategy,
+                                )
+                        except ValueError as e:
+                            self._logger.error(f"[{sim_time}] start() errored for task: {task}")
+                            self._logger.error(f"[{sim_time}] Error: {e}")
 
         # Remove issued placements from self._placements
         for app_id, task_name in to_delete:
@@ -1507,23 +1586,57 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
 
                     # Perform worker pool step
                     self._logger.info(
-                        "[%s] Need to perform a step before remove_task().",
+                        "[%s] Need to perform a step before remove_task() for %s.",
                         current_time,
+                        popped_item.task,
                         )
-                    self.PerformWorkerPoolStep(sim_time=current_time)
+                    completed_tasks = self.PerformWorkerPoolStep(sim_time=current_time)
+                    # TODO: (DG) For simplicity, we only pop cleanup task state for a single 
+                    # popped-item in the loop at once. Later, we could cleanup all identified
+                    # completed tasks here.
 
-                    # Free the resources on the worker pool for the completed task
-                    task_placed_at_worker_pool = self._worker_pools.get_worker_pool(
-                        popped_item.task.worker_pool_id
-                    )
-                    task_placed_at_worker_pool.remove_task(
-                        current_time=current_time, task=popped_item.task
+                    if popped_item.task.state == TaskState.COMPLETED:
+                        # It means that the task state was already cleaned up after another
+                        # invocation of PerformWorkerPoolStep. Can skip here then.
+                        self._logger.info(
+                            "[%s] Task %s already in COMPLETED state while processing "
+                            "in PopTasksBasedOnTime.",
+                            current_time,
+                            popped_item.task,
                         )
+                    else:
+                        self._logger.info(
+                            "[%s] PopTasksBasedOnTime invoking CleanupTaskExecution "
+                            "for task %s",
+                            current_time,
+                            popped_item.task,
+                        )
+                        self.CleanupTaskExecution(task=popped_item.task,
+                                                  sim_time=current_time)
 
-                    # Mark the Task as completed.
-                    # Also release the task from the scheduler service
-                    popped_item.task.update_remaining_time(EventTime.zero())
-                    popped_item.task.finish(current_time)
+                    # # Free the resources on the worker pool for the completed task
+                    # task_placed_at_worker_pool = self._worker_pools.get_worker_pool(
+                    #     popped_item.task.worker_pool_id
+                    # )
+                    # task_placed_at_worker_pool.remove_task(
+                    #     current_time=current_time, task=popped_item.task
+                    #     )
+
+                    # # Mark the Task as completed.
+                    # # Also release the task from the scheduler service
+                    # popped_item.task.update_remaining_time(EventTime.zero())
+                    # popped_item.task.finish(current_time)
+
+                    # # TODO: (DG) Check change here
+                    # released_tasks, cancelled_tasks = self._workload.notify_task_completion(
+                    #     task=popped_item.task,
+                    #     finish_time=current_time)
+                    
+                    # # TODO: (DG) Check change here
+                    # for new_released_task in released_tasks:
+                    #     new_released_task.release(current_time)
+                    
+                    # # TODO: Might do for cancelled too
 
                     # Mark task graph completed
                     task_graph = self._workload.get_task_graph(popped_item.task.task_graph)
@@ -1571,10 +1684,9 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             time_elapsed_since_last_step,
         )
         for worker_pool in self._worker_pools.worker_pools:
-            # TODO: (DG) Check if this is correct. Why do we pass current time?
-            # Should pass last update time instead?
-            for task in worker_pool.step(
-                self._last_step_up_time, time_elapsed_since_last_step):
+            completed_tasks = worker_pool.step(
+                self._last_step_up_time, time_elapsed_since_last_step)
+            for task in completed_tasks:
                 self._logger.info(
                     "[%s] Task %s was now found complete.",
                     sim_time,
@@ -1583,6 +1695,39 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
 
         # Update _last_step_up_time
         self._last_step_up_time = sim_time
+
+        return completed_tasks
+
+    
+    def CleanupTaskExecution(self, task, sim_time):
+        self._logger.info(
+            "[%s] Cleaning up task execution for task %s.",
+            sim_time,
+            task,
+            )
+        
+        # Free the resources on the worker pool for the completed task
+        task_placed_at_worker_pool = self._worker_pools.get_worker_pool(
+            task.worker_pool_id
+        )
+        task_placed_at_worker_pool.remove_task(
+            current_time=sim_time, task=task
+            )
+
+        # Mark the Task as completed.
+        # Also release the task from the scheduler service
+        task.update_remaining_time(EventTime.zero())
+        task.finish(sim_time)
+
+        released_tasks, cancelled_tasks = self._workload.notify_task_completion(
+            task=task,
+            finish_time=sim_time)
+        
+        for new_released_task in released_tasks:
+            new_released_task.release(sim_time)
+        
+        # TODO: Might do for cancelled too
+
 
 
 async def serve():

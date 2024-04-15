@@ -42,31 +42,23 @@ class FIFOScheduler(BaseScheduler):
         self, sim_time: EventTime, workload: Workload, worker_pools: WorkerPools
     ) -> Placements:
         tasks = workload.get_schedulable_tasks(
-            time=sim_time, preemption=self.preemptive, worker_pools=worker_pools
+            time=sim_time,
+            preemption=self.preemptive,
+            worker_pools=worker_pools,
+            scheduler_is_task_type=True,
         )
-
         # Create a virtual WorkerPool set to try scheduling decisions on.
-        schedulable_worker_pools = copy(worker_pools)
-        for worker_pool in schedulable_worker_pools.worker_pools:
-            self._logger.debug(
-                f"[{sim_time.time}] The state of {worker_pool} is: "
-                f"{os.linesep} {os.linesep.join(worker_pool.get_utilization())}"
-            )
+        # schedulable_worker_pools = copy(worker_pools)
+        schedulable_worker_pools = worker_pools
 
         start_time = time.time()
-
         # Sort the tasks according to their release times, and place them on
         # the worker pools.
         ordered_tasks = list(sorted(tasks, key=attrgetter("release_time")))
-        task_descriptions = [
-            f"{task.unique_name} ({task.release_time})" for task in ordered_tasks
-        ]
-        self._logger.debug(
-            f"[{sim_time.time}] The scheduler received {len(ordered_tasks)} tasks to "
-            f"be scheduled. The order of the tasks is {task_descriptions}."
-        )
 
-        # Run the scheduling loop.
+        # TODO: (DG) Check Alind's changes in EDF scheduler
+        # and replicate code for dropping tasks?
+
         placements = []
         for task in ordered_tasks:
             self._logger.debug(
@@ -75,9 +67,9 @@ class FIFOScheduler(BaseScheduler):
                 f"{task.available_execution_strategies}."
             )
 
-            # If we are enforcing deadlines, and the Task is past its deadline,
-            # then we should create a cancellation for it. This is only applicable if
-            # the user wants the tasks that cannot meet their deadline to be dropped.
+            # If we are enforcing deadlines, and the Task is past its deadline, then
+            # we should create a cancellation for it. This is only applicable if the
+            # user wants the tasks that cannot meet their deadline to be dropped.
             if (
                 self.enforce_deadlines
                 and task.deadline
@@ -90,7 +82,7 @@ class FIFOScheduler(BaseScheduler):
                     "Cancelling the task.",
                     sim_time.time,
                     task,
-                    task.deadline,
+                    task.deadline.time,
                 )
                 continue
 
@@ -134,13 +126,18 @@ class FIFOScheduler(BaseScheduler):
                     task,
                 )
                 placements.append(Placement.create_task_placement(task=task))
+
         end_time = time.time()
 
         # Compute and return the Placements object.
         scheduler_runtime = EventTime(
             int((end_time - start_time) * 1e6), EventTime.Unit.US
         )
-        runtime = scheduler_runtime if self.runtime.is_invalid() else self.runtime
+        runtime = (
+            scheduler_runtime
+            if self.runtime == EventTime(-1, EventTime.Unit.US)
+            else self.runtime
+        )
         return Placements(
             runtime=runtime, true_runtime=scheduler_runtime, placements=placements
         )

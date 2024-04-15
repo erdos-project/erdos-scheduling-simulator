@@ -989,6 +989,7 @@ class TaskGraph(Graph[Task]):
         branch_prediction_accuracy: float = 0.50,
         release_taskgraphs: bool = False,
         debug: bool = False,
+        scheduler_is_task_type: bool = False,
     ) -> Sequence[Task]:
         """Retrieves all tasks from the given TaskGraph that are expected to be
         available for scheduling within the horizon defined by `time + lookahead`.
@@ -1031,186 +1032,190 @@ class TaskGraph(Graph[Task]):
         Returns:
             A list of tasks that are schedulable in the `time + lookahead` horizon.
         """
-        # Estimate the completion time of materialized tasks.
-        task_queue = deque([])
-        estimated_completion_time = {}
-        for task in self.get_nodes():
-            if task.state == TaskState.COMPLETED:
-                estimated_completion_time[task] = task.completion_time
-            elif task.state in [
-                TaskState.RUNNING,
-                TaskState.PREEMPTED,
-                TaskState.EVICTED,
-            ]:
-                # Optimistically assume that the task will be resumed right now.
-                estimated_completion_time[task] = time + task.remaining_time
-            elif task.state == TaskState.RELEASED:
-                estimated_completion_time[task] = (
-                    max(task.release_time, time) + task.remaining_time
-                )
-            elif task.state == TaskState.SCHEDULED:
-                if retract_schedules:
-                    # Assume that the task will be placed again now.
-                    slowest_strategy = (
-                        task.available_execution_strategies.get_slowest_strategy()
-                    )
-                    estimated_completion_time[task] = time + slowest_strategy.runtime
-                else:
+        if scheduler_is_task_type is False:
+            # Estimate the completion time of materialized tasks.
+            task_queue = deque([])
+            estimated_completion_time = {}
+            for task in self.get_nodes():
+                if task.state == TaskState.COMPLETED:
+                    estimated_completion_time[task] = task.completion_time
+                elif task.state in [
+                    TaskState.RUNNING,
+                    TaskState.PREEMPTED,
+                    TaskState.EVICTED,
+                ]:
+                    # Optimistically assume that the task will be resumed right now.
+                    estimated_completion_time[task] = time + task.remaining_time
+                elif task.state == TaskState.RELEASED:
                     estimated_completion_time[task] = (
-                        task.expected_start_time + task.remaining_time
+                        max(task.release_time, time) + task.remaining_time
                     )
-            elif task.state == TaskState.CANCELLED:
-                # Completion times of cancelled tasks is not estimated.
-                continue
-            elif task.state == TaskState.VIRTUAL:
-                # There's no way to estimate the completion time of a task
-                # in this state from known values, propagate completion times
-                # from the parents here.
-                continue
-            else:
-                raise ValueError(
-                    f"Task {task.unique_name} in unknown state: {task.state}."
-                )
-            task_queue.append(task)
-            if debug:
-                task._logger.debug(
-                    f"[{time.to(EventTime.Unit.US).time}] After considering the "
-                    f"task {task.unique_name}, the task queue is "
-                    f"{[_task.unique_name for _task in task_queue]}."
-                )
-
-        # Estimate the completion time of VIRTUAL tasks.
-        while len(task_queue) > 0:
-            task = task_queue.popleft()
-            completion_time = estimated_completion_time[task]
-
-            # Find the children tasks to propogate the completion time
-            # to according to the policy.
-            children_tasks = []
-            if task.conditional:
-                children_tasks = self.resolve_conditional(
-                    task, policy, branch_prediction_accuracy
-                )
-            else:
-                children_tasks = self.get_children(task)
-
-            for child_task in children_tasks:
-                if (
-                    not retract_schedules and child_task.state != TaskState.VIRTUAL
-                ) or (
-                    retract_schedules
-                    and child_task.state not in (TaskState.VIRTUAL, TaskState.SCHEDULED)
-                ):
-                    # Skip the task because we've already set its completion time.
+                elif task.state == TaskState.SCHEDULED:
+                    if retract_schedules:
+                        # Assume that the task will be placed again now.
+                        slowest_strategy = (
+                            task.available_execution_strategies.get_slowest_strategy()
+                        )
+                        estimated_completion_time[task] = time + slowest_strategy.runtime
+                    else:
+                        estimated_completion_time[task] = (
+                            task.expected_start_time + task.remaining_time
+                        )
+                elif task.state == TaskState.CANCELLED:
+                    # Completion times of cancelled tasks is not estimated.
                     continue
-
-                # Compute the estimated completion time of the child task.
-                # If the child task was provided with a specific release time, and
-                # that time leads to a later completion time, use that completion time.
-                slowest_strategy = (
-                    child_task.available_execution_strategies.get_slowest_strategy()
-                )
-                child_completion_time = completion_time + slowest_strategy.runtime
-                if child_task.release_time:
-                    child_completion_time = max(
-                        child_completion_time,
-                        child_task.release_time + slowest_strategy.runtime,
+                elif task.state == TaskState.VIRTUAL:
+                    # There's no way to estimate the completion time of a task
+                    # in this state from known values, propagate completion times
+                    # from the parents here.
+                    continue
+                else:
+                    raise ValueError(
+                        f"Task {task.unique_name} in unknown state: {task.state}."
+                    )
+                task_queue.append(task)
+                if debug:
+                    task._logger.debug(
+                        f"[{time.to(EventTime.Unit.US).time}] After considering the "
+                        f"task {task.unique_name}, the task queue is "
+                        f"{[_task.unique_name for _task in task_queue]}."
                     )
 
-                # Update the completion time of the child.
-                if (
-                    child_task not in estimated_completion_time
-                    or child_completion_time > estimated_completion_time[child_task]
-                ):
-                    estimated_completion_time[child_task] = child_completion_time
-                    task_queue.append(child_task)
+            # Estimate the completion time of VIRTUAL tasks.
+            while len(task_queue) > 0:
+                task = task_queue.popleft()
+                completion_time = estimated_completion_time[task]
 
-        if debug:
-            estimated_completion_time_output = [
-                f"{_task.unique_name} ({_completion_time})"
-                for _task, _completion_time in estimated_completion_time.items()
-            ]
-            task._logger.debug(
-                f"[{time.to(EventTime.Unit.US).time}] The set of tasks with their "
-                f"available estimated completion times are: "
-                f"{estimated_completion_time_output}."
-            )
+                # Find the children tasks to propogate the completion time
+                # to according to the policy.
+                children_tasks = []
+                if task.conditional:
+                    children_tasks = self.resolve_conditional(
+                        task, policy, branch_prediction_accuracy
+                    )
+                else:
+                    children_tasks = self.get_children(task)
 
-        # Add the tasks conforming to the policy within the lookahead.
-        tasks = []
+                for child_task in children_tasks:
+                    if (
+                        not retract_schedules and child_task.state != TaskState.VIRTUAL
+                    ) or (
+                        retract_schedules
+                        and child_task.state not in (TaskState.VIRTUAL, TaskState.SCHEDULED)
+                    ):
+                        # Skip the task because we've already set its completion time.
+                        continue
 
-        # Track if any released tasks have been added to the set of available
-        # tasks. If yes, and the `release_taskgraphs` option was set, then
-        # forego the checking of the estimated completion time for the virtual
-        # tasks. This works in a loop since we iterate on the tasks in the
-        # topologically-sorted order.
-        any_released = False
-        for task in self.topological_sort():
-            if task.state in (TaskState.COMPLETED, TaskState.RUNNING):
-                # The task has already been completed or is running,
-                # we should notify that all tasks of this TaskGraph
-                # must be released now if required.
-                any_released = True
-            elif (
-                task.state == TaskState.RELEASED
-                and task.release_time <= time + lookahead
-            ):
-                # The Task has already been released and its release time is within
-                # the lookahead.
-                tasks.append(task)
-                any_released = True
-            elif task.state in (TaskState.PREEMPTED, TaskState.EVICTED):
-                # PREEMPTED and EVICTED tasks are always available for scheduling.
-                tasks.append(task)
-                any_released = True
-            elif (
-                task.state == TaskState.VIRTUAL
-                and task in estimated_completion_time
-                and (
-                    (any_released and release_taskgraphs)
-                    or estimated_completion_time[task]
-                    <= time + lookahead + task.remaining_time  # Check the release time
-                )
-            ):
-                # A VIRTUAL task that may be available for scheduling.
-                tasks.append(task)
-                any_released = True
-            elif (
-                retract_schedules
-                and task.state == TaskState.SCHEDULED
-                and task in estimated_completion_time
-                and (
-                    (any_released and release_taskgraphs)
-                    or estimated_completion_time[task]
-                    <= time
-                    + lookahead
-                    + task.available_execution_strategies.get_slowest_strategy().runtime
-                )
-            ):
-                # A SCHEDULED task that is being reconsidered for scheduling.
-                tasks.append(task)
-                any_released = True
+                    # Compute the estimated completion time of the child task.
+                    # If the child task was provided with a specific release time, and
+                    # that time leads to a later completion time, use that completion time.
+                    slowest_strategy = (
+                        child_task.available_execution_strategies.get_slowest_strategy()
+                    )
+                    child_completion_time = completion_time + slowest_strategy.runtime
+                    if child_task.release_time:
+                        child_completion_time = max(
+                            child_completion_time,
+                            child_task.release_time + slowest_strategy.runtime,
+                        )
+
+                    # Update the completion time of the child.
+                    if (
+                        child_task not in estimated_completion_time
+                        or child_completion_time > estimated_completion_time[child_task]
+                    ):
+                        estimated_completion_time[child_task] = child_completion_time
+                        task_queue.append(child_task)
+
             if debug:
+                estimated_completion_time_output = [
+                    f"{_task.unique_name} ({_completion_time})"
+                    for _task, _completion_time in estimated_completion_time.items()
+                ]
                 task._logger.debug(
-                    f"[{time.to(EventTime.Unit.US).time}] After considering "
-                    f"{task.unique_name} ({task.state}), the set of potentially "
-                    f"schedulable tasks are {[_task.unique_name for _task in tasks]},"
-                    f" and the status of any_released is {any_released}."
+                    f"[{time.to(EventTime.Unit.US).time}] The set of tasks with their "
+                    f"available estimated completion times are: "
+                    f"{estimated_completion_time_output}."
                 )
 
-        # No need to add already running tasks if preemption is not enabled.
-        if preemption:
-            if worker_pools:
-                # Adding the tasks placed on the given worker pool.
-                tasks.extend(worker_pools.get_placed_tasks())
-            else:
-                # No worker pool provided. Getting all RUNNING tasks.
-                tasks.extend(
-                    self.filter(
-                        lambda task: task.state
-                        in (TaskState.SCHEDULED, TaskState.RUNNING)
+            # Add the tasks conforming to the policy within the lookahead.
+            tasks = []
+
+            # Track if any released tasks have been added to the set of available
+            # tasks. If yes, and the `release_taskgraphs` option was set, then
+            # forego the checking of the estimated completion time for the virtual
+            # tasks. This works in a loop since we iterate on the tasks in the
+            # topologically-sorted order.
+            any_released = False
+            for task in self.topological_sort():
+                if task.state in (TaskState.COMPLETED, TaskState.RUNNING):
+                    # The task has already been completed or is running,
+                    # we should notify that all tasks of this TaskGraph
+                    # must be released now if required.
+                    any_released = True
+                elif (
+                    task.state == TaskState.RELEASED
+                    and task.release_time <= time + lookahead
+                ):
+                    # The Task has already been released and its release time is within
+                    # the lookahead.
+                    tasks.append(task)
+                    any_released = True
+                elif task.state in (TaskState.PREEMPTED, TaskState.EVICTED):
+                    # PREEMPTED and EVICTED tasks are always available for scheduling.
+                    tasks.append(task)
+                    any_released = True
+                elif (
+                    task.state == TaskState.VIRTUAL
+                    and task in estimated_completion_time
+                    and (
+                        (any_released and release_taskgraphs)
+                        or estimated_completion_time[task]
+                        <= time + lookahead + task.remaining_time  # Check the release time
                     )
-                )
+                ):
+                    # A VIRTUAL task that may be available for scheduling.
+                    tasks.append(task)
+                    any_released = True
+                elif (
+                    retract_schedules
+                    and task.state == TaskState.SCHEDULED
+                    and task in estimated_completion_time
+                    and (
+                        (any_released and release_taskgraphs)
+                        or estimated_completion_time[task]
+                        <= time
+                        + lookahead
+                        + task.available_execution_strategies.get_slowest_strategy().runtime
+                    )
+                ):
+                    # A SCHEDULED task that is being reconsidered for scheduling.
+                    tasks.append(task)
+                    any_released = True
+                if debug:
+                    task._logger.debug(
+                        f"[{time.to(EventTime.Unit.US).time}] After considering "
+                        f"{task.unique_name} ({task.state}), the set of potentially "
+                        f"schedulable tasks are {[_task.unique_name for _task in tasks]},"
+                        f" and the status of any_released is {any_released}."
+                    )
+
+            # No need to add already running tasks if preemption is not enabled.
+            if preemption:
+                if worker_pools:
+                    # Adding the tasks placed on the given worker pool.
+                    tasks.extend(worker_pools.get_placed_tasks())
+                else:
+                    # No worker pool provided. Getting all RUNNING tasks.
+                    tasks.extend(
+                        self.filter(
+                            lambda task: task.state
+                            in (TaskState.SCHEDULED, TaskState.RUNNING)
+                        )
+                    )
+        else:
+            # return tasks for EDF, FIFO, TetriSched
+            tasks = self.filter(lambda task: task.state == TaskState.RELEASED)
 
         return tasks
 

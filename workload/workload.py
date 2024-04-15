@@ -263,6 +263,7 @@ class Workload(object):
         branch_prediction_accuracy: float = 0.50,
         release_taskgraphs: bool = False,
         debug: bool = False,
+        scheduler_is_task_type: bool = False,
     ) -> Sequence[Task]:
         """Retrieves all the tasks expected to be released within the scheduling
         horizon defined by `time + lookahead`.
@@ -305,6 +306,7 @@ class Workload(object):
                     branch_prediction_accuracy,
                     release_taskgraphs,
                     debug,
+                    scheduler_is_task_type,
                 )
             )
         return schedulable_tasks

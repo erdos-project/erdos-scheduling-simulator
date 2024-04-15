@@ -497,6 +497,7 @@ class TetriSchedScheduler(BaseScheduler):
             policy=self.policy,
             branch_prediction_accuracy=self.branch_prediction_accuracy,
             release_taskgraphs=self.release_taskgraphs,
+            scheduler_is_task_type=not self.release_taskgraphs,
         )
 
         task_description_string = [
