@@ -419,6 +419,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                 task=completed_task,
                 sim_time=current_time
                 )
+        
 
         # TODO (Sukrit): Change this to a better implementation.
         # Let's do some simple scheduling for now, that gives a fixed number of
@@ -1344,7 +1345,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
 
         self._logger.info(
             "[%s] Received task for completion. task.start_time: %s ,"
-            "task.remaining_time (=runtime):  %s ,  actual completion time: %s. "
+            "task.remaining_time:  %s ,  actual completion time: %s. "
             "Task details: %s",
             sim_time.time,
             matched_task.start_time.time,
@@ -1543,6 +1544,10 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             len(placements),
             request.id,
         )
+
+        # Run the scheduler since the Workload has changed.
+        await self.run_scheduler()
+
         return erdos_scheduler_pb2.GetPlacementsResponse(
             success=True,
             placements=placements,
@@ -1638,27 +1643,27 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                     
                     # # TODO: Might do for cancelled too
 
-                    # Mark task graph completed
-                    task_graph = self._workload.get_task_graph(popped_item.task.task_graph)
-                    if task_graph is None:
-                        self._logger.error(f"[{current_time}] Taskgraph for task {popped_item.task} is None")
-                        raise RuntimeError(f"[{current_time}] Taskgraph for task {popped_item.task} is None")
-                    if task_graph.is_complete():
-                        self._logger.info(f"[{current_time}] Finished task_graph {task_graph.name}")
-                        if task_graph.deadline < current_time:
-                            self._logger.info(f"[{current_time}] Missed deadline for task_graph {task_graph.name}")
-                            self._total_taskgraphs_missed += 1
-                        else:
-                            self._logger.info(f"[{current_time}] Met deadline for task_graph {task_graph.name}")
-                            self._total_taskgraphs_met += 1
-                        self._logger.info(
-                            "[%s] RUN_STATS (registered, met, missed, cancelled): %s, %s, %s, %s",
-                            current_time,
-                            self._total_taskgraphs_registered,
-                            self._total_taskgraphs_met,
-                            self._total_taskgraphs_missed,
-                            self._total_taskgraphs_cancelled,
-                            )
+                    # # Mark task graph completed
+                    # task_graph = self._workload.get_task_graph(popped_item.task.task_graph)
+                    # if task_graph is None:
+                    #     self._logger.error(f"[{current_time}] Taskgraph for task {popped_item.task} is None")
+                    #     raise RuntimeError(f"[{current_time}] Taskgraph for task {popped_item.task} is None")
+                    # if task_graph.is_complete():
+                    #     self._logger.info(f"[{current_time}] Finished task_graph {task_graph.name}")
+                    #     if task_graph.deadline < current_time:
+                    #         self._logger.info(f"[{current_time}] Missed deadline for task_graph {task_graph.name}")
+                    #         self._total_taskgraphs_missed += 1
+                    #     else:
+                    #         self._logger.info(f"[{current_time}] Met deadline for task_graph {task_graph.name}")
+                    #         self._total_taskgraphs_met += 1
+                    #     self._logger.info(
+                    #         "[%s] RUN_STATS (registered, met, missed, cancelled): %s, %s, %s, %s",
+                    #         current_time,
+                    #         self._total_taskgraphs_registered,
+                    #         self._total_taskgraphs_met,
+                    #         self._total_taskgraphs_missed,
+                    #         self._total_taskgraphs_cancelled,
+                    #         )
 
                     # Run the scheduler since the Workload has changed.
                     await self.run_scheduler()
@@ -1697,7 +1702,6 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         self._last_step_up_time = sim_time
 
         return completed_tasks
-
     
     def CleanupTaskExecution(self, task, sim_time):
         self._logger.info(
@@ -1728,6 +1732,27 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         
         # TODO: Might do for cancelled too
 
+        # Mark task graph completed
+        task_graph = self._workload.get_task_graph(task.task_graph)
+        if task_graph is None:
+            self._logger.error(f"[{sim_time}] Taskgraph for task {task} is None")
+            raise RuntimeError(f"[{sim_time}] Taskgraph for task {task} is None")
+        if task_graph.is_complete():
+            self._logger.info(f"[{sim_time}] Finished task_graph {task_graph.name}")
+            if task_graph.deadline < sim_time:
+                self._logger.info(f"[{sim_time}] Missed deadline for task_graph {task_graph.name}")
+                self._total_taskgraphs_missed += 1
+            else:
+                self._logger.info(f"[{sim_time}] Met deadline for task_graph {task_graph.name}")
+                self._total_taskgraphs_met += 1
+            self._logger.info(
+                "[%s] RUN_STATS (registered, met, missed, cancelled): %s, %s, %s, %s",
+                sim_time,
+                self._total_taskgraphs_registered,
+                self._total_taskgraphs_met,
+                self._total_taskgraphs_missed,
+                self._total_taskgraphs_cancelled,
+                )
 
 
 async def serve():
