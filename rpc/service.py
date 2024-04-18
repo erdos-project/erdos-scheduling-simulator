@@ -2,6 +2,7 @@ import asyncio
 import heapq
 import math
 import os
+import random
 import sys
 import time
 from concurrent import futures
@@ -142,7 +143,7 @@ flags.DEFINE_bool(
 )
 flags.DEFINE_integer(
     "scheduler_time_limit",
-    4,
+    3,
     "The time limit (in seconds) to allow the scheduler to keep "
     "searching for solutions without finding a better one.",
 )
@@ -155,9 +156,9 @@ flags.DEFINE_bool(
 )
 flags.DEFINE_integer(
     "scheduler_max_time_discretization",
-    5,
+    8,
     "The maximum discretization that the scheduler can have (in µs). "
-    "Only used when scheduler_adaptive_discretization flag is enabled. (default: 5)",
+    "Only used when scheduler_adaptive_discretization flag is enabled. (default: 8)",
 )
 flags.DEFINE_float(
     "scheduler_max_occupancy_threshold",
@@ -186,7 +187,7 @@ flags.DEFINE_bool(
 )
 flags.DEFINE_integer(
     "scheduler_plan_ahead_no_consideration_gap",
-    6,
+    4,
     "The length of time gap (in µs) for which the reconsiderations are frozen. "
     "From the current time to the consideration gap, any tasks placed will not be "
     "reconsidered for rescheduling.",
@@ -204,13 +205,27 @@ flags.DEFINE_integer(
     "If `scheduler_selective_rescheduling` is True, then this flag defines the number "
     "of TaskGraphs to sample for rescheduling.",
 )
-flags.DEFINE_float(
-    "task_graph_slo_factor",
-    2.0,
-    "The multiplicative factor to be used with critical path length of the task graph. "
+flags.DEFINE_integer(
+    "min_task_graph_deadline_variance",
+    10,
+    "The MIN percentage (additive) factor to be used with critical path length of the task graph. "
     "This helps inform the deadline for the taskgraph and all tasks within the task "
-    "graph. The value be > 1.0 since the taskgraph would take atleast the critical path "
+    "graph. The value be > 0 since the taskgraph would take atleast the critical path "
     "time duration to complete.",
+)
+flags.DEFINE_integer(
+    "max_task_graph_deadline_variance",
+    25,
+    "The MAX percentage (additive) factor to be used with critical path length of the task graph. "
+    "This helps inform the deadline for the taskgraph and all tasks within the task "
+    "graph. The value be > min_task_graph_deadline_variance since deadline is decided based on it.",
+)
+flags.DEFINE_bool(
+    "uniformly_sample_task_slots",
+    False,
+    "Enabling this ignores the TPCH profiled taskslots and uses a seeded, rng gerenated "
+    "num_tasks (= num_slots) for different stages of the TPCH job, uniformly sampled "
+    "in a range.",
 )
 
 
@@ -288,7 +303,11 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         self._total_taskgraphs_met = 0
         self._total_taskgraphs_cancelled = 0
         self._cancelled_taskgraphs = set()
-        self._task_graph_slo_factor = FLAGS.task_graph_slo_factor
+        self._min_task_graph_deadline_variance = FLAGS.min_task_graph_deadline_variance
+        self._max_task_graph_deadline_variance = FLAGS.max_task_graph_deadline_variance
+
+        # Setting a rng for future use
+        self._rng = random.Random(1234)
 
         # Scheduler information maintained by the servicer.
         self._scheduler_running_lock = asyncio.Lock()
@@ -302,6 +321,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             )
             self._scheduler_is_task_type = True
         elif FLAGS.scheduler == "FIFO":
+            # NOTE: FIFO is supposed to be run as deadline unaware
             self._scheduler = FIFOScheduler(
                 enforce_deadlines=FLAGS.enforce_deadlines,
                 _flags=FLAGS,
@@ -319,8 +339,8 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             # --scheduler_max_occupancy_threshold=0.999 ====> Passed through different argument name
             # --finer_discretization_at_prev_solution
             # --finer_discretization_window=4
-            # --scheduler_selective_rescheduling ====> Passed through _flags
-            # --scheduler_reconsideration_period=0.6 ====> Passed through _flags
+            # --scheduler_selective_rescheduling (DISABLE) ====> Passed through _flags
+            # --scheduler_reconsideration_period=0.99 ====> Passed through _flags
 
             self._scheduler = TetriSchedScheduler(
                 release_taskgraphs=FLAGS.release_taskgraphs,
@@ -572,8 +592,8 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             for placement in unplaced_placements:
                 if placement.task.task_graph not in self._placements:
                     self._logger.info(
-                        "[%s] taskgraph %s not found for task %s, couldn't invalidate it or"
-                        "it was previously invalidated.",
+                        "[%s] Taskgraph %s not found for task %s, couldn't invalidate "
+                        "it or it was previously invalidated.",
                         current_time,
                         placement.task.task_graph,
                         placement.task,
@@ -948,6 +968,7 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                 profiled_task_slots = (
                     tpch_query_all_stage_info[mapped_stage_id]["num_tasks"]
                     )
+                
                 # Profiled runtime (in ms) * duration_multiplier is converted
                 # to nearest second
                 profiled_task_runtime = math.ceil(
@@ -957,12 +978,25 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                         ) * FLAGS.spark_task_duration_multiplier
                         )
                 
-                task_slots = (profiled_task_slots
-                              if profiled_task_slots <= tpch_max_executors_per_job
-                              else tpch_max_executors_per_job
-                              )
-                # Setting minimum task_runtime to 3s to allow stages to complete
-                task_runtime = max(3, (
+                if FLAGS.uniformly_sample_task_slots:
+                    # Chosen to override profiled tasks slots for TPCH
+                    # TODO: (DG) The (20,60) range is outside default max_executors
+                    # set to 50. Need to update code to correctly use max_executors later
+                    # TODO: (DG) Don't like that seed is now going to change the dag structure
+                    # everytime a new app arrives in the workload.
+                    # Induces variability but seems weird.
+                    # NOTE: tpch_max_ececutors is 50 but we will sample upto 60.
+                    task_slots = self._rng.randint(20, 60)
+                else:
+                    task_slots = (profiled_task_slots
+                                  if profiled_task_slots <= tpch_max_executors_per_job
+                                  else tpch_max_executors_per_job
+                                  )
+                
+                # TODO: (DG) Adjust runtime if using uniformly_sample_task_slots
+                # Currently, runtimes still being calculated based on profiled_task_slots
+                # Setting minimum task_runtime to 8s to allow stages to complete
+                task_runtime = max(8, (
                     profiled_task_runtime
                     if profiled_task_slots <= tpch_max_executors_per_job
                     else math.ceil(
@@ -1069,9 +1103,15 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
             .time
         )
 
-        # Setting taskgraph and task deadlines using critical_path_time * SLO factor
+        # Setting taskgraph and task deadlines using critical_path_time * deadline_variance_factor
+        deadline_variance_factor = 1.0 + (
+            self._rng.randint(
+                self._min_task_graph_deadline_variance,
+                self._max_task_graph_deadline_variance
+                )
+        )/100
         task_graph_slo_time = math.ceil(
-            critical_path_time * self._task_graph_slo_factor
+            critical_path_time * deadline_variance_factor
             )
         
         for task in task_graph.get_nodes():
@@ -1083,13 +1123,16 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
         task_graph.to_dot(f"{request.id}.dot")
         self._workload.add_task_graph(task_graph)
         self._logger.info(
-            "[%s] Added the TaskGraph(name=%s, id=%s, deadline=%s, critical_path_time = %s, task_graph_slo_time = %s) to the Workload.",
+            "[%s] Added the TaskGraph(name=%s, id=%s, deadline=%s, "
+            "critical_path_time = %s, task_graph_slo_time = %s, "
+            "deadline_variance_factor= %s) to the Workload.",
             sim_time,
             request.name,
             request.id,
             task_graph.deadline,
             critical_path_time,
             task_graph_slo_time,
+            deadline_variance_factor,
         )
         self._logger.info(
             "[%s] The structure of the TaskGraph %s is \n%s.",
