@@ -75,7 +75,7 @@ def use_cloudlab_profile(query_num, dataset_size, max_executors):
         data = json.load(file)
     
     query_key_to_extract = ("tpch_q" + str(query_num) +
-                            "_" + str(dataset_size) +
+                            "_" + str(dataset_size) + "g" +
                             "_maxCores_" + str(max_executors))
     required_query_profile = data[query_key_to_extract]
 

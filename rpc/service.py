@@ -985,8 +985,8 @@ class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer
                     # TODO: (DG) Don't like that seed is now going to change the dag structure
                     # everytime a new app arrives in the workload.
                     # Induces variability but seems weird.
-                    # NOTE: tpch_max_ececutors is 50 but we will sample upto 60.
-                    task_slots = self._rng.randint(20, 60)
+                    # NOTE: tpch_max_ececutors is 50 but we will sample upto 70.
+                    task_slots = self._rng.randint(30, 70)
                 else:
                     task_slots = (profiled_task_slots
                                   if profiled_task_slots <= tpch_max_executors_per_job

@@ -172,7 +172,11 @@ class EDFScheduler(BaseScheduler):
         scheduler_runtime = EventTime(
             int((end_time - start_time) * 1e6), EventTime.Unit.US
         )
-        runtime = scheduler_runtime if self.runtime.is_invalid() else self.runtime
+        runtime = (
+            scheduler_runtime
+            if self.runtime == EventTime(-1, EventTime.Unit.US)
+            else self.runtime
+        )
         return Placements(
             runtime=runtime, true_runtime=scheduler_runtime, placements=placements
         )

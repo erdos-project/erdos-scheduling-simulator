@@ -268,6 +268,7 @@ class TetriSchedScheduler(BaseScheduler):
         # sure that no optimization passes remove it.
         # Reset at the beginning of each Scheduler invocation (`schedule()`).
         self._individual_task_strls: Mapping[str, tetrisched.Expression] = {}
+        self._skipped_task_names: Set[str] = set()
         # A cache for previously selected choose expressions, this is done for
         # providing better hints to the solver
         self._previously_satisfied_choose_exprs = set([])
@@ -665,7 +666,7 @@ class TetriSchedScheduler(BaseScheduler):
                 ]
 
             # Keep track of the Tasks that have not been considered for scheduling.
-            skipped_task_names = set()
+            self._skipped_task_names: Set[str] = set()
             if self.release_taskgraphs:
                 # Find the TaskGraphs that are available for scheduling.
                 task_graphs_for_scheduling = self._choose_task_graphs_for_scheduling(
@@ -733,7 +734,13 @@ class TetriSchedScheduler(BaseScheduler):
                                         f"previously placed tasks to account for "
                                         f"correct Allocations."
                                     )
-                                skipped_task_names.add(task.unique_name)
+                                self._skipped_task_names.add(task.unique_name)
+                                self._logger.debug(
+                                    "[%s] Adding %s to the tasks being "
+                                    "skipped for scheduling.",
+                                    sim_time.time,
+                                    task.unique_name,
+                                )
                         continue
 
                     # Construct the STRL.
@@ -800,6 +807,12 @@ class TetriSchedScheduler(BaseScheduler):
                     )
                     if task_strl is not None:
                         objective_strl.addChild(task_strl)
+
+            self._logger.debug(
+                "[%s] The tasks being skipped from scheduling were: %s.",
+                sim_time.time,
+                ", ".join(list(self._skipped_task_names)),
+            )
 
             # Register the STRL expression with the scheduler and solve it.
             try:
@@ -879,7 +892,7 @@ class TetriSchedScheduler(BaseScheduler):
 
                 # Retrieve the Placements for each task.
                 for task in tasks_to_be_scheduled:
-                    if task.unique_name in skipped_task_names:
+                    if task.unique_name in self._skipped_task_names:
                         # If the task was skipped, then we honor the previous placement.
                         self._logger.debug(
                             f"[{sim_time.time}] Honoring prior placement for Task "
@@ -1202,6 +1215,13 @@ class TetriSchedScheduler(BaseScheduler):
             )
             if task.state == TaskState.SCHEDULED:
                 task_allocation_expression.setPreviouslySatisfied(True)
+
+            self._skipped_task_names.add(task.unique_name)
+            self._logger.debug(
+                "[%s] Adding %s to the tasks being skipped for scheduling.",
+                current_time.time,
+                task.unique_name,
+            )
             self._logger.debug(
                 f"[{current_time.time}] Generated an AllocationExpression for "
                 f"task {task.unique_name} in state {task.state} starting at "

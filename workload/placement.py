@@ -226,7 +226,8 @@ class Placement(object):
             return (
                 f"Placement(type={self._placement_type}, "
                 f"work_profile={self.work_profile}, "
-                f"time={self.placement_time}, worker_pool_id={self.worker_pool_id}, "
+                f"placement_time={self.placement_time}, "
+                f"worker_pool_id={self.worker_pool_id}, "
                 f"worker_id={self.worker_id}, "
                 f"loading_strategy={self.loading_strategy})"
             )
@@ -237,7 +238,8 @@ class Placement(object):
         elif self._placement_type == Placement.PlacementType.PLACE_TASK:
             return (
                 f"Placement(type={self._placement_type}, task={self.task.unique_name}, "
-                f"time={self.placement_time}, worker_pool_id={self.worker_pool_id}, "
+                f"placement_time={self.placement_time}, "
+                f"worker_pool_id={self.worker_pool_id}, "
                 f"worker_id={self.worker_id}, "
                 f"execution_strategy={self.execution_strategy})"
             )

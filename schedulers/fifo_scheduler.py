@@ -62,8 +62,8 @@ class FIFOScheduler(BaseScheduler):
         placements = []
         for task in ordered_tasks:
             self._logger.debug(
-                f"[{sim_time.time}] Trying to schedule task {task.unique_name} with "
-                f"release time {task.release_time} and available execution strategies: "
+                f"[{sim_time.time}] FIFOScheduler trying to schedule {task} with the "
+                f"available execution strategies: "
                 f"{task.available_execution_strategies}."
             )
 

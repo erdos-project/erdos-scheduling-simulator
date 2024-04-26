@@ -26,28 +26,29 @@ GurobiSolver::GurobiInterruptOptimizationCallback::
 void GurobiSolver::GurobiInterruptOptimizationCallback::callback() {
   try {
     auto currentTime = std::chrono::steady_clock::now();
-    if (where == GRB_CB_POLLING) {
-      if (params.timeLimitMs.has_value()) {
-        auto elapsedTimeMs =
-            std::chrono::duration_cast<std::chrono::milliseconds>(currentTime -
-                                                                  startTime)
-                .count();
+    // if (where == GRB_CB_POLLING) {
+    if (params.timeLimitMs.has_value()) {
+      auto elapsedTimeMs =
+          std::chrono::duration_cast<std::chrono::milliseconds>(currentTime -
+                                                                startTime)
+              .count();
 
-        if (elapsedTimeMs > params.timeLimitMs.value()) {
-          abort();
-        }
+      if (elapsedTimeMs > params.timeLimitMs.value()) {
+        abort();
       }
-      if (params.newSolutionTimeLimitMs.has_value()) {
-        auto elapsedTimeMs =
-            std::chrono::duration_cast<std::chrono::milliseconds>(
-                currentTime - lastIncumbentSolutionTime)
-                .count();
+    }
+    if (params.newSolutionTimeLimitMs.has_value()) {
+      auto elapsedTimeMs =
+          std::chrono::duration_cast<std::chrono::milliseconds>(
+              currentTime - lastIncumbentSolutionTime)
+              .count();
 
-        if (elapsedTimeMs > params.newSolutionTimeLimitMs.value()) {
-          abort();
-        }
+      if (elapsedTimeMs > params.newSolutionTimeLimitMs.value()) {
+        abort();
       }
-    } else if (where == GRB_CB_MIPSOL && params.utilityUpperBound.has_value()) {
+    }
+    // } else
+    if (where == GRB_CB_MIPSOL && params.utilityUpperBound.has_value()) {
       auto solutionObjectiveValue = getDoubleInfo(GRB_CB_MIPSOL_OBJ);
       if (solutionObjectiveValue >= params.utilityUpperBound.value() -
                                         TETRISCHED_SOLUTION_UPPER_BOUND_DELTA) {

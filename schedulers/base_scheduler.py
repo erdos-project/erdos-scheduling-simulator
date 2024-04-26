@@ -75,6 +75,9 @@ class BaseScheduler(object):
             )
         else:
             self._logger = setup_logging(name=self.__class__.__name__)
+        
+        print(f"self._logger: {self._logger}, {self._logger.handlers}")
+        self._logger.debug("TEST print")
 
     def start(
         self,
