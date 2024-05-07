@@ -602,7 +602,7 @@ class WorkerPool(object):
                     f"[{','.join(t.unique_name for t in worker.get_placed_tasks())}]"
                 )
                 self._logger.error(error_message)
-                raise RuntimeError(error_message)
+                return False
             else:
                 strategy = execution_strategy
 

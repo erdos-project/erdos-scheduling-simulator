@@ -114,7 +114,9 @@ class AlibabaLoader(BaseWorkloadLoader):
         self._task_cpu_usage_min = self._flags.alibaba_loader_task_cpu_usage_min
         self._task_cpu_usage_max = self._flags.alibaba_loader_task_cpu_usage_max
         self._task_cpu_usage_random = self._flags.alibaba_loader_task_cpu_usage_random
-        self._alibaba_bump_resources_of_low_duration_task = self._flags.alibaba_bump_resources_of_low_duration_task
+        self._alibaba_bump_resources_of_low_duration_task = (
+            self._flags.alibaba_bump_resources_of_low_duration_task
+        )
 
     def _construct_workload_definitions(
         self,
@@ -551,9 +553,12 @@ class AlibabaLoader(BaseWorkloadLoader):
                     * self._task_cpu_multiplier
                 )
                 # bump up the resources of low duration tasks
-                if self._alibaba_bump_resources_of_low_duration_task and  task.actual_duration < 4:
+                if (
+                    self._alibaba_bump_resources_of_low_duration_task
+                    and task.actual_duration < 4
+                ):
                     resource_usage = self._task_cpu_usage_max
-                
+
                 job_resources_1 = Resources(
                     resource_vector={
                         Resource(name="Slot_1", _id="any"): resource_usage,
