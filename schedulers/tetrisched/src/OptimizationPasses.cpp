@@ -699,8 +699,7 @@ void DiscretizationSelectorOptimizationPass::runPass(
   //             - minOccupancyTime] << std::endl;
   // }
 
-  // changing the STRL expressions
-  // for (auto &[discreteTimeRange, discreteGranularity] : timeRangeToGranularities)
+  // Changing the STRL expressions
   // Find Max expressions over NCK and remove NCK expressions with redundant
   // start times
   {
@@ -714,8 +713,6 @@ void DiscretizationSelectorOptimizationPass::runPass(
       {
         auto startTime = discreteTimeRange.first;
         auto endTime = discreteTimeRange.second;
-        // find ncks within startTime and endTime for this Max expr
-        // std::vector<ExpressionPtr> ncksWithinTimeRange;
 
         ExpressionPtr minStartTimeNckExpr = nullptr;
         ExpressionPtr prevSolutionNckExpr = nullptr;
@@ -726,20 +723,19 @@ void DiscretizationSelectorOptimizationPass::runPass(
             if (prevSolutionNckExpr == nullptr &&
                 (*child)->isPreviouslySatisfied()) {
               prevSolutionNckExpr = *child;
-              // break;
             }
             if (minStartTimeNckExpr != nullptr) {
-              if (minStartTimeNckExpr->getTimeBounds().startTimeRange.first >
-                  startTimeNck) {
+              if (minStartTimeNckExpr->getTimeBounds().startTimeRange.first > startTimeNck) {
                 minStartTimeNckExpr = *child;
               }
             } else {
               minStartTimeNckExpr = *child;
             }
-          } else{
-            if (startTimeNck < startTime)
-            {
-              throw exceptions::RuntimeException("No ncks for MAX expression: NckExpr: NckExpr(" + child->get()->getId() + ", " + child->get()->getName() + ")");
+          } else {
+            if (startTimeNck < startTime) {
+              throw exceptions::RuntimeException(
+                "No nCks for MAX expression: NckExpr: NckExpr(" + child->get()->getId() +
+                ", " + child->get()->getName() + ")");
             }
             break;
           }
@@ -756,7 +752,9 @@ void DiscretizationSelectorOptimizationPass::runPass(
         }
       }
       if (savedChildren.size() == 0){
-        throw exceptions::RuntimeException("No ncks for MAX expression: MaxExprName: MaxExpr(" + maxNckExpr->getId() + ", " + maxNckExpr->getName()+")");
+        throw exceptions::RuntimeException(
+          "No ncks for MAX expression: MaxExprName: MaxExpr(" +
+          maxNckExpr->getId() + ", " + maxNckExpr->getName()+")");
       }
       maxNckExpr->replaceChildren(std::move(savedChildren));
     }
