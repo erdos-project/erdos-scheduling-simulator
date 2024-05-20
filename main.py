@@ -64,6 +64,12 @@ flags.DEFINE_enum(
     "Sets the mode in which the log file is opened. If 'append', the log file is "
     "opened in append mode, and if 'write', the log file is opened in write mode. ",
 )
+flags.DEFINE_multi_enum(
+    "opt_passes",
+    [], # default
+    ["CRITICAL_PATH_PASS", "DYNAMIC_DISCRETIZATION_PASS", "CAPACITY_CONSTRAINT_PURGE_PASS"], # choices
+    help="Specify the optimization passes that needs to be enabled once the STRL is generated, default: ['CRITICAL_PATH_PASS', 'CAPACITY_CONSTRAINT_PURGE_PASS']",
+)
 flags.DEFINE_string(
     "csv_file_name",
     None,
@@ -340,13 +346,13 @@ flags.DEFINE_bool(
     "If `True`, the scheduler creates space-time matrix non-uniformly. "
     "The discretization is finer initially, and coarser at the end. (default: False)",
 )
-flags.DEFINE_bool(
-    "scheduler_dynamic_discretization",
-    False,
-    "If `True`, the scheduler creates space-time matrix non-uniformly. "
-    "The discretization is dynamically decided based on the occupancy request for "
-    "each time slice. (default: False)",
-)
+# flags.DEFINE_bool(
+#     "scheduler_dynamic_discretization",
+#     False,
+#     "If `True`, the scheduler creates space-time matrix non-uniformly. "
+#     "The discretization is dynamically decided based on the occupancy request for "
+#     "each time slice. (default: False)",
+# )
 flags.DEFINE_bool(
     "finer_discretization_at_prev_solution",
     False,
@@ -471,12 +477,12 @@ flags.DEFINE_bool(
     "If `True`, the scheduler is allowed to batch tasks "
     "that share a WorkProfile together.",
 )
-flags.DEFINE_bool(
-    "scheduler_enable_optimization_pass",
-    False,
-    "If `True`, the scheduler runs pre/post-translation optimization passes"
-    "when registering STRL expression.",
-)
+# flags.DEFINE_bool(
+#     "scheduler_enable_optimization_pass",
+#     False,
+#     "If `True`, the scheduler runs pre/post-translation optimization passes"
+#     "when registering STRL expression.",
+# )
 flags.DEFINE_bool(
     "scheduler_selective_rescheduling",
     False,
@@ -819,7 +825,6 @@ def main(args):
             max_time_discretization=EventTime(
                 FLAGS.scheduler_max_time_discretization, EventTime.Unit.US
             ),
-            dynamic_discretization=FLAGS.scheduler_dynamic_discretization,
             max_occupancy_threshold=FLAGS.scheduler_max_occupancy_threshold,
             finer_discretization_at_prev_solution=finer_discretization,
             finer_discretization_window=EventTime(

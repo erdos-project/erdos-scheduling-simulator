@@ -17,6 +17,31 @@ enum OptimizationPassType {
   POST_TRANSLATION_PASS = 1,
 };
 
+enum OptimizationPassCategory {
+    CRITICAL_PATH_PASS = 0,
+    DYNAMIC_DISCRETIZATION_PASS = 1,
+    CAPACITY_CONSTRAINT_PURGE_PASS = 2,
+};
+
+/// The `OptimizationPassConfig` structure represents the configuration of the
+/// opt passes. This config is used to inform the choice of how to perform fidelity
+/// and non fidelity preserving OPT passes.
+struct OptimizationPassConfig {
+    /// configs for dynamic discretization
+    Time minDiscretization = 1;
+    Time maxDiscretization = 5;
+    float maxOccupancyThreshold = 0.8;
+    bool finerDiscretizationAtPrevSolution = false;
+    Time finerDiscretizationWindow = 5;
+    std::string toString() const {
+        std::stringstream ss;
+        ss << "{minDisc: " << minDiscretization << ", maxDisc: " << maxDiscretization << ", maxOccupancyThreshold: " << maxOccupancyThreshold << ", finerDiscretizationAtPrevSolution: " << finerDiscretizationAtPrevSolution << ", finerDiscretizationWindow: " << finerDiscretizationWindow << "\n";
+        return ss.str();
+    }
+};
+using OptimizationPassConfig = struct OptimizationPassConfig;
+using OptimizationPassConfigPtr = std::shared_ptr<OptimizationPassConfig>;
+
 /// An `OptimizationPass` is a base class for all Optimization passes that
 /// run on the STRL tree.
 class OptimizationPass {
@@ -159,17 +184,12 @@ class OptimizationPassRunner {
   bool debug;
   /// A list of optimization passes to run.
   std::vector<OptimizationPassPtr> registeredPasses;
-  /// flag for dynamic discretization optimization pass
-  bool enableDynamicDiscretization;
+  
+  OptimizationPassConfigPtr optConfig;
 
- public:
+  public :
   /// Initialize the OptimizationPassRunner.
-  OptimizationPassRunner(bool debug = false,
-                         bool enableDynamicDiscretization = false,
-                         Time minDiscretization = 1, Time maxDiscretization = 5,
-                         float maxOccupancyThreshold = 0.8,
-                         bool finerDiscretizationAtPrevSolution = false,
-                         Time finerDiscretizationWindow = 5);
+  OptimizationPassRunner(bool debug = false, OptimizationPassConfigPtr optConfig = nullptr);
 
   /// Run the pre-translation optimization passes on the given STRL expression.
   void runPreTranslationPasses(Time currentTime, ExpressionPtr strlExpression,
@@ -178,6 +198,9 @@ class OptimizationPassRunner {
   /// Run the post-translation optimization passes on the given STRL expression.
   void runPostTranslationPasses(Time currentTime, ExpressionPtr strlExpression,
                                 CapacityConstraintMapPtr capacityConstraints);
+
+  /// Add the optimization passes
+  void addOptimizationPass(OptimizationPassCategory optPass);  
 };
 }  // namespace tetrisched
 #endif  // _TETRISCHED_OPTIMIZATION_PASSES_HPP_

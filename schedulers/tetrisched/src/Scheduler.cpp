@@ -11,16 +11,15 @@
 #endif
 
 namespace tetrisched {
-Scheduler::Scheduler(Time discretization, SolverBackendType solverBackend,
-                     std::string logDir, bool enableDynamicDiscretization,
-                     Time maxDiscretization, float maxOccupancyThreshold,
-                     bool finerDiscretizationAtPrevSolution,
-                     Time finerDiscretizationWindow)
-    : solverBackend(solverBackend),
-      discretization(discretization),
-      logDir(logDir) {
-  // Initialize the solver backend.
-  switch (solverBackend) {
+  Scheduler::Scheduler(Time discretization, SolverBackendType solverBackend,
+                       std::string logDir, OptimizationPassConfigPtr optConfig)
+      : solverBackend(solverBackend),
+        discretization(discretization),
+        logDir(logDir)
+  {
+    // Initialize the solver backend.
+    switch (solverBackend)
+    {
 #ifdef _TETRISCHED_WITH_CPLEX_
     case SolverBackendType::CPLEX:
       solver = std::make_shared<CPLEXSolver>();
@@ -37,10 +36,12 @@ Scheduler::Scheduler(Time discretization, SolverBackendType solverBackend,
   }
   solverModel = solver->getModel();
   optimizationPasses = OptimizationPassRunner(
-      false, enableDynamicDiscretization, discretization, maxDiscretization,
-      maxOccupancyThreshold, finerDiscretizationAtPrevSolution,
-      finerDiscretizationWindow);
+      false, optConfig);
   solverConfig = std::make_shared<SolverConfig>();
+  }
+
+void Scheduler::addOptimizationPass(OptimizationPassCategory optPass) {
+  optimizationPasses.addOptimizationPass(optPass);
 }
 
 void Scheduler::registerSTRL(

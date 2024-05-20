@@ -181,7 +181,7 @@ class TetriSchedScheduler(BaseScheduler):
         _flags: Optional["absl.flags"] = None,
         adaptive_discretization: bool = False,
         max_time_discretization: EventTime = EventTime(5, EventTime.Unit.US),
-        dynamic_discretization: bool = False,
+        # dynamic_discretization: bool = False,
         max_occupancy_threshold: float = 0.8,
         finer_discretization_at_prev_solution: bool = False,
         finer_discretization_window: EventTime = EventTime(5, EventTime.Unit.US),
@@ -209,26 +209,43 @@ class TetriSchedScheduler(BaseScheduler):
 
         # Values for STRL generation.
         self._use_windowed_choose = False
-        self._dynamic_discretization = dynamic_discretization
+        self._dynamic_discretization = True if "DYNAMIC_DISCRETIZATION_PASS" in self._flags.opt_passes else False
         self._adaptive_discretization = adaptive_discretization
         if self._dynamic_discretization or self._adaptive_discretization:
             self._use_windowed_choose = False
         self._max_discretization = max_time_discretization.to(EventTime.Unit.US)
+        
+        # optimization passes config 
+        self._opt_configuration = tetrisched.OptimizationPassConfig()
+        self._opt_configuration.minDiscretization = self._time_discretization.time
+        self._opt_configuration.maxDiscretization = self._max_discretization.time
+        self._opt_configuration.maxOccupancyThreshold = max_occupancy_threshold
+        self._opt_configuration.finerDiscretizationAtPrevSolution = finer_discretization_at_prev_solution
+        self._opt_configuration.finerDiscretizationWindow = finer_discretization_window.to(EventTime.Unit.US).time
+        
+        # print(f"----- [PYTHON] {self._opt_configuration.toString()}")
+        
         self._scheduler = tetrisched.Scheduler(
             self._time_discretization.time,
             tetrisched.backends.SolverBackendType.GUROBI,
-            self._log_dir,
-            self._dynamic_discretization,  # enable dynamic discretization
-            self._max_discretization.time,
-            max_occupancy_threshold,
-            finer_discretization_at_prev_solution,
-            finer_discretization_window.to(EventTime.Unit.US).time,
+            self._log_dir, self._opt_configuration
         )
+        
+            
         self._use_task_graph_indicator_utility = self._goal == "max_goodput"
         self._previously_placed_reward_scale_factor = 1.0
         self._enable_optimization_passes = (
-            _flags.scheduler_enable_optimization_pass if _flags else False
+            len(self._flags.opt_passes) != 0
         )
+        
+        # add optimization passes
+        if len(self._flags.opt_passes) == 0:
+            self._logger.info(f"Running With no Optimization Pass")
+        for opt_pass in self._flags.opt_passes:
+            self._logger.info(f"Enable Optimization Passes: {opt_pass}")
+            self._scheduler.addOptimizationPass(tetrisched.OptimizationPassCategory.__members__[opt_pass])
+            # self._scheduler.addOptimizationPass(tetrisched.OptimizationPassCategoryopt_pass)
+        
         self._selectively_choose_task_graphs_for_rescheduling = (
             _flags.scheduler_selective_rescheduling if _flags else False
         )
