@@ -9,12 +9,8 @@ namespace tetrisched {
 
 /// The `SchedulerConfig` structure represents the configuration of the
 /// scheduler. This config is used to inform the choice of how the scheduler
-/// should schedule the STRL expression.
+/// should run the solver.
 struct SchedulerConfig {
-  /// If True, the scheduler will optimize the STRL expression.
-  bool optimize;
-
-  /// The configuration for the solver backend.
   std::optional<uint64_t> numThreads;
   std::optional<Time> totalSolverTimeMs;
   std::optional<Time> newSolutionTimeMs;

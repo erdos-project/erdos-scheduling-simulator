@@ -12,8 +12,8 @@ void defineBasicTypes(py::module_& tetrisched_m) {
   py::enum_<tetrisched::OptimizationPassCategory>(tetrisched_m, "OptimizationPassCategory")
       .value("CRITICAL_PATH_PASS", tetrisched::OptimizationPassCategory::CRITICAL_PATH_PASS)
       .value("DYNAMIC_DISCRETIZATION_PASS", tetrisched::OptimizationPassCategory::DYNAMIC_DISCRETIZATION_PASS)
-      .value("CAPACITY_CONSTRAINT_PURGE_PASS", tetrisched::OptimizationPassCategory::CAPACITY_CONSTRAINT_PURGE_PASS)
-      .export_values();
+      .value("CAPACITY_CONSTRAINT_PURGE_PASS", tetrisched::OptimizationPassCategory::CAPACITY_CONSTRAINT_PURGE_PASS);
+
   // Define the Partition type.
   py::class_<tetrisched::Partition, tetrisched::PartitionPtr>(
       tetrisched_m, "Partition", py::dynamic_attr())
@@ -64,23 +64,21 @@ void defineScheduler(py::module_& tetrisched_m) {
   py::class_<tetrisched::OptimizationPassConfig, tetrisched::OptimizationPassConfigPtr>(tetrisched_m, "OptimizationPassConfig")
       .def(py::init<>(), "Initializes an empty OptimizationPassConfig.")
       .def_readwrite("minDiscretization", &tetrisched::OptimizationPassConfig::minDiscretization,
-                     "the min discretization for Dynamic Discretiazation OPT pass.")
+                     "The minimum discretization for Dynamic Discretiazation OPT pass.")
       .def_readwrite("maxDiscretization", &tetrisched::OptimizationPassConfig::maxDiscretization,
-                     "the max discretization for Dynamic Discretiazation OPT pass.")
+                     "The maximum discretization for Dynamic Discretiazation OPT pass.")
       .def_readwrite("maxOccupancyThreshold", &tetrisched::OptimizationPassConfig::maxOccupancyThreshold,
-                     "the max occupancy threshold beyond which dynamic discretization is always min.")
+                     "The max occupancy threshold beyond which dynamic discretization is always min.")
       .def_readwrite("finerDiscretizationAtPrevSolution", &tetrisched::OptimizationPassConfig::finerDiscretizationAtPrevSolution,
                      "Whether to enabled finer discretization at solved solutions.")
       .def_readwrite("finerDiscretizationWindow", &tetrisched::OptimizationPassConfig::finerDiscretizationWindow,
                      "The window upto which finer discretization should be enabled around previously solved solutions.")
       .def("toString", &tetrisched::OptimizationPassConfig::toString, "Print String Representation");
+
   // Define the Config for the Scheduler.
   py::class_<tetrisched::SchedulerConfig, tetrisched::SchedulerConfigPtr>(
       tetrisched_m, "SchedulerConfig")
       .def(py::init<>(), "Initializes an empty SchedulerConfig.")
-      .def_readwrite("optimize", &tetrisched::SchedulerConfig::optimize,
-                     "If True, the scheduler will optimize the STRL "
-                     "expression.")
       .def_readwrite("numThreads", &tetrisched::SchedulerConfig::numThreads,
                      "The number of threads to use for the solver.")
       .def_readwrite("totalSolverTimeMs",

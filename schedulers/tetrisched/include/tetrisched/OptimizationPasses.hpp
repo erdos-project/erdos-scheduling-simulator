@@ -17,6 +17,7 @@ enum OptimizationPassType {
   POST_TRANSLATION_PASS = 1,
 };
 
+/// The types of OptimizationPasses implemented in the library.
 enum OptimizationPassCategory {
     CRITICAL_PATH_PASS = 0,
     DYNAMIC_DISCRETIZATION_PASS = 1,
@@ -35,7 +36,11 @@ struct OptimizationPassConfig {
     Time finerDiscretizationWindow = 5;
     std::string toString() const {
         std::stringstream ss;
-        ss << "{minDisc: " << minDiscretization << ", maxDisc: " << maxDiscretization << ", maxOccupancyThreshold: " << maxOccupancyThreshold << ", finerDiscretizationAtPrevSolution: " << finerDiscretizationAtPrevSolution << ", finerDiscretizationWindow: " << finerDiscretizationWindow << "\n";
+        ss << "{ minDisc: " << minDiscretization
+           << ", maxDisc: " << maxDiscretization
+           << ", maxOccupancyThreshold: " << maxOccupancyThreshold
+           << ", finerDiscretizationAtPrevSolution: " << finerDiscretizationAtPrevSolution
+           << ", finerDiscretizationWindow: " << finerDiscretizationWindow << std::endl;
         return ss.str();
     }
 };
@@ -184,12 +189,12 @@ class OptimizationPassRunner {
   bool debug;
   /// A list of optimization passes to run.
   std::vector<OptimizationPassPtr> registeredPasses;
-  
+
   OptimizationPassConfigPtr optConfig;
 
   public :
   /// Initialize the OptimizationPassRunner.
-  OptimizationPassRunner(bool debug = false, OptimizationPassConfigPtr optConfig = nullptr);
+  OptimizationPassRunner(OptimizationPassConfigPtr optConfig, bool debug = false);
 
   /// Run the pre-translation optimization passes on the given STRL expression.
   void runPreTranslationPasses(Time currentTime, ExpressionPtr strlExpression,
@@ -200,7 +205,7 @@ class OptimizationPassRunner {
                                 CapacityConstraintMapPtr capacityConstraints);
 
   /// Add the optimization passes
-  void addOptimizationPass(OptimizationPassCategory optPass);  
+  void addOptimizationPass(OptimizationPassCategory optPass);
 };
 }  // namespace tetrisched
 #endif  // _TETRISCHED_OPTIMIZATION_PASSES_HPP_

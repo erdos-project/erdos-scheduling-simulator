@@ -11,15 +11,14 @@
 #endif
 
 namespace tetrisched {
-  Scheduler::Scheduler(Time discretization, SolverBackendType solverBackend,
-                       std::string logDir, OptimizationPassConfigPtr optConfig)
-      : solverBackend(solverBackend),
-        discretization(discretization),
-        logDir(logDir)
-  {
-    // Initialize the solver backend.
-    switch (solverBackend)
-    {
+Scheduler::Scheduler(Time discretization, SolverBackendType solverBackend,
+                     std::string logDir, OptimizationPassConfigPtr optConfig)
+    : solverBackend(solverBackend),
+      discretization(discretization),
+      optimizationPasses(optConfig, false),
+      logDir(logDir) {
+  // Initialize the solver backend.
+  switch (solverBackend) {
 #ifdef _TETRISCHED_WITH_CPLEX_
     case SolverBackendType::CPLEX:
       solver = std::make_shared<CPLEXSolver>();
@@ -35,10 +34,8 @@ namespace tetrisched {
           "The solver backend type is not supported.");
   }
   solverModel = solver->getModel();
-  optimizationPasses = OptimizationPassRunner(
-      false, optConfig);
   solverConfig = std::make_shared<SolverConfig>();
-  }
+}
 
 void Scheduler::addOptimizationPass(OptimizationPassCategory optPass) {
   optimizationPasses.addOptimizationPass(optPass);
@@ -87,7 +84,7 @@ void Scheduler::registerSTRL(
   }
 
   // Run the Pre-Translation OptimizationPasses on this expression.
-  if (schedulerConfig->optimize) {
+  {
     TETRISCHED_SCOPE_TIMER(
         "Scheduler::registerSTRL::preTranslationOptimizationPasses," +
         std::to_string(currentTime));
@@ -97,7 +94,7 @@ void Scheduler::registerSTRL(
 
   {
     TETRISCHED_SCOPE_NECESSARY_TIMER("Scheduler::registerSTRL::parse," +
-                           std::to_string(currentTime));
+                                     std::to_string(currentTime));
     // Parse the ExpressionTree to populate the solver model.
     TETRISCHED_DEBUG("Beginning the parsing of the ExpressionTree rooted at "
                      << expression->getName() << ".")
@@ -108,7 +105,7 @@ void Scheduler::registerSTRL(
   }
 
   // Run the Post-Translation OptimizationPasses on this expression.
-  if (schedulerConfig->optimize) {
+  {
     TETRISCHED_SCOPE_TIMER(
         "Scheduler::registerSTRL::postTranslationOptimizationPasses," +
         std::to_string(currentTime));
@@ -146,21 +143,21 @@ void Scheduler::schedule(Time currentTime) {
   // Translate the model to the solver backend.
   {
     TETRISCHED_SCOPE_NECESSARY_TIMER("Scheduler::schedule::translateModel," +
-                           std::to_string(currentTime));
+                                     std::to_string(currentTime));
     this->solver->translateModel(solverConfig);
   }
 
   // Solve the model.
   {
     TETRISCHED_SCOPE_NECESSARY_TIMER("Scheduler::schedule::solveModel," +
-                           std::to_string(currentTime));
+                                     std::to_string(currentTime));
     solverSolution = this->solver->solveModel();
   }
 
   // Populate the results from the solver into the expression tree.
   {
     TETRISCHED_SCOPE_NECESSARY_TIMER("Scheduler::schedule::populateResults," +
-                           std::to_string(currentTime));
+                                     std::to_string(currentTime));
     if (solverSolution.has_value() && solverSolution.value()->isValid()) {
       this->expression.value()->populateResults(solverModel);
     }

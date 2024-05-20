@@ -64,12 +64,6 @@ flags.DEFINE_enum(
     "Sets the mode in which the log file is opened. If 'append', the log file is "
     "opened in append mode, and if 'write', the log file is opened in write mode. ",
 )
-flags.DEFINE_multi_enum(
-    "opt_passes",
-    [], # default
-    ["CRITICAL_PATH_PASS", "DYNAMIC_DISCRETIZATION_PASS", "CAPACITY_CONSTRAINT_PURGE_PASS"], # choices
-    help="Specify the optimization passes that needs to be enabled once the STRL is generated, default: ['CRITICAL_PATH_PASS', 'CAPACITY_CONSTRAINT_PURGE_PASS']",
-)
 flags.DEFINE_string(
     "csv_file_name",
     None,
@@ -477,12 +471,6 @@ flags.DEFINE_bool(
     "If `True`, the scheduler is allowed to batch tasks "
     "that share a WorkProfile together.",
 )
-# flags.DEFINE_bool(
-#     "scheduler_enable_optimization_pass",
-#     False,
-#     "If `True`, the scheduler runs pre/post-translation optimization passes"
-#     "when registering STRL expression.",
-# )
 flags.DEFINE_bool(
     "scheduler_selective_rescheduling",
     False,
@@ -500,6 +488,16 @@ flags.DEFINE_float(
     0.1,
     "The percentage of critical path duration until which the scheduler will try "
     "placing the TaskGraph, and drop the TaskGraph if it cannot be placed after.",
+)
+flags.DEFINE_multi_enum(
+    "optimization_passes",
+    [],
+    [
+        "CRITICAL_PATH_PASS",
+        "CAPACITY_CONSTRAINT_PURGE_PASS",
+        "DYNAMIC_DISCRETIZATION_PASS",
+    ],
+    "Specify the optimizations that needs to be enabled once the STRL is generated.",
 )
 
 # Workload definition related flags.
