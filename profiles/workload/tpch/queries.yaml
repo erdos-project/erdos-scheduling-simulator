@@ -1,0 +1,392 @@
+# Implementation of the TPC-H workload graph for the Simulator.
+# This file implements the structure for the TPC-H query DAGs.
+# The profiles for the corresponding DAGs can be retrieved based on the
+# size of the dataset and the cluster where the DAGs were executed.
+# (See e.g., profiles/workload/tpch/cloudlab)
+# The nodes of the TPC-H DAG is defined based on the Spark stage number that
+# was observed during execution.
+graphs:
+  - name: Q1
+    graph:
+      - name: 0
+        children: [1]
+      - name: 1
+        children: [2]
+      - name: 2
+
+  - name: Q2
+    graph:
+      - name: 0
+        children: [2, 9]
+      - name: 1
+        children: [2]
+      - name: 2
+        children: [4]
+      - name: 3
+        children: [4]
+      - name: 4
+        children: [7]
+      - name: 5
+        children: [7, 13]
+      - name: 6
+        children: [15]
+      - name: 7
+        children: [15]
+      - name: 8
+        children: [9]
+      - name: 9
+        children: [11]
+      - name: 10
+        children: [11]
+      - name: 11
+        children: [13]
+      - name: 12
+        children: [14]
+      - name: 13
+        children: [14]
+      - name: 14
+        children: [16]
+      - name: 15
+        children: [16]
+      - name: 16
+
+  - name: Q3
+    graph:
+      - name: 0
+        children: [2]
+      - name: 1
+        children: [2]
+      - name: 2
+        children: [4]
+      - name: 3
+        children: [4]
+      - name: 4
+
+  - name: Q4
+    graph:
+      - name: 0
+        children: [2]
+      - name: 1
+        children: [2]
+      - name: 2
+        children: [3]
+      - name: 3
+        children: [4]
+      - name: 4
+
+  - name: Q5
+    graph:
+      - name: 0
+        children: [2]
+      - name: 1
+        children: [2]
+      - name: 2
+        children: [4]
+      - name: 3
+        children: [4]
+      - name: 4
+        children: [6]
+      - name: 5
+        children: [6]
+      - name: 6
+        children: [8]
+      - name: 7
+        children: [8]
+      - name: 8
+        children: [10]
+      - name: 9
+        children: [10]
+      - name: 10
+        children: [11]
+      - name: 11
+        children: [12]
+      - name: 12
+  - name: Q6
+    graph:
+      - name: 0
+        children: [1]
+      - name: 1
+
+  - name: Q7
+    graph:
+      - name: 0
+        children: [2, 5]
+      - name: 1
+        children: [2]
+      - name: 2
+        children: [8]
+      - name: 3
+        children: [8]
+      - name: 4
+        children: [5]
+      - name: 5
+        children: [7]
+      - name: 6
+        children: [7]
+      - name: 7
+        children: [9]
+      - name: 8
+        children: [9]
+      - name: 9
+        children: [10]
+      - name: 10
+        children: [11]
+      - name: 11
+
+  - name: Q8
+    graph:
+      - name: 0
+        children: [5]
+      - name: 1
+        children: [5]
+      - name: 2
+        children: [4]
+      - name: 3
+        children: [4]
+      - name: 4
+        children: [13]
+      - name: 5
+        children: [13]
+      - name: 6
+        children: [8]
+      - name: 7
+        children: [8]
+      - name: 8
+        children: [10]
+      - name: 9
+        children: [10]
+      - name: 10
+        children: [12]
+      - name: 11
+        children: [12]
+      - name: 12
+        children: [14]
+      - name: 13
+        children: [14]
+      - name: 14
+        children: [15]
+      - name: 15
+        children: [16]
+      - name: 16
+
+  - name: Q9
+    graph:
+      - name: 0
+        children: [5]
+      - name: 1
+        children: [5]
+      - name: 2
+        children: [4]
+      - name: 3
+        children: [4]
+      - name: 4
+        children: [6]
+      - name: 5
+        children: [6]
+      - name: 6
+        children: [8]
+      - name: 7
+        children: [8]
+      - name: 8
+        children: [10]
+      - name: 9
+        children: [10]
+      - name: 10
+        children: [11]
+      - name: 11
+        children: [12]
+      - name: 12
+
+  - name: Q10
+    graph:
+      - name: 0
+        children: [2]
+      - name: 1
+        children: [2]
+      - name: 2
+        children: [4]
+      - name: 3
+        children: [4]
+      - name: 4
+        children: [6]
+      - name: 5
+        children: [6]
+      - name: 6
+        children: [7]
+      - name: 7
+
+  - name: Q11
+    graph:
+      - name: 0
+        children: [2]
+      - name: 1
+        children: [2]
+      - name: 2
+        children: [5, 6]
+      - name: 3
+        children: [6]
+      - name: 4
+        children: [5]
+      - name: 5
+        children: [6]
+      - name: 6
+
+  - name: Q12
+    graph:
+      - name: 0
+        children: [2]
+      - name: 1
+        children: [2]
+      - name: 2
+        children: [3]
+      - name: 3
+        children: [4]
+      - name: 4
+
+  - name: Q13
+    graph:
+      - name: 0
+        children: [2]
+      - name: 1
+        children: [2]
+      - name: 2
+        children: [3]
+      - name: 3
+        children: [4]
+      - name: 4
+        children: [5]
+      - name: 5
+
+  - name: Q14
+    graph:
+      - name: 0
+        children: [2]
+      - name: 1
+        children: [2]
+      - name: 2
+
+  - name: Q15
+    graph:
+      - name: 0
+        children: [5]
+      - name: 1
+        children: [2, 3]
+      - name: 2
+        children: [4]
+      - name: 3
+        children: [4]
+      - name: 4
+        children: [5]
+      - name: 5
+
+  - name: Q16
+    graph:
+      - name: 0
+        children: [2]
+      - name: 1
+        children: [2]
+      - name: 2
+        children: [4]
+      - name: 3
+        children: [4]
+      - name: 4
+        children: [5]
+      - name: 5
+        children: [6]
+      - name: 6
+        children: [7]
+      - name: 7
+
+  - name: Q17
+    graph:
+      - name: 0
+        children: [3]
+      - name: 1
+        children: [3]
+      - name: 2
+        children: [3]
+      - name: 3
+
+  - name: Q18
+    graph:
+      - name: 0
+        children: [5]
+      - name: 1
+        children: [4]
+      - name: 2
+        children: [4]
+      - name: 3
+        children: [4]
+      - name: 4
+        children: [5]
+      - name: 5
+
+  - name: Q19
+    graph:
+      - name: 0
+        children: [2]
+      - name: 1
+        children: [2]
+      - name: 2
+
+  - name: Q20
+    graph:
+      - name: 0
+        children: [2]
+      - name: 1
+        children: [2]
+      - name: 2
+        children: [4]
+      - name: 3
+        children: [4]
+      - name: 4
+        children: [8]
+      - name: 5
+        children: [7]
+      - name: 6
+        children: [7]
+      - name: 7
+        children: [8]
+      - name: 8
+
+  - name: Q21
+    graph:
+      - name: 0
+        children: [3]
+      - name: 1
+        children: [3]
+      - name: 2
+        children: [6]
+      - name: 3
+        children: [6]
+      - name: 4
+        children: [5]
+      - name: 5
+        children: [11]
+      - name: 6
+        children: [11]
+      - name: 7
+        children: [11]
+      - name: 8
+        children: [9]
+      - name: 9
+        children: [10]
+      - name: 10
+        children: [12]
+      - name: 11
+        children: [12]
+      - name: 12
+        children: [13]
+      - name: 13
+
+  - name: Q22
+    graph:
+      - name: 0
+        children: [3]
+      - name: 1
+        children: [3]
+      - name: 2
+        children: [3]
+      - name: 3
+        children: [4]
+      - name: 4
