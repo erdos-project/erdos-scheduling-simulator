@@ -14,23 +14,6 @@ from data import (
     WorkloadLoader,
     WorkloadLoaderClockworkBursty,
 )
-from schedulers import (
-    BranchPredictionScheduler,
-    ClockworkScheduler,
-    EDFScheduler,
-    FIFOScheduler,
-    GrapheneScheduler,
-    ILPScheduler,
-    LSFScheduler,
-    TetriSchedCPLEXScheduler,
-    TetriSchedGurobiScheduler,
-    Z3Scheduler,
-)
-
-try:
-    from schedulers import TetriSchedScheduler
-except ImportError:
-    pass
 from simulator import Simulator
 from utils import EventTime, setup_csv_logging, setup_logging
 from workload import BranchPredictionPolicy, JobGraph, Workload
@@ -706,12 +689,16 @@ def main(args):
     # Instantiate the scheduler based on the given flag.
     scheduler = None
     if FLAGS.scheduler == "FIFO":
+        from schedulers import FIFOScheduler
+
         scheduler = FIFOScheduler(
             preemptive=FLAGS.preemption,
             runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
             _flags=FLAGS,
         )
     elif FLAGS.scheduler == "EDF":
+        from schedulers import EDFScheduler
+
         scheduler = EDFScheduler(
             preemptive=FLAGS.preemption,
             runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
@@ -719,12 +706,16 @@ def main(args):
             _flags=FLAGS,
         )
     elif FLAGS.scheduler == "LSF":
+        from schedulers import LSFScheduler
+
         scheduler = LSFScheduler(
             preemptive=FLAGS.preemption,
             runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
             _flags=FLAGS,
         )
     elif FLAGS.scheduler == "Z3":
+        from schedulers import Z3Scheduler
+
         scheduler = Z3Scheduler(
             preemptive=FLAGS.preemption,
             runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
@@ -738,6 +729,8 @@ def main(args):
             _flags=FLAGS,
         )
     elif FLAGS.scheduler == "BranchPrediction":
+        from schedulers import BranchPredictionScheduler
+
         scheduler = BranchPredictionScheduler(
             preemptive=FLAGS.preemption,
             runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
@@ -747,6 +740,8 @@ def main(args):
             _flags=FLAGS,
         )
     elif FLAGS.scheduler == "ILP":
+        from schedulers import ILPScheduler
+
         scheduler = ILPScheduler(
             preemptive=FLAGS.preemption,
             runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
@@ -763,6 +758,8 @@ def main(args):
             _flags=FLAGS,
         )
     elif FLAGS.scheduler == "TetriSched_CPLEX":
+        from schedulers import TetriSchedCPLEXScheduler
+
         scheduler = TetriSchedCPLEXScheduler(
             preemptive=FLAGS.preemption,
             runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
@@ -780,6 +777,8 @@ def main(args):
             _flags=FLAGS,
         )
     elif FLAGS.scheduler == "TetriSched_Gurobi":
+        from schedulers import TetriSchedGurobiScheduler
+
         scheduler = TetriSchedGurobiScheduler(
             preemptive=FLAGS.preemption,
             runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
@@ -798,12 +797,16 @@ def main(args):
             _flags=FLAGS,
         )
     elif FLAGS.scheduler == "Clockwork":
+        from schedulers import ClockworkScheduler
+
         scheduler = ClockworkScheduler(
             runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
             goal=FLAGS.clockwork_goal,
             _flags=FLAGS,
         )
     elif FLAGS.scheduler == "TetriSched":
+        from schedulers import TetriSchedScheduler
+
         finer_discretization = FLAGS.finer_discretization_at_prev_solution
         scheduler = TetriSchedScheduler(
             preemptive=FLAGS.preemption,
@@ -833,40 +836,56 @@ def main(args):
             ),
         )
     elif FLAGS.scheduler == "GraphenePrime":
-        scheduler = TetriSchedScheduler(
-            preemptive=FLAGS.preemption,
-            runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
-            lookahead=EventTime(FLAGS.scheduler_lookahead, EventTime.Unit.US),
-            # Graphene does not have a notion of deadlines, so we do not enforce them.
-            enforce_deadlines=False,
-            retract_schedules=FLAGS.retract_schedules,
-            # Graphene is a DAG-aware scheduler, so we force the release of TaskGraphs
-            # when any of the tasks in the graph are released.
-            release_taskgraphs=True,
-            # Graphene aims to minimize the makespan of the schedule, so we force the
-            # goal of the Scheduler to be the minimum placement delay.
-            goal="min_placement_delay",
-            time_discretization=EventTime(
-                FLAGS.scheduler_time_discretization, EventTime.Unit.US
-            ),
-            plan_ahead=EventTime(FLAGS.scheduler_plan_ahead, EventTime.Unit.US),
-            log_to_file=FLAGS.scheduler_log_to_file,
-            _flags=FLAGS,
-        )
+        try:
+            from schedulers import TetriSchedScheduler
+
+            scheduler = TetriSchedScheduler(
+                preemptive=FLAGS.preemption,
+                runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
+                lookahead=EventTime(FLAGS.scheduler_lookahead, EventTime.Unit.US),
+                # Graphene does not have a notion of deadlines.
+                enforce_deadlines=False,
+                retract_schedules=FLAGS.retract_schedules,
+                # Graphene is a DAG-aware scheduler.
+                release_taskgraphs=True,
+                # Graphene is a min-makespan scheduler.
+                goal="min_placement_delay",
+                time_discretization=EventTime(
+                    FLAGS.scheduler_time_discretization, EventTime.Unit.US
+                ),
+                plan_ahead=EventTime(FLAGS.scheduler_plan_ahead, EventTime.Unit.US),
+                log_to_file=FLAGS.scheduler_log_to_file,
+                _flags=FLAGS,
+            )
+        except ImportError:
+            logger.error(
+                "Unable to import TetriSchedScheduler. "
+                "Make sure you've compiled the TetriSched C++ backend."
+            )
+            raise RuntimeError("TetriSchedScheduler not available.")
     elif FLAGS.scheduler == "Graphene":
-        scheduler = GrapheneScheduler(
-            preemptive=FLAGS.preemption,
-            runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
-            lookahead=EventTime(FLAGS.scheduler_lookahead, EventTime.Unit.US),
-            retract_schedules=FLAGS.retract_schedules,
-            goal=FLAGS.ilp_goal,
-            time_discretization=EventTime(
-                FLAGS.scheduler_time_discretization, EventTime.Unit.US
-            ),
-            plan_ahead=EventTime(FLAGS.scheduler_plan_ahead, EventTime.Unit.US),
-            log_to_file=FLAGS.scheduler_log_to_file,
-            _flags=FLAGS,
-        )
+        try:
+            from schedulers import GrapheneScheduler
+
+            scheduler = GrapheneScheduler(
+                preemptive=FLAGS.preemption,
+                runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
+                lookahead=EventTime(FLAGS.scheduler_lookahead, EventTime.Unit.US),
+                retract_schedules=FLAGS.retract_schedules,
+                goal=FLAGS.ilp_goal,
+                time_discretization=EventTime(
+                    FLAGS.scheduler_time_discretization, EventTime.Unit.US
+                ),
+                plan_ahead=EventTime(FLAGS.scheduler_plan_ahead, EventTime.Unit.US),
+                log_to_file=FLAGS.scheduler_log_to_file,
+                _flags=FLAGS,
+            )
+        except ImportError:
+            logger.error(
+                "Unable to import GrapheneScheduler. "
+                "Make sure you've compiled the TetriSched C++ backend."
+            )
+            raise RuntimeError("GrapheneScheduler not available.")
     else:
         raise ValueError(
             "Unsupported scheduler implementation: {}".format(FLAGS.scheduler)
