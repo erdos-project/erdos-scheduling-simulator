@@ -9,6 +9,7 @@ from data import (
     TaskLoaderBenchmark,
     TaskLoaderPylot,
     TaskLoaderSynthetic,
+    TpchLoader,
     WorkerLoader,
     WorkerLoaderBenchmark,
     WorkloadLoader,
@@ -34,7 +35,7 @@ flags.DEFINE_enum(
 flags.DEFINE_enum(
     "replay_trace",
     "pylot",
-    ["pylot", "clockwork_bursty", "alibaba"],
+    ["pylot", "clockwork_bursty", "alibaba", "tpch"],
     "Sets the trace to replay in the replay mode.",
 )
 flags.DEFINE_string(
@@ -128,6 +129,13 @@ flags.DEFINE_integer(
 )
 flags.DEFINE_integer(
     "benchmark_num_cpus", 10, "Number of CPUs available for benchmarking."
+)
+
+# TPCH related flags
+flags.DEFINE_string(
+    "tpch_query_dag_spec",
+    "./profiles/workload/tpch/queries.yaml",
+    "Path to a YAML file specifying the TPC-H query DAGs",
 )
 
 # AlibabaLoader related flags.
@@ -632,6 +640,10 @@ def main(args):
                     FLAGS.workload_update_interval, EventTime.Unit.US
                 ),
                 flags=FLAGS,
+            )
+        elif FLAGS.replay_trace == "tpch":
+            workload_loader = TpchLoader(
+                path=FLAGS.tpch_query_dag_spec,
             )
         else:
             raise NotImplementedError(
