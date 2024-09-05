@@ -27,12 +27,15 @@ class TpchLoader(BaseWorkloadLoader):
     
     Args:
         path (`str`): Path to a YAML file specifying the TPC-H query DAGs
+        _flags (`absl.flags`): The flags used to initialize the app, if any
     """
     def __init__(self, path: str, _flags: Optional["absl.flags"] = None) -> None:
         if _flags:
             self._loop_timeout = _flags.loop_timeout
+            self._workload_profile_path = _flags.workload_profile_path
         else:
             self._loop_timeout = EventTime(time=sys.maxsize, unit=EventTime.Unit.US)
+            self._workload_profile_path = "./profiles/workload/tpch/decima/2g"
 
         with open(path, "r") as f:
             workload_data = yaml.safe_load(f)
@@ -41,8 +44,11 @@ class TpchLoader(BaseWorkloadLoader):
         for query in workload_data["graphs"]:
             query_name = query["name"]
             graph = query["graph"]
-
-            job_graph = TpchLoader.parse_job_graph(query_name=query_name, graph=graph)
+            job_graph = TpchLoader.make_job_graph(
+                query_name=query_name,
+                graph=graph,
+                profile_path=self._workload_profile_path,
+            )
             job_graphs[query_name] = job_graph
 
         workload = Workload.from_job_graphs(job_graphs)
@@ -51,7 +57,7 @@ class TpchLoader(BaseWorkloadLoader):
 
 
     @staticmethod
-    def parse_job_graph(query_name: str, graph: List[Dict[str, Any]]) -> JobGraph:
+    def make_job_graph(query_name: str, graph: List[Dict[str, Any]], profile_path: str) -> JobGraph:
         job_graph = JobGraph(
             name=query_name,
 
@@ -66,14 +72,11 @@ class TpchLoader(BaseWorkloadLoader):
             deadline_variance=(0,0),
         )
 
-        # TODO: make configurable
-        profiler_path = "./profiles/workload/tpch/decima/2g"
         query_num = int(query_name[1:])
-        profiler_data = TpchLoader.get_profiler_data_for_query(profiler_path, query_num)
+        profiler_data = TpchLoader.get_profiler_data_for_query(profile_path, query_num)
 
         name_to_job = {}
         for node in graph:
-            # TODO: make profile_path configurable
             worker_profile = TpchLoader.load_query_profile(
                 profiler_data=profiler_data,
                 query_name=query_name,
