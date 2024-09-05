@@ -1,10 +1,11 @@
 import sys
-import yaml
 
 from typing import Any, Dict, List, Optional
 from pathlib import Path
 
+import absl #noqa: F401
 import numpy as np
+import yaml
 
 from utils import EventTime
 from workload import (
@@ -27,7 +28,12 @@ class TpchLoader(BaseWorkloadLoader):
     Args:
         path (`str`): Path to a YAML file specifying the TPC-H query DAGs
     """
-    def __init__(self, path: str) -> None:
+    def __init__(self, path: str, _flags: Optional["absl.flags"] = None) -> None:
+        if _flags:
+            self._loop_timeout = _flags.loop_timeout
+        else:
+            self._loop_timeout = EventTime(time=sys.maxsize, unit=EventTime.Unit.US)
+
         with open(path, "r") as f:
             workload_data = yaml.safe_load(f)
 
@@ -39,10 +45,8 @@ class TpchLoader(BaseWorkloadLoader):
             job_graph = TpchLoader.parse_job_graph(query_name=query_name, graph=graph)
             job_graphs[query_name] = job_graph
 
-        # TODO: configurable?
-        loop_timeout = EventTime(time=sys.maxsize, unit=EventTime.Unit.US) 
         workload = Workload.from_job_graphs(job_graphs)
-        workload.populate_task_graphs(completion_time=loop_timeout)
+        workload.populate_task_graphs(completion_time=self._loop_timeout)
         self._workloads = iter([workload])
 
 
