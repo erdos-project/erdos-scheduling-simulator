@@ -1,4 +1,6 @@
+import sys
 import yaml
+
 from typing import Any, Dict, List, Optional
 from pathlib import Path
 
@@ -37,7 +39,11 @@ class TpchLoader(BaseWorkloadLoader):
             job_graph = TpchLoader.parse_job_graph(query_name=query_name, graph=graph)
             job_graphs[query_name] = job_graph
 
-        self._workloads = iter([Workload.from_job_graphs(job_graphs)])
+        # TODO: configurable?
+        loop_timeout = EventTime(time=sys.maxsize, unit=EventTime.Unit.US) 
+        workload = Workload.from_job_graphs(job_graphs)
+        workload.populate_task_graphs(completion_time=loop_timeout)
+        self._workloads = iter([workload])
 
 
     @staticmethod
@@ -101,7 +107,7 @@ class TpchLoader(BaseWorkloadLoader):
             strategy=ExecutionStrategy(
                 resources=resources,
                 batch_size=1,
-                runtime=profile["avg_task_duration"],
+                runtime=EventTime(profile["avg_task_duration"], EventTime.Unit.US),
             ),
         )
         return WorkProfile(
