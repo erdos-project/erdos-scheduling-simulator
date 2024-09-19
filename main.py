@@ -137,6 +137,17 @@ flags.DEFINE_string(
     "./profiles/workload/tpch/queries.yaml",
     "Path to a YAML file specifying the TPC-H query DAGs",
 )
+flags.DEFINE_integer(
+    "tpch_num_queries",
+    50,
+    "Number of TPC-H queries to run",
+)
+flags.DEFINE_enum(
+    "tpch_dataset_size",
+    "50",
+    ["2", "50", "100", "250", "500"],
+    "Size of the TPC-H dataset to use",
+)
 
 # AlibabaLoader related flags.
 flags.DEFINE_integer(
@@ -644,6 +655,7 @@ def main(args):
         elif FLAGS.replay_trace == "tpch":
             workload_loader = TpchLoader(
                 path=FLAGS.tpch_query_dag_spec,
+                flags=FLAGS,
             )
         else:
             raise NotImplementedError(

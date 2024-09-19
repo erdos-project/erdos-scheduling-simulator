@@ -1,11 +1,14 @@
-import sys
+import random
+from pathlib import Path
 
 from typing import Any, Dict, List, Optional
 from pathlib import Path
 
-import absl #noqa: F401
+import absl
 import numpy as np
 import yaml
+
+from more_itertools import before_and_after
 
 from utils import EventTime
 from workload import (
@@ -22,20 +25,40 @@ from workload import (
 from .base_workload_loader import BaseWorkloadLoader
 
 
+"""
+- [ ] Release policy based on workload
+- [ ] Fix current time setting
+- [ ] Configure deadline variance 
+- [ ] Configure release policy
+"""
+
+
 class TpchLoader(BaseWorkloadLoader):
     """Loads the TPCH trace from the provided file
-    
+
     Args:
         path (`str`): Path to a YAML file specifying the TPC-H query DAGs
-        _flags (`absl.flags`): The flags used to initialize the app, if any
+        flags (`absl.flags`): The flags used to initialize the app, if any
     """
-    def __init__(self, path: str, _flags: Optional["absl.flags"] = None) -> None:
-        if _flags:
-            self._loop_timeout = _flags.loop_timeout
-            self._workload_profile_path = _flags.workload_profile_path
+
+    def __init__(self, path: str, flags: "absl.flags") -> None:
+        self._flags = flags
+        self._rng_seed = flags.random_seed
+        self._rng = random.Random(self._rng_seed)
+        self._loop_timeout = flags.loop_timeout
+        self._num_queries = flags.tpch_num_queries
+        self._dataset_size = flags.tpch_dataset_size
+        if flags.workload_profile_path:
+            self._workload_profile_path = str(
+                Path(flags.workload_profile_path) / f"{self._dataset_size}g"
+            )
         else:
-            self._loop_timeout = EventTime(time=sys.maxsize, unit=EventTime.Unit.US)
             self._workload_profile_path = "./profiles/workload/tpch/decima/2g"
+        self._workload_update_interval = EventTime(10, EventTime.Unit.US)
+        release_policy = self._get_release_policy()
+        self._release_times = release_policy.get_release_times(
+            completion_time=EventTime(self._flags.loop_timeout, EventTime.Unit.US)
+        )
 
         with open(path, "r") as f:
             workload_data = yaml.safe_load(f)
@@ -51,25 +74,72 @@ class TpchLoader(BaseWorkloadLoader):
             )
             job_graphs[query_name] = job_graph
 
-        workload = Workload.from_job_graphs(job_graphs)
-        workload.populate_task_graphs(completion_time=self._loop_timeout)
-        self._workloads = iter([workload])
+        self._job_graphs = job_graphs
+        self._workload = Workload.empty(flags)
 
+    def _get_release_policy(self):
+        release_policy_args = {}
+        if self._flags.override_release_policy == "periodic":
+            release_policy_args = {
+                "period": EventTime(
+                    self._flags.override_arrival_period, EventTime.Unit.US
+                ),
+            }
+        elif self._flags.override_release_policy == "fixed":
+            release_policy_args = {
+                "period": EventTime(
+                    self._flags.override_arrival_period, EventTime.Unit.US
+                ),
+                "num_invocations": self._flags.override_num_invocation,
+            }
+        elif self._flags.override_release_policy == "poisson":
+            release_policy_args = {
+                "rate": self._flags.override_poisson_arrival_rate,
+                "num_invocations": self._flags.override_num_invocation,
+            }
+        elif self._flags.override_release_policy == "gamma":
+            release_policy_args = {
+                "rate": self._flags.override_poisson_arrival_rate,
+                "num_invocations": self._flags.override_num_invocation,
+                "coefficient": self._flags.override_gamma_coefficient,
+            }
+        elif self._flags.override_release_policy == "fixed_gamma":
+            release_policy_args = {
+                "variable_arrival_rate": self._flags.override_poisson_arrival_rate,
+                "base_arrival_rate": self._flags.override_base_arrival_rate,
+                "num_invocations": self._flags.override_num_invocation,
+                "coefficient": self._flags.override_gamma_coefficient,
+            }
+        else:
+            raise NotImplementedError(
+                f"Release policy {self._flags.override_release_policy} not implemented."
+            )
+
+        # Check that none of the arg values are None
+        assert all([val is not None for val in release_policy_args.values()])
+
+        # Construct the release policy
+        start_time = EventTime(
+            time=self._rng.randint(
+                self._flags.randomize_start_time_min,
+                self._flags.randomize_start_time_max,
+            ),
+            unit=EventTime.Unit.US,
+        )
+        release_policy = getattr(
+            JobGraph.ReleasePolicy, self._flags.override_release_policy
+        )(start=start_time, rng_seed=self._rng_seed, **release_policy_args)
+
+        return release_policy
 
     @staticmethod
-    def make_job_graph(query_name: str, graph: List[Dict[str, Any]], profile_path: str) -> JobGraph:
+    def make_job_graph(
+        query_name: str, graph: List[Dict[str, Any]], profile_path: str
+    ) -> JobGraph:
         job_graph = JobGraph(
             name=query_name,
-
             # TODO: make configurable
-            release_policy=JobGraph.ReleasePolicy.fixed(
-                period=EventTime(30, EventTime.Unit.US),
-                num_invocations=10,
-                start=EventTime(0, EventTime.Unit.US),
-            ),
-
-            # TODO: make configurable
-            deadline_variance=(0,0),
+            deadline_variance=(10, 50),
         )
 
         query_num = int(query_name[1:])
@@ -100,9 +170,10 @@ class TpchLoader(BaseWorkloadLoader):
 
         return job_graph
 
-
     @staticmethod
-    def load_query_profile(profiler_data: Dict[int, Dict[str, Any]], query_name: str, node_name: str) -> WorkProfile:
+    def load_query_profile(
+        profiler_data: Dict[int, Dict[str, Any]], query_name: str, node_name: str
+    ) -> WorkProfile:
         profile = profiler_data[int(node_name)]
         resources = Resources(
             resource_vector={
@@ -122,9 +193,10 @@ class TpchLoader(BaseWorkloadLoader):
             execution_strategies=execution_strategies,
         )
 
-
     @staticmethod
-    def get_profiler_data_for_query(profile_path: str, query_num: int) -> Dict[int, Dict[str, Any]]:
+    def get_profiler_data_for_query(
+        profile_path: str, query_num: int
+    ) -> Dict[int, Dict[str, Any]]:
         def pre_process_task_duration(task_duration):
             # remove fresh durations from first wave
             clean_first_wave = {}
@@ -152,7 +224,6 @@ class TpchLoader(BaseWorkloadLoader):
         for n in range(num_nodes):
             task_duration = task_durations[n]
             e = next(iter(task_duration["first_wave"]))
-            # NOTE: somehow only picks the first element {2: [n_tasks_in_ms]}
 
             num_tasks = len(task_duration["first_wave"][e]) + len(
                 task_duration["rest_wave"][e]
@@ -176,12 +247,21 @@ class TpchLoader(BaseWorkloadLoader):
 
         return stage_info
 
-
     def get_next_workload(self, current_time: EventTime) -> Optional[Workload]:
-        try:
-            return next(self._workloads)
-        except StopIteration:
+        if len(self._release_times) == 0:
             return None
+        to_release, self._release_times = before_and_after(lambda t: t <= current_time + self._workload_update_interval, self._release_times)
+        for t in to_release:
+            query_num = self._rng.randint(1, len(self._job_graphs))
+            query_name = f"Q{query_num}"
+            job_graph = self._job_graphs[query_name]
+            task_graph = job_graph.get_next_task_graph(
+                start_time=t,
+                _flags=self._flags,
+            )
+            self._workload.add_task_graph(task_graph)
+        self._release_times = list(self._release_times)
+        return self._workload
 
 
 class SetWithCount(object):
@@ -208,4 +288,3 @@ class SetWithCount(object):
         self.set[item] -= 1
         if self.set[item] == 0:
             del self.set[item]
-
