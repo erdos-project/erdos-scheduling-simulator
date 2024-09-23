@@ -1539,19 +1539,19 @@ class Simulator(object):
                 len(releasable_tasks),
             )
 
-            # Add the TaskGraphRelease events into the system.
-            for task_graph_name, task_graph in self._workload.task_graphs.items():
-                event = Event(
-                    event_type=EventType.TASK_GRAPH_RELEASE,
-                    time=task_graph.release_time,
-                    task_graph=task_graph_name,
-                )
-                self._event_queue.add_event(event)
-                self._logger.info(
-                    "[%s] Added %s to the event queue.",
-                    self._simulator_time.to(EventTime.Unit.US).time,
-                    event,
-                )
+            # # Add the TaskGraphRelease events into the system.
+            # for task_graph_name, task_graph in self._workload.task_graphs.items():
+            #     event = Event(
+            #         event_type=EventType.TASK_GRAPH_RELEASE,
+            #         time=task_graph.release_time,
+            #         task_graph=task_graph_name,
+            #     )
+            #     self._event_queue.add_event(event)
+            #     self._logger.info(
+            #         "[%s] Added %s to the event queue.",
+            #         self._simulator_time.to(EventTime.Unit.US).time,
+            #         event,
+            #     )
 
             max_release_time = self._simulator_time
             for task in releasable_tasks:

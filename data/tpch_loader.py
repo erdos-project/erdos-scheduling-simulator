@@ -1,5 +1,5 @@
+import sys
 import random
-from pathlib import Path
 
 from typing import Any, Dict, List, Optional
 from pathlib import Path
@@ -7,8 +7,6 @@ from pathlib import Path
 import absl
 import numpy as np
 import yaml
-
-from more_itertools import before_and_after
 
 from utils import EventTime
 from workload import (
@@ -25,14 +23,6 @@ from workload import (
 from .base_workload_loader import BaseWorkloadLoader
 
 
-"""
-- [ ] Release policy based on workload
-- [ ] Fix current time setting
-- [ ] Configure deadline variance 
-- [ ] Configure release policy
-"""
-
-
 class TpchLoader(BaseWorkloadLoader):
     """Loads the TPCH trace from the provided file
 
@@ -45,23 +35,27 @@ class TpchLoader(BaseWorkloadLoader):
         self._flags = flags
         self._rng_seed = flags.random_seed
         self._rng = random.Random(self._rng_seed)
-        self._loop_timeout = flags.loop_timeout
-        self._num_queries = flags.tpch_num_queries
-        self._dataset_size = flags.tpch_dataset_size
-        if flags.workload_profile_path:
-            self._workload_profile_path = str(
-                Path(flags.workload_profile_path) / f"{self._dataset_size}g"
-            )
+        if flags.workload_update_interval > 0:
+            self._workload_update_interval = flags.workload_update_interval
         else:
-            self._workload_profile_path = "./profiles/workload/tpch/decima/2g"
-        self._workload_update_interval = EventTime(10, EventTime.Unit.US)
+            self._workload_update_interval = EventTime(sys.maxsize, EventTime.Unit.US)
         release_policy = self._get_release_policy()
         self._release_times = release_policy.get_release_times(
             completion_time=EventTime(self._flags.loop_timeout, EventTime.Unit.US)
         )
+        self._current_release_pointer = 0
+
+        # Set up query name to job graph mapping
 
         with open(path, "r") as f:
             workload_data = yaml.safe_load(f)
+
+        if flags.workload_profile_path:
+            workload_profile_path = str(
+                Path(flags.workload_profile_path) / f"{flags.s.tpch_dataset_size}g"
+            )
+        else:
+            workload_profile_path = "./profiles/workload/tpch/decima/2g"
 
         job_graphs = {}
         for query in workload_data["graphs"]:
@@ -70,11 +64,17 @@ class TpchLoader(BaseWorkloadLoader):
             job_graph = TpchLoader.make_job_graph(
                 query_name=query_name,
                 graph=graph,
-                profile_path=self._workload_profile_path,
+                profile_path=workload_profile_path,
+                deadline_variance=(
+                    int(flags.min_deadline_variance),
+                    int(flags.max_deadline_variance),
+                )
             )
             job_graphs[query_name] = job_graph
 
         self._job_graphs = job_graphs
+
+        # Initialize workload
         self._workload = Workload.empty(flags)
 
     def _get_release_policy(self):
@@ -134,12 +134,11 @@ class TpchLoader(BaseWorkloadLoader):
 
     @staticmethod
     def make_job_graph(
-        query_name: str, graph: List[Dict[str, Any]], profile_path: str
+        query_name: str, graph: List[Dict[str, Any]], profile_path: str, deadline_variance=(0,0),
     ) -> JobGraph:
         job_graph = JobGraph(
             name=query_name,
-            # TODO: make configurable
-            deadline_variance=(10, 50),
+            deadline_variance=deadline_variance,
         )
 
         query_num = int(query_name[1:])
@@ -248,9 +247,24 @@ class TpchLoader(BaseWorkloadLoader):
         return stage_info
 
     def get_next_workload(self, current_time: EventTime) -> Optional[Workload]:
-        if len(self._release_times) == 0:
+        to_release = []
+        while (
+            self._current_release_pointer < len(self._release_times)
+            and self._release_times[self._current_release_pointer]
+            <= current_time + self._workload_update_interval
+        ):
+            to_release.append(
+                self._release_times[self._current_release_pointer]
+            )
+            self._current_release_pointer += 1
+
+        if (
+            self._current_release_pointer >= len(self._release_times)
+            and len(to_release) == 0
+        ):
+            # Nothing left to release
             return None
-        to_release, self._release_times = before_and_after(lambda t: t <= current_time + self._workload_update_interval, self._release_times)
+
         for t in to_release:
             query_num = self._rng.randint(1, len(self._job_graphs))
             query_name = f"Q{query_num}"
@@ -260,7 +274,7 @@ class TpchLoader(BaseWorkloadLoader):
                 _flags=self._flags,
             )
             self._workload.add_task_graph(task_graph)
-        self._release_times = list(self._release_times)
+
         return self._workload
 
 

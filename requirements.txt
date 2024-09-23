@@ -14,4 +14,3 @@ cplex
 pre-commit
 black
 isort
-more-itertools
