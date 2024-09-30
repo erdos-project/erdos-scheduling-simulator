@@ -2,15 +2,18 @@
 
 import ast
 import json
+import yaml
 import os
 from typing import Mapping, Sequence
 
 import networkx as nx
 import numpy as np
 
-DECIMA_TPCH_DIR = "../profiles/workload/tpch/decima/"
+# TODO: Remove relative paths and make them configurable
+DECIMA_TPCH_DIR = "/home/dgarg39/erdos-scheduling-simulator/profiles/workload/tpch/decima/"
+TPCH_PARENT_DIR = "/home/dgarg39/erdos-scheduling-simulator/profiles/workload/tpch/"
 TPCH_SUBDIR = "100g/"
-CLOUDLAB_TPCH_DIR = "../profiles/workload/tpch/cloudlab/"
+CLOUDLAB_TPCH_DIR = "/home/dgarg39/erdos-scheduling-simulator/profiles/workload/tpch/cloudlab/"
 
 
 class SetWithCount(object):
@@ -134,12 +137,31 @@ def use_decima_tpch_profile(query_num, dataset_size):
 
 
 def get_base_tpch_graph_structure(query_num):
-    # use query_num to read string from file
-    with open(os.path.join(DECIMA_TPCH_DIR, "query_dag.json")) as f:
-        tpch_query_json = json.load(f)
+    with open(os.path.join(TPCH_PARENT_DIR, "queries.yaml")) as f:
+        tpch_query_yaml = yaml.load(f, Loader=yaml.FullLoader)
+    
+    # Extract the graph structure for the given query number
+    query_graph = None
+    for graph in tpch_query_yaml['graphs']:
+        if graph['name'] == f'Q{query_num}':
+            query_graph = graph['graph']
+            break
 
-    # get query dependency from file
-    query_dependency = ast.literal_eval(tpch_query_json["query_number"][str(query_num)])
+    if query_graph is None:
+        raise ValueError(f"Query number {query_num} not found in the YAML file")
+
+    # Convert the graph structure to a format suitable for nx.DiGraph
+    query_dependency = []
+    for node in query_graph:
+        if 'children' in node:
+            for child in node['children']:
+                query_dependency.append((node['name'], child))
+        else:
+            # Ensure each tuple has two elements by adding a dummy node
+            query_dependency.append((node['name'], None))
+    
+    # Remove any tuples where the second element is None
+    query_dependency = [edge for edge in query_dependency if edge[1] is not None]
 
     # convert job structure into a nx graph
     base_tpch_graph = nx.DiGraph(query_dependency)
