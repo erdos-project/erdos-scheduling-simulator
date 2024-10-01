@@ -148,6 +148,16 @@ flags.DEFINE_enum(
     ["2", "50", "100", "250", "500"],
     "Size of the TPC-H dataset to use",
 )
+flags.DEFINE_integer(
+    "tpch_max_executors_per_job",
+    50,
+    "Maximum number of executors to use per TPC-H query stage",
+)
+flags.DEFINE_integer(
+    "tpch_min_task_runtime",
+    8,
+    "Minimum runtime of a TPC-H task",
+)
 
 # AlibabaLoader related flags.
 flags.DEFINE_integer(

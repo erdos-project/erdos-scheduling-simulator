@@ -1,3 +1,4 @@
+import math
 import sys
 import random
 
@@ -8,7 +9,7 @@ import absl
 import numpy as np
 import yaml
 
-from utils import EventTime
+from utils import EventTime, setup_logging
 from workload import (
     Workload,
     WorkProfile,
@@ -33,6 +34,12 @@ class TpchLoader(BaseWorkloadLoader):
 
     def __init__(self, path: str, flags: "absl.flags") -> None:
         self._flags = flags
+        self._logger = setup_logging(
+            name=self.__class__.__name__,
+            log_dir=flags.log_dir,
+            log_file=flags.log_file_name,
+            log_level=flags.log_level,
+        )
         self._rng_seed = flags.random_seed
         self._rng = random.Random(self._rng_seed)
         if flags.workload_update_interval > 0:
@@ -43,6 +50,7 @@ class TpchLoader(BaseWorkloadLoader):
         self._release_times = release_policy.get_release_times(
             completion_time=EventTime(self._flags.loop_timeout, EventTime.Unit.US)
         )
+
         self._current_release_pointer = 0
 
         # Set up query name to job graph mapping
@@ -61,14 +69,14 @@ class TpchLoader(BaseWorkloadLoader):
         for query in workload_data["graphs"]:
             query_name = query["name"]
             graph = query["graph"]
-            job_graph = TpchLoader.make_job_graph(
+            job_graph = self.make_job_graph(
                 query_name=query_name,
                 graph=graph,
                 profile_path=workload_profile_path,
                 deadline_variance=(
                     int(flags.min_deadline_variance),
                     int(flags.max_deadline_variance),
-                )
+                ),
             )
             job_graphs[query_name] = job_graph
 
@@ -132,9 +140,12 @@ class TpchLoader(BaseWorkloadLoader):
 
         return release_policy
 
-    @staticmethod
     def make_job_graph(
-        query_name: str, graph: List[Dict[str, Any]], profile_path: str, deadline_variance=(0,0),
+        self,
+        query_name: str,
+        graph: List[Dict[str, Any]],
+        profile_path: str,
+        deadline_variance=(0, 0),
     ) -> JobGraph:
         job_graph = JobGraph(
             name=query_name,
@@ -146,7 +157,7 @@ class TpchLoader(BaseWorkloadLoader):
 
         name_to_job = {}
         for node in graph:
-            worker_profile = TpchLoader.load_query_profile(
+            worker_profile = self.make_work_profile(
                 profiler_data=profiler_data,
                 query_name=query_name,
                 node_name=node["name"],
@@ -169,14 +180,45 @@ class TpchLoader(BaseWorkloadLoader):
 
         return job_graph
 
-    @staticmethod
-    def load_query_profile(
-        profiler_data: Dict[int, Dict[str, Any]], query_name: str, node_name: str
+    def make_work_profile(
+        self, profiler_data: Dict[int, Dict[str, Any]], query_name: str, node_name: str
     ) -> WorkProfile:
         profile = profiler_data[int(node_name)]
+
+        num_tasks = min(self._flags.tpch_max_executors_per_job, profile["num_tasks"])
+
+        # adjust runtime based on num_tasks
+        runtime = max(
+            self._flags.tpch_min_task_runtime,
+            (
+                profile["avg_task_duration"]
+                if profile["num_tasks"] <= self._flags.tpch_max_executors_per_job
+                else math.ceil(
+                    (profile["num_tasks"] * profile["avg_task_duration"])
+                    / self._flags.tpch_max_executors_per_job
+                )
+            ),
+        )
+
+        if profile["num_tasks"] > self._flags.tpch_max_executors_per_job:
+            self._logger.debug(
+                "%s@%s: Profiled slots > tpch_max_executors_per_job: %s. Converted "
+                "(slots,runtime) from (%s,%sms) to (%s, %sms)",
+                node_name,
+                query_name,
+                self._flags.tpch_max_executors_per_job,
+                profile["num_tasks"],
+                profile["avg_task_duration"],
+                num_tasks,
+                runtime,
+            )
+
+        # convert runtime to us, it is in millseconds
+        runtime = round(max(1, runtime / 1e3))
+
         resources = Resources(
             resource_vector={
-                Resource(name="Slot", _id="any"): profile["num_tasks"],
+                Resource(name="Slot", _id="any"): num_tasks,
             },
         )
         execution_strategies = ExecutionStrategies()
@@ -184,7 +226,7 @@ class TpchLoader(BaseWorkloadLoader):
             strategy=ExecutionStrategy(
                 resources=resources,
                 batch_size=1,
-                runtime=EventTime(profile["avg_task_duration"], EventTime.Unit.US),
+                runtime=EventTime(runtime, EventTime.Unit.US),
             ),
         )
         return WorkProfile(
@@ -240,7 +282,7 @@ class TpchLoader(BaseWorkloadLoader):
             curr_stage = {
                 "stage_id": n,
                 "num_tasks": num_tasks,
-                "avg_task_duration": round(rough_duration),
+                "avg_task_duration": round(rough_duration),  # in milliseconds
             }
             stage_info[n] = curr_stage
 
@@ -253,9 +295,7 @@ class TpchLoader(BaseWorkloadLoader):
             and self._release_times[self._current_release_pointer]
             <= current_time + self._workload_update_interval
         ):
-            to_release.append(
-                self._release_times[self._current_release_pointer]
-            )
+            to_release.append(self._release_times[self._current_release_pointer])
             self._current_release_pointer += 1
 
         if (
