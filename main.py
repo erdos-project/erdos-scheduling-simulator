@@ -159,6 +159,14 @@ flags.DEFINE_integer(
     "Minimum runtime of a TPC-H task",
 )
 
+flags.DEFINE_list(
+    "opt_passes",
+    [],
+    "A list of timestamps (in µs) at which to request extra logging from the Scheduler."
+    "If scheduler_log_to_file is `True`, then extra information will be requested for "
+    "all timestamps.",
+)
+
 # AlibabaLoader related flags.
 flags.DEFINE_integer(
     "alibaba_loader_task_cpu_multiplier",

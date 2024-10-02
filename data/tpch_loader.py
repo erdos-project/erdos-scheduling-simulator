@@ -188,16 +188,13 @@ class TpchLoader(BaseWorkloadLoader):
         num_tasks = min(self._flags.tpch_max_executors_per_job, profile["num_tasks"])
 
         # adjust runtime based on num_tasks
-        runtime = max(
-            self._flags.tpch_min_task_runtime,
-            (
-                profile["avg_task_duration"]
-                if profile["num_tasks"] <= self._flags.tpch_max_executors_per_job
-                else math.ceil(
-                    (profile["num_tasks"] * profile["avg_task_duration"])
-                    / self._flags.tpch_max_executors_per_job
-                )
-            ),
+        runtime = (
+            profile["avg_task_duration"]
+            if profile["num_tasks"] <= self._flags.tpch_max_executors_per_job
+            else math.ceil(
+                (profile["num_tasks"] * profile["avg_task_duration"])
+                / self._flags.tpch_max_executors_per_job
+            )
         )
 
         if profile["num_tasks"] > self._flags.tpch_max_executors_per_job:
@@ -214,7 +211,7 @@ class TpchLoader(BaseWorkloadLoader):
             )
 
         # convert runtime to us, it is in millseconds
-        runtime = round(max(1, runtime / 1e3))
+        runtime = round(max(self._flags.tpch_min_task_runtime, runtime / 1e3))
 
         resources = Resources(
             resource_vector={
