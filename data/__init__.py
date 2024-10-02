@@ -7,6 +7,7 @@ from .task_loader import TaskLoader
 from .task_loader_benchmark import TaskLoaderBenchmark
 from .task_loader_pylot import TaskLoaderPylot
 from .task_loader_synthetic import TaskLoaderSynthetic
+from .tpch_loader import TpchLoader
 from .worker_loader import WorkerLoader
 from .worker_loader_benchmark import WorkerLoaderBenchmark
 from .workload_loader import WorkloadLoader
