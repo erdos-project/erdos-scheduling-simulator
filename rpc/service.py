@@ -1,6 +1,8 @@
+import time
 import asyncio
 from concurrent import futures
 from urllib.parse import urlparse
+from typing import Optional
 
 # TODO: refactor out the need to import main to get common flags
 import main
@@ -46,6 +48,14 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         self._simulator = None
         self._scheduler = EDFScheduler()
 
+    def __sim_time(self, ts: Optional[int] = None):
+        if self._initialization_time is None:
+            raise ValueErorr("initialization time is not set")
+        if not ts:
+            ts = int(time.time())
+        ts = EventTime(ts, EventTime.Unit.US)
+        return ts - self._initialization_time
+
     async def RegisterFramework(self, request, context):
         if self._simulator:
             msg = f"Framework already registered at the address {self._master_uri} at timestamp {self._initialization_time}"
@@ -69,9 +79,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
             worker_pools=WorkerPools([worker_pool]),
         )
 
-        sim_time = (
-            EventTime(request.timestamp, EventTime.Unit.US) - self._initialization_time
-        )
+        sim_time = self.__sim_time(request.timestamp)
         msg = f"[{sim_time}] Registered the framework '{framework_name}' with URI {self._master_uri} at {self._initialization_time.time}"
         self._logger.info(msg)
         return erdos_scheduler_pb2.RegisterFrameworkResponse(success=True, message=msg)
@@ -91,9 +99,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
                 success=False, message=msg
             )
 
-        sim_time = (
-            EventTime(request.timestamp, EventTime.Unit.US) - self._initialization_time
-        )
+        sim_time = self.__sim_time(request.timestamp)
         self._initialization_time = None
         self._master_uri = None
         self._simulator = None
