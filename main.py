@@ -143,6 +143,12 @@ flags.DEFINE_integer(
     "Number of TPC-H queries to run",
 )
 flags.DEFINE_enum(
+    "tpch_profile_type",
+    "Cloudlab",
+    ["Cloudlab", "Decima"],
+    "Type of TPC-H profile the data loader must use",
+)
+flags.DEFINE_enum(
     "tpch_dataset_size",
     "50",
     ["2", "50", "100", "250", "500"],
