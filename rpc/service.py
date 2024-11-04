@@ -1,9 +1,8 @@
 import asyncio
 from concurrent import futures
 
-
-import erdos_scheduler_pb2
-import erdos_scheduler_pb2_grpc
+from rpc import erdos_scheduler_pb2
+from rpc import erdos_scheduler_pb2_grpc
 
 import grpc
 
