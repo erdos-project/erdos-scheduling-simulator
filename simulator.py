@@ -223,6 +223,9 @@ class EventQueue(object):
     def __len__(self) -> int:
         return len(self._event_queue)
 
+    def __str__(self) -> str:
+        return str(self._event_queue)
+
 
 class Simulator(object):
     """A `Simulator` simulates the execution of the different tasks in the
@@ -251,7 +254,7 @@ class Simulator(object):
         self,
         worker_pools: WorkerPools,
         scheduler: BaseScheduler,
-        workload_loader: BaseWorkloadLoader,
+        workload_loader: BaseWorkloadLoader = None,
         loop_timeout: EventTime = EventTime(time=sys.maxsize, unit=EventTime.Unit.US),
         scheduler_frequency: EventTime = EventTime(time=-1, unit=EventTime.Unit.US),
         _flags: Optional["absl.flags"] = None,
@@ -259,7 +262,7 @@ class Simulator(object):
         if not isinstance(scheduler, BaseScheduler):
             raise ValueError("Scheduler must implement the BaseScheduler interface.")
 
-        if not isinstance(workload_loader, BaseWorkloadLoader):
+        if workload_loader and not isinstance(workload_loader, BaseWorkloadLoader):
             raise ValueError(
                 "WorkloadLoader must implement the BaseWorkloadLoader interface."
             )
@@ -392,15 +395,16 @@ class Simulator(object):
         )
 
         # Second, create the UPDATE_WORKLOAD event to retrieve the latest Workload.
-        upate_workload_event = Event(
-            event_type=EventType.UPDATE_WORKLOAD, time=self._simulator_time
-        )
-        self._event_queue.add_event(upate_workload_event)
-        self._logger.info(
-            "[%s] Added %s to the event queue.",
-            self._simulator_time.time,
-            upate_workload_event,
-        )
+        if self._workload_loader:
+            upate_workload_event = Event(
+                event_type=EventType.UPDATE_WORKLOAD, time=self._simulator_time
+            )
+            self._event_queue.add_event(upate_workload_event)
+            self._logger.info(
+                "[%s] Added %s to the event queue.",
+                self._simulator_time.time,
+                upate_workload_event,
+            )
 
         # Third, create the SCHEDULER_START event to invoke the scheduler.
         sched_start_event = Event(
@@ -472,7 +476,7 @@ class Simulator(object):
         """
         # Run the simulator loop.
         while True:
-            time_until_next_event = self._event_queue.peek().time - self._simulator_time
+            time_until_next_event = self.time_until_next_event()
 
             # If there are any running tasks, step through the execution of the
             # Simulator until the closest remaining time.
@@ -510,6 +514,12 @@ class Simulator(object):
                 self.__step(step_size=time_until_next_event)
                 if self.__handle_event(self._event_queue.next()):
                     break
+
+    def time_until_next_event(self) -> EventTime:
+        return self._event_queue.peek().time - self._simulator_time
+
+    def step(self, step_size: EventTime) -> None:
+        self.__step(step_size=step_size)
 
     def __handle_scheduler_start(self, event: Event) -> None:
         """Handle the SCHEDULER_START event. The method invokes the scheduler, and adds
@@ -1503,6 +1513,11 @@ class Simulator(object):
             raise ValueError(
                 f"__handle_update_workload called with event of type {event.type}."
             )
+        if not self._workload_loader:
+            raise ValueError(
+                "UPDATE_WORKLOAD event enqueued without workload_loader"
+            )
+
         updated_workload = self._workload_loader.get_next_workload(
             current_time=self._simulator_time
         )
