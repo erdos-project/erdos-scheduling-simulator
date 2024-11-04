@@ -157,8 +157,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
             _logger=self._logger,
         )
 
-        # Simulator maintains only one worker pool, so this should be fine
-        next(iter(self._simulator._worker_pools.worker_pools)).add_workers([worker])
+        self.__get_worker_pool().add_workers([worker])
 
         msg = f"[{sim_time}] Registered worker (id={request.id}, name={request.name})."
 
@@ -188,6 +187,12 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
 
     def __framework_registered(self):
         return self._simulator is not None
+
+    def __get_worker_pool(self):
+        # Simulator maintains only one worker pool, so this should be fine
+        return next(iter(self._simulator._worker_pools.worker_pools)).add_workers(
+            [worker]
+        )
 
 
 async def serve(server):
