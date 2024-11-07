@@ -4,12 +4,13 @@ import json
 import sys
 import random
 
-from typing import Any, Dict, List, Optional, Callable
+from typing import Any, Dict, List, Optional, Callable, Tuple
 from pathlib import Path
 
 import absl
 import numpy as np
 import yaml
+import networkx as nx
 
 from utils import EventTime, setup_logging
 from workload import (
@@ -27,15 +28,247 @@ from workload import (
 from .base_workload_loader import BaseWorkloadLoader
 
 
-class TpchLoader(BaseWorkloadLoader):
-    """Loads the TPCH trace from the provided file
+class TpchLoader:
+    """Construct TPC-H task graph from a query profile
 
     Args:
         path (`str`): Path to a YAML file specifying the TPC-H query DAGs
         flags (`absl.flags`): The flags used to initialize the app, if any
+
     """
 
-    def __init__(self, path: str, flags: "absl.flags") -> None:
+    def __init__(self, path: Path, flags: "absl.flags"):
+        self._logger = setup_logging(
+            name=self.__class__.__name__,
+            log_dir=flags.log_dir,
+            log_file=flags.log_file_name,
+            log_level=flags.log_level,
+        )
+        self._flags = flags
+
+        # Load the TPC-H DAG structures
+        with open(path, "r") as f:
+            workload_data = yaml.safe_load(f)
+        self._graphs = {}
+        for query in workload_data["graphs"]:
+            query_num = int(query["name"][1:])
+            self._graphs[query_num] = query["graph"]
+
+    def make_task_graph(
+        self,
+        id: str,
+        query_num: int,
+        release_time: EventTime,
+        dependencies: Optional[List[Dict[str, Any]]] = None,
+        profile_type: Optional[str] = None,
+        dataset_size: Optional[int] = None,
+        max_executors_per_job: Optional[int] = None,
+        min_task_runtime: Optional[int] = None,
+    ) -> Tuple[TaskGraph, Dict[int, int]]:
+        if profile_type is None:
+            profile_type = self._flags.tpch_profile_type
+        if dataset_size is None:
+            dataset_size = self._flags.tpch_dataset_size
+        if max_executors_per_job is None:
+            max_executors_per_job = self._flags.tpch_max_executors_per_job
+        if min_task_runtime is None:
+            min_task_runtime = self._flags.tpch_min_task_runtime
+
+        query_name = f"Q{query_num}"
+
+        # Normalize dependencies
+        if dependencies is None:
+            dependencies = self._graphs[query_num]
+            deps_mapping = None
+        else:
+            deps_mapping = self.__map_dependencies(query_num, dependencies)
+            for node in dependencies:
+                node["name"] = deps_mapping[node["name"]]
+                if "children" in node:
+                    node["children"] = [deps_mapping[c] for c in node["children"]]
+            self._logger.info(
+                f"Mapped dependencies for TPC-H query {query_name} as {deps_mapping}."
+            )
+
+        # Construct a JobGraph
+        job_graph = JobGraph(name=f"{query_name}[{id}]")
+        profiler_data = get_all_stage_info_for_query(
+            query_num,
+            profile_type,
+            dataset_size,
+            max_executors_per_job,
+        )
+        name_to_job = {}
+        for node in dependencies:
+            worker_profile = self.__make_work_profile(
+                profiler_data=profiler_data,
+                query_name=query_name,
+                node_name=node["name"],
+                max_executors_per_job=max_executors_per_job,
+                min_task_runtime=min_task_runtime,
+            )
+            job = Job(
+                name=node["name"],
+                profile=worker_profile,
+            )
+            name_to_job[node["name"]] = job
+            job_graph.add_job(job=job)
+        for node in dependencies:
+            job = name_to_job[node["name"]]
+            if "children" in node:
+                for child in node["children"]:
+                    if child not in name_to_job:
+                        raise ValueError(
+                            f"Child {child} of {node['name']} was "
+                            f"not present in the graph."
+                        )
+                    child_job = name_to_job[child]
+                    job_graph.add_child(job, child_job)
+
+        # Construct TaskGraph from JobGraph
+        task_graph = job_graph.get_next_task_graph(
+            start_time=release_time,
+            _flags=self._flags,
+        )
+
+        self._logger.info(f"Constructed TaskGraph for TPC-H query {query_name}.")
+
+        return task_graph, deps_mapping
+
+    def __make_work_profile(
+        self,
+        profiler_data: Dict[int, Dict[str, Any]],
+        query_name: str,
+        node_name: str,
+        max_executors_per_job: int,
+        min_task_runtime: int,
+    ) -> WorkProfile:
+        profile = profiler_data[int(node_name)]
+
+        profiled_task_slots = profile["num_tasks"]
+        profiled_runtime = math.ceil(profile["avg_task_duration_ms"] / 1e3)
+
+        if profiled_task_slots > max_executors_per_job:
+            num_slots = max_executors_per_job
+            runtime = math.ceil(
+                (profiled_task_slots * profiled_runtime) / max_executors_per_job
+            )
+            self._logger.debug(
+                "%s@%s: num_slots (%s) > max_executors_per_job (%s). Converted "
+                "(slots,runtime) from (%s,%s) to (%s, %s)",
+                node_name,
+                query_name,
+                profiled_task_slots,
+                max_executors_per_job,
+                profiled_task_slots,
+                profiled_runtime,
+                num_slots,
+                runtime,
+            )
+        else:
+            num_slots = profiled_task_slots
+            runtime = profiled_runtime
+
+        if runtime < min_task_runtime:
+            _runtime = runtime
+            runtime = max(min_task_runtime, _runtime)
+            self._logger.debug(
+                "%s@%s: runtime (%s) < min_task_runtime (%s). Converted "
+                "(slots,runtime) from (%s,%s) to (%s, %s)",
+                node_name,
+                query_name,
+                _runtime,
+                min_task_runtime,
+                num_slots,
+                _runtime,
+                num_slots,
+                runtime,
+            )
+
+        resources = Resources(
+            resource_vector={
+                Resource(name="Slot", _id="any"): num_slots,
+            },
+        )
+        execution_strategies = ExecutionStrategies()
+        execution_strategies.add_strategy(
+            strategy=ExecutionStrategy(
+                resources=resources,
+                batch_size=1,
+                runtime=EventTime(runtime, EventTime.Unit.US),
+            ),
+        )
+        return WorkProfile(
+            name=f"{query_name}_{node_name}_execution_profile",
+            execution_strategies=execution_strategies,
+        )
+
+    def __map_dependencies(self, query_num: int, deps: List[Dict[str, Any]]):
+        def deps_to_nx_graph(deps: List[Dict[str, Any]]):
+            query_dependency = []
+            for node in deps:
+                if "children" in node:
+                    for child in node["children"]:
+                        query_dependency.append((node["name"], child))
+                else:
+                    # Ensure each tuple has two elements by adding a dummy node
+                    query_dependency.append((node["name"], None))
+
+            # Remove any tuples where the second element is None
+            query_dependency = [
+                edge for edge in query_dependency if edge[1] is not None
+            ]
+
+            # convert job structure into a nx graph
+            nx_deps = nx.DiGraph(query_dependency)
+
+            return nx_deps
+
+        def are_structurally_same(graph1, graph2):
+            # Step 1: Check if both graphs have the same number of vertices
+            if len(graph1.nodes) != len(graph2.nodes):
+                return False, None
+
+            # Step 2: Check if there exists a bijection between the vertices
+            #         of the two graphs such that their adjacency relationships match
+            for mapping in nx.isomorphism.GraphMatcher(
+                graph1, graph2
+            ).isomorphisms_iter():
+                # Check if the adjacency relationships match
+                if all(v in mapping for u, v in graph1.edges):
+                    # graph structures match
+                    # mapping is a dict {key=original-stage-id, val=app-stage-id}
+                    # we reverse reversed mapping from app-stage-id to orig-stage-id
+                    reversed_mapping = {v: k for k, v in mapping.items()}
+                    return True, reversed_mapping
+
+            return False, None
+
+        base_deps = self._graphs[query_num]
+        is_same, mapping = are_structurally_same(
+            deps_to_nx_graph(base_deps), deps_to_nx_graph(deps)
+        )
+
+        if not is_same:
+            raise ValueError(
+                f"Structure of dependencies provided for query number {query_num} does not match that of canonical dependencies. Provided: {deps}. Canonical: {base_deps}"
+            )
+
+        return mapping
+
+    @property
+    def num_queries(self) -> int:
+        return len(self._graphs)
+
+
+class TpchWorkloadLoader(BaseWorkloadLoader):
+    """Construct a TPC-H query workload
+
+    Args:
+        flags (`absl.flags`): The flags used to initialize the app, if any
+    """
+
+    def __init__(self, flags: "absl.flags") -> None:
         self._flags = flags
         self._logger = setup_logging(
             name=self.__class__.__name__,
@@ -50,29 +283,18 @@ class TpchLoader(BaseWorkloadLoader):
         else:
             self._workload_update_interval = EventTime(sys.maxsize, EventTime.Unit.US)
 
-        # Set up task graph generators
-        with open(path, "r") as f:
-            workload_data = yaml.safe_load(f)
-        task_graph_generators = {}
-        for query in workload_data["graphs"]:
-            query_name = query["name"]
-            graph = query["graph"]
-            gen = self.make_task_graph_generator(
-                query_name=query_name,
-                graph=graph,
-            )
-            task_graph_generators[query_name] = gen
-        self._task_graph_generators = task_graph_generators
+        # Instantiate tpch loader
+        self._tpch_loader = TpchLoader(path=flags.tpch_query_dag_spec, flags=flags)
 
         # Gather release times
-        release_policy = self._make_release_policy()
+        release_policy = self.__make_release_policy()
         release_times = release_policy.get_release_times(
             completion_time=EventTime(self._flags.loop_timeout, EventTime.Unit.US)
         )
 
         # Sample queries to be released
         query_nums = [
-            self._rng.randint(1, len(self._task_graph_generators))
+            self._rng.randint(1, self._tpch_loader.num_queries)
             for _ in range(self._flags.override_num_invocation)
         ]
 
@@ -82,7 +304,7 @@ class TpchLoader(BaseWorkloadLoader):
         # Initialize workload
         self._workload = Workload.empty(flags)
 
-    def _make_release_policy(self):
+    def __make_release_policy(self):
         release_policy_args = {}
         if self._flags.override_release_policy == "periodic":
             release_policy_args = {
@@ -131,151 +353,6 @@ class TpchLoader(BaseWorkloadLoader):
             ),
         )
 
-    def make_task_graph_generator(
-        self,
-        query_name: str,
-        graph: List[Dict[str, Any]],
-    ) -> Callable[[int, EventTime, EventTime], TaskGraph]:
-        def h(idx: int, current_time: EventTime, start_time: EventTime):
-            # Construct a JobGraph
-            job_graph = JobGraph(name=f"{query_name}[{idx}]")
-            query_num = int(query_name[1:])
-            profiler_data = get_all_stage_info_for_query(
-                query_num,
-                self._flags.tpch_profile_type,
-                self._flags.tpch_dataset_size,
-                self._flags.tpch_max_executors_per_job,
-            )
-            name_to_job = {}
-            for node in graph:
-                worker_profile = self.make_work_profile(
-                    profiler_data=profiler_data,
-                    query_name=query_name,
-                    node_name=node["name"],
-                )
-                job = Job(
-                    name=node["name"],
-                    profile=worker_profile,
-                )
-                name_to_job[node["name"]] = job
-                job_graph.add_job(job=job)
-            for node in graph:
-                job = name_to_job[node["name"]]
-                if "children" in node:
-                    for child in node["children"]:
-                        if child not in name_to_job:
-                            raise ValueError(
-                                f"Child {child} of {node['name']} was "
-                                f"not present in the graph."
-                            )
-                        child_job = name_to_job[child]
-                        job_graph.add_child(job, child_job)
-
-            # Construct TaskGraph from JobGraph
-            task_graph = job_graph.get_next_task_graph(
-                start_time=start_time,
-                _flags=self._flags,
-            )
-
-            # Update deadline
-            critical_path = task_graph.get_longest_path(
-                weights=lambda task: (task.slowest_execution_strategy.runtime.time)
-            )
-            critical_path_time = (
-                sum(
-                    [t.slowest_execution_strategy.runtime for t in critical_path],
-                    start=EventTime.zero(),
-                )
-                .to(EventTime.Unit.US)
-                .time
-            )
-            deadline_variance_factor = (
-                1.0
-                + (
-                    self._rng.randint(
-                        self._flags.min_deadline_variance,
-                        self._flags.max_deadline_variance,
-                    )
-                )
-                / 100
-            )
-            task_graph_slo_time = math.ceil(
-                critical_path_time * deadline_variance_factor
-            )
-            for task in task_graph.get_nodes():
-                deadline = EventTime(
-                    start_time.time + task_graph_slo_time, unit=EventTime.Unit.US
-                )
-                task.update_deadline(deadline)
-
-            return task_graph
-
-        return h
-
-    def make_work_profile(
-        self, profiler_data: Dict[int, Dict[str, Any]], query_name: str, node_name: str
-    ) -> WorkProfile:
-        profile = profiler_data[int(node_name)]
-
-        profiled_task_slots = profile["num_tasks"]
-        profiled_runtime = math.ceil(profile["avg_task_duration_ms"] / 1e3)
-
-        if profiled_task_slots > self._flags.tpch_max_executors_per_job:
-            num_slots = self._flags.tpch_max_executors_per_job
-            runtime = math.ceil(
-                (profiled_task_slots * profiled_runtime)
-                / self._flags.tpch_max_executors_per_job
-            )
-            self._logger.debug(
-                "%s@%s: num_slots (%s) > tpch_max_executors_per_job (%s). Converted "
-                "(slots,runtime) from (%s,%s) to (%s, %s)",
-                node_name,
-                query_name,
-                profiled_task_slots,
-                self._flags.tpch_max_executors_per_job,
-                profiled_task_slots,
-                profiled_runtime,
-                num_slots,
-                runtime,
-            )
-        else:
-            num_slots = profiled_task_slots
-            runtime = profiled_runtime
-
-        if runtime < self._flags.tpch_min_task_runtime:
-            _runtime = runtime
-            runtime = max(self._flags.tpch_min_task_runtime, _runtime)
-            self._logger.debug(
-                "%s@%s: runtime (%s) < tpch_min_task_runtime (%s). Converted "
-                "(slots,runtime) from (%s,%s) to (%s, %s)",
-                node_name,
-                query_name,
-                _runtime,
-                self._flags.tpch_min_task_runtime,
-                num_slots,
-                _runtime,
-                num_slots,
-                runtime,
-            )
-
-        resources = Resources(
-            resource_vector={
-                Resource(name="Slot", _id="any"): num_slots,
-            },
-        )
-        execution_strategies = ExecutionStrategies()
-        execution_strategies.add_strategy(
-            strategy=ExecutionStrategy(
-                resources=resources,
-                batch_size=1,
-                runtime=EventTime(runtime, EventTime.Unit.US),
-            ),
-        )
-        return WorkProfile(
-            name=f"{query_name}_{node_name}_execution_profile",
-            execution_strategies=execution_strategies,
-        )
-
     def get_next_workload(self, current_time: EventTime) -> Optional[Workload]:
         # Reset rng if this is the first workload. This is to ensure we have
         # parity with how jobs are spawned in Spark
@@ -301,11 +378,10 @@ class TpchLoader(BaseWorkloadLoader):
             return None
 
         for i, (q, t) in enumerate(to_release):
-            query_name = f"Q{q}"
-            task_graph = self._task_graph_generators[query_name](
-                idx=i,
-                current_time=current_time,
-                start_time=t,
+            task_graph, _ = self._tpch_loader.make_task_graph(
+                id=str(i),
+                query_num=q,
+                release_time=t,
             )
             self._workload.add_task_graph(task_graph)
 

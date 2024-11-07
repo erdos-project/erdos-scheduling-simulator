@@ -9,7 +9,7 @@ from data import (
     TaskLoaderBenchmark,
     TaskLoaderPylot,
     TaskLoaderSynthetic,
-    TpchLoader,
+    TpchWorkloadLoader,
     WorkerLoader,
     WorkerLoaderBenchmark,
     WorkloadLoader,
@@ -669,10 +669,7 @@ def main(args):
                 flags=FLAGS,
             )
         elif FLAGS.replay_trace == "tpch":
-            workload_loader = TpchLoader(
-                path=FLAGS.tpch_query_dag_spec,
-                flags=FLAGS,
-            )
+            workload_loader = TpchWorkloadLoader(flags=FLAGS)
         else:
             raise NotImplementedError(
                 f"Replay trace {FLAGS.replay_trace} is not implemented yet."
