@@ -758,6 +758,9 @@ class Simulator(object):
                     placement.placement_time,
                 )
                 placement.task.schedule(event_time, placement)
+                
+                # set task's start_time to the placement_time
+                placement.task._start_time = placement.placement_time
 
                 simulator_event = Event(
                     event_type=EventType.TASK_PLACEMENT,
@@ -790,6 +793,10 @@ class Simulator(object):
                         placement.placement_time,
                     )
                     placement.task.schedule(event_time, placement)
+                    
+                    # reset task's start_time to the new placement_time
+                    placement.task._start_time = placement.placement_time
+                    
                     simulator_event = Event(
                         event_type=EventType.TASK_PLACEMENT,
                         time=placement.placement_time,
