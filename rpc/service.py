@@ -3,6 +3,7 @@ import asyncio
 from concurrent import futures
 from urllib.parse import urlparse
 from typing import Optional
+from enum import Enum
 
 # TODO: refactor out the need to import main to get common flags
 import main
@@ -10,6 +11,7 @@ from schedulers import EDFScheduler
 from simulator import Simulator, EventTime
 from workers import Worker, WorkerPool, WorkerPools
 from workload import Resource, Resources
+from data.tpch_loader import TpchLoader
 from utils import setup_logging, setup_csv_logging
 from rpc import erdos_scheduler_pb2
 from rpc import erdos_scheduler_pb2_grpc
@@ -39,9 +41,19 @@ flags.DEFINE_integer(
     "The amount of virtualized memory (in GB) that must be created in each Worker on "
     "the framework. Refer to the `virtualized_cores` flag for more information.",
 )
+flags.DEFINE_integer(
+    "spark_app_num_initial_executors",
+    10,
+    "The initial number of executors that are requested by each Spark application.",
+)
+
+
+class DataLoader(Enum):
+    TPCH = "tpch"
 
 
 class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
+
     def __init__(self) -> None:
         self._logger = setup_logging(
             name=__name__,
@@ -61,21 +73,33 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
 
         self._master_uri = None
         self._initialization_time = None
+        self._data_loaders = {}
+        # TODO: refactor
+        self._data_loaders[DataLoader.TPCH] = TpchLoader(
+            path=FLAGS.tpch_query_dag_spec, flags=FLAGS
+        )
         self._simulator = None
         self._scheduler = EDFScheduler()
 
+        self._registered_task_graphs = {}
+
     async def RegisterFramework(self, request, context):
+        sim_time = self.__sim_time()
+
         if self.__framework_registered():
-            msg = f"Framework already registered at the address {self._master_uri} at timestamp {self._initialization_time}"
+            msg = f"[{sim_time}] Framework already registered at the address {self._master_uri} at timestamp {self._initialization_time}"
             self._logger.error(msg)
             return erdos_scheduler_pb2.RegisterFrameworkResponse(
                 success=False,
                 message=msg,
             )
 
+        t = int(time.time())
         framework_name = request.name
         self._master_uri = request.uri
-        self._initialization_time = EventTime(request.timestamp, EventTime.Unit.US)
+        self._initialization_time = EventTime(t, EventTime.Unit.US)
+        # Update sim_time now that initialization_time is set
+        sim_time = self.__sim_time()
 
         parsed_uri = urlparse(self._master_uri)
         worker_pool = WorkerPool(
@@ -89,12 +113,13 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
             ),  # Maintain only one worker pool in the simulator
         )
 
-        sim_time = self.__sim_time(request.timestamp)
-        msg = f"[{sim_time}] Registered the framework '{framework_name}' with URI {self._master_uri} at {self._initialization_time.time}"
+        msg = f"[{sim_time}] Registered the framework '{framework_name}' with URI {self._master_uri} at UNIX time {self._initialization_time.time}"
         self._logger.info(msg)
         return erdos_scheduler_pb2.RegisterFrameworkResponse(success=True, message=msg)
 
     async def DeregisterFramework(self, request, context):
+        sim_time = self.__sim_time()
+
         if not self.__framework_registered():
             msg = f"Trying to deregister a framework at {request.uri} but no framework has been registered yet."
             self._logger.error(msg)
@@ -109,7 +134,6 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
                 success=False, message=msg
             )
 
-        sim_time = self.__sim_time(request.timestamp)
         self._initialization_time = None
         self._master_uri = None
         self._simulator = None
@@ -126,9 +150,89 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         pass
 
     async def RegisterTaskGraph(self, request, context):
-        pass
+        sim_time = self.__sim_time()
+
+        if not self.__framework_registered():
+            msg = f"[{sim_time}] Trying to register a task graph (id={request.id}, name={request.name}) but no framework has been registered yet."
+            self._logger.error(msg)
+            return erdos_scheduler_pb2.RegisterTaskGraphResponse(
+                success=False, message=msg, num_executors=0
+            )
+
+        if request.id in self._registered_task_graphs:
+            msg = f"[{sim_time}] The task graph (id={request.id}, name={request.name}) is already registered"
+            self._logger.error(msg)
+            return erdos_scheduler_pb2.RegisterTaskGraphResponse(
+                success=False, message=msg, num_executors=0
+            )
+
+        # We only support TPCH queries for now
+        if request.name.startswith("TPCH Query"):
+            # Parse request name
+            query_parts = request.name.split()
+            if len(query_parts) != 3 and len(query_parts) != 5:
+                msg = f"[{sim_time}] Invalid TPCH query request"
+                return erdos_scheduler_pb2.RegisterTaskGraphResponse(
+                    success=False, message=msg, num_executors=0
+                )
+            query_num = int(query_parts[2])
+            if len(query_parts) == 5:
+                dataset_size = int(query_parts[3])
+                max_executors_per_job = int(query_parts[4])
+            else:
+                dataset_size = FLAGS.tpch_dataset_size
+                max_executors_per_job = FLAGS.tpch_max_executors_per_job
+
+            # Convert request.dependencies to [{name: int, children: [int]}]
+            dependencies = []
+            for dep in request.dependencies:
+                dependencies.append(
+                    {
+                        "name": int(dep.key.id),
+                        "children": [int(c) for c in dep.children_ids],
+                    }
+                )
+
+            # Construct the task graph
+            try:
+                task_graph, stage_id_mapping = self._data_loaders[
+                    DataLoader.TPCH
+                ].make_task_graph(
+                    id=id,
+                    query_num=query_num,
+                    release_time=sim_time,
+                    dependencies=dependencies,
+                    dataset_size=dataset_size,
+                    max_executors_per_job=max_executors_per_job,
+                )
+            except Exception as e:
+                msg = f"[{sim_time}] Failed to load TPCH query {query_num}. Exception: {e}"
+                return erdos_scheduler_pb2.RegisterTaskGraphResponse(
+                    success=False, message=msg, num_executors=0
+                )
+        else:
+            msg = f"[{sim_time}] The service only supports TPCH queries"
+            return erdos_scheduler_pb2.RegisterTaskGraphResponse(
+                success=False, message=msg, num_executors=0
+            )
+
+        self._registered_task_graphs[request.id] = (task_graph, stage_id_mapping)
+        msg = f"[{sim_time}] Registered task graph (id={request.id}, name={request.name}) successfully"
+
+        return erdos_scheduler_pb2.RegisterTaskGraphResponse(
+            success=True,
+            message=msg,
+            num_executors=FLAGS.spark_app_num_initial_executors,
+        )
 
     async def RegisterEnvironmentReady(self, request, context):
+        if not self.__framework_registered():
+            msg = f"[{sim_time}] Trying to notify that the environment is ready for task graph (id={request.id}, name={request.name}) but no framework is registered yet"
+            return erdos_scheduler_pb2.RegisterEnvironmentReadyResponse(
+                success=False,
+                message=msg,
+            )
+
         pass
 
     async def RegisterWorker(self, request, context):
@@ -161,8 +265,6 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
 
         msg = f"[{sim_time}] Registered worker (id={request.id}, name={request.name})."
 
-        # TODO(elton): run scheduler? i think not, but keeping a TODO here to review later
-
         return erdos_scheduler_pb2.RegisterWorkerResponse(
             success=True,
             message=msg,
@@ -177,11 +279,10 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
     async def NotifyTaskCompletion(self, request, context):
         pass
 
-    def __sim_time(self, ts: Optional[int] = None) -> EventTime:
+    def __sim_time(self) -> EventTime:
         if self._initialization_time is None:
-            raise ValueErorr("initialization time is not set")
-        if not ts:
-            ts = int(time.time())
+            return EventTime.invalid()
+        ts = int(time.time())
         ts = EventTime(ts, EventTime.Unit.US)
         return ts - self._initialization_time
 
@@ -190,9 +291,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
 
     def __get_worker_pool(self):
         # Simulator maintains only one worker pool, so this should be fine
-        return next(iter(self._simulator._worker_pools.worker_pools)).add_workers(
-            [worker]
-        )
+        return next(iter(self._simulator._worker_pools.worker_pools))
 
 
 async def serve(server):
