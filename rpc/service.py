@@ -98,6 +98,8 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         self._scheduler = EDFScheduler()
 
         self._registered_task_graphs = {}
+        # TODO: (Dhruv) Can we get the currently active task graphs directly from the workload object?
+        self._active_task_graphs = set()
 
         super().__init__()
 
@@ -240,6 +242,10 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         self._registered_task_graphs[request.id] = RegisteredTaskGraph(task_graph, stage_id_mapping)
         msg = f"[{sim_time}] Registered task graph (id={request.id}, name={request.name}) successfully"
 
+        # Add the task graph to the active task graphs if registration is successful
+        self._active_task_graphs.add(request.id)
+        print(f"[{sim_time}] Task graph with {request.id} registered successfully. Active task graphs: {self._active_task_graphs}")
+        
         return erdos_scheduler_pb2.RegisterTaskGraphResponse(
             success=True,
             message=msg,
@@ -310,8 +316,33 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         )
 
     async def GetPlacements(self, request, context):
-        pass
+        sim_time = self.__sim_time()
         
+        # TODO (Dhruv): Can add check to verify that framework and worker are registered
+        
+        # Check if the task graph is registered
+        if request.id not in self._registered_task_graphs:
+            msg = f"[{sim_time}] Task graph with id {request.task_graph_id} not registered."
+            return erdos_scheduler_pb2.GetPlacementsResponse(
+                success=False,
+                message=msg,
+            )
+        
+        # Check if the task graph is active
+        if request.id not in self._active_task_graphs:
+            msg = f"[{sim_time}] Task graph with id {request.task_graph_id} not active."
+            return erdos_scheduler_pb2.GetPlacementsResponse(
+                success=False,
+                message=msg,
+            )
+        
+        print(f"[{sim_time}] Processing GetPlacements request for task graph with id {request.id}")
+        
+        return erdos_scheduler_pb2.GetPlacementsResponse(
+            success=True,
+            message=f"Placements for taskgraph {request.id} returned successfully.",
+        )
+
     async def NotifyTaskCompletion(self, request, context):
         pass
 
