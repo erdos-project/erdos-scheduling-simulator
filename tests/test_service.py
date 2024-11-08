@@ -63,7 +63,7 @@ def test_service():
 
     # Register a correct TaskGraph
     request = erdos_scheduler_pb2.RegisterTaskGraphRequest(
-        id="task-graph",
+        id="task-graph-0",
         name="TPCH Query 4 50 50",
         timestamp=1234567890,
         dependencies=[
@@ -78,10 +78,22 @@ def test_service():
     assert (
         response.success
         and re.search(
-            r"Registered task graph \(id=task-graph, name=TPCH Query 4 50 50\) successfully",
+            r"Registered task graph \(id=task-graph-0, name=TPCH Query 4 50 50\) successfully",
             response.message,
         )
         and response.num_executors == 10
+    )
+
+    # Mark the environment as ready
+    request = erdos_scheduler_pb2.RegisterEnvironmentReadyRequest(
+        id="task-graph-0",
+        num_executors=10,
+        timestamp=1234567890,
+    )
+    response = stub.RegisterEnvironmentReady(request)
+    assert (
+        response.success
+        and re.search(r"Successfully marked environment as ready for task graph \(id=task-graph-0\)", response.message)
     )
 
     # Deregister framework
