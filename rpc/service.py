@@ -226,14 +226,14 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         )
 
     async def RegisterEnvironmentReady(self, request, context):
+        sim_time = self.__sim_time()
+
         if not self.__framework_registered():
             msg = f"[{sim_time}] Trying to notify that the environment is ready for task graph (id={request.id}, name={request.name}) but no framework is registered yet"
             return erdos_scheduler_pb2.RegisterEnvironmentReadyResponse(
                 success=False,
                 message=msg,
             )
-
-        pass
 
     async def RegisterWorker(self, request, context):
         sim_time = self.__sim_time()
@@ -263,7 +263,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
 
         self.__get_worker_pool().add_workers([worker])
 
-        msg = f"[{sim_time}] Registered worker (id={request.id}, name={request.name})."
+        msg = f"[{sim_time}] Registered worker (id={request.id}, name={request.name})"
 
         return erdos_scheduler_pb2.RegisterWorkerResponse(
             success=True,
