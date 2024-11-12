@@ -49,7 +49,6 @@ flags.DEFINE_integer(
     "The initial number of executors that are requested by each Spark application.",
 )
 
-
 class DataLoader(Enum):
     TPCH = "tpch"
 
@@ -114,7 +113,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
                 message=msg,
             )
 
-        t = int(time.time())
+        t = time.time_ns() // 1000       # Current epoch time in microseconds
         framework_name = request.name
         self._master_uri = request.uri
         self._initialization_time = EventTime(t, EventTime.Unit.US)
@@ -133,6 +132,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
                 [worker_pool]
             ),  # Maintain only one worker pool in the simulator
             workload_loader=self._workload_loader,
+            _flags=FLAGS,
         )
 
         msg = f"[{sim_time}] Registered the framework '{framework_name}' with URI {self._master_uri} at UNIX time {self._initialization_time.time}"
@@ -289,7 +289,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         # TODO(Sukrit): Right now, we drop the memory requirements, we should use
         # them to do multi-dimensional packing using STRL.
 
-        cpu_resource = Resource(name="Slot_CPU")
+        cpu_resource = Resource(name="Slot")
         worker_resources = Resources(
             resource_vector={
                 # TODO(elton): handle override worker cpu count?
@@ -345,11 +345,21 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
 
     async def NotifyTaskCompletion(self, request, context):
         pass
+    
+    async def _tick_simulator(self):
+        while True:
+            if self._simulator is not None:
+                current_sim_time = self.__sim_time()
+                self._logger.debug(f"[{current_sim_time}] Simulator tick real timestamp: {time.time_ns() // 1000}")
+                self._simulator.tick(tick_until=current_sim_time)
+            else:
+                print("Simulator instance is None")
+            await asyncio.sleep(0.1)  # 100 milliseconds
 
     def __sim_time(self) -> EventTime:
         if self._initialization_time is None:
             return EventTime.invalid()
-        ts = int(time.time())
+        ts = time.time_ns() // 1000       # Current epoch time in microseconds
         ts = EventTime(ts, EventTime.Unit.US)
         return ts - self._initialization_time
 
@@ -371,8 +381,12 @@ def main(_argv):
     loop = asyncio.get_event_loop()
 
     server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=FLAGS.max_workers))
-    erdos_scheduler_pb2_grpc.add_SchedulerServiceServicer_to_server(Servicer(), server)
+    servicer = Servicer()
+    erdos_scheduler_pb2_grpc.add_SchedulerServiceServicer_to_server(servicer, server)
     server.add_insecure_port(f"[::]:{FLAGS.port}")
+    
+    # Schedule the periodic tick_simulator task
+    loop.create_task(servicer._tick_simulator())
 
     try:
         loop.run_until_complete(serve(server))
@@ -380,7 +394,6 @@ def main(_argv):
         print("Terminated ERDOS RPC Service")
     finally:
         loop.close()
-
 
 if __name__ == "__main__":
     app.run(main)

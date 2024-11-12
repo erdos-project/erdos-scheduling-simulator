@@ -85,3 +85,28 @@ make -j install
 ```bash
 python3 main.py --flagfile=configs/simple_av_workload.conf > experiments/simple_av_workload_test.output
 ```
+
+
+## Step 3: Using the Spark-Erdos service
+
+From the base directory:
+
+### Install the requirements
+```bash
+pip install -r rpc/requirements.txt
+```
+
+### Run protoc to generate the service and message definitions using
+```bash
+python -m grpc_tools.protoc -I./rpc/protos --python_out=. --grpc_python_out=. ./rpc/protos/rpc/erdos_scheduler.proto
+```
+
+### Run the service using
+```bash
+python -m rpc.service
+```
+
+### Run the test_service script using
+```bash
+python -m rpc.dg_test_service
+```

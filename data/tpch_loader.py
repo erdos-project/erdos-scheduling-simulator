@@ -195,7 +195,7 @@ class TpchLoader:
             strategy=ExecutionStrategy(
                 resources=resources,
                 batch_size=1,
-                runtime=EventTime(runtime, EventTime.Unit.US),
+                runtime=EventTime(runtime, EventTime.Unit.S),
             ),
         )
         return WorkProfile(

@@ -514,12 +514,46 @@ class Simulator(object):
                 self.__step(step_size=time_until_next_event)
                 if self.__handle_event(self._event_queue.next()):
                     break
+                
+    def tick(self, tick_until: EventTime) -> None:
+        """Run the simulator loop to execute enqueued events until a particular time"""
+        tick_size = tick_until - self._simulator_time
+        self._logger.debug(
+            "[%s] Running the simulator loop for a tick of %s to reach time of %s.",
+            self._simulator_time.to(EventTime.Unit.US).time,
+            tick_size,
+            tick_until.to(EventTime.Unit.US).time,
+        )
+        running_tasks = self._worker_pools.get_placed_tasks()
+
+        if running_tasks:
+            min_task_remaining_time = min(
+                map(attrgetter("remaining_time"), running_tasks)
+            )
+            self._logger.debug(
+                "[%s] The minimum task remaining time was %s, "
+                "and the tick size was %s.",
+                self._simulator_time.to(EventTime.Unit.US).time,
+                min_task_remaining_time,
+                tick_size,
+            )
+
+            if min_task_remaining_time < tick_size:
+                self.__step(step_size=min_task_remaining_time)
+                self._logger.info(f"Completed step upto min_task_remaining_time of {min_task_remaining_time}")
+            else:
+                self.__step(step_size=tick_size)
+                self._logger.info(f"Had running tasks but completed step of tick_size: {tick_size}")
+                if self.__handle_event(self._event_queue.next()):
+                    return
+        else:
+            self.__step(step_size=tick_size)
+            self._logger.info(f"No running tasks, completed step of tick_size: {tick_size}")
+            if self.__handle_event(self._event_queue.next()):
+                return
 
     def time_until_next_event(self) -> EventTime:
         return self._event_queue.peek().time - self._simulator_time
-
-    def step(self, step_size: EventTime) -> None:
-        self.__step(step_size=step_size)
 
     def __handle_scheduler_start(self, event: Event) -> None:
         """Handle the SCHEDULER_START event. The method invokes the scheduler, and adds
@@ -1592,6 +1626,7 @@ class Simulator(object):
                     else self._simulator_time + self._workload_update_interval
                 ),
             )
+            # TODO: (DG) It keeps adding update workload events. Should we handle this from the service?
             self._event_queue.add_event(next_update_event)
             self._logger.info(
                 "[%s] Added %s to the event queue.",
@@ -1885,6 +1920,7 @@ class Simulator(object):
             next_event is None
             and len(schedulable_tasks) == 0
             and len(running_tasks) == 0
+            and self._workload_update_interval != EventTime(9999999, EventTime.Unit.US)
         ):
             self._logger.info(
                 "[%s] There are no currently schedulable tasks, no running tasks, "
