@@ -516,41 +516,52 @@ class Simulator(object):
                     break
                 
     def tick(self, tick_until: EventTime) -> None:
-        """Run the simulator loop to execute enqueued events until a particular time"""
-        tick_size = tick_until - self._simulator_time
-        self._logger.debug(
-            "[%s] Running the simulator loop for a tick of %s to reach time of %s.",
-            self._simulator_time.to(EventTime.Unit.US).time,
-            tick_size,
-            tick_until.to(EventTime.Unit.US).time,
-        )
-        running_tasks = self._worker_pools.get_placed_tasks()
-
-        if running_tasks:
-            min_task_remaining_time = min(
-                map(attrgetter("remaining_time"), running_tasks)
-            )
+        """Run the simulator loop to execute enqueued events until a particular time."""
+        
+        while self._simulator_time < tick_until:
+            tick_size = tick_until - self._simulator_time
             self._logger.debug(
-                "[%s] The minimum task remaining time was %s, "
-                "and the tick size was %s.",
+                "[%s] Running the simulator loop to reach time of %s with remaining tick size %s.",
                 self._simulator_time.to(EventTime.Unit.US).time,
-                min_task_remaining_time,
+                tick_until.to(EventTime.Unit.US).time,
                 tick_size,
             )
-
-            if min_task_remaining_time < tick_size:
-                self.__step(step_size=min_task_remaining_time)
-                self._logger.info(f"Completed step upto min_task_remaining_time of {min_task_remaining_time}")
+            
+            # Get current running tasks
+            running_tasks = self._worker_pools.get_placed_tasks()
+            
+            # Determine the next step size based on the smallest remaining task time or tick size
+            if running_tasks:
+                min_task_remaining_time = min(
+                    map(attrgetter("remaining_time"), running_tasks)
+                )
+                step_size = min(min_task_remaining_time, tick_size)
+                self._logger.debug(
+                    "[%s] The minimum task remaining time was %s, "
+                    "and the selected step size was %s.",
+                    self._simulator_time.to(EventTime.Unit.US).time,
+                    min_task_remaining_time,
+                    step_size,
+                )
             else:
-                self.__step(step_size=tick_size)
-                self._logger.info(f"Had running tasks but completed step of tick_size: {tick_size}")
-                if self.__handle_event(self._event_queue.next()):
-                    return
-        else:
-            self.__step(step_size=tick_size)
-            self._logger.info(f"No running tasks, completed step of tick_size: {tick_size}")
-            if self.__handle_event(self._event_queue.next()):
-                return
+                step_size = tick_size  # No tasks running, use the entire tick size
+            
+            # Step the simulator forward
+            self.__step(step_size=step_size)
+            self._logger.info(
+                f"Stepped simulator by {step_size}, new simulator time is {self._simulator_time}"
+            )
+            
+            # Check and process the next event in the queue if it exists and is due
+            while ((self._event_queue.peek() is not None) and (
+                self._event_queue.peek().time <= self._simulator_time)):
+                event = self._event_queue.next()
+                if self.__handle_event(event):
+                    return  # Exit early if event handling requires it
+                
+            self._logger.info(
+                f"Finished processing simulator events upto time: {self._simulator_time}"
+            )
 
     def time_until_next_event(self) -> EventTime:
         return self._event_queue.peek().time - self._simulator_time

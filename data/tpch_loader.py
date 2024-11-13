@@ -33,17 +33,24 @@ class TpchLoader:
 
     Args:
         path (`str`): Path to a YAML file specifying the TPC-H query DAGs
+        runtime_unit (`EventTime.Unit`): The unit of the runtime
         flags (`absl.flags`): The flags used to initialize the app, if any
 
     """
 
-    def __init__(self, path: Path, flags: "absl.flags"):
+    def __init__(
+        self,
+        path: Path,
+        flags: "absl.flags",
+        runtime_unit: EventTime.Unit = EventTime.Unit.US
+        ):
         self._logger = setup_logging(
             name=self.__class__.__name__,
             log_dir=flags.log_dir,
             log_file=flags.log_file_name,
             log_level=flags.log_level,
         )
+        self._runtime_unit = runtime_unit
         self._flags = flags
 
         # Load the TPC-H DAG structures
@@ -195,7 +202,7 @@ class TpchLoader:
             strategy=ExecutionStrategy(
                 resources=resources,
                 batch_size=1,
-                runtime=EventTime(runtime, EventTime.Unit.S),
+                runtime=EventTime(runtime, self._runtime_unit),
             ),
         )
         return WorkProfile(

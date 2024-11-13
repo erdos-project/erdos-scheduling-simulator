@@ -89,7 +89,9 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         self._initialization_time = None
         self._data_loaders = {}
         self._data_loaders[DataLoader.TPCH] = TpchLoader(
-            path=FLAGS.tpch_query_dag_spec, flags=FLAGS
+            path=FLAGS.tpch_query_dag_spec,
+            flags=FLAGS,
+            runtime_unit=EventTime.Unit.S,
         )
         self._simulator = None
         self._workload_loader = None
