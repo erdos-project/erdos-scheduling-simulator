@@ -1603,6 +1603,7 @@ class Simulator(object):
                     else self._simulator_time + self._workload_update_interval
                 ),
             )
+            # TODO(elton): Handle this properly
             # self._event_queue.add_event(next_update_event)
             self._logger.info(
                 "[%s] Added %s to the event queue.",
