@@ -101,8 +101,6 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         self._scheduler = EDFScheduler(runtime=EventTime(0, EventTime.Unit.US))
 
         self._registered_task_graphs = {}
-        # TODO: (Dhruv) Can we get the currently active task graphs directly from the workload object?
-        self._active_task_graphs = set()
 
         super().__init__()
 
@@ -248,9 +246,6 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         )
         msg = f"[{stime}] Registered task graph '{task_graph.name}' successfully"
 
-        # Add the task graph to the active task graphs if registration is successful
-        self._active_task_graphs.add(request.id)
-
         return erdos_scheduler_pb2.RegisterTaskGraphResponse(
             success=True,
             message=msg,
@@ -262,15 +257,21 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
 
         if not self.__framework_registered():
             msg = f"[{stime}] Trying to notify that the environment is ready for task graph (id={request.id}) but no framework is registered yet"
+            self._logger.error(msg)
             return erdos_scheduler_pb2.RegisterEnvironmentReadyResponse(
                 success=False,
                 message=msg,
             )
 
-        # TODO: check if the task graph exists
+        if request.id not in self._registered_task_graphs:
+            msg = f"[{stime}] Task graph of id '{request.id}' is not registered or does not exist"
+            self._logger.error(msg)
+            return erdos_scheduler_pb2.RegisterEnvironmentReadyResponse(
+                success=False,
+                message=msg,
+            )
 
         task_graph = self._registered_task_graphs[request.id].graph
-
         self._workload_loader.add_task_graph(task_graph)
         self._simulator._event_queue.add_event(
             Event(
@@ -291,6 +292,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
 
         if not self.__framework_registered():
             msg = f"[{stime}] Trying to register a worker (id={request.id}, name={request.name}) but no framework is registered yet"
+            self._logger.error(msg)
             return erdos_scheduler_pb2.RegisterWorkerResponse(
                 success=False, message=msg
             )
@@ -316,7 +318,6 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
 
         msg = f"[{stime}] Registered worker (id={request.id}, name={request.name})"
         self._logger.info(msg)
-
         return erdos_scheduler_pb2.RegisterWorkerResponse(
             success=True,
             message=msg,
@@ -331,17 +332,8 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
 
         # Check if the task graph is registered
         if request.id not in self._registered_task_graphs:
-            msg = (
-                f"[{stime}] Task graph with id {request.task_graph_id} not registered."
-            )
-            return erdos_scheduler_pb2.GetPlacementsResponse(
-                success=False,
-                message=msg,
-            )
-
-        # Check if the task graph is active
-        if request.id not in self._active_task_graphs:
-            msg = f"[{stime}] Task graph with id {request.task_graph_id} not active."
+            msg = f"[{stime}] Task graph with id '{request.id}' not registered."
+            self._logger.error(msg)
             return erdos_scheduler_pb2.GetPlacementsResponse(
                 success=False,
                 message=msg,
@@ -357,7 +349,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
 
         return erdos_scheduler_pb2.GetPlacementsResponse(
             success=True,
-            message=f"Placements for taskgraph {request.id} returned successfully.",
+            message=f"Placements for task graph '{request.id}' returned successfully",
         )
 
     async def NotifyTaskCompletion(self, request, context):
