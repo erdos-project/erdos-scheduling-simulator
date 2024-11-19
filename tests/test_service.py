@@ -91,10 +91,20 @@ def test_service():
         timestamp=1234567890,
     )
     response = stub.RegisterEnvironmentReady(request)
-    assert (
-        response.success
-        and re.search(r"Successfully marked environment as ready for task graph \(id=task-graph-0\)", response.message)
+    assert response.success and re.search(
+        r"Successfully marked environment as ready for task graph \(id=task-graph-0\)",
+        response.message,
     )
+
+    time.sleep(16)
+
+    # Get placements for the task
+    request = erdos_scheduler_pb2.GetPlacementsRequest(
+        timestamp=1234567890,
+        id="task-graph-0",
+    )
+    response = stub.GetPlacements(request)
+    assert False
 
     # Deregister framework
     request = erdos_scheduler_pb2.DeregisterFrameworkRequest(

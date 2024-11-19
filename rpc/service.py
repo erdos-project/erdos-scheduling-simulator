@@ -96,7 +96,8 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         self._simulator = None
         self._workload_loader = None
 
-        self._scheduler = EDFScheduler()
+        # TODO: address this
+        self._scheduler = EDFScheduler(runtime=EventTime(0, EventTime.Unit.US))
 
         self._registered_task_graphs = {}
         # TODO: (Dhruv) Can we get the currently active task graphs directly from the workload object?
@@ -327,7 +328,9 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
 
         # Check if the task graph is registered
         if request.id not in self._registered_task_graphs:
-            msg = f"[{stime}] Task graph with id {request.task_graph_id} not registered."
+            msg = (
+                f"[{stime}] Task graph with id {request.task_graph_id} not registered."
+            )
             return erdos_scheduler_pb2.GetPlacementsResponse(
                 success=False,
                 message=msg,
@@ -354,7 +357,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
             if self._simulator is not None:
                 stime = self.__stime()
                 self._logger.debug(f"[{stime}] Simulator tick")
-                self._simulator.tick(tick_until=stime)
+                self._simulator.tick(until=stime)
             else:
                 print("Simulator instance is None")
             await asyncio.sleep(1)
