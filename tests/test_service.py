@@ -78,7 +78,7 @@ def test_service():
     assert (
         response.success
         and re.search(
-            r"Registered task graph \(id=task-graph-0, name=TPCH Query 4 50 50\) successfully",
+            r"Registered task graph 'Q4\[task-graph-0\]@1' successfully",
             response.message,
         )
         and response.num_executors == 10
@@ -92,11 +92,11 @@ def test_service():
     )
     response = stub.RegisterEnvironmentReady(request)
     assert response.success and re.search(
-        r"Successfully marked environment as ready for task graph \(id=task-graph-0\)",
+        r"Successfully marked environment as ready for task graph 'Q4\[task-graph-0\]@1'",
         response.message,
     )
 
-    time.sleep(16)
+    time.sleep(3)
 
     # Get placements for the task
     request = erdos_scheduler_pb2.GetPlacementsRequest(

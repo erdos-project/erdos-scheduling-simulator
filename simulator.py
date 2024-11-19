@@ -5,7 +5,7 @@ import sys
 from enum import Enum
 from functools import total_ordering
 from operator import attrgetter, itemgetter
-from typing import Mapping, Optional, Sequence, Callable
+from typing import Mapping, Optional, Sequence, Callable, Dict, List
 
 import absl  # noqa: F401
 
@@ -344,6 +344,10 @@ class Simulator(object):
         self._next_scheduler_event = None
         self._last_scheduler_placements: Optional[Placements] = None
 
+        # Stores current placements for tasks of a task graph
+        # task_graph => {task_id => placement}
+        self._current_task_graph_placements: Dict[str, Dict[str, Placement]] = {}
+
         # A Cache from the TaskID to a future Placement event in the EventQueue.
         # The Simulator uses this bookkeeping to revoke / invalidate decisions made
         # by the past scheduler invocations.
@@ -530,6 +534,13 @@ class Simulator(object):
                 self.__step(step_size=time_until_next_event)
                 if self.__handle_event(self._event_queue.next()):
                     break
+
+    def get_current_placements_for_task_graph(
+        self, task_graph_name: str
+    ) -> List[Placement]:
+        if task_graph_name not in self._current_task_graph_placements:
+            raise ValueError(f"Task graph '{task_graph_name}' does not exist")
+        return list(self._current_task_graph_placements[task_graph_name].values())
 
     def __time_until_next_event(self) -> EventTime:
         return self._event_queue.peek().time - self._simulator_time
@@ -1173,6 +1184,10 @@ class Simulator(object):
             event.task.worker_pool_id
         )
         task_placed_at_worker_pool.remove_task(current_time=event.time, task=event.task)
+
+        # Remove the task from it's task graph's current placements
+        del self._current_task_graph_placements[event.task.task_graph][event.task.id]
+
         event.task.finish()
 
         # Log the TASK_FINISHED event into the CSV.
@@ -1193,6 +1208,10 @@ class Simulator(object):
                 if task_graph.deadline > event.time
                 else event.time - task_graph.deadline
             )
+
+            # Remove task graph from current task graph placements map
+            del self._current_task_graph_placements[event.task.task_graph]
+
             self._csv_logger.debug(
                 f"{event.time.time},TASK_GRAPH_FINISHED,{task_graph.name},"
                 f"{task_graph.deadline.to(EventTime.Unit.US).time},"
@@ -1410,6 +1429,9 @@ class Simulator(object):
                 "[%s] Placed %s on %s.", event.time.time, task, worker_pool
             )
             del self._future_placement_events[task.id]
+            self._current_task_graph_placements[task.task_graph][
+                task.id
+            ] = event.placement
         else:
             next_placement_time = event.time + EventTime(1, EventTime.Unit.US)
             next_placement_event = Event(
@@ -1564,6 +1586,24 @@ class Simulator(object):
                 len(self._workload.task_graphs),
                 len(releasable_tasks),
             )
+
+            # Add task graph entry in self._current_task_graph_placements to
+            # track its task placements
+            for task_graph_name, task_graph in self._workload.task_graphs.items():
+                # In addition to newly added task graphs, self._workload also
+                # contains all previously released task graphs.
+                #
+                # So, we guard the addition of the entry on two conditions:
+                # (1) The task graph doesn't have an entry (we don't want to
+                #     nuke an existing one)
+                # (2) The task graph is not complete (we only keep the entry
+                #     alive while the task graph is running to avoid a memory
+                #     leak)
+                if (
+                    task_graph_name not in self._current_task_graph_placements
+                    and not task_graph.is_complete()
+                ):
+                    self._current_task_graph_placements[task_graph_name] = {}
 
             # # Add the TaskGraphRelease events into the system.
             # for task_graph_name, task_graph in self._workload.task_graphs.items():

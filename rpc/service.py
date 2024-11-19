@@ -246,7 +246,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         self._registered_task_graphs[request.id] = RegisteredTaskGraph(
             task_graph, stage_id_mapping
         )
-        msg = f"[{stime}] Registered task graph (id={request.id}, name={request.name}) successfully"
+        msg = f"[{stime}] Registered task graph '{task_graph.name}' successfully"
 
         # Add the task graph to the active task graphs if registration is successful
         self._active_task_graphs.add(request.id)
@@ -267,9 +267,11 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
                 message=msg,
             )
 
-        self._workload_loader.add_task_graph(
-            self._registered_task_graphs[request.id].graph
-        )
+        # TODO: check if the task graph exists
+
+        task_graph = self._registered_task_graphs[request.id].graph
+
+        self._workload_loader.add_task_graph(task_graph)
         self._simulator._event_queue.add_event(
             Event(
                 event_type=EventType.UPDATE_WORKLOAD,
@@ -277,7 +279,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
             )
         )
 
-        msg = f"[{stime}] Successfully marked environment as ready for task graph (id={request.id})"
+        msg = f"[{stime}] Successfully marked environment as ready for task graph '{task_graph.name}'"
         self._logger.info(msg)
         return erdos_scheduler_pb2.RegisterEnvironmentReadyResponse(
             success=True,
@@ -344,6 +346,14 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
                 success=False,
                 message=msg,
             )
+
+        task_graph = self._registered_task_graphs[request.id].graph
+        placements = self._simulator.get_current_placements_for_task_graph(
+            task_graph.name
+        )
+        self._logger.info(
+            f"Received the following placements for '{task_graph.name}': {placements}"
+        )
 
         return erdos_scheduler_pb2.GetPlacementsResponse(
             success=True,
