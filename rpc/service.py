@@ -49,6 +49,7 @@ flags.DEFINE_integer(
     "The initial number of executors that are requested by each Spark application.",
 )
 
+
 class DataLoader(Enum):
     TPCH = "tpch"
 
@@ -59,12 +60,12 @@ class WorkloadLoader(BaseWorkloadLoader):
 
     def add_task_graph(self, task_graph: TaskGraph):
         self._workload.add_task_graph(task_graph)
-    
+
     def get_next_workload(self, current_time: EventTime) -> Optional[Workload]:
         return self._workload
 
 
-RegisteredTaskGraph = namedtuple('RegisteredTaskGraph', ['graph', 'stage_id_mapping'])
+RegisteredTaskGraph = namedtuple("RegisteredTaskGraph", ["graph", "stage_id_mapping"])
 
 
 class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
@@ -91,7 +92,6 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         self._data_loaders[DataLoader.TPCH] = TpchLoader(
             path=FLAGS.tpch_query_dag_spec,
             flags=FLAGS,
-            runtime_unit=EventTime.Unit.S,
         )
         self._simulator = None
         self._workload_loader = None
@@ -115,7 +115,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
                 message=msg,
             )
 
-        t = time.time_ns() // 1000       # Current epoch time in microseconds
+        t = time.time_ns() // 1000  # Current epoch time in microseconds
         framework_name = request.name
         self._master_uri = request.uri
         self._initialization_time = EventTime(t, EventTime.Unit.US)
@@ -229,6 +229,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
                     dependencies=dependencies,
                     dataset_size=dataset_size,
                     max_executors_per_job=max_executors_per_job,
+                    runtime_unit=EvenTime.Unit.S,
                 )
             except Exception as e:
                 msg = f"[{sim_time}] Failed to load TPCH query {query_num}. Exception: {e}"
@@ -241,13 +242,17 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
                 success=False, message=msg, num_executors=0
             )
 
-        self._registered_task_graphs[request.id] = RegisteredTaskGraph(task_graph, stage_id_mapping)
+        self._registered_task_graphs[request.id] = RegisteredTaskGraph(
+            task_graph, stage_id_mapping
+        )
         msg = f"[{sim_time}] Registered task graph (id={request.id}, name={request.name}) successfully"
 
         # Add the task graph to the active task graphs if registration is successful
         self._active_task_graphs.add(request.id)
-        print(f"[{sim_time}] Task graph with {request.id} registered successfully. Active task graphs: {self._active_task_graphs}")
-        
+        print(
+            f"[{sim_time}] Task graph with {request.id} registered successfully. Active task graphs: {self._active_task_graphs}"
+        )
+
         return erdos_scheduler_pb2.RegisterTaskGraphResponse(
             success=True,
             message=msg,
@@ -264,14 +269,16 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
                 message=msg,
             )
 
-        self._workload_loader.add_task_graph(self._registered_task_graphs[request.id].graph)
+        self._workload_loader.add_task_graph(
+            self._registered_task_graphs[request.id].graph
+        )
         self._simulator._event_queue.add_event(
             Event(
                 event_type=EventType.UPDATE_WORKLOAD,
                 time=sim_time,
             )
         )
-        
+
         msg = f"[{sim_time}] Successfully marked environment as ready for task graph (id={request.id})"
         self._logger.info(msg)
         return erdos_scheduler_pb2.RegisterEnvironmentReadyResponse(
@@ -308,6 +315,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         self.__get_worker_pool().add_workers([worker])
 
         msg = f"[{sim_time}] Registered worker (id={request.id}, name={request.name})"
+        self._logger.info(msg)
 
         return erdos_scheduler_pb2.RegisterWorkerResponse(
             success=True,
@@ -319,9 +327,9 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
 
     async def GetPlacements(self, request, context):
         sim_time = self.__sim_time()
-        
+
         # TODO (Dhruv): Can add check to verify that framework and worker are registered
-        
+
         # Check if the task graph is registered
         if request.id not in self._registered_task_graphs:
             msg = f"[{sim_time}] Task graph with id {request.task_graph_id} not registered."
@@ -329,7 +337,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
                 success=False,
                 message=msg,
             )
-        
+
         # Check if the task graph is active
         if request.id not in self._active_task_graphs:
             msg = f"[{sim_time}] Task graph with id {request.task_graph_id} not active."
@@ -337,9 +345,11 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
                 success=False,
                 message=msg,
             )
-        
-        print(f"[{sim_time}] Processing GetPlacements request for task graph with id {request.id}")
-        
+
+        print(
+            f"[{sim_time}] Processing GetPlacements request for task graph with id {request.id}"
+        )
+
         return erdos_scheduler_pb2.GetPlacementsResponse(
             success=True,
             message=f"Placements for taskgraph {request.id} returned successfully.",
@@ -347,12 +357,14 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
 
     async def NotifyTaskCompletion(self, request, context):
         pass
-    
+
     async def _tick_simulator(self):
         while True:
             if self._simulator is not None:
                 current_sim_time = self.__sim_time()
-                self._logger.debug(f"[{current_sim_time}] Simulator tick real timestamp: {time.time_ns() // 1000}")
+                self._logger.debug(
+                    f"[{current_sim_time}] Simulator tick real timestamp: {time.time_ns() // 1000}"
+                )
                 self._simulator.tick(tick_until=current_sim_time)
             else:
                 print("Simulator instance is None")
@@ -361,7 +373,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
     def __sim_time(self) -> EventTime:
         if self._initialization_time is None:
             return EventTime.invalid()
-        ts = time.time_ns() // 1000       # Current epoch time in microseconds
+        ts = time.time_ns() // 1000  # Current epoch time in microseconds
         ts = EventTime(ts, EventTime.Unit.US)
         return ts - self._initialization_time
 
@@ -386,7 +398,7 @@ def main(_argv):
     servicer = Servicer()
     erdos_scheduler_pb2_grpc.add_SchedulerServiceServicer_to_server(servicer, server)
     server.add_insecure_port(f"[::]:{FLAGS.port}")
-    
+
     # Schedule the periodic tick_simulator task
     loop.create_task(servicer._tick_simulator())
 
@@ -396,6 +408,7 @@ def main(_argv):
         print("Terminated ERDOS RPC Service")
     finally:
         loop.close()
+
 
 if __name__ == "__main__":
     app.run(main)

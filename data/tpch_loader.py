@@ -33,7 +33,6 @@ class TpchLoader:
 
     Args:
         path (`str`): Path to a YAML file specifying the TPC-H query DAGs
-        runtime_unit (`EventTime.Unit`): The unit of the runtime
         flags (`absl.flags`): The flags used to initialize the app, if any
 
     """
@@ -42,15 +41,13 @@ class TpchLoader:
         self,
         path: Path,
         flags: "absl.flags",
-        runtime_unit: EventTime.Unit = EventTime.Unit.US
-        ):
+    ):
         self._logger = setup_logging(
             name=self.__class__.__name__,
             log_dir=flags.log_dir,
             log_file=flags.log_file_name,
             log_level=flags.log_level,
         )
-        self._runtime_unit = runtime_unit
         self._flags = flags
 
         # Load the TPC-H DAG structures
@@ -71,6 +68,7 @@ class TpchLoader:
         dataset_size: Optional[int] = None,
         max_executors_per_job: Optional[int] = None,
         min_task_runtime: Optional[int] = None,
+        runtime_unit: EventTime.Unit = EventTime.Unit.US,
     ) -> Tuple[TaskGraph, Dict[int, int]]:
         if profile_type is None:
             profile_type = self._flags.tpch_profile_type
@@ -113,6 +111,7 @@ class TpchLoader:
                 node_name=node["name"],
                 max_executors_per_job=max_executors_per_job,
                 min_task_runtime=min_task_runtime,
+                runtime_unit=runtime_unit,
             )
             job = Job(
                 name=node["name"],
@@ -149,6 +148,7 @@ class TpchLoader:
         node_name: str,
         max_executors_per_job: int,
         min_task_runtime: int,
+        runtime_unit: EventTime,
     ) -> WorkProfile:
         profile = profiler_data[int(node_name)]
 
@@ -202,7 +202,7 @@ class TpchLoader:
             strategy=ExecutionStrategy(
                 resources=resources,
                 batch_size=1,
-                runtime=EventTime(runtime, self._runtime_unit),
+                runtime=EventTime(runtime, runtime_unit),
             ),
         )
         return WorkProfile(
