@@ -104,7 +104,14 @@ def test_service():
         id="task-graph-0",
     )
     response = stub.GetPlacements(request)
-    assert False
+    assert response.success
+    actual_task_ids = set()
+    for placement in response.placements:
+        assert (
+            placement.worker_id == "1234" and placement.application_id == "task-graph-0"
+        )
+        actual_task_ids.add(placement.task_id)
+    assert actual_task_ids == {0, 1}
 
     # Deregister framework
     request = erdos_scheduler_pb2.DeregisterFrameworkRequest(

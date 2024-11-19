@@ -493,7 +493,8 @@ class Simulator(object):
         """
         # Run the simulator loop.
         while True:
-            if not should_continue(self._event_queue.peek().time):
+            top = self._event_queue.peek()
+            if top and not should_continue(top.time):
                 break
 
             time_until_next_event = self.__time_until_next_event()

@@ -339,17 +339,34 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
                 message=msg,
             )
 
-        task_graph = self._registered_task_graphs[request.id].graph
-        placements = self._simulator.get_current_placements_for_task_graph(
+        task_graph, stage_id_mapping = self._registered_task_graphs[request.id]
+        sim_placements = self._simulator.get_current_placements_for_task_graph(
             task_graph.name
         )
+
         self._logger.info(
-            f"Received the following placements for '{task_graph.name}': {placements}"
+            f"Received the following placements for '{task_graph.name}': {sim_placements}"
         )
+
+        # Construct response. Notably, we apply stage-id mapping
+        placements = []
+        for placement in sim_placements:
+            worker_id = self.__get_worker_id()
+            task_id = stage_id_mapping[placement.task.name]
+            cores = sum(x for _, x in placement.execution_strategy.resources.resources)
+            placements.append(
+                {
+                    "worker_id": worker_id,
+                    "application_id": request.id,
+                    "task_id": int(task_id),
+                    "cores": cores,
+                }
+            )
 
         return erdos_scheduler_pb2.GetPlacementsResponse(
             success=True,
             message=f"Placements for task graph '{request.id}' returned successfully",
+            placements=placements,
         )
 
     async def NotifyTaskCompletion(self, request, context):
@@ -382,6 +399,11 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
     def __get_worker_pool(self):
         # Simulator maintains only one worker pool, so this should be fine
         return next(iter(self._simulator._worker_pools.worker_pools))
+
+    def __get_worker_id(self):
+        # We return the name here because we register the worker id from
+        # Spark as the name of the worker in the worker pool
+        return self.__get_worker_pool().workers[0].name
 
 
 async def serve(server):
