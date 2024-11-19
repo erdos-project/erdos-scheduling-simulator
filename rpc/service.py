@@ -115,10 +115,10 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
                 message=msg,
             )
 
-        t = time.time_ns() // 1000  # Current epoch time in microseconds
+        t = int(time.time())
         framework_name = request.name
         self._master_uri = request.uri
-        self._initialization_time = EventTime(t, EventTime.Unit.US)
+        self._initialization_time = EventTime(t, EventTime.Unit.S)
         # Update sim_time now that initialization_time is set
         sim_time = self.__sim_time()
 
@@ -229,7 +229,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
                     dependencies=dependencies,
                     dataset_size=dataset_size,
                     max_executors_per_job=max_executors_per_job,
-                    runtime_unit=EvenTime.Unit.S,
+                    runtime_unit=EventTime.Unit.S,
                 )
             except Exception as e:
                 msg = f"[{sim_time}] Failed to load TPCH query {query_num}. Exception: {e}"
@@ -249,9 +249,6 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
 
         # Add the task graph to the active task graphs if registration is successful
         self._active_task_graphs.add(request.id)
-        print(
-            f"[{sim_time}] Task graph with {request.id} registered successfully. Active task graphs: {self._active_task_graphs}"
-        )
 
         return erdos_scheduler_pb2.RegisterTaskGraphResponse(
             success=True,
@@ -320,7 +317,6 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         return erdos_scheduler_pb2.RegisterWorkerResponse(
             success=True,
             message=msg,
-            # TODO(elton): not sure why we need to set this here
             cores=FLAGS.virtualized_cores,
             memory=FLAGS.virtualized_memory * 1024,
         )
@@ -368,13 +364,13 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
                 self._simulator.tick(tick_until=current_sim_time)
             else:
                 print("Simulator instance is None")
-            await asyncio.sleep(0.1)  # 100 milliseconds
+            await asyncio.sleep(1)
 
     def __sim_time(self) -> EventTime:
         if self._initialization_time is None:
             return EventTime.invalid()
-        ts = time.time_ns() // 1000  # Current epoch time in microseconds
-        ts = EventTime(ts, EventTime.Unit.US)
+        ts = int(time.time())
+        ts = EventTime(ts, EventTime.Unit.S)
         return ts - self._initialization_time
 
     def __framework_registered(self):
