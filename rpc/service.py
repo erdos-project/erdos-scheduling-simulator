@@ -96,7 +96,8 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         self._simulator = None
         self._workload_loader = None
 
-        # TODO: address this
+        # There is a bug in the simulator that causes tasks to be placed
+        # in the past if the scheduler runtime is not zero
         self._scheduler = EDFScheduler(runtime=EventTime(0, EventTime.Unit.US))
 
         self._registered_task_graphs = {}
