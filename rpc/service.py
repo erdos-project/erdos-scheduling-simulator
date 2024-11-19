@@ -105,10 +105,10 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         super().__init__()
 
     async def RegisterFramework(self, request, context):
-        sim_time = self.__sim_time()
+        stime = self.__stime()
 
         if self.__framework_registered():
-            msg = f"[{sim_time}] Framework already registered at the address {self._master_uri} at timestamp {self._initialization_time}"
+            msg = f"[{stime}] Framework already registered at the address {self._master_uri} at timestamp {self._initialization_time}"
             self._logger.error(msg)
             return erdos_scheduler_pb2.RegisterFrameworkResponse(
                 success=False,
@@ -119,8 +119,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         framework_name = request.name
         self._master_uri = request.uri
         self._initialization_time = EventTime(t, EventTime.Unit.S)
-        # Update sim_time now that initialization_time is set
-        sim_time = self.__sim_time()
+        stime = self.__stime()
 
         parsed_uri = urlparse(self._master_uri)
         worker_pool = WorkerPool(
@@ -137,22 +136,22 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
             _flags=FLAGS,
         )
 
-        msg = f"[{sim_time}] Registered the framework '{framework_name}' with URI {self._master_uri} at UNIX time {self._initialization_time.time}"
+        msg = f"[{stime}] Registered the framework '{framework_name}' with URI {self._master_uri} at UNIX time {self._initialization_time.time}"
         self._logger.info(msg)
         return erdos_scheduler_pb2.RegisterFrameworkResponse(success=True, message=msg)
 
     async def DeregisterFramework(self, request, context):
-        sim_time = self.__sim_time()
+        stime = self.__stime()
 
         if not self.__framework_registered():
-            msg = f"Trying to deregister a framework at {request.uri} but no framework has been registered yet."
+            msg = f"[{stime}] Trying to deregister a framework at {request.uri} but no framework has been registered yet."
             self._logger.error(msg)
             return erdos_scheduler_pb2.DeregisterFrameworkResponse(
                 success=False, message=msg
             )
 
         if self._master_uri != request.uri:
-            msg = f"Trying to deregister the framework at {request.uri} but the registered framework is at {self._master_uri}"
+            msg = f"[{stime}] Trying to deregister the framework at {request.uri} but the registered framework is at {self._master_uri}"
             self._logger.error(msg)
             return erdos_scheduler_pb2.DeregisterFrameworkResponse(
                 success=False, message=msg
@@ -162,7 +161,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         self._master_uri = None
         self._workload_loader = None
         self._simulator = None
-        msg = f"[{sim_time}] Successfully deregistered the framework at {request.uri}"
+        msg = f"[{stime}] Successfully deregistered the framework at {request.uri}"
         self._logger.info(msg)
         return erdos_scheduler_pb2.DeregisterFrameworkResponse(
             success=True, message=msg
@@ -175,17 +174,17 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         pass
 
     async def RegisterTaskGraph(self, request, context):
-        sim_time = self.__sim_time()
+        stime = self.__stime()
 
         if not self.__framework_registered():
-            msg = f"[{sim_time}] Trying to register a task graph (id={request.id}, name={request.name}) but no framework has been registered yet."
+            msg = f"[{stime}] Trying to register a task graph (id={request.id}, name={request.name}) but no framework has been registered yet."
             self._logger.error(msg)
             return erdos_scheduler_pb2.RegisterTaskGraphResponse(
                 success=False, message=msg, num_executors=0
             )
 
         if request.id in self._registered_task_graphs:
-            msg = f"[{sim_time}] The task graph (id={request.id}, name={request.name}) is already registered"
+            msg = f"[{stime}] The task graph (id={request.id}, name={request.name}) is already registered"
             self._logger.error(msg)
             return erdos_scheduler_pb2.RegisterTaskGraphResponse(
                 success=False, message=msg, num_executors=0
@@ -196,7 +195,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
             # Parse request name
             query_parts = request.name.split()
             if len(query_parts) != 3 and len(query_parts) != 5:
-                msg = f"[{sim_time}] Invalid TPCH query request"
+                msg = f"[{stime}] Invalid TPCH query request"
                 return erdos_scheduler_pb2.RegisterTaskGraphResponse(
                     success=False, message=msg, num_executors=0
                 )
@@ -225,19 +224,19 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
                 ].make_task_graph(
                     id=id,
                     query_num=query_num,
-                    release_time=sim_time,
+                    release_time=stime,
                     dependencies=dependencies,
                     dataset_size=dataset_size,
                     max_executors_per_job=max_executors_per_job,
                     runtime_unit=EventTime.Unit.S,
                 )
             except Exception as e:
-                msg = f"[{sim_time}] Failed to load TPCH query {query_num}. Exception: {e}"
+                msg = f"[{stime}] Failed to load TPCH query {query_num}. Exception: {e}"
                 return erdos_scheduler_pb2.RegisterTaskGraphResponse(
                     success=False, message=msg, num_executors=0
                 )
         else:
-            msg = f"[{sim_time}] The service only supports TPCH queries"
+            msg = f"[{stime}] The service only supports TPCH queries"
             return erdos_scheduler_pb2.RegisterTaskGraphResponse(
                 success=False, message=msg, num_executors=0
             )
@@ -245,7 +244,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         self._registered_task_graphs[request.id] = RegisteredTaskGraph(
             task_graph, stage_id_mapping
         )
-        msg = f"[{sim_time}] Registered task graph (id={request.id}, name={request.name}) successfully"
+        msg = f"[{stime}] Registered task graph (id={request.id}, name={request.name}) successfully"
 
         # Add the task graph to the active task graphs if registration is successful
         self._active_task_graphs.add(request.id)
@@ -257,10 +256,10 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         )
 
     async def RegisterEnvironmentReady(self, request, context):
-        sim_time = self.__sim_time()
+        stime = self.__stime()
 
         if not self.__framework_registered():
-            msg = f"[{sim_time}] Trying to notify that the environment is ready for task graph (id={request.id}) but no framework is registered yet"
+            msg = f"[{stime}] Trying to notify that the environment is ready for task graph (id={request.id}) but no framework is registered yet"
             return erdos_scheduler_pb2.RegisterEnvironmentReadyResponse(
                 success=False,
                 message=msg,
@@ -272,11 +271,11 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         self._simulator._event_queue.add_event(
             Event(
                 event_type=EventType.UPDATE_WORKLOAD,
-                time=sim_time,
+                time=stime,
             )
         )
 
-        msg = f"[{sim_time}] Successfully marked environment as ready for task graph (id={request.id})"
+        msg = f"[{stime}] Successfully marked environment as ready for task graph (id={request.id})"
         self._logger.info(msg)
         return erdos_scheduler_pb2.RegisterEnvironmentReadyResponse(
             success=True,
@@ -284,10 +283,10 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         )
 
     async def RegisterWorker(self, request, context):
-        sim_time = self.__sim_time()
+        stime = self.__stime()
 
         if not self.__framework_registered():
-            msg = f"[{sim_time}] Trying to register a worker (id={request.id}, name={request.name}) but no framework is registered yet"
+            msg = f"[{stime}] Trying to register a worker (id={request.id}, name={request.name}) but no framework is registered yet"
             return erdos_scheduler_pb2.RegisterWorkerResponse(
                 success=False, message=msg
             )
@@ -311,7 +310,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
 
         self.__get_worker_pool().add_workers([worker])
 
-        msg = f"[{sim_time}] Registered worker (id={request.id}, name={request.name})"
+        msg = f"[{stime}] Registered worker (id={request.id}, name={request.name})"
         self._logger.info(msg)
 
         return erdos_scheduler_pb2.RegisterWorkerResponse(
@@ -322,13 +321,13 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         )
 
     async def GetPlacements(self, request, context):
-        sim_time = self.__sim_time()
+        stime = self.__stime()
 
         # TODO (Dhruv): Can add check to verify that framework and worker are registered
 
         # Check if the task graph is registered
         if request.id not in self._registered_task_graphs:
-            msg = f"[{sim_time}] Task graph with id {request.task_graph_id} not registered."
+            msg = f"[{stime}] Task graph with id {request.task_graph_id} not registered."
             return erdos_scheduler_pb2.GetPlacementsResponse(
                 success=False,
                 message=msg,
@@ -336,15 +335,11 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
 
         # Check if the task graph is active
         if request.id not in self._active_task_graphs:
-            msg = f"[{sim_time}] Task graph with id {request.task_graph_id} not active."
+            msg = f"[{stime}] Task graph with id {request.task_graph_id} not active."
             return erdos_scheduler_pb2.GetPlacementsResponse(
                 success=False,
                 message=msg,
             )
-
-        print(
-            f"[{sim_time}] Processing GetPlacements request for task graph with id {request.id}"
-        )
 
         return erdos_scheduler_pb2.GetPlacementsResponse(
             success=True,
@@ -357,16 +352,18 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
     async def _tick_simulator(self):
         while True:
             if self._simulator is not None:
-                current_sim_time = self.__sim_time()
-                self._logger.debug(
-                    f"[{current_sim_time}] Simulator tick real timestamp: {time.time_ns() // 1000}"
-                )
-                self._simulator.tick(tick_until=current_sim_time)
+                stime = self.__stime()
+                self._logger.debug(f"[{stime}] Simulator tick")
+                self._simulator.tick(tick_until=stime)
             else:
                 print("Simulator instance is None")
             await asyncio.sleep(1)
 
-    def __sim_time(self) -> EventTime:
+    def __stime(self) -> EventTime:
+        """
+        Time as viewed by the service. Starts when a framework is registered
+        and ends when it is deregistered.
+        """
         if self._initialization_time is None:
             return EventTime.invalid()
         ts = int(time.time())
