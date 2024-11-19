@@ -5,7 +5,7 @@ import sys
 from enum import Enum
 from functools import total_ordering
 from operator import attrgetter, itemgetter
-from typing import Mapping, Optional, Sequence
+from typing import Mapping, Optional, Sequence, Callable
 
 import absl  # noqa: F401
 
@@ -469,14 +469,30 @@ class Simulator(object):
                     )
 
     def simulate(self) -> None:
-        """Run the simulator loop.
+        """Run the simulator loop to fixpoint.
 
         This loop requires the `Workload` to be populated with the `TaskGraph`s whose
         execution is to be simulated using the Scheduler.
         """
+        self.__simulate_f(lambda _: True)
+
+    def tick(self, until: EventTime) -> None:
+        """Tick the simulator until the specified time"""
+        self.__simulate_f(should_continue=lambda et: et <= until)
+
+    def __simulate_f(self, should_continue: Callable[[EventTime], bool]) -> None:
+        """Helper function to run the simulator until a predicate is satisfied.
+
+        The predicate (`should_continue`) receives the time of the next event
+        in the queue, using which it can use to decide whether or not to
+        simulate.
+        """
         # Run the simulator loop.
         while True:
-            time_until_next_event = self.time_until_next_event()
+            if not should_continue(self._event_queue.peek().time):
+                break
+
+            time_until_next_event = self.__time_until_next_event()
 
             # If there are any running tasks, step through the execution of the
             # Simulator until the closest remaining time.
@@ -514,56 +530,8 @@ class Simulator(object):
                 self.__step(step_size=time_until_next_event)
                 if self.__handle_event(self._event_queue.next()):
                     break
-                
-    def tick(self, tick_until: EventTime) -> None:
-        """Run the simulator loop to execute enqueued events until a particular time."""
-        
-        while self._simulator_time < tick_until:
-            tick_size = tick_until - self._simulator_time
-            self._logger.debug(
-                "[%s] Running the simulator loop to reach time of %s with remaining tick size %s.",
-                self._simulator_time.to(EventTime.Unit.US).time,
-                tick_until.to(EventTime.Unit.US).time,
-                tick_size,
-            )
-            
-            # Get current running tasks
-            running_tasks = self._worker_pools.get_placed_tasks()
-            
-            # Determine the next step size based on the smallest remaining task time or tick size
-            if running_tasks:
-                min_task_remaining_time = min(
-                    map(attrgetter("remaining_time"), running_tasks)
-                )
-                step_size = min(min_task_remaining_time, tick_size)
-                self._logger.debug(
-                    "[%s] The minimum task remaining time was %s, "
-                    "and the selected step size was %s.",
-                    self._simulator_time.to(EventTime.Unit.US).time,
-                    min_task_remaining_time,
-                    step_size,
-                )
-            else:
-                step_size = tick_size  # No tasks running, use the entire tick size
-            
-            # Step the simulator forward
-            self.__step(step_size=step_size)
-            self._logger.info(
-                f"Stepped simulator by {step_size}, new simulator time is {self._simulator_time}"
-            )
-            
-            # Check and process the next event in the queue if it exists and is due
-            while ((self._event_queue.peek() is not None) and (
-                self._event_queue.peek().time <= self._simulator_time)):
-                event = self._event_queue.next()
-                if self.__handle_event(event):
-                    return  # Exit early if event handling requires it
-                
-            self._logger.info(
-                f"Finished processing simulator events upto time: {self._simulator_time}"
-            )
 
-    def time_until_next_event(self) -> EventTime:
+    def __time_until_next_event(self) -> EventTime:
         return self._event_queue.peek().time - self._simulator_time
 
     def __handle_scheduler_start(self, event: Event) -> None:
@@ -1559,9 +1527,7 @@ class Simulator(object):
                 f"__handle_update_workload called with event of type {event.type}."
             )
         if not self._workload_loader:
-            raise ValueError(
-                "UPDATE_WORKLOAD event enqueued without workload_loader"
-            )
+            raise ValueError("UPDATE_WORKLOAD event enqueued without workload_loader")
 
         updated_workload = self._workload_loader.get_next_workload(
             current_time=self._simulator_time
@@ -1637,8 +1603,7 @@ class Simulator(object):
                     else self._simulator_time + self._workload_update_interval
                 ),
             )
-            # TODO: (DG) It keeps adding update workload events. Should we handle this from the service?
-            self._event_queue.add_event(next_update_event)
+            # self._event_queue.add_event(next_update_event)
             self._logger.info(
                 "[%s] Added %s to the event queue.",
                 self._simulator_time.time,
@@ -1931,7 +1896,6 @@ class Simulator(object):
             next_event is None
             and len(schedulable_tasks) == 0
             and len(running_tasks) == 0
-            and self._workload_update_interval != EventTime(9999999, EventTime.Unit.US)
         ):
             self._logger.info(
                 "[%s] There are no currently schedulable tasks, no running tasks, "
