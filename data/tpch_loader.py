@@ -79,8 +79,6 @@ class TpchLoader:
         if min_task_runtime is None:
             min_task_runtime = self._flags.tpch_min_task_runtime
 
-        query_name = f"Q{query_num}"
-
         # Normalize dependencies
         if dependencies is None:
             dependencies = self._graphs[query_num]
@@ -92,11 +90,11 @@ class TpchLoader:
                 if "children" in node:
                     node["children"] = [deps_mapping[c] for c in node["children"]]
             self._logger.info(
-                f"Mapped dependencies for TPC-H query {query_name} as {deps_mapping}."
+                f"Mapped dependencies for TPC-H query {query_name(query_num)} as {deps_mapping}."
             )
 
         # Construct a JobGraph
-        job_graph = JobGraph(name=f"{query_name}[{id}]")
+        job_graph = JobGraph(name=task_graph_name(query_num, id))
         profiler_data = get_all_stage_info_for_query(
             query_num,
             profile_type,
@@ -107,7 +105,7 @@ class TpchLoader:
         for node in dependencies:
             worker_profile = self.__make_work_profile(
                 profiler_data=profiler_data,
-                query_name=query_name,
+                query_num=query_num,
                 node_name=node["name"],
                 max_executors_per_job=max_executors_per_job,
                 min_task_runtime=min_task_runtime,
@@ -137,14 +135,16 @@ class TpchLoader:
             _flags=self._flags,
         )
 
-        self._logger.info(f"Constructed TaskGraph for TPC-H query {query_name}.")
+        self._logger.info(
+            f"Constructed TaskGraph for TPC-H query {query_name(query_num)}."
+        )
 
         return task_graph, deps_mapping
 
     def __make_work_profile(
         self,
         profiler_data: Dict[int, Dict[str, Any]],
-        query_name: str,
+        query_num: int,
         node_name: str,
         max_executors_per_job: int,
         min_task_runtime: int,
@@ -164,7 +164,7 @@ class TpchLoader:
                 "%s@%s: num_slots (%s) > max_executors_per_job (%s). Converted "
                 "(slots,runtime) from (%s,%s) to (%s, %s)",
                 node_name,
-                query_name,
+                query_name(query_num),
                 profiled_task_slots,
                 max_executors_per_job,
                 profiled_task_slots,
@@ -183,7 +183,7 @@ class TpchLoader:
                 "%s@%s: runtime (%s) < min_task_runtime (%s). Converted "
                 "(slots,runtime) from (%s,%s) to (%s, %s)",
                 node_name,
-                query_name,
+                query_name(query_num),
                 _runtime,
                 min_task_runtime,
                 num_slots,
@@ -206,7 +206,7 @@ class TpchLoader:
             ),
         )
         return WorkProfile(
-            name=f"{query_name}_{node_name}_execution_profile",
+            name=f"{query_name(query_num)}_{node_name}_execution_profile",
             execution_strategies=execution_strategies,
         )
 
@@ -393,6 +393,14 @@ class TpchWorkloadLoader(BaseWorkloadLoader):
             self._workload.add_task_graph(task_graph)
 
         return self._workload
+
+
+def query_name(query_num: int) -> str:
+    return f"Q{query_num}"
+
+
+def task_graph_name(query_num: int, id: any) -> str:
+    return f"{query_name(query_num)}[{id}]"
 
 
 def make_release_policy(
