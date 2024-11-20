@@ -340,6 +340,16 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
             )
 
         task_graph, stage_id_mapping = self._registered_task_graphs[request.id]
+
+        # Check if the task graph is active
+        if task_graph.is_complete():
+            msg = f"[{stime}] Task graph '{task_graph.name}' is complete. No more placements to provide."
+            self._logger.error(msg)
+            return erdos_scheduler_pb2.GetPlacementsResponse(
+                success=False,
+                message=msg,
+            )
+
         sim_placements = self._simulator.get_current_placements_for_task_graph(
             task_graph.name
         )
