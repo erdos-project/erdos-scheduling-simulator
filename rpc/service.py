@@ -261,14 +261,6 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
     async def RegisterEnvironmentReady(self, request, context):
         stime = self.__stime()
 
-        if not self.__framework_registered():
-            msg = f"[{stime}] Trying to notify that the environment is ready for task graph (id={request.id}) but no framework is registered yet"
-            self._logger.error(msg)
-            return erdos_scheduler_pb2.RegisterEnvironmentReadyResponse(
-                success=False,
-                message=msg,
-            )
-
         if request.id not in self._registered_task_graphs:
             msg = f"[{stime}] Task graph of id '{request.id}' is not registered or does not exist"
             self._logger.error(msg)
@@ -335,11 +327,9 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
     async def GetPlacements(self, request, context):
         stime = self.__stime()
 
-        # TODO (Dhruv): Can add check to verify that framework and worker are registered
-
         # Check if the task graph is registered
         if request.id not in self._registered_task_graphs:
-            msg = f"[{stime}] Task graph with id '{request.id}' not registered."
+            msg = f"[{stime}] Task graph with id '{request.id}' is not registered or does not exist"
             self._logger.error(msg)
             return erdos_scheduler_pb2.GetPlacementsResponse(
                 success=False,
