@@ -494,7 +494,7 @@ class Simulator(object):
         # Run the simulator loop.
         while True:
             top = self._event_queue.peek()
-            if top and not should_continue(top.time):
+            if not top or not should_continue(top.time):
                 break
 
             time_until_next_event = self.__time_until_next_event()
@@ -1406,6 +1406,7 @@ class Simulator(object):
         assert (
             worker_pool is not None
         ), f"No WorkerPool found with ID: {event.placement.worker_pool_id}."
+
         success = worker_pool.place_task(
             task,
             execution_strategy=event.placement.execution_strategy,
@@ -2076,6 +2077,8 @@ class Simulator(object):
 
         # Calculate the time at which the placements need to be applied.
         placement_time = event.time + placements.runtime
+        for placement in placements:
+            placement._placement_time = placement_time
 
         # Save the placements until the placement time arrives.
         self._last_scheduler_placements = placements

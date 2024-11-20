@@ -1,3 +1,4 @@
+import sys
 import time
 import asyncio
 from concurrent import futures
@@ -96,9 +97,11 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         self._simulator = None
         self._workload_loader = None
 
-        # There is a bug in the simulator that causes tasks to be placed
-        # in the past if the scheduler runtime is not zero
-        self._scheduler = EDFScheduler(runtime=EventTime(0, EventTime.Unit.US))
+        self._scheduler = EDFScheduler(
+            runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
+            enforce_deadlines=FLAGS.enforce_deadlines,
+            _flags=FLAGS,
+        )
 
         self._registered_task_graphs = {}
 
@@ -272,6 +275,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
             )
 
         task_graph = self._registered_task_graphs[request.id].graph
+
         self._workload_loader.add_task_graph(task_graph)
         self._simulator._event_queue.add_event(
             Event(
