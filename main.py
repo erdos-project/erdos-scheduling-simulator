@@ -116,6 +116,11 @@ flags.DEFINE_integer(
     "If set to default (-1), then the Simulator will automatically choose an interval "
     "based on the set of released tasks in the previous iteration.",
 )
+flags.DEFINE_bool(
+    "orchestrated",
+    False,
+    "Runs the simulator in orchestrated mode. Currently used by the ERDOS service.",
+)
 
 # Benchmark related flags.
 flags.DEFINE_integer(

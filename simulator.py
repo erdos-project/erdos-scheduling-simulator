@@ -379,6 +379,9 @@ class Simulator(object):
         self._finished_task_graphs = 0
         self._missed_task_graph_deadlines = 0
 
+        # Is the simulator orchestrated?
+        self._orchestrated = _flags.orchestrated
+
         # Initialize the event queue.
         # To make the system continue working the loop, we add three events:
         # - SIMULATOR_START: A notional event start the simulator and log into the CSV.
@@ -503,7 +506,7 @@ class Simulator(object):
             # Simulator until the closest remaining time.
             running_tasks = self._worker_pools.get_placed_tasks()
 
-            if len(running_tasks) > 0:
+            if not self._orchestrated and len(running_tasks) > 0:
                 # There are running tasks, figure out the minimum remaining
                 # time across all the tasks.
                 min_task_remaining_time = min(
@@ -1062,18 +1065,19 @@ class Simulator(object):
         # Reset the available tasks and the last task placement.
         self._last_scheduler_placements = None
 
-        # The scheduler has finished its execution, insert an event for the next
-        # invocation of the scheduler.
-        next_sched_event = self.__get_next_scheduler_event(
-            event,
-            self._scheduler_frequency,
-            self._last_scheduler_start_time,
-            self._loop_timeout,
-        )
-        self._event_queue.add_event(next_sched_event)
-        self._logger.info(
-            "[%s] Added %s to the event queue.", event.time.time, next_sched_event
-        )
+        if not self._orchestrated:
+            # The scheduler has finished its execution, insert an event for the next
+            # invocation of the scheduler.
+            next_sched_event = self.__get_next_scheduler_event(
+                event,
+                self._scheduler_frequency,
+                self._last_scheduler_start_time,
+                self._loop_timeout,
+            )
+            self._event_queue.add_event(next_sched_event)
+            self._logger.info(
+                "[%s] Added %s to the event queue.", event.time.time, next_sched_event
+            )
 
         # Now that all the tasks are placed, ask the simulator to log the resource
         # utilization and quit later, if requested.
@@ -1776,13 +1780,14 @@ class Simulator(object):
             self._simulator_time.time,
             [event.task.unique_name for event in task_finished_events],
         )
-        for task_finished_event in task_finished_events:
-            self._event_queue.add_event(task_finished_event)
-            self._logger.info(
-                "[%s] Added %s to the event queue.",
-                self._simulator_time.time,
-                task_finished_event,
-            )
+        if not self._orchestrated:
+            for task_finished_event in task_finished_events:
+                self._event_queue.add_event(task_finished_event)
+                self._logger.info(
+                    "[%s] Added %s to the event queue.",
+                    self._simulator_time.time,
+                    task_finished_event,
+                )
 
     def __get_next_scheduler_event(
         self,

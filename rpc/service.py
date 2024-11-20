@@ -130,6 +130,9 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
             _logger=self._logger,
         )
         self._workload_loader = WorkloadLoader()
+        
+        # Enable orchestrated mode
+        FLAGS.orchestrated = True
         self._simulator = Simulator(
             scheduler=self._scheduler,
             worker_pools=WorkerPools(
@@ -225,7 +228,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
                 task_graph, stage_id_mapping = self._data_loaders[
                     DataLoader.TPCH
                 ].make_task_graph(
-                    id=id,
+                    id=request.id,
                     query_num=query_num,
                     release_time=stime,
                     dependencies=dependencies,
@@ -248,7 +251,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
             task_graph, stage_id_mapping
         )
         msg = f"[{stime}] Registered task graph '{task_graph.name}' successfully"
-
+        self._logger.info(msg)
         return erdos_scheduler_pb2.RegisterTaskGraphResponse(
             success=True,
             message=msg,
