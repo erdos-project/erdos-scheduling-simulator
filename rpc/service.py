@@ -77,6 +77,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
             log_dir=FLAGS.log_dir,
             log_file=FLAGS.log_file_name,
             log_level=FLAGS.log_level,
+            fmt='[%(asctime)s] {%(funcName)s:%(lineno)d} - %(message)s',
         )
         self._csv_logger = setup_csv_logging(
             name=__name__,
@@ -182,9 +183,10 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
             f"[{stime}] Successfully registered driver for app id {request.id}"
         )
         self._logger.info(msg)
-        return erdos_scheduler_pb2.DeregisterDriverResponse(
+        return erdos_scheduler_pb2.RegisterDriverResponse(
             success=True,
             message=msg,
+            worker_id=self.__get_worker_id(),
         )
 
     async def DeregisterDriver(self, request, context):
@@ -482,13 +484,13 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
 
     async def _tick_simulator(self):
         while True:
-            if self._simulator is not None:
-                stime = self.__stime()
-                self._logger.debug(f"[{stime}] Simulator tick")
-                with self._lock:
+            with self._lock:
+                if self._simulator is not None:
+                    stime = self.__stime()
+                    # self._logger.debug(f"[{stime}] Simulator tick")
                     self._simulator.tick(until=stime)
-            else:
-                print("Simulator instance is None")
+            # else:
+            #     print("Simulator instance is None")
             await asyncio.sleep(1)
 
     def __stime(self) -> EventTime:
