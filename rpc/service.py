@@ -176,7 +176,14 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         )
 
     async def RegisterDriver(self, request, context):
-        pass
+        msg = (
+            f"[{stime}] Successfully registered driver for task graph {task_graph.name}"
+        )
+        self._logger.info(msg)
+        return erdos_scheduler_pb2.DeregisterDriverResponse(
+            success=True,
+            message=msg,
+        )
 
     async def DeregisterDriver(self, request, context):
         if request.id not in self._registered_task_graphs:
