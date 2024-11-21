@@ -50,6 +50,13 @@ flags.DEFINE_integer(
     10,
     "The initial number of executors that are requested by each Spark application.",
 )
+flags.DEFINE_bool(
+    "override_worker_cpu_count",
+    False,
+    "If True, worker CPU count will be set to 640 (Cloudlab 20-node cluster CPU count). "
+    "This allows us to scale up spark experiments without actually deploying a large "
+    "spark cluster.",
+)
 
 
 class DataLoader(Enum):
@@ -340,9 +347,9 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         cpu_resource = Resource(name="Slot")
         worker_resources = Resources(
             resource_vector={
-                # TODO(elton): handle override worker cpu count?
-                cpu_resource: request.cores,
-            },
+                cpu_resource: request.cores if not FLAGS.override_worker_cpu_count
+                else 640
+                },
             _logger=self._logger,
         )
         worker = Worker(
