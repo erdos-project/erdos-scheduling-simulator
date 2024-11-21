@@ -1,3 +1,4 @@
+import threading
 import sys
 import time
 import asyncio
@@ -104,6 +105,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         )
 
         self._registered_task_graphs = {}
+        self._lock = threading.Lock()
 
         super().__init__()
 
@@ -293,13 +295,14 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
             event_type=EventType.UPDATE_WORKLOAD,
             time=stime,
         )
-        self._simulator._event_queue.add_event(update_workload_event)
-
         scheduler_start_event = Event(
             event_type=EventType.SCHEDULER_START,
             time=stime.to(EventTime.Unit.US),
         )
-        self._simulator._event_queue.add_event(scheduler_start_event)
+
+        with self._lock:
+            self._simulator._event_queue.add_event(update_workload_event)
+            self._simulator._event_queue.add_event(scheduler_start_event)
 
         msg = f"[{stime}] Successfully marked environment as ready for task graph '{task_graph.name}'"
         self._logger.info(msg)
@@ -369,9 +372,10 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
                 message=msg,
             )
 
-        sim_placements = self._simulator.get_current_placements_for_task_graph(
-            task_graph.name
-        )
+        with self._lock:
+            sim_placements = self._simulator.get_current_placements_for_task_graph(
+                task_graph.name
+            )
 
         self._logger.info(
             f"Received the following placements for '{task_graph.name}': {sim_placements}"
@@ -440,13 +444,14 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
             time=actual_task_completion_time,
             task=task,
         )
-        self._simulator._event_queue.add_event(task_finished_event)
-
         scheduler_start_event = Event(
             event_type=EventType.SCHEDULER_START,
             time=actual_task_completion_time.to(EventTime.Unit.US),
         )
-        self._simulator._event_queue.add_event(scheduler_start_event)
+
+        with self._lock:
+            self._simulator._event_queue.add_event(task_finished_event)
+            self._simulator._event_queue.add_event(scheduler_start_event)
 
         msg = f"[{stime}] Successfully processed completion of task '{request.task_id}' of task graph '{task_graph.name}'"
         self._logger.info(msg)
@@ -460,7 +465,8 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
             if self._simulator is not None:
                 stime = self.__stime()
                 self._logger.debug(f"[{stime}] Simulator tick")
-                self._simulator.tick(until=stime)
+                with self._lock:
+                    self._simulator.tick(until=stime)
             else:
                 print("Simulator instance is None")
             await asyncio.sleep(1)
