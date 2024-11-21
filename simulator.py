@@ -401,6 +401,9 @@ class Simulator(object):
             sim_start_event,
         )
 
+        if self._orchestrated:
+            return
+
         # Second, create the UPDATE_WORKLOAD event to retrieve the latest Workload.
         if self._workload_loader:
             upate_workload_event = Event(

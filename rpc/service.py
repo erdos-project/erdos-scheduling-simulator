@@ -130,7 +130,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
             _logger=self._logger,
         )
         self._workload_loader = WorkloadLoader()
-        
+
         # Enable orchestrated mode
         FLAGS.orchestrated = True
         self._simulator = Simulator(
@@ -177,7 +177,23 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         pass
 
     async def DeregisterDriver(self, request, context):
-        pass
+        if request.id not in self._registered_task_graphs:
+            msg = f"[{stime}] Task graph of id '{request.id}' is not registered or does not exist"
+            self._logger.error(msg)
+            return erdos_scheduler_pb2.DeregisterDriverResponse(
+                success=False,
+                message=msg,
+            )
+
+        task_graph, _ = self._registered_task_graphs[request.id]
+        del self._registered_task_graphs[request.id]
+
+        msg = f"[{stime}] Successfully de-registered driver for task graph {task_graph.name}"
+        self._logger.info(msg)
+        return erdos_scheduler_pb2.DeregisterDriverResponse(
+            success=True,
+            message=msg,
+        )
 
     async def RegisterTaskGraph(self, request, context):
         stime = self.__stime()
@@ -272,12 +288,18 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         task_graph = self._registered_task_graphs[request.id].graph
 
         self._workload_loader.add_task_graph(task_graph)
-        self._simulator._event_queue.add_event(
-            Event(
-                event_type=EventType.UPDATE_WORKLOAD,
-                time=stime,
-            )
+
+        update_workload_event = Event(
+            event_type=EventType.UPDATE_WORKLOAD,
+            time=stime,
         )
+        self._simulator._event_queue.add_event(update_workload_event)
+
+        scheduler_start_event = Event(
+            event_type=EventType.SCHEDULER_START,
+            time=stime.to(EventTime.Unit.US),
+        )
+        self._simulator._event_queue.add_event(scheduler_start_event)
 
         msg = f"[{stime}] Successfully marked environment as ready for task graph '{task_graph.name}'"
         self._logger.info(msg)
@@ -377,7 +399,54 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         )
 
     async def NotifyTaskCompletion(self, request, context):
-        pass
+        stime = self.__stime()
+
+        # Check if the task graph is registered
+        if request.application_id not in self._registered_task_graphs:
+            msg = f"[{stime}] Task graph with id '{request.id}' is not registered or does not exist"
+            self._logger.error(msg)
+            return erdos_scheduler_pb2.NotifyTaskCompletionResponse(
+                success=False,
+                message=msg,
+            )
+
+        task_graph, stage_id_mapping = self._registered_task_graphs[
+            request.application_id
+        ]
+        task = task_graph.get_task(stage_id_mapping[request.task_id])
+        if task is None:
+            msg = f"[{stime}] Task '{task_id}' does not exist in the task graph '{task_graph.name}'"
+            self._logger.error(msg)
+            return erdos_scheduler_pb2.NotifyTaskCompletionResponse(
+                success=False,
+                message=msg,
+            )
+
+        actual_task_completion_time = stime + task.remaining_time.time
+
+        task_finished_event = Event(
+            event_type=EventType.TASK_FINISHED,
+            time=EventTime(time=actual_task_completion_time, unit=EventTime.Unit.S),
+            task=task,
+        )
+        self._simulator._event_queue.add_event(task_finished_event)
+
+        scheduler_start_event = Event(
+            event_type=EventType.SCHEDULER_START,
+            time=EventTime(time=actual_task_completion_time, unit=EventTime.Unit.S).to(
+                EventTime.Unit.US
+            ),
+        )
+        self._simulator._event_queue.add_event(scheduler_start_event)
+
+        # TODO(elton): log info message
+        # TODO(elton): write a test program to give this a spin
+
+        # TODO(elton): update log message
+        return erdos_scheduler_pb2.NotifyTaskCompletionResponse(
+            success=True,
+            message=f"NotifyTaskCompletion for taskgraph {request.application_id}",
+        )
 
     async def _tick_simulator(self):
         while True:
