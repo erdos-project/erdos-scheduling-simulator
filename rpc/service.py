@@ -176,8 +176,10 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         )
 
     async def RegisterDriver(self, request, context):
+        stime = self.__stime()
+                
         msg = (
-            f"[{stime}] Successfully registered driver for task graph {task_graph.name}"
+            f"[{stime}] Successfully registered driver for app id {request.id}"
         )
         self._logger.info(msg)
         return erdos_scheduler_pb2.DeregisterDriverResponse(
@@ -186,6 +188,8 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         )
 
     async def DeregisterDriver(self, request, context):
+        stime = self.__stime()
+        
         if request.id not in self._registered_task_graphs:
             msg = f"[{stime}] Task graph of id '{request.id}' is not registered or does not exist"
             self._logger.error(msg)
