@@ -13,7 +13,7 @@ import main
 from schedulers import EDFScheduler
 from simulator import Simulator, Event, EventTime, EventType
 from workers import Worker, WorkerPool, WorkerPools
-from workload import Resource, Resources, Workload, TaskGraph, TaskState
+from workload import Resource, Resources, Workload, TaskGraph, TaskState, Placement
 from data import BaseWorkloadLoader
 from data.tpch_loader import TpchLoader
 from utils import setup_logging, setup_csv_logging
@@ -387,12 +387,21 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
             worker_id = self.__get_worker_id()
             task_id = stage_id_mapping[placement.task.name]
             cores = sum(x for _, x in placement.execution_strategy.resources.resources)
+
+            if placement.placement_type not in (
+                Placement.PlacementType.PLACE_TASK,
+                Placement.PlacementType.CANCEL_TASK,
+            ):
+                raise NotImplementedError
+
             placements.append(
                 {
                     "worker_id": worker_id,
                     "application_id": request.id,
                     "task_id": int(task_id),
                     "cores": cores,
+                    "cancelled": placement.placement_type
+                    == Placement.PlacementType.CANCEL_TASK,
                 }
             )
 
