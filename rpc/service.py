@@ -12,7 +12,7 @@ import main
 from schedulers import EDFScheduler
 from simulator import Simulator, Event, EventTime, EventType
 from workers import Worker, WorkerPool, WorkerPools
-from workload import Resource, Resources, Workload, TaskGraph
+from workload import Resource, Resources, Workload, TaskGraph, TaskState
 from data import BaseWorkloadLoader
 from data.tpch_loader import TpchLoader
 from utils import setup_logging, setup_csv_logging
@@ -415,37 +415,44 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         ]
         task = task_graph.get_task(stage_id_mapping[request.task_id])
         if task is None:
-            msg = f"[{stime}] Task '{task_id}' does not exist in the task graph '{task_graph.name}'"
+            msg = f"[{stime}] Task '{request.task_id}' does not exist in the task graph '{task_graph.name}'"
             self._logger.error(msg)
             return erdos_scheduler_pb2.NotifyTaskCompletionResponse(
                 success=False,
                 message=msg,
             )
 
-        actual_task_completion_time = stime + task.remaining_time.time
+        if task.state != TaskState.RUNNING:
+            msg = f"[{stime}] Received task completion notification for task '{request.task_id}' but it is not running"
+            self._logger.error(msg)
+            return erdos_scheduler_pb2.NotifyTaskCompletionResponse(
+                success=False,
+                message=msg,
+            )
+
+        # HACK: The worker pool doesn't step every tick (probably should). So, the task.remaining_time is not accurate. We compute actual_task_completion then by getting the runtime from the profile,
+        actual_task_completion_time = (
+            task.start_time + task.slowest_execution_strategy.runtime
+        )
 
         task_finished_event = Event(
             event_type=EventType.TASK_FINISHED,
-            time=EventTime(time=actual_task_completion_time, unit=EventTime.Unit.S),
+            time=actual_task_completion_time,
             task=task,
         )
         self._simulator._event_queue.add_event(task_finished_event)
 
         scheduler_start_event = Event(
             event_type=EventType.SCHEDULER_START,
-            time=EventTime(time=actual_task_completion_time, unit=EventTime.Unit.S).to(
-                EventTime.Unit.US
-            ),
+            time=actual_task_completion_time.to(EventTime.Unit.US),
         )
         self._simulator._event_queue.add_event(scheduler_start_event)
 
-        # TODO(elton): log info message
-        # TODO(elton): write a test program to give this a spin
-
-        # TODO(elton): update log message
+        msg = f"[{stime}] Successfully processed completion of task '{request.task_id}' of task graph '{task_graph.name}'"
+        self._logger.info(msg)
         return erdos_scheduler_pb2.NotifyTaskCompletionResponse(
             success=True,
-            message=f"NotifyTaskCompletion for taskgraph {request.application_id}",
+            message=msg,
         )
 
     async def _tick_simulator(self):
