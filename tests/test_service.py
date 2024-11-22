@@ -83,6 +83,9 @@ def test_service():
         )
         and response.num_executors == 10
     )
+    
+    # Introduce a 2s delay in getting the env ready
+    time.sleep(2)
 
     # Mark the environment as ready
     request = erdos_scheduler_pb2.RegisterEnvironmentReadyRequest(
