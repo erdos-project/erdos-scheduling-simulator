@@ -9,8 +9,7 @@ This README provides step-by-step instructions to set up the environment, compil
 
 ---
 
-## Step 0: Create Conda Environment
-
+## Step 0A: Create Conda Environment
 ```bash
 conda create -n <env_name> python=3.10
 ```
@@ -24,6 +23,27 @@ conda activate <env_name>
 ```bash
 conda install -c conda-forge openjdk=17.0.9
 ```
+
+## Step 0B: Setup TPCH (dataset, jar) workload
+Build the dataset
+```bash
+cd /path/to/tpch-spark/dbgen
+
+make
+
+./dbgen
+```
+
+Running `./dbgen` above creates a dataset of scale factor `s` of `1` (default) i.e. 1GB.
+
+> NOTE: Had updated the scala version to 2.13.0 in tpch.sbt
+
+Next, we build the target for `tpch-spark`:
+```bash
+sbt package
+```
+
+> NOTE: In case of errors in building the target, check `openjdk` version. It should be `17` and not `21`.
 
 
 ## Step 1: Setup `spark-mirror`
@@ -39,7 +59,7 @@ Verify or set current branch `erdos-spark-integration`
 Verify or set `SPARK_HOME` to point to the correct location of `spark-mirror`.
 
 ### Verify env variable `JAVA_HOME`
-NOTE: `JAVA_HOME` should automatically get set to `/path/to/anaconda3/envs/<env_name>/lib/jvm`
+> NOTE: `JAVA_HOME` should automatically get set to `/path/to/anaconda3/envs/<env_name>/lib/jvm`
 
 ### For first time compilation (entire package)
 ```bash
@@ -70,10 +90,13 @@ This jar interferes with gRPC which requires a `guava-31` jar. To fix:
 - Run `./sbin/patch-erdos.sh`
 - Verify `guava-31.0.1-jre.jar` exists under `assembly/target/scala-2.13/jars/`
 
-
+### Update `PATH` with spark bin files
+```bash
+export PATH=$PATH:/path/to/spark_mirror/bin
+```
 
 ## Step 2: Compile ERDOS
-NOTE: The `erdos-scheduling-simulator` in Step 2 refers to the seperately cloned repository. It is not the `erdos-scheduling-simulator` submodule within
+> NOTE: The `erdos-scheduling-simulator` in Step 2 refers to the seperately cloned repository. It is not the `erdos-scheduling-simulator` submodule within
 the `spark-mirror` repository.
 
 ### Clone repo
@@ -106,7 +129,7 @@ make -j install
 ```
 
 ### Test that simulator works with `simple_av_workload`
-NOTE: Might need to create `experiments` sub-directory if it doesnt already exist
+> NOTE: Might need to create `experiments` sub-directory if it doesnt already exist
 ```bash
 python3 main.py --flagfile=configs/simple_av_workload.conf > experiments/simple_av_workload_test.output
 ```
@@ -114,7 +137,7 @@ The TaskGraph should complete and meet its deadline.
 
 
 ## Step 3: Spark-Erdos service functionality test
-NOTE: As in step 2, the `erdos-scheduling-simulator` here also refers to the seperately cloned repository.
+> NOTE: As in step 2, the `erdos-scheduling-simulator` here also refers to the seperately cloned repository.
 
 From the base directory:
 
@@ -134,7 +157,7 @@ python -m rpc.service
 ```
 
 ### Run local tests for the erdos-spark service
-Note: Verify that `pytest` is installed in the `<env_name>`. Else first do `pip install pytest`. Once installed, run the tests using:
+> NOTE: Verify that `pytest` is installed in the `<env_name>`. Else first do `pip install pytest`. Once installed, run the tests using:
 ```bash
 pytest tests/test_service.py
 ```
@@ -169,11 +192,31 @@ Also, verify that environment variable `SPARK_HOME` is set correctly to point to
 At this point, the spark framework should be registered with the erdos-service.
 
 ### Viewing spark cluster status
-TBD
+Start a ssh tunnel to the node hosting the spark cluster and access port `18080` using the command:
+```bash
+ssh -L 18080:<HOST_IP>:18080 <username>@<node_ip>
+```
+
+Once this command succeeds, you can view the History Server on your laptop's browser at URL: `localhost:18080`
+
+> NOTE: Same process needs to be repeated to view Master and Worker UIs. They run on ports `8080` and `8081` respectively.
+
+### Submitting a test spark application
+To be submitted from within the `tpch-spark` repo:
+```bash
+/path/to/spark_mirror/bin/spark-submit --deploy-mode cluster --master spark://<NODE_IP>:7077 --conf 'spark.port.maxRetries=132' --conf 'spark.eventLog.enabled=true' --conf 'spark.eventLog.dir=/path/to/event_log' --conf 'spark.sql.adaptive.enabled=false' --conf 'spark.sql.adaptive.coalescePartitions.enabled=false' --conf 'spark.sql.autoBroadcastJoinThreshold=-1' --conf 'spark.sql.shuffle.partitions=1' --conf 'spark.sql.files.minPartitionNum=1' --conf 'spark.sql.files.maxPartitionNum=1' --conf 'spark.app.deadline=120' --class 'main.scala.TpchQuery' target/scala-2.13/spark-tpc-h-queries_2.13-1.0.jar "4" "50" "50"
+```
+
+The above job submission is parameterized by `(DEADLINE, QUERY_NUM, DATASET_SIZE, MAX_CORES)`. An example input value for this tuple is 
+`(120, 4, 50, 50)`.
+> Refer to `launch_expt_script.py` in `tpch-spark` for more details on eligible values for these parameters and how they are used.
+
+Once submitted, review the application's runtime status on the Spark Web UI.
 
 ### Shutdown cluster
-
-* To stop all spark services after the experiment concludes
+* To stop the master and worker(s) after the experiment concludes, run:
 ```bash
 ./sbin/stop-all.sh
 ```
+
+> NOTE: This command does not terminate the History Server process.
