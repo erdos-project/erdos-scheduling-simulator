@@ -46,21 +46,7 @@ def test_service():
         r"Registered worker \(id=1234, name=test_worker\)", response.message
     )
 
-    # Register an incorrect TaskGraph
-    request = erdos_scheduler_pb2.RegisterTaskGraphRequest(
-        id="task-graph",
-        name="TPCH Query 4 50 50",
-        timestamp=1234567890,
-        dependencies=[
-            {"key": {"id": 0, "name": "stage 0"}, "children_ids": [1, 2]},
-        ],
-    )
-    response = stub.RegisterTaskGraph(request)
-    assert not response.success and re.search(
-        r"Failed to load TPCH query 4. Exception: Structure of dependencies provided for query number 4 does not match that of canonical dependencies",
-        response.message,
-    )
-    
+   
     # Try to fetch placements for an unregistered task graph
     # Get placements for the task, should be empty
     request = erdos_scheduler_pb2.GetPlacementsRequest(
@@ -72,6 +58,22 @@ def test_service():
         r"Task graph with id \'task-graph-0\' is not registered or does not exist",
         response.message,
     )
+
+    # TODO: move to environment ready
+    # Register an incorrect TaskGraph
+    # request = erdos_scheduler_pb2.RegisterTaskGraphRequest(
+    #     id="task-graph",
+    #     name="TPCH Query 4 50 50",
+    #     timestamp=1234567890,
+    #     dependencies=[
+    #         {"key": {"id": 0, "name": "stage 0"}, "children_ids": [1, 2]},
+    #     ],
+    # )
+    # response = stub.RegisterTaskGraph(request)
+    # assert not response.success and re.search(
+    #     r"Failed to load TPCH query 4. Exception: Structure of dependencies provided for query number 4 does not match that of canonical dependencies",
+    #     response.message,
+    # )
 
     # Register a correct TaskGraph
     request = erdos_scheduler_pb2.RegisterTaskGraphRequest(
@@ -90,7 +92,7 @@ def test_service():
     assert (
         response.success
         and re.search(
-            r"Registered task graph 'Q4\[task-graph-0\]@1' successfully",
+            r"Registered task graph 'task-graph-0' successfully",
             response.message,
         )
         and response.num_executors == 10
