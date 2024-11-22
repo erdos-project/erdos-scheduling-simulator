@@ -36,7 +36,7 @@ make
 
 Running `./dbgen` above creates a dataset of scale factor `s` of `1` (default) i.e. 1GB.
 
-> NOTE: Had updated the scala version to 2.13.0 in tpch.sbt
+> NOTE: Had updated the scala version to 2.13.0 in tpch.sbt. The sbt version used was `1.9.7`.
 
 Next, we build the target for `tpch-spark`:
 ```bash
@@ -210,6 +210,9 @@ To be submitted from within the `tpch-spark` repo:
 The above job submission is parameterized by `(DEADLINE, QUERY_NUM, DATASET_SIZE, MAX_CORES)`. An example input value for this tuple is 
 `(120, 4, 50, 50)`.
 > Refer to `launch_expt_script.py` in `tpch-spark` for more details on eligible values for these parameters and how they are used.
+
+> NOTE: By default, env variable `TPCH_INPUT_DATA_DIR` will look for `dbgen` inside the current working directory. While it works for `spark-submit`
+> issued from inside the `tpch-spark` repository, it needs to be explicitly set otherwise. 
 
 Once submitted, review the application's runtime status on the Spark Web UI.
 
