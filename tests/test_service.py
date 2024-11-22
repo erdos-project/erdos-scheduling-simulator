@@ -60,6 +60,18 @@ def test_service():
         r"Failed to load TPCH query 4. Exception: Structure of dependencies provided for query number 4 does not match that of canonical dependencies",
         response.message,
     )
+    
+    # Try to fetch placements for an unregistered task graph
+    # Get placements for the task, should be empty
+    request = erdos_scheduler_pb2.GetPlacementsRequest(
+        timestamp=1234567890,
+        id="task-graph-0",
+    )
+    response = stub.GetPlacements(request)
+    assert not response.success and re.search(
+        r"Task graph with id \'task-graph-0\' is not registered or does not exist",
+        response.message,
+    )
 
     # Register a correct TaskGraph
     request = erdos_scheduler_pb2.RegisterTaskGraphRequest(
