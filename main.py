@@ -473,7 +473,7 @@ flags.DEFINE_float(
     "placing the TaskGraph, and drop the TaskGraph if it cannot be placed after.",
 )
 flags.DEFINE_multi_enum(
-    "optimization_passes",
+    "opt_passes",
     [],
     [
         "CRITICAL_PATH_PASS",
