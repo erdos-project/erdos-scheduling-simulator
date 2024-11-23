@@ -75,7 +75,7 @@ def test_service():
     #     response.message,
     # )
 
-    # Register a correct TaskGraph
+    # Register the first (correct) TaskGraph, it will be able to run
     request = erdos_scheduler_pb2.RegisterTaskGraphRequest(
         id="task-graph-0",
         name="TPCH Query 4 50 50",
@@ -181,6 +181,92 @@ def test_service():
         )
         actual_task_ids.add(placement.task_id)
     assert actual_task_ids == {2}
+    
+    # Register the second (correct) TaskGraph, wont be able to run due to inadequate resources
+    request = erdos_scheduler_pb2.RegisterTaskGraphRequest(
+        id="task-graph-1",
+        name="TPCH Query 4 50 200",
+        timestamp=1234567890,
+        dependencies=[
+            {"key": {"id": 0, "name": "stage 0"}, "children_ids": [2]},
+            {"key": {"id": 1, "name": "stage 1"}, "children_ids": [2]},
+            {"key": {"id": 2, "name": "stage 2"}, "children_ids": [3]},
+            {"key": {"id": 3, "name": "stage 3"}, "children_ids": [4]},
+            {"key": {"id": 4, "name": "stage 4"}, "children_ids": []},
+        ],
+    )
+    response = stub.RegisterTaskGraph(request)
+    assert (
+        response.success
+        and re.search(
+            r"Registered task graph 'task-graph-1' successfully",
+            response.message,
+        )
+        and response.num_executors == 10
+    )
+    
+    # Introduce a 2s delay in getting the env ready
+    time.sleep(2)
+    
+    # Mark the environment as ready
+    request = erdos_scheduler_pb2.RegisterEnvironmentReadyRequest(
+        id="task-graph-1",
+        num_executors=10,
+        timestamp=1234567890,
+    )
+    response = stub.RegisterEnvironmentReady(request)
+    assert response.success and re.search(
+        r"Successfully marked environment as ready for task graph 'Q4\[task-graph-1\]@1'",
+        response.message,
+    )
+    
+    # Wait for 10s to get the placements for the second task graph
+    time.sleep(10)
+    
+    # Get placements for the task, none should be placed since worker has inadequate resources
+    request = erdos_scheduler_pb2.GetPlacementsRequest(
+        timestamp=1234567890,
+        id="task-graph-1",
+    )
+    response = stub.GetPlacements(request)
+    assert response.success
+    actual_task_ids = set()
+    for placement in response.placements:
+        assert (
+            placement.worker_id == "1234" and placement.application_id == "task-graph-1"
+        )
+        actual_task_ids.add(placement.task_id)
+    assert len(actual_task_ids) == 0
+    
+    # Wait for 100 more seconds and request placements again
+    time.sleep(100)
+    
+    # Notify task completion for task 2 in task graph 0 to trigger scheduler run again
+    request = erdos_scheduler_pb2.NotifyTaskCompletionRequest(
+        application_id="task-graph-0",
+        task_id=2,
+        timestamp=1234567890
+    )
+    response = stub.NotifyTaskCompletion(request)
+    assert response.success
+    
+    # Wait for 2 seconds to allow scheduler to process task completion and run scheduler
+    time.sleep(2)
+    
+    # Get placements for the task, entire taskgraph should be cancelled
+    request = erdos_scheduler_pb2.GetPlacementsRequest(
+        timestamp=1234567890,
+        id="task-graph-1",
+    )
+    response = stub.GetPlacements(request)
+    assert response.success
+    actual_task_ids = set()
+    for placement in response.placements:
+        assert (
+            placement.worker_id == "None" and placement.application_id == "task-graph-1" and placement.cancelled == True
+        )
+        actual_task_ids.add(placement.task_id)
+    assert actual_task_ids == {0, 1}
 
     # Deregister framework
     request = erdos_scheduler_pb2.DeregisterFrameworkRequest(
