@@ -362,6 +362,8 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         with self._lock:
             self._simulator._event_queue.add_event(update_workload_event)
             self._simulator._event_queue.add_event(scheduler_start_event)
+            self._logger.info(f"[{stime}] Adding event {update_workload_event} to the simulator's event queue")
+            self._logger.info(f"[{stime}] Added event {scheduler_start_event} to the simulator's event queue")
 
         msg = f"[{stime}] Successfully marked environment as ready for task graph '{r.task_graph.name}'"
         self._logger.info(msg)
@@ -513,20 +515,25 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         actual_task_completion_time = (
             task.start_time + task.slowest_execution_strategy.runtime
         )
-
+        
+        # NOTE: Although the actual_task_completion_time works for task completion notifications that arrive early, it is 
+        # inaccurate for task completion notifications that occur past that time. Thus, a max of the current and actual completion time
+        # is taken to ensure that the task is marked completed at the correct time.
         task_finished_event = Event(
             event_type=EventType.TASK_FINISHED,
-            time=actual_task_completion_time,
+            time=max(actual_task_completion_time, stime),
             task=task,
         )
         scheduler_start_event = Event(
             event_type=EventType.SCHEDULER_START,
-            time=actual_task_completion_time.to(EventTime.Unit.US),
+            time=max(actual_task_completion_time.to(EventTime.Unit.US), stime.to(EventTime.Unit.US)),
         )
 
         with self._lock:
             self._simulator._event_queue.add_event(task_finished_event)
             self._simulator._event_queue.add_event(scheduler_start_event)
+            self._logger.info(f"[{stime}] Adding event {task_finished_event} to the simulator's event queue")
+            self._logger.info(f"[{stime}] Added event {scheduler_start_event} to the simulator's event queue")
 
         msg = f"[{stime}] Successfully processed completion of task '{request.task_id}' of task graph '{r.task_graph.name}'"
         self._logger.info(msg)
