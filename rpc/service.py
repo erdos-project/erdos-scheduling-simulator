@@ -386,9 +386,8 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         cpu_resource = Resource(name="Slot")
         worker_resources = Resources(
             resource_vector={
-                # TODO(elton): handle override worker cpu count?
-                # cpu_resource: request.cores,
-                cpu_resource: 640,
+                cpu_resource: request.cores if not FLAGS.override_worker_cpu_count
+                else 640
             },
             _logger=self._logger,
         )
