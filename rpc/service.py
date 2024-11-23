@@ -130,7 +130,9 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
             _flags=FLAGS,
         )
 
-        self._registered_task_graphs = {}
+        # TODO: Items in _registered_task_graphs are never deleted right now, needs to be handled.
+        self._registered_task_graphs = {}    
+        self._registered_app_drivers = {}    # Spark driver id differs from taskgraph name (application id)
         self._lock = threading.Lock()
 
         super().__init__()
@@ -203,8 +205,21 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
 
     async def RegisterDriver(self, request, context):
         stime = self.__stime()
-
-        msg = f"[{stime}] Successfully registered driver for app id {request.id}"
+        
+        if request.id in self._registered_app_drivers:
+            msg = f"[{stime}] Driver with id '{request.id}' is already registered"
+            self._logger.error(msg)
+            return erdos_scheduler_pb2.RegisterDriverResponse(
+                success=False,
+                message=msg,
+                worker_id=self.__get_worker_id(),
+            )
+        
+        # TODO: Update the registered_app_drivers to map the driver id to 
+        # application id once the taskgraph is registered.
+        self._registered_app_drivers[request.id] = None
+        
+        msg = f"[{stime}] Successfully registered driver {request.id} for an application."
         self._logger.info(msg)
         return erdos_scheduler_pb2.RegisterDriverResponse(
             success=True,
@@ -215,18 +230,20 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
     async def DeregisterDriver(self, request, context):
         stime = self.__stime()
 
-        if request.id not in self._registered_task_graphs:
-            msg = f"[{stime}] Task graph of id '{request.id}' is not registered or does not exist"
+        if request.id not in self._registered_app_drivers:
+            msg = f"[{stime}] Driver id '{request.id}' is not registered or does not exist"
             self._logger.error(msg)
             return erdos_scheduler_pb2.DeregisterDriverResponse(
                 success=False,
                 message=msg,
             )
+            
+        # TODO: Dummy mapping from driver to task graph (application), so task_graph_name is None.
+        # Deletion of taskgraph from registered_task_graphs and driver from registered_app_drivers should be done carefully.
+        task_graph_name = self._registered_app_drivers[request.id]
+        del self._registered_app_drivers[request.id]
 
-        task_graph, _ = self._registered_task_graphs[request.id]
-        del self._registered_task_graphs[request.id]
-
-        msg = f"[{stime}] Successfully de-registered driver for task graph {task_graph.name}"
+        msg = f"[{stime}] Successfully de-registered driver with id {request.id} for task graph {task_graph_name}"
         self._logger.info(msg)
         return erdos_scheduler_pb2.DeregisterDriverResponse(
             success=True,
