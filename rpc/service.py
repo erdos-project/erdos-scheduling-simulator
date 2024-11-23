@@ -454,9 +454,9 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         # Construct response. Notably, we apply stage-id mapping
         placements = []
         for placement in sim_placements:
-            worker_id = self.__get_worker_id()
+            worker_id = self.__get_worker_id() if placement.placement_type == Placement.PlacementType.PLACE_TASK else "None"
             task_id = r.stage_id_mapping[placement.task.name]
-            cores = sum(x for _, x in placement.execution_strategy.resources.resources)
+            cores = sum(x for _, x in placement.execution_strategy.resources.resources) if placement.placement_type == Placement.PlacementType.PLACE_TASK else 0
 
             if placement.placement_type not in (
                 Placement.PlacementType.PLACE_TASK,
@@ -474,6 +474,9 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
                     == Placement.PlacementType.CANCEL_TASK,
                 }
             )
+        self._logger.info(
+            f"Sending placements for '{r.task_graph.name}': {placements}"
+        )
 
         return erdos_scheduler_pb2.GetPlacementsResponse(
             success=True,

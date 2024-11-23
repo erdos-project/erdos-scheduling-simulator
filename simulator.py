@@ -710,6 +710,9 @@ class Simulator(object):
                         task=cancelled_task,
                     )
                 )
+                self._current_task_graph_placements[placement.task.task_graph][
+                    placement.task.id
+                    ] = placement
 
             if task_graph.is_cancelled():
                 released_tasks_from_new_task_graph = (
