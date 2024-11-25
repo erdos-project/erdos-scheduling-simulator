@@ -10,7 +10,6 @@ from dataclasses import dataclass
 
 # TODO: refactor out the need to import main to get common flags
 import main
-from schedulers import EDFScheduler
 from simulator import Simulator, Event, EventTime, EventType
 from workers import Worker, WorkerPool, WorkerPools
 from workload import Resource, Resources, Workload, TaskGraph, TaskState, Placement
@@ -124,11 +123,59 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         self._simulator = None
         self._workload_loader = None
 
-        self._scheduler = EDFScheduler(
-            runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
-            enforce_deadlines=FLAGS.enforce_deadlines,
-            _flags=FLAGS,
-        )
+        # Instantiate the scheduler based on the given flag.
+        self._scheduler = None
+        if FLAGS.scheduler == "FIFO":
+            from schedulers import FIFOScheduler
+
+            self._scheduler = FIFOScheduler(
+                preemptive=FLAGS.preemption,
+                runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
+                enforce_deadlines=FLAGS.enforce_deadlines, # TODO: (DG) Check why this isnt passed in the simulator
+                _flags=FLAGS,
+            )
+        elif FLAGS.scheduler == "EDF":
+            from schedulers import EDFScheduler
+
+            self._scheduler = EDFScheduler(
+                preemptive=FLAGS.preemption,
+                runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
+                enforce_deadlines=FLAGS.enforce_deadlines,
+                _flags=FLAGS,
+            )
+        elif FLAGS.scheduler == "TetriSched":
+            from schedulers import TetriSchedScheduler
+
+            finer_discretization = FLAGS.finer_discretization_at_prev_solution
+            self._scheduler = TetriSchedScheduler(
+                preemptive=FLAGS.preemption,
+                runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
+                lookahead=EventTime(FLAGS.scheduler_lookahead, EventTime.Unit.US),
+                enforce_deadlines=FLAGS.enforce_deadlines,
+                retract_schedules=FLAGS.retract_schedules,
+                release_taskgraphs=FLAGS.release_taskgraphs,
+                goal=FLAGS.ilp_goal,
+                time_discretization=EventTime(
+                    FLAGS.scheduler_time_discretization, EventTime.Unit.US
+                ),
+                plan_ahead=EventTime(FLAGS.scheduler_plan_ahead, EventTime.Unit.US),
+                log_to_file=FLAGS.scheduler_log_to_file,
+                adaptive_discretization=FLAGS.scheduler_adaptive_discretization,
+                _flags=FLAGS,
+                max_time_discretization=EventTime(
+                    FLAGS.scheduler_max_time_discretization, EventTime.Unit.US
+                ),
+                max_occupancy_threshold=FLAGS.scheduler_max_occupancy_threshold,
+                finer_discretization_at_prev_solution=finer_discretization,
+                finer_discretization_window=EventTime(
+                    FLAGS.finer_discretization_window, EventTime.Unit.US
+                ),
+                plan_ahead_no_consideration_gap=EventTime(
+                    FLAGS.scheduler_plan_ahead_no_consideration_gap, EventTime.Unit.US
+                ),
+            )
+        else:
+            raise ValueError(f"Unknown scheduler {FLAGS.scheduler}.")
 
         # TODO: Items in _registered_task_graphs are never deleted right now, needs to be handled.
         self._registered_task_graphs = {}    
@@ -550,7 +597,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
             with self._lock:
                 if self._simulator is not None:
                     stime = self.__stime()
-                    # self._logger.debug(f"[{stime}] Simulator tick")
+                    self._logger.debug(f"[{stime}] Simulator tick")
                     self._simulator.tick(until=stime)
             # else:
             #     print("Simulator instance is None")
