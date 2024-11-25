@@ -53,7 +53,7 @@ class Task(object):
     Args:
         name (`str`): The name of the computation (typically the callback of
             the ERDOS operator.
-        task_graph_name (`str`): The name of the TaskGraph that this Task belongs to.
+        task_graph (`str`): The name of the TaskGraph that this Task belongs to.
         job (`Job`): The job that created this particular task.
         deadline (`EventTime`): The absolute deadline by which the task should complete.
         profile (`WorkProfile`): A profile of the computation that the Task is supposed

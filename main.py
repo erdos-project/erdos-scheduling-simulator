@@ -9,6 +9,7 @@ from data import (
     TaskLoaderBenchmark,
     TaskLoaderPylot,
     TaskLoaderSynthetic,
+    TpchWorkloadLoader,
     WorkerLoader,
     WorkerLoaderBenchmark,
     WorkloadLoader,
@@ -34,7 +35,7 @@ flags.DEFINE_enum(
 flags.DEFINE_enum(
     "replay_trace",
     "pylot",
-    ["pylot", "clockwork_bursty", "alibaba"],
+    ["pylot", "clockwork_bursty", "alibaba", "tpch"],
     "Sets the trace to replay in the replay mode.",
 )
 flags.DEFINE_string(
@@ -115,6 +116,11 @@ flags.DEFINE_integer(
     "If set to default (-1), then the Simulator will automatically choose an interval "
     "based on the set of released tasks in the previous iteration.",
 )
+flags.DEFINE_bool(
+    "orchestrated",
+    False,
+    "Runs the simulator in orchestrated mode. Currently used by the ERDOS service.",
+)
 
 # Benchmark related flags.
 flags.DEFINE_integer(
@@ -128,6 +134,40 @@ flags.DEFINE_integer(
 )
 flags.DEFINE_integer(
     "benchmark_num_cpus", 10, "Number of CPUs available for benchmarking."
+)
+
+# TPCH related flags
+flags.DEFINE_string(
+    "tpch_query_dag_spec",
+    "./profiles/workload/tpch/queries.yaml",
+    "Path to a YAML file specifying the TPC-H query DAGs",
+)
+flags.DEFINE_integer(
+    "tpch_num_queries",
+    50,
+    "Number of TPC-H queries to run",
+)
+flags.DEFINE_enum(
+    "tpch_profile_type",
+    "Cloudlab",
+    ["Cloudlab", "Decima"],
+    "Type of TPC-H profile the data loader must use",
+)
+flags.DEFINE_enum(
+    "tpch_dataset_size",
+    "50",
+    ["2", "50", "100", "250", "500"],
+    "Size of the TPC-H dataset to use",
+)
+flags.DEFINE_integer(
+    "tpch_max_executors_per_job",
+    50,
+    "Maximum number of executors to use per TPC-H query stage",
+)
+flags.DEFINE_integer(
+    "tpch_min_task_runtime",
+    8,
+    "Minimum runtime of a TPC-H task",
 )
 
 # AlibabaLoader related flags.
@@ -633,6 +673,8 @@ def main(args):
                 ),
                 flags=FLAGS,
             )
+        elif FLAGS.replay_trace == "tpch":
+            workload_loader = TpchWorkloadLoader(flags=FLAGS)
         else:
             raise NotImplementedError(
                 f"Replay trace {FLAGS.replay_trace} is not implemented yet."

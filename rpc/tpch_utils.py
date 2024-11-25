@@ -2,106 +2,45 @@
 
 import ast
 import json
+import yaml
 import os
 from typing import Mapping, Sequence
 
 import networkx as nx
 import numpy as np
 
-HOME_TPCH_DIR = "../profiles/workload/tpch_decima/"
-TPCH_SUBDIR = "2g/"
+from data.tpch_loader import get_all_stage_info_for_query
 
 
-class SetWithCount(object):
-    """
-    allow duplication in set
-    """
-
-    def __init__(self):
-        self.set = {}
-
-    def __contains__(self, item):
-        return item in self.set
-
-    def add(self, item):
-        if item in self.set:
-            self.set[item] += 1
-        else:
-            self.set[item] = 1
-
-    def clear(self):
-        self.set.clear()
-
-    def remove(self, item):
-        self.set[item] -= 1
-        if self.set[item] == 0:
-            del self.set[item]
-
-
-def pre_process_task_duration(task_duration):
-    # remove fresh durations from first wave
-    clean_first_wave = {}
-    for e in task_duration["first_wave"]:
-        clean_first_wave[e] = []
-        fresh_durations = SetWithCount()
-        # O(1) access
-        for d in task_duration["fresh_durations"][e]:
-            fresh_durations.add(d)
-        for d in task_duration["first_wave"][e]:
-            if d not in fresh_durations:
-                clean_first_wave[e].append(d)
-            else:
-                # prevent duplicated fresh duration blocking first wave
-                fresh_durations.remove(d)
-
-
-def get_all_stage_info_for_query(query_num):
-    task_durations = np.load(
-        os.path.join(
-            HOME_TPCH_DIR, TPCH_SUBDIR, "task_duration_" + str(query_num) + ".npy"
-        ),
-        allow_pickle=True,
-    ).item()
-
-    num_nodes = len(task_durations)
-
-    stage_info = {}
-
-    for n in range(num_nodes):
-        task_duration = task_durations[n]
-        e = next(iter(task_duration["first_wave"]))
-        # NOTE: somehow only picks the first element {2: [n_tasks_in_ms]}
-
-        num_tasks = len(task_duration["first_wave"][e]) + len(
-            task_duration["rest_wave"][e]
-        )
-
-        # remove fresh duration from first wave duration
-        # drag nearest neighbor first wave duration to empty spots
-        pre_process_task_duration(task_duration)
-        rough_duration = np.mean(
-            [i for t in task_duration["first_wave"].values() for i in t]
-            + [i for t in task_duration["rest_wave"].values() for i in t]
-            + [i for t in task_duration["fresh_durations"].values() for i in t]
-        )
-
-        curr_stage = {
-            "stage_id": n,
-            "num_tasks": num_tasks,
-            "avg_task_duration": round(rough_duration),
-        }
-        stage_info[n] = curr_stage
-
-    return stage_info
+TPCH_PARENT_DIR = "/home/dgarg39/erdos-scheduling-simulator/profiles/workload/tpch/"
 
 
 def get_base_tpch_graph_structure(query_num):
-    # use query_num to read string from file
-    with open(os.path.join(HOME_TPCH_DIR, "query_dag.json")) as f:
-        tpch_query_json = json.load(f)
+    with open(os.path.join(TPCH_PARENT_DIR, "queries.yaml")) as f:
+        tpch_query_yaml = yaml.load(f, Loader=yaml.FullLoader)
 
-    # get query dependency from file
-    query_dependency = ast.literal_eval(tpch_query_json["query_number"][str(query_num)])
+    # Extract the graph structure for the given query number
+    query_graph = None
+    for graph in tpch_query_yaml["graphs"]:
+        if graph["name"] == f"Q{query_num}":
+            query_graph = graph["graph"]
+            break
+
+    if query_graph is None:
+        raise ValueError(f"Query number {query_num} not found in the YAML file")
+
+    # Convert the graph structure to a format suitable for nx.DiGraph
+    query_dependency = []
+    for node in query_graph:
+        if "children" in node:
+            for child in node["children"]:
+                query_dependency.append((node["name"], child))
+        else:
+            # Ensure each tuple has two elements by adding a dummy node
+            query_dependency.append((node["name"], None))
+
+    # Remove any tuples where the second element is None
+    query_dependency = [edge for edge in query_dependency if edge[1] is not None]
 
     # convert job structure into a nx graph
     base_tpch_graph = nx.DiGraph(query_dependency)

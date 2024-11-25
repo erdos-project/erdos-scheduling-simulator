@@ -193,6 +193,7 @@ message Placement {
     string application_id = 2;
     uint32 task_id = 3;
     uint32 cores = 4;
+    bool cancelled = 5; // If the task (and thereby the task graph) should be cancelled
 }
 
 message GetPlacementsResponse {
