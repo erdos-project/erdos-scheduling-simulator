@@ -131,7 +131,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
             self._scheduler = FIFOScheduler(
                 preemptive=FLAGS.preemption,
                 runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
-                enforce_deadlines=FLAGS.enforce_deadlines, # TODO: (DG) Check why this isnt passed in the simulator
+                enforce_deadlines=FLAGS.enforce_deadlines,  # TODO: (DG) Check why this isnt passed in the simulator
                 _flags=FLAGS,
             )
         elif FLAGS.scheduler == "EDF":
@@ -178,8 +178,10 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
             raise ValueError(f"Unknown scheduler {FLAGS.scheduler}.")
 
         # TODO: Items in _registered_task_graphs are never deleted right now, needs to be handled.
-        self._registered_task_graphs = {}    
-        self._registered_app_drivers = {}    # Spark driver id differs from taskgraph name (application id)
+        self._registered_task_graphs = {}
+        self._registered_app_drivers = (
+            {}
+        )  # Spark driver id differs from taskgraph name (application id)
         self._lock = threading.Lock()
 
         super().__init__()
@@ -252,7 +254,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
 
     async def RegisterDriver(self, request, context):
         stime = self.__stime()
-        
+
         if request.id in self._registered_app_drivers:
             msg = f"[{stime}] Driver with id '{request.id}' is already registered"
             self._logger.error(msg)
@@ -261,12 +263,14 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
                 message=msg,
                 worker_id=self.__get_worker_id(),
             )
-        
-        # TODO: Update the registered_app_drivers to map the driver id to 
+
+        # TODO: Update the registered_app_drivers to map the driver id to
         # application id once the taskgraph is registered.
         self._registered_app_drivers[request.id] = None
-        
-        msg = f"[{stime}] Successfully registered driver {request.id} for an application."
+
+        msg = (
+            f"[{stime}] Successfully registered driver {request.id} for an application."
+        )
         self._logger.info(msg)
         return erdos_scheduler_pb2.RegisterDriverResponse(
             success=True,
@@ -284,7 +288,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
                 success=False,
                 message=msg,
             )
-            
+
         # TODO: Dummy mapping from driver to task graph (application), so task_graph_name is None.
         # Deletion of taskgraph from registered_task_graphs and driver from registered_app_drivers should be done carefully.
         task_graph_name = self._registered_app_drivers[request.id]
@@ -409,8 +413,12 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         with self._lock:
             self._simulator._event_queue.add_event(update_workload_event)
             self._simulator._event_queue.add_event(scheduler_start_event)
-            self._logger.info(f"[{stime}] Adding event {update_workload_event} to the simulator's event queue")
-            self._logger.info(f"[{stime}] Added event {scheduler_start_event} to the simulator's event queue")
+            self._logger.info(
+                f"[{stime}] Adding event {update_workload_event} to the simulator's event queue"
+            )
+            self._logger.info(
+                f"[{stime}] Added event {scheduler_start_event} to the simulator's event queue"
+            )
 
         msg = f"[{stime}] Successfully marked environment as ready for task graph '{r.task_graph.name}'"
         self._logger.info(msg)
@@ -435,8 +443,9 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         cpu_resource = Resource(name="Slot")
         worker_resources = Resources(
             resource_vector={
-                cpu_resource: request.cores if not FLAGS.override_worker_cpu_count
-                else 640
+                cpu_resource: (
+                    request.cores if not FLAGS.override_worker_cpu_count else 640
+                )
             },
             _logger=self._logger,
         )
@@ -501,9 +510,17 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         # Construct response. Notably, we apply stage-id mapping
         placements = []
         for placement in sim_placements:
-            worker_id = self.__get_worker_id() if placement.placement_type == Placement.PlacementType.PLACE_TASK else "None"
+            worker_id = (
+                self.__get_worker_id()
+                if placement.placement_type == Placement.PlacementType.PLACE_TASK
+                else "None"
+            )
             task_id = r.stage_id_mapping[placement.task.name]
-            cores = sum(x for _, x in placement.execution_strategy.resources.resources) if placement.placement_type == Placement.PlacementType.PLACE_TASK else 0
+            cores = (
+                sum(x for _, x in placement.execution_strategy.resources.resources)
+                if placement.placement_type == Placement.PlacementType.PLACE_TASK
+                else 0
+            )
 
             if placement.placement_type not in (
                 Placement.PlacementType.PLACE_TASK,
@@ -521,9 +538,7 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
                     == Placement.PlacementType.CANCEL_TASK,
                 }
             )
-        self._logger.info(
-            f"Sending placements for '{r.task_graph.name}': {placements}"
-        )
+        self._logger.info(f"Sending placements for '{r.task_graph.name}': {placements}")
 
         return erdos_scheduler_pb2.GetPlacementsResponse(
             success=True,
@@ -565,8 +580,8 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         actual_task_completion_time = (
             task.start_time + task.slowest_execution_strategy.runtime
         )
-        
-        # NOTE: Although the actual_task_completion_time works for task completion notifications that arrive early, it is 
+
+        # NOTE: Although the actual_task_completion_time works for task completion notifications that arrive early, it is
         # inaccurate for task completion notifications that occur past that time. Thus, a max of the current and actual completion time
         # is taken to ensure that the task is marked completed at the correct time.
         task_finished_event = Event(
@@ -576,14 +591,21 @@ class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
         )
         scheduler_start_event = Event(
             event_type=EventType.SCHEDULER_START,
-            time=max(actual_task_completion_time.to(EventTime.Unit.US), stime.to(EventTime.Unit.US)),
+            time=max(
+                actual_task_completion_time.to(EventTime.Unit.US),
+                stime.to(EventTime.Unit.US),
+            ),
         )
 
         with self._lock:
             self._simulator._event_queue.add_event(task_finished_event)
             self._simulator._event_queue.add_event(scheduler_start_event)
-            self._logger.info(f"[{stime}] Adding event {task_finished_event} to the simulator's event queue")
-            self._logger.info(f"[{stime}] Added event {scheduler_start_event} to the simulator's event queue")
+            self._logger.info(
+                f"[{stime}] Adding event {task_finished_event} to the simulator's event queue"
+            )
+            self._logger.info(
+                f"[{stime}] Added event {scheduler_start_event} to the simulator's event queue"
+            )
 
         msg = f"[{stime}] Successfully processed completion of task '{request.task_id}' of task graph '{r.task_graph.name}'"
         self._logger.info(msg)
