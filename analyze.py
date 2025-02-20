@@ -335,7 +335,7 @@ def analyze_resource_utilization(
     # Plotting defaults.
     # hatches = ['//', '--', '**']
     # alphas = np.arange(0.2, 1.2, 0.2)
-    resource_color = {"GPU": "red", "CPU": "green"}
+    resource_color = {"Slot": "green"}
 
     # Worker Pool statistics
     worker_pool_stats = csv_reader.get_worker_pool_utilizations(scheduler_csv_file)
@@ -1246,16 +1246,16 @@ def log_aggregate_stats(
                 / sum(stat.resource_utilizations[resource])
                 for stat in worker_pool_stats
             ]
-            for resource in ("GPU", "CPU")
+            for resource in ("Slot",)
         }
 
         scheduler_invocations = csv_reader.get_scheduler_invocations(csv_file)
         placed_tasks = [
-            scheduler_invocation.placed_tasks
+            scheduler_invocation.num_placed_tasks
             for scheduler_invocation in scheduler_invocations
         ]
         unplaced_tasks = [
-            scheduler_invocation.unplaced_tasks
+            scheduler_invocation.num_unplaced_tasks
             for scheduler_invocation in scheduler_invocations
         ]
 
@@ -1268,8 +1268,7 @@ def log_aggregate_stats(
                 placement_delay,
                 deadline_delay,
                 stat_function(e2e_response_time),
-                stat_function(resource_uses["GPU"]),
-                stat_function(resource_uses["CPU"]),
+                stat_function(resource_uses["Slot"]),
                 stat_function(placed_tasks),
                 stat_function(unplaced_tasks),
                 log_name,
@@ -1288,8 +1287,7 @@ def log_aggregate_stats(
                 "Placement",
                 "Deadline",
                 "JCT",
-                "GPU",
-                "CPU",
+                "Slot",
                 "Placed",
                 "Unplaced",
                 "Log",

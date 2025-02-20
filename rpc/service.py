@@ -1,52 +1,41 @@
-import asyncio
-import heapq
-import os
+import threading
 import sys
 import time
-from collections import defaultdict
+import asyncio
 from concurrent import futures
-from operator import attrgetter
-from typing import Mapping, Sequence
 from urllib.parse import urlparse
+from typing import Optional, Dict, Callable, Tuple
+from enum import Enum
+from dataclasses import dataclass
 
-sys.path.append(
-    os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir))
-)
-
-import erdos_scheduler_pb2
-import erdos_scheduler_pb2_grpc
-import grpc
-from absl import app, flags
-from tpch_utils import get_all_stage_info_for_query, verify_and_relable_tpch_app_graph
-
-from schedulers import EDFScheduler, FIFOScheduler
-from utils import EventTime, setup_logging
+# TODO: refactor out the need to import main to get common flags
+import main
+from simulator import Simulator, Event, EventTime, EventType
 from workers import Worker, WorkerPool, WorkerPools
 from workload import (
-    ExecutionStrategies,
-    ExecutionStrategy,
-    Job,
-    Placement,
     Resource,
     Resources,
-    Task,
-    TaskGraph,
     Workload,
-    WorkProfile,
+    TaskGraph,
+    TaskState,
+    Placement,
+    JobGraph,
 )
+from data import BaseWorkloadLoader
+from data.tpch_loader import TpchLoader
+from utils import setup_logging, setup_csv_logging
+from rpc import erdos_scheduler_pb2
+from rpc import erdos_scheduler_pb2_grpc
+
+import grpc
+
+from absl import app, flags
 
 FLAGS = flags.FLAGS
 
 flags.DEFINE_integer("port", 50051, "Port to serve the ERDOS Scheduling RPC Server on.")
 flags.DEFINE_integer(
     "max_workers", 10, "Maximum number of workers to use for the RPC server."
-)
-flags.DEFINE_string("log_file", None, "Path to the log file.", short_name="log")
-flags.DEFINE_string("log_level", "debug", "The level to log.")
-flags.DEFINE_integer(
-    "initial_executors",
-    10,
-    "The initial number of executors that are requested by each application.",
 )
 flags.DEFINE_integer(
     "virtualized_cores",
@@ -63,809 +52,829 @@ flags.DEFINE_integer(
     "The amount of virtualized memory (in GB) that must be created in each Worker on "
     "the framework. Refer to the `virtualized_cores` flag for more information.",
 )
-flags.DEFINE_enum(
-    "scheduler", "EDF", ["FIFO", "EDF"], "The scheduler to use for this execution."
+flags.DEFINE_integer(
+    "spark_app_num_initial_executors",
+    10,
+    "The initial number of executors that are requested by each Spark application.",
+)
+flags.DEFINE_bool(
+    "override_worker_cpu_count",
+    False,
+    "If True, worker CPU count will be set to 640 (Cloudlab 20-node cluster CPU count). "
+    "This allows us to scale up spark experiments without actually deploying a large "
+    "spark cluster.",
 )
 
 
-# Define an item containing completion timestamp and task
-class TimedItem:
-    def __init__(self, timestamp, task):
-        self.timestamp = timestamp
-        self.task = task
+class DataLoader(Enum):
+    TPCH = "tpch"
 
 
-# Define a priority queue based on heapq module
-class PriorityQueue:
-    def __init__(self):
-        self._queue = []
+class WorkloadLoader(BaseWorkloadLoader):
+    def __init__(self, _flags) -> None:
+        self._workload = Workload.empty(_flags)
 
-    def put(self, item):
-        heapq.heappush(self._queue, (item.timestamp, item))
+    def add_task_graph(self, task_graph: TaskGraph):
+        self._workload.add_task_graph(task_graph)
 
-    def get(self):
-        _, item = heapq.heappop(self._queue)
-        return item
-
-    def empty(self):
-        return len(self._queue) == 0
+    def get_next_workload(self, current_time: EventTime) -> Optional[Workload]:
+        return self._workload
 
 
-# Implement the service.
-class SchedulerServiceServicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
-    def __init__(self) -> None:
-        """Initialize the service, and setup the logger."""
-        # Values used by the Servicer.
-        self._logger = setup_logging(name=FLAGS.log_file, log_level=FLAGS.log_level)
-        self._initialized = False
-        self._initialization_time = -1
+@dataclass
+class RegisteredApplication:
+    """
+    Represents a registered application that can be used to generate task
+    graphs. It also manages the mapping between Spark stage IDs and canonical
+    task IDs.
+
+    A registered application is ready if the `task_graph` attribute is set.
+
+    Attributes:
+        gen (Callable[[EventTime], Tuple[TaskGraph, Dict[int,int]]]):
+            A function that takes a release time and outputs:
+            - A task graph
+            - A mapping from Spark stage IDs to canonical task IDs
+
+        task_graph (TaskGraph, optional):
+            The generated task graph for the application. Defaults to None.
+
+    Methods:
+        generate_task_graph(release_time: EventTime):
+            Sets the `task_graph` attribute by generating a task graph for a
+            given `release_time`.
+
+        spark_task_id(task_id: int):
+            Returns the canonical task ID corresponding to a Spark stage ID.
+
+        canonical_task_id(stage_id: int):
+            Returns the Spark stage ID corresponding to a canonical task ID.
+    """
+
+    gen: Callable[[EventTime], Tuple[TaskGraph, Dict[int, int]]]
+    task_graph: TaskGraph = None
+
+    _forward: Dict[int, int] = None  # spark stage id => canonical task id
+    _backward: Dict[int, int] = None  # canonical task id => spark stage id
+    _last_gen: EventTime = None
+
+    def __init__(self, gen):
+        self.gen = gen
+
+    def generate_task_graph(self, release_time: EventTime):
+        task_graph, stage_id_mapping = self.gen(release_time)
+        self.task_graph = task_graph
+        self._forward = stage_id_mapping
+        self._backward = {v: k for k, v in self._forward.items()}
+        self._last_gen = release_time
+
+    def spark_task_id(self, task_id: int):
+        return self._backward[task_id]
+
+    def canonical_task_id(self, stage_id: int):
+        return self._forward[stage_id]
+
+
+class Servicer(erdos_scheduler_pb2_grpc.SchedulerServiceServicer):
+    def __init__(self, server) -> None:
+        self._server = server
+
+        # Override some flags
+
+        # Enable orchestrated mode
+        FLAGS.orchestrated = True
+        # Set scheduler runtime to zero
+        FLAGS.scheduler_runtime = 0
+
+        self._logger = setup_logging(
+            name=__name__,
+            log_dir=FLAGS.log_dir,
+            log_file=FLAGS.log_file_name,
+            log_level=FLAGS.log_level,
+            fmt="[%(asctime)s] {%(funcName)s:%(lineno)d} - %(message)s",
+        )
+        self._csv_logger = setup_csv_logging(
+            name=__name__,
+            log_dir=FLAGS.log_dir,
+            log_file=FLAGS.csv_file_name,
+        )
+        for flag_name in FLAGS:
+            self._csv_logger.debug(
+                f"input_flag,{flag_name},{getattr(FLAGS, flag_name)}"
+            )
+
         self._master_uri = None
+        self._initialization_time = None
+        self._data_loaders = {}
+        self._data_loaders[DataLoader.TPCH] = TpchLoader(
+            path=FLAGS.tpch_query_dag_spec,
+            flags=FLAGS,
+        )
+        self._simulator = None
+        self._workload_loader = None
 
-        # The simulator types maintained by the Servicer.
-        self._worker_pool = None
-        self._worker_pools = None
-        self._drivers: Mapping[str, Task] = {}
-        self._workload = None
+        # Instantiate the scheduler based on the given flag.
+        self._scheduler = None
+        if FLAGS.scheduler == "FIFO":
+            from schedulers import FIFOScheduler
 
-        # Scheduler information maintained by the servicer.
-        self._scheduler_running_lock = asyncio.Lock()
-        self._scheduler_running = False
-        self._rerun_scheduler = False
-        if FLAGS.scheduler == "EDF":
-            self._scheduler = EDFScheduler()
-        elif FLAGS.scheduler == "FIFO":
-            self._scheduler = FIFOScheduler()
+            self._scheduler = FIFOScheduler(
+                preemptive=FLAGS.preemption,
+                runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
+                enforce_deadlines=FLAGS.enforce_deadlines,  # TODO: (DG) Check why this isnt passed in the simulator
+                _flags=FLAGS,
+            )
+        elif FLAGS.scheduler == "EDF":
+            from schedulers import EDFScheduler
+
+            self._scheduler = EDFScheduler(
+                preemptive=FLAGS.preemption,
+                runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
+                enforce_deadlines=FLAGS.enforce_deadlines,
+                _flags=FLAGS,
+            )
+        elif FLAGS.scheduler == "TetriSched":
+            from schedulers import TetriSchedScheduler
+
+            finer_discretization = FLAGS.finer_discretization_at_prev_solution
+            self._scheduler = TetriSchedScheduler(
+                preemptive=FLAGS.preemption,
+                runtime=EventTime(FLAGS.scheduler_runtime, EventTime.Unit.US),
+                lookahead=EventTime(FLAGS.scheduler_lookahead, EventTime.Unit.US),
+                enforce_deadlines=FLAGS.enforce_deadlines,
+                retract_schedules=FLAGS.retract_schedules,
+                release_taskgraphs=FLAGS.release_taskgraphs,
+                goal=FLAGS.ilp_goal,
+                time_discretization=EventTime(
+                    FLAGS.scheduler_time_discretization, EventTime.Unit.US
+                ),
+                plan_ahead=EventTime(FLAGS.scheduler_plan_ahead, EventTime.Unit.US),
+                log_to_file=FLAGS.scheduler_log_to_file,
+                adaptive_discretization=FLAGS.scheduler_adaptive_discretization,
+                _flags=FLAGS,
+                max_time_discretization=EventTime(
+                    FLAGS.scheduler_max_time_discretization, EventTime.Unit.US
+                ),
+                max_occupancy_threshold=FLAGS.scheduler_max_occupancy_threshold,
+                finer_discretization_at_prev_solution=finer_discretization,
+                finer_discretization_window=EventTime(
+                    FLAGS.finer_discretization_window, EventTime.Unit.US
+                ),
+                plan_ahead_no_consideration_gap=EventTime(
+                    FLAGS.scheduler_plan_ahead_no_consideration_gap, EventTime.Unit.US
+                ),
+            )
         else:
             raise ValueError(f"Unknown scheduler {FLAGS.scheduler}.")
 
-        # Placement information maintained by the servicer.
-        # The placements map the application IDs to the Placement retrieved from the
-        # scheduler. The placements are automatically clipped at the time of informing
-        # the framework of applying them to the executors.
-        # NOTE (Sukrit): This must always be sorted by the Placement time.
-        self._placements: Mapping[str, Sequence[Placement]] = defaultdict(list)
-
-        # Additional task information maintained by the servicer
-        self._tasks_marked_for_completion = PriorityQueue()
-
-        # Start the asyncio loop for clearing out pending tasks for completion
-        asyncio.create_task(self.PopTasksBasedOnTime())
+        # TODO: Items in _registered_applications are never deleted right now, needs to be handled.
+        self._registered_applications = {}
+        self._registered_app_drivers = (
+            {}
+        )  # Spark driver id differs from taskgraph name (application id)
+        self._received_shutdown = False
+        self._shutting_down = False
+        self._lock = threading.Lock()
 
         super().__init__()
 
-    async def schedule(self) -> None:
-        """Schedules the tasks that have been added to the Workload."""
-        async with self._scheduler_running_lock:
-            if self._scheduler_running:
-                self._logger.error(
-                    "Scheduler already running, this should never be reached."
-                )
-                return
-            self._scheduler_running = True
-
-        current_time = EventTime(int(time.time()), EventTime.Unit.S)
-        self._logger.info(
-            "Starting a scheduling cycle with %s TaskGraphs and %s Workers at %s.",
-            len(self._workload.task_graphs),
-            len(self._worker_pool.workers),
-            current_time,
-        )
-
-        # TODO (Sukrit): Change this to a better implementation.
-        # Let's do some simple scheduling for now, that gives a fixed number of
-        # executors to all the available applications in intervals of 10 seconds.
-        if len(self._workload.task_graphs) >= 2:
-            placements = self._scheduler.schedule(
-                sim_time=current_time,
-                workload=self._workload,
-                worker_pools=self._worker_pools,
-            )
-            # Filter the placements that are not of type PLACE_TASK and that have not
-            # been placed.
-            filtered_placements = filter(
-                lambda p: p.placement_type == Placement.PlacementType.PLACE_TASK
-                and p.is_placed(),
-                placements,
-            )
-            for placement in sorted(
-                filtered_placements, key=attrgetter("placement_time")
-            ):
-                self._placements[placement.task.task_graph].append(placement)
-                # Schedule the task here since marking it as running requires it to be
-                # scheduled before. We mark it to be running when we inform the
-                # framework of the placement.
-                placement.task.schedule(
-                    time=placement.placement_time,
-                    placement=placement,
-                )
-
-        self._logger.info(
-            "Finished the scheduling cycle initiated at %s.", current_time
-        )
-
-        # Check if another run of the Scheduler has been requested, and if so, create
-        # a task for it. Otherwise, mark the scheduler as not running.
-        async with self._scheduler_running_lock:
-            self._scheduler_running = False
-            if self._rerun_scheduler:
-                self._rerun_scheduler = False
-                asyncio.create_task(self.schedule())
-
-    async def run_scheduler(self) -> None:
-        """Checks if the scheduler is running, and if not, starts it.
-
-        If the scheduler is already running, we queue up another execution of the
-        scheduler. This execution batches the scheduling requests, and runs the
-        scheduler only once for all the requests."""
-        async with self._scheduler_running_lock:
-            if not self._scheduler_running:
-                asyncio.create_task(self.schedule())
-            else:
-                self._rerun_scheduler = True
-
     async def RegisterFramework(self, request, context):
-        """Registers a new framework with the backend scheduler.
-        This is the entry point for a new instance of Spark / Flink to register
-        itself with the backend scheduler, and is intended as an EHLO.
-        """
-        if self._initialized:
-            self._logger.warning(
-                "Framework already registered at %s with the address %s",
-                self._initialization_time,
-                self._master_uri,
-            )
+        stime = self.__stime()
+
+        if self.__framework_registered():
+            msg = f"[{stime}] Framework already registered at the address {self._master_uri} at timestamp {self._initialization_time}"
+            self._logger.error(msg)
             return erdos_scheduler_pb2.RegisterFrameworkResponse(
                 success=False,
-                message=f"Framework already registered at "
-                f"{self._initialization_time} at the address {self._master_uri}",
+                message=msg,
             )
 
-        # Setup a new Framework instance.
+        t = int(time.time())
         framework_name = request.name
         self._master_uri = request.uri
-        self._initialization_time = request.timestamp
-        self._initialized = True
-        self._logger.info(
-            "Registering framework %s with URI %s at %s",
-            framework_name,
-            self._master_uri,
-            self._initialization_time,
+        self._initialization_time = EventTime(t, EventTime.Unit.US)
+        stime = self.__stime()
+
+        parsed_uri = urlparse(self._master_uri)
+        worker_pool = WorkerPool(
+            name=f"WorkerPool_{parsed_uri.netloc}",
+            _logger=self._logger,
+        )
+        self._workload_loader = WorkloadLoader(FLAGS)
+
+        self._simulator = Simulator(
+            scheduler=self._scheduler,
+            worker_pools=WorkerPools(
+                [worker_pool]
+            ),  # Maintain only one worker pool in the simulator
+            workload_loader=self._workload_loader,
+            _flags=FLAGS,
         )
 
-        # Setup the simulator types.
-        parsed_uri = urlparse(self._master_uri)
-        self._worker_pool = WorkerPool(name=f"WorkerPool_{parsed_uri.netloc}")
-        self._worker_pools = WorkerPools(worker_pools=[self._worker_pool])
-        self._workload = Workload.from_task_graphs({})
+        msg = f"[{stime}] Registered the framework '{framework_name}' with URI {self._master_uri} at UNIX time {self._initialization_time.time}"
+        self._logger.info(msg)
+        return erdos_scheduler_pb2.RegisterFrameworkResponse(success=True, message=msg)
 
-        # Return the response.
-        return erdos_scheduler_pb2.RegisterFrameworkResponse(
-            success=True,
-            message=f"{framework_name} at {self._master_uri} registered successfully!",
+    async def DeregisterFramework(self, request, context):
+        stime = self.__stime()
+
+        if not self.__framework_registered():
+            msg = f"[{stime}] Trying to deregister a framework at {request.uri} but no framework has been registered yet."
+            self._logger.error(msg)
+            return erdos_scheduler_pb2.DeregisterFrameworkResponse(
+                success=False, message=msg
+            )
+
+        if self._master_uri != request.uri:
+            msg = f"[{stime}] Trying to deregister the framework at {request.uri} but the registered framework is at {self._master_uri}"
+            self._logger.error(msg)
+            return erdos_scheduler_pb2.DeregisterFrameworkResponse(
+                success=False, message=msg
+            )
+
+        self._initialization_time = None
+        self._master_uri = None
+        self._workload_loader = None
+        self._simulator = None
+        msg = f"[{stime}] Successfully deregistered the framework at {request.uri}"
+        self._logger.info(msg)
+        return erdos_scheduler_pb2.DeregisterFrameworkResponse(
+            success=True, message=msg
         )
 
     async def RegisterDriver(self, request, context):
-        if not self._initialized:
-            self._logger.warning(
-                "Trying to register a driver with name %s and id %s, "
-                "but no framework is registered yet.",
-                request.name,
-                request.id,
-            )
+        stime = self.__stime()
+
+        if not self.__worker_registered():
+            msg = f"[{stime}] Failed to register driver (id={request.id}) because no worker has been registered yet."
+            self._logger.error(msg)
             return erdos_scheduler_pb2.RegisterDriverResponse(
                 success=False,
-                message="Framework not registered yet.",
-                worker_id="",
+                message=msg,
             )
 
-        # Create a Task for the Driver, and add it to the list of drivers.
-        # TODO (Sukrit): We drop the memory requirements for now, we should use
-        # them to do multi-dimensional packing using STRL.
-        self._logger.info(
-            "Received a request to register a driver with name %s, URI: %s. "
-            "The driver requires %s cores and %s memory.",
-            request.id,
-            request.uri,
-            request.cores,
-            request.memory,
-        )
-        driver_resources = Resources(
-            resource_vector={Resource(name="Slot_CPU", _id="any"): 1}
-        )
-        driver_job = Job(
-            name=request.id,
-            profile=WorkProfile(
-                name=f"WorkProfile_{request.id}",
-                execution_strategies=ExecutionStrategies(
-                    [
-                        ExecutionStrategy(
-                            resources=driver_resources,
-                            batch_size=1,
-                            # NOTE (Sukrit): Drivers are long running, and have no
-                            # fixed runtime. Setting it to zero helps us unload the
-                            # driver from the Worker whenever we need it.
-                            runtime=EventTime.zero(),
-                        )
-                    ]
-                ),
-            ),
-        )
-        driver = Task(
-            name=request.id,
-            task_graph=request.uri,
-            job=driver_job,
-            deadline=EventTime.invalid(),
-        )
-        self._drivers[request.id] = driver
-
-        # Iterate over the Workers and find a Worker that can accomodate the driver.
-        placement_found = False
-        for worker in self._worker_pool.workers:
-            for execution_strategy in driver.available_execution_strategies:
-                if worker.can_accomodate_strategy(execution_strategy):
-                    # This Worker can accomodate the Driver, we assign it here.
-                    placement_found = True
-                    self._worker_pool.place_task(driver, execution_strategy, worker.id)
-
-                    # Update the Task's state and placement information.
-                    placement_time = EventTime(request.timestamp, EventTime.Unit.S)
-                    driver.schedule(
-                        time=placement_time,
-                        placement=Placement(
-                            type=Placement.PlacementType.PLACE_TASK,
-                            computation=driver,
-                            placement_time=placement_time,
-                            worker_pool_id=self._worker_pool.id,
-                            worker_id=worker.id,
-                            strategy=execution_strategy,
-                        ),
-                    )
-                    driver.start(placement_time)
-
-                    # Tell the framework to start the driver.
-                    return erdos_scheduler_pb2.RegisterDriverResponse(
-                        success=True,
-                        message=f"Driver {request.id} registered successfully!",
-                        worker_id=worker.name,
-                    )
-
-        if not placement_found:
+        if request.id in self._registered_app_drivers:
+            msg = f"[{stime}] Driver with id '{request.id}' is already registered"
+            self._logger.error(msg)
             return erdos_scheduler_pb2.RegisterDriverResponse(
                 success=False,
-                message=f"No Worker can accomodate the driver {request.id} yet.",
-                worker_id="",
+                message=msg,
+                worker_id=self.__get_worker_id(),
             )
+
+        # TODO: Update the registered_app_drivers to map the driver id to
+        # application id once the taskgraph is registered.
+        self._registered_app_drivers[request.id] = None
+
+        msg = (
+            f"[{stime}] Successfully registered driver {request.id} for an application."
+        )
+        self._logger.info(msg)
+        return erdos_scheduler_pb2.RegisterDriverResponse(
+            success=True,
+            message=msg,
+            worker_id=self.__get_worker_id(),
+        )
 
     async def DeregisterDriver(self, request, context):
-        if not self._initialized:
-            self._logger.warning(
-                "Trying to deregister a driver with id %s, "
-                "but no framework is registered yet.",
-                request.id,
-            )
-            return erdos_scheduler_pb2.DeregisterDriverResponse(
-                success=False, message="Framework not registered yet."
-            )
+        stime = self.__stime()
 
-        if request.id not in self._drivers:
-            self._logger.warning(
-                "Trying to deregister a driver with id %s, "
-                "but no driver with that id is registered.",
-                request.id,
-            )
+        if request.id not in self._registered_app_drivers:
+            msg = f"[{stime}] Driver id '{request.id}' is not registered or does not exist"
+            self._logger.error(msg)
             return erdos_scheduler_pb2.DeregisterDriverResponse(
                 success=False,
-                message=f"Driver with id {request.id} not registered yet.",
+                message=msg,
             )
 
-        # Deregister the driver.
-        driver = self._drivers[request.id]
-        completion_time = EventTime(request.timestamp, EventTime.Unit.S)
-        self._worker_pool.remove_task(completion_time, driver)
-        driver.finish(completion_time)
-        del self._drivers[request.id]
+        # TODO: Dummy mapping from driver to task graph (application), so task_graph_name is None.
+        # Deletion of taskgraph from registered_applications and driver from registered_app_drivers should be done carefully.
+        task_graph_name = self._registered_app_drivers[request.id]
+        del self._registered_app_drivers[request.id]
+
+        with self._lock:
+            log_stats_event = Event(
+                event_type=EventType.LOG_STATS,
+                time=self.__stime(),
+            )
+            self._simulator._event_queue.add_event(log_stats_event)
+
+        msg = f"[{stime}] Successfully de-registered driver with id {request.id} for task graph {task_graph_name}"
+        self._logger.info(msg)
+
+        if len(self._registered_app_drivers) == 0 and self._received_shutdown:
+            self._logger.info(f"[{stime}] The last driver has been deregistered; finishing simulation")
+            # Signals _tick_simulator() to stop.  Shouldn't be
+            # necessary in principle because after the with block
+            # ends, there shouldn't be any more events left to run,
+            # but doesn't hurt.
+            self._shutting_down = True
+            with self._lock:
+                self._simulator.simulate()
+            await self._server.stop(0)
+
         return erdos_scheduler_pb2.DeregisterDriverResponse(
             success=True,
-            message=f"Driver with id {request.id} deregistered successfully!",
+            message=msg,
         )
 
     async def RegisterTaskGraph(self, request, context):
-        """Registers a new TaskGraph with the backend scheduler.
-        This is the entry point for a new application of Spark to register
-        itself with the backend scheduler, and is intended as an EHLO.
-        """
-        if not self._initialized:
-            self._logger.warning(
-                "Trying to register a task graph with ID %s and name %s, "
-                "but no framework is registered yet.",
-                request.id,
-                request.name,
-            )
+        stime = self.__stime()
+
+        if not self.__worker_registered():
+            msg = f"[{stime}] Failed to register task graph (id={request.id}, name={request.name}) because no worker has been registered yet."
+            self._logger.error(msg)
             return erdos_scheduler_pb2.RegisterTaskGraphResponse(
-                success=False, message="Framework not registered yet.", num_executors=0
+                success=False, message=msg, num_executors=0
             )
 
-        if request.id in self._workload.task_graphs:
-            self._logger.warning(
-                "The application with ID %s and name %s was already registered.",
-                request.id,
-                request.name,
-            )
+        if request.id in self._registered_applications:
+            msg = f"[{stime}] The task graph (id={request.id}, name={request.name}) is already registered"
+            self._logger.error(msg)
             return erdos_scheduler_pb2.RegisterTaskGraphResponse(
-                success=False,
-                message=f"Application ID {request.id} with name {request.name} "
-                f"already registered!",
-                num_executors=0,
+                success=False, message=msg, num_executors=0
             )
 
-        self._logger.info(
-            "Attempting to register application ID %s with name %s",
-            request.id,
-            request.name,
-        )
-        # Check if query is from TPC-H workload.
-        # If yes, retrieve profiled slots and runtime info. If no, use default values
-        is_tpch_query = False
-        tpch_query_all_stage_info = None
-        if request.name.startswith("TPCH_"):
-            is_tpch_query = True
-            # retrieve tasks-per-stage and runtime info based on query number
-            tpch_query_num = request.name.split("TPCH_Q", 1)[1]
-            tpch_query_all_stage_info = get_all_stage_info_for_query(tpch_query_num)
-            same_structure, stage_id_mapping = verify_and_relable_tpch_app_graph(
-                query_num=tpch_query_num, dependencies=request.dependencies
-            )
+        # We only support TPCH queries for now
+        if request.name.startswith("TPCH Query"):
+            # Parse request name
+            query_parts = request.name.split()
+            match query_parts:
+                case _, _, query_num, index, dataset_size, max_executors_per_job:
+                    query_num = int(query_num)
+                    dataset_size = int(dataset_size)
+                    max_executors_per_job = int(max_executors_per_job)
+                case _, _, query_num, dataset_size, max_executors_per_job:
+                    query_num = int(query_num)
+                    # default index counts up from 0; incorrect if
+                    # Spark receives jobs out of order
+                    index = str(len(self._registered_applications))
+                    dataset_size = int(dataset_size)
+                    max_executors_per_job = int(max_executors_per_job)
+                case _, _, query_num:
+                    query_num = int(query_num)
+                    index = str(len(self._registered_applications))
+                    dataset_size = FLAGS.tpch_dataset_size
+                    max_executors_per_job = FLAGS.tpch_max_executors_per_job
+                case _:
+                    msg = f"[{stime}] Invalid TPCH query request"
+                    return erdos_scheduler_pb2.RegisterTaskGraphResponse(
+                        success=False, message=msg, num_executors=0
+                    )
 
-            # return failure message if not tpch app isnt of same DAG structure
-            if not same_structure:
-                self._logger.warning(
-                    "TPCH application with ID %s and name %s couldn't be registered."
-                    "DAG structure mismatch!",
-                    request.id,
-                    request.name,
+            # Convert request.dependencies to [{name: int, children: [int]}]
+            dependencies = []
+            for dep in request.dependencies:
+                dependencies.append(
+                    {
+                        "name": int(dep.key.id),
+                        "children": [int(c) for c in dep.children_ids],
+                    }
                 )
+
+            # Create a job graph
+            self._logger.debug(str((query_num, index, dataset_size, max_executors_per_job)))
+            try:
+                job_graph, stage_id_mapping = self._data_loaders[
+                    DataLoader.TPCH
+                ].make_job_graph(
+                    id=index,
+                    query_num=query_num,
+                    dependencies=dependencies,
+                    dataset_size=dataset_size,
+                    max_executors_per_job=max_executors_per_job,
+                    runtime_unit=EventTime.Unit.US,
+                )
+            except Exception as e:
+                msg = f"[{stime}] Failed to load TPCH query {query_num}. Exception: {e}"
+                self._logger.error(msg)
                 return erdos_scheduler_pb2.RegisterTaskGraphResponse(
-                    success=False,
-                    message=f"TPCH application ID {request.id} with name {request.name}"
-                    f" couldn't be registered. DAG structure mismatch!",
-                    num_executors=0,
+                    success=False, message=msg, num_executors=0
                 )
 
-        # Construct all the Tasks for the TaskGraph.
-        task_ids_to_task: Mapping[int, Task] = {}
-        default_resource = Resources(
-            resource_vector={Resource(name="Slot_CPU", _id="any"): 20}
-        )
-        default_runtime = EventTime(20, EventTime.Unit.US)
-
-        for task_dependency in request.dependencies:
-            framework_task = task_dependency.key
-            if is_tpch_query:
-                mapped_stage_id = stage_id_mapping[framework_task.id]
-                task_slots = tpch_query_all_stage_info[mapped_stage_id]["num_tasks"]
-                task_runtime = tpch_query_all_stage_info[mapped_stage_id][
-                    "avg_task_duration"
-                ]
-                self._logger.info(
-                    "Creating Task for given app TPCH stage: %s, mapped to "
-                    "original stage id %s, with tasks: %s and avg runtime: %s",
-                    framework_task.id,
-                    mapped_stage_id,
-                    task_slots,
-                    task_runtime,
+            if not self.__can_accomodate_task_graph(job_graph):
+                msg = f"[{stime}] The worker Pool cannot accomodate the task graph '{request.id}'"
+                self._logger.error(msg)
+                return erdos_scheduler_pb2.RegisterTaskGraphResponse(
+                    success=False, message=msg, num_executors=0
                 )
-            task_ids_to_task[framework_task.id] = Task(
-                name=framework_task.name,
-                task_graph=request.id,
-                job=Job(
-                    name=framework_task.name,
-                    profile=WorkProfile(
-                        name=f"WorkProfile_{framework_task.name}",
-                        execution_strategies=ExecutionStrategies(
-                            [
-                                ExecutionStrategy(
-                                    resources=(
-                                        default_resource
-                                        if not is_tpch_query
-                                        else Resources(
-                                            resource_vector={
-                                                Resource(
-                                                    name="Slot_CPU", _id="any"
-                                                ): task_slots
-                                            }
-                                        )
-                                    ),
-                                    batch_size=1,
-                                    runtime=(
-                                        default_runtime
-                                        if not is_tpch_query
-                                        else EventTime(task_runtime, EventTime.Unit.US)
-                                    ),
-                                )
-                            ]
-                        ),
-                    ),
-                ),
-                deadline=EventTime(request.deadline, EventTime.Unit.S),
-                # TODO (Sukrit): We should maintain a counter for each application
-                # type so that we can correlate the Tasks with a particular invocation.
-                timestamp=1,
-            )
-            # NOTE (Sukrit): We maintain the StageID of the Task as a separate field
-            # that is not accessible / used by the Simulator.
-            task_ids_to_task[framework_task.id].stage_id = framework_task.id
-            self._logger.info(
-                "Constructed Task %s for the TaskGraph %s.",
-                framework_task.name,
-                request.id,
+
+            def gen(release_time):
+                task_graph = job_graph.get_next_task_graph(
+                    start_time=release_time,
+                    _flags=FLAGS,
+                )
+                return task_graph, stage_id_mapping
+
+        else:
+            msg = f"[{stime}] The service only supports TPCH queries"
+            self._logger.error(msg)
+            return erdos_scheduler_pb2.RegisterTaskGraphResponse(
+                success=False, message=msg, num_executors=0
             )
 
-        # Construct the TaskGraph from the Tasks.
-        task_graph_structure: Mapping[Task, Sequence[Task]] = {}
-        for task_dependency in request.dependencies:
-            task_graph_structure[task_ids_to_task[task_dependency.key.id]] = [
-                task_ids_to_task[task_id] for task_id in task_dependency.children_ids
-            ]
-        task_graph = TaskGraph(
-            name=request.id,
-            tasks=task_graph_structure,
-        )
-        self._workload.add_task_graph(task_graph)
-        self._logger.info(
-            "Added the TaskGraph(name=%s, id=%s) to the Workload.",
-            request.name,
-            request.id,
-        )
-        self._logger.info(
-            "The structure of the TaskGraph %s is \n%s.",
-            request.id,
-            str(task_graph),
-        )
+        self._registered_applications[request.id] = RegisteredApplication(gen=gen)
 
-        # Return the response.
+        msg = f"[{stime}] Registered task graph '{request.id}' successfully"
+        self._logger.info(msg)
         return erdos_scheduler_pb2.RegisterTaskGraphResponse(
             success=True,
-            message=f"Application ID {request.id} with name "
-            f"{request.name} and deadline {request.deadline} registered successfully!",
-            num_executors=FLAGS.initial_executors,
+            message=msg,
+            num_executors=FLAGS.spark_app_num_initial_executors,
         )
 
     async def RegisterEnvironmentReady(self, request, context):
-        """Registers that the environment (i.e., executors) are ready for the given
-        TaskGraph at the specified time.
+        stime = self.__stime()
 
-        This is intended to release the sources of the TaskGraph to the scheduling
-        backend, to consider the application in this scheduling cycle.
-        """
-        if not self._initialized:
-            self._logger.warning(
-                "Trying to register that the environment is ready for the TaskGraph "
-                "with ID %s, but no framework is registered yet.",
-                request.id,
-            )
-            return erdos_scheduler_pb2.RegisterEnvironmentReadyResponse(
-                success=False, message="Framework not registered yet."
-            )
-
-        task_graph = self._workload.get_task_graph(request.id)
-        if task_graph is None:
-            self._logger.warning(
-                "Trying to register that the environment is ready for the TaskGraph "
-                "with ID %s, but no TaskGraph with that ID is registered.",
-                request.id,
-            )
+        if request.id not in self._registered_applications:
+            msg = f"[{stime}] Task graph of id '{request.id}' is not registered or does not exist"
+            self._logger.error(msg)
             return erdos_scheduler_pb2.RegisterEnvironmentReadyResponse(
                 success=False,
-                message=f"TaskGraph with ID {request.id} not registered yet.",
+                message=msg,
             )
 
-        if request.num_executors != FLAGS.initial_executors:
-            self._logger.warning(
-                "The TaskGraph %s requires %s executors, but the environment is ready "
-                "with %s executors.",
-                request.id,
-                FLAGS.initial_executors,
-                request.num_executors,
+        r = self._registered_applications[request.id]
+        r.generate_task_graph(stime)
+
+        with self._lock:
+            self._simulator._workload.add_task_graph(r.task_graph)
+            self._simulator._current_task_graph_placements[r.task_graph.name] = {}
+
+            for task in r.task_graph.get_releasable_tasks():
+                task_release_event = Event(
+                    event_type=EventType.TASK_RELEASE,
+                    time=self.__stime(),
+                    task=task,
+                )
+                self._logger.info(
+                    f"[{stime}] Added event {task_release_event} to the simulator's event queue",
+                )
+                self._simulator._event_queue.add_event(task_release_event)
+
+            scheduler_start_event = Event(
+                event_type=EventType.SCHEDULER_START,
+                time=self.__stime(),
             )
-            return erdos_scheduler_pb2.RegisterEnvironmentReadyResponse(
-                success=False,
-                message=f"Number of executors not {FLAGS.initial_executors}.",
+            self._simulator._event_queue.add_event(scheduler_start_event)
+            self._logger.info(
+                f"[{stime}] Added event {scheduler_start_event} to the simulator's event queue"
             )
 
-        # Release all the sources of the TaskGraph at the given time.
-        for source_task in task_graph.get_source_tasks():
-            source_task.release(EventTime(request.timestamp, EventTime.Unit.S))
-
-        # Run the scheduler since the Workload has changed.
-        await self.run_scheduler()
-
+        msg = f"[{stime}] Successfully marked environment as ready for task graph '{r.task_graph.name}'"
+        self._logger.info(msg)
         return erdos_scheduler_pb2.RegisterEnvironmentReadyResponse(
             success=True,
-            message=f"Environment ready for TaskGraph with ID {request.id}!",
-        )
-
-    async def DeregisterFramework(self, request, context):
-        """Deregisters the framework with the backend scheduler.
-        This is the exit point for a running instance of Spark / Flink to deregister"""
-        if not self._initialized:
-            self._logger.warning(
-                "Trying to deregister the framework at %s, "
-                "but no framework is registered yet.",
-                request.uri,
-            )
-            return erdos_scheduler_pb2.DeregisterFrameworkResponse(
-                success=False, message="Framework not registered yet."
-            )
-
-        if not self._master_uri == request.uri:
-            self._logger.warning(
-                "Trying to deregister the framework at %s, "
-                "but the registered framework is at %s.",
-                request.uri,
-                self._master_uri,
-            )
-            return erdos_scheduler_pb2.DeregisterFrameworkResponse(
-                success=False,
-                message=f"Framework not registered at {request.uri} yet.",
-            )
-
-        # Deregister the framework.
-        self._initialization_time = None
-        self._master_uri = None
-        self._initialized = False
-        self._logger.info("Deregistering framework at %s", request.uri)
-        return erdos_scheduler_pb2.DeregisterFrameworkResponse(
-            success=True,
-            message=f"Framework at {request.uri} deregistered successfully!",
+            message=msg,
         )
 
     async def RegisterWorker(self, request, context):
-        """Registers a new worker with the backend scheduler."""
-        if not self._initialized:
-            self._logger.warning(
-                "Trying to register a worker with name %s and id %s, "
-                "but no framework is registered yet.",
-                request.name,
-                request.id,
-            )
+        stime = self.__stime()
+
+        if not self.__framework_registered():
+            msg = f"[{stime}] Trying to register a worker (id={request.id}, name={request.name}) but no framework is registered yet"
+            self._logger.error(msg)
             return erdos_scheduler_pb2.RegisterWorkerResponse(
-                success=False, message="Framework not registered yet."
+                success=False, message=msg
             )
 
-        # First, we construct the Resources with the given size.
-        # TODO (Sukrit): Right now, we drop the memory requirements, we should use
+        # TODO(Sukrit): Right now, we drop the memory requirements, we should use
         # them to do multi-dimensional packing using STRL.
-        cpu_resource = Resource(name="Slot_CPU")
-        worker_resources = Resources(resource_vector={cpu_resource: request.cores})
-        self._logger.debug(
-            "Successfully constructed the resources for the worker %s: %s.",
-            request.name,
-            worker_resources,
-        )
 
-        # Construct a new Worker instance, and add it to the WorkerPool.
+        cpu_resource = Resource(name="Slot")
+        worker_resources = Resources(
+            resource_vector={
+                cpu_resource: (
+                    request.cores if not FLAGS.override_worker_cpu_count else 640
+                )
+            },
+            _logger=self._logger,
+        )
         worker = Worker(
             name=request.id,
             resources=worker_resources,
-        )
-        self._worker_pool.add_workers([worker])
-
-        self._logger.info(
-            "Registering worker with name %s, and resources %s.",
-            worker.name,
-            worker_resources,
+            _logger=self._logger,
         )
 
-        # Run the scheduler since the Resource set has changed, and new task graphs
-        # may become eligible to run.
-        await self.run_scheduler()
+        self.__get_worker_pool().add_workers([worker])
 
+        msg = f"[{stime}] Registered worker (id={request.id}, name={request.name})"
+        self._logger.info(msg)
         return erdos_scheduler_pb2.RegisterWorkerResponse(
             success=True,
-            message=f"Worker {request.name} registered successfully!",
+            message=msg,
             cores=FLAGS.virtualized_cores,
             memory=FLAGS.virtualized_memory * 1024,
         )
 
-    async def NotifyTaskCompletion(self, request, context):
-        """Notifies the backend scheduler that a task has completed."""
-        if not self._initialized:
-            self._logger.warning(
-                "Trying to notify the backend scheduler that the task with ID %s "
-                "from application %s has completed, "
-                "but no framework is registered yet.",
-                request.task_id,
-                request.application_id,
-            )
-            return erdos_scheduler_pb2.NotifyTaskCompletionResponse(
-                success=False, message="Framework not registered yet."
-            )
-
-        task_graph = self._workload.get_task_graph(request.application_id)
-        if task_graph is None:
-            self._logger.warning(
-                "Trying to notify the backend scheduler that the task with ID %s "
-                "from application %s has completed, but the application "
-                "was not registered with the backend yet.",
-                request.task_id,
-                request.application_id,
-            )
-            return erdos_scheduler_pb2.NotifyTaskCompletionResponse(
-                success=False,
-                message=f"Application with ID {request.application_id} "
-                f"not registered yet.",
-            )
-
-        # Find the Task that has completed, and mark it as such.
-        matched_task = None
-        for task in task_graph.get_nodes():
-            if task.stage_id == request.task_id:
-                matched_task = task
-        if matched_task is None:
-            self._logger.warning(
-                "Trying to notify the backend scheduler that the task with ID %s "
-                "from application %s has completed, but the task "
-                "was not found in the TaskGraph.",
-                request.task_id,
-                request.application_id,
-            )
-            return erdos_scheduler_pb2.NotifyTaskCompletionResponse(
-                success=False,
-                message=f"Task with ID {request.task_id} "
-                f"not found in TaskGraph {request.application_id}.",
-            )
-
-        # Instead of completing & removing the task immediately, check
-        # if it is actually complete or will complete in the future
-
-        # Get the actual task completion timestamp
-        actual_task_completion_time = (
-            matched_task.start_time.time + matched_task.remaining_time.time
-        )
-
-        current_time = time.time()
-        self._logger.info(
-            "Received task for completion at time: %s , task.start_time: %s ,"
-            "task.remaining_time (=runtime):  %s ,  actual completion time: %s ",
-            round(current_time),
-            matched_task.start_time.time,
-            matched_task.remaining_time.time,
-            actual_task_completion_time,
-        )
-
-        # TODO DG: remaining_time assumes execution of the slowest strategy
-        # Should be updated to reflect correct remaining_time based on chosen strategy?
-
-        # Add all tasks to _tasks_marked_for_completion queue.
-        # If task has actually completed, it will be dequeued immediately
-        # Else it will be dequeued at its actual task completion time
-        self._tasks_marked_for_completion.put(
-            TimedItem(actual_task_completion_time, matched_task)
-        )
-
-        # NOTE: task.finish() and run_scheduler() invocations are postponed
-        # until it is time for the task to be actually marked as complete.
-
-        return erdos_scheduler_pb2.NotifyTaskCompletionResponse(
-            success=True,
-            message=f"Task with ID {request.task_id} marked for completion at "
-            f"{round(current_time)}! It will be removed on actual "
-            f"task completion time at {actual_task_completion_time}",
-        )
-
     async def GetPlacements(self, request, context):
-        """Retrieves the placements applicable at the specified time."""
-        request_timestamp = EventTime(request.timestamp, EventTime.Unit.S)
-        if not self._initialized:
-            self._logger.warning(
-                "Trying to get placements for %s at time %s, "
-                "but no framework is registered yet.",
-                request.id,
-                request_timestamp,
-            )
+        stime = self.__stime()
+
+        # Check if the task graph is registered
+        if request.id not in self._registered_applications:
+            msg = f"[{stime}] Task graph with id '{request.id}' is not registered or does not exist"
+            self._logger.error(msg)
             return erdos_scheduler_pb2.GetPlacementsResponse(
-                success=False, message="Framework not registered yet."
+                success=False,
+                message=msg,
             )
 
-        if request.id not in self._placements:
-            self._logger.warning(
-                "Trying to get placements for %s at time %s, but the application "
-                "was not registered with the backend yet.",
-                request.id,
-                request_timestamp,
+        r = self._registered_applications[request.id]
+
+        if r.task_graph is None:
+            msg = f"[{stime}] Task graph '{request.id}' is not ready"
+            self._logger.error(msg)
+            return erdos_scheduler_pb2.GetPlacementsResponse(
+                success=True,
+                message=msg,
+                placements=[],
             )
 
-        # Construct and return the placements.,
+        if r.task_graph.is_complete():
+            msg = f"[{stime}] Task graph '{r.task_graph.name}' is complete. No more placements to provide."
+            self._logger.error(msg)
+            return erdos_scheduler_pb2.GetPlacementsResponse(
+                success=True,
+                message=msg,
+            )
+
+        # A task graph is considered complete if **all** of its **sink** tasks
+        # are complete. It is considered cancelled if **any** of its **sink**
+        # tasks are cancelled.
+
+        # If the task graph is complete, the Spark application will
+        # automatically shut down because it knows that all of its stages have
+        # finished executing.
+
+        # Matters get interesting in the presence of task cancellations. The
+        # service is aware of which tasks are cancelled.
+
+        # First, even when a task graph is cancelled, the simulator (without
+        # orchestration)
+        # continues to schedule and execute any tasks that were released into
+        # the system. The service, which runs the simulator in orchestrated
+        # mode, must emulate this behavior to maintain parity.
+
+        # Second, from Spark's point of view, however, those tasks are still
+        # pending placements. So, Spark will continue to periodically invoke
+        # `GetPlacements` in the hopes of receiving placements for those
+        # cancelled tasks. Left unhandled, the Spark application will loop
+        # indefinitely waiting for placements.
+
+        # We _could_ communicate these task cancellations to Spark. Then, we
+        # can modify the DAGScheduler to invoke GetPlacements until all of its
+        # stages have either finished executing or have been cancelled, after
+        # which it can safely terminate the application.
+
+        # However, we run into an issue due to VIRTUAL tasks. When a task is
+        # cancelled, the simulator invokes `TaskGraph.cancel(task)`.
+        # `TaskGraph.cancel(task)` traverses the tree rooted at `task`
+        # depth-first, cancelling tasks along the way until it finds the first
+        # terminal task. As a consequence, it is possible for the tree rooted
+        # at a cancelled task to have VIRTUAL tasks inside of it. These
+        # virtual tasks will never receive placements because they are not
+        # releasable. So, it is possible for the Spark application to stall on
+        # `GetPlacements` waiting on placements for these virtual tasks.
+
+        # Since the service knows the state of each task, it is easy then for
+        # the service to determine when the Spark application should terminate
+        # in the presence of task cancellations.
+
+        # So, instead of communicating task cancellations, we communicate when
+        # the Spark application should terminate.
+        #
+        # The first check makes sure all tasks are either CANCELLED,
+        # COMPLETED, or VIRTUAL. We check for all tasks because it is possible
+        # that the simulator is processing released and scheduled tasks. If we
+        # terminate early, then we will never receive `NotifyTaskCompletion`s
+        # for those tasks (because the Spark application was terminated),
+        # which then results in those tasks never getting removed from the
+        # worker pool.
+        #
+        # The second check makes sure that the task graph is indeed cancelled.
+        # We have this additional guard because at the start all tasks are
+        # VIRTUAL and we don't want to terminate the application then.
+        
+        if r.task_graph.is_cancelled():
+            self._logger.error(f"[{stime}] Task graph '{r.task_graph.name}' is in state cancelled.")
+
+        should_terminate = all(
+            task.state
+            in (
+                TaskState.CANCELLED,
+                TaskState.COMPLETED,
+                TaskState.VIRTUAL,
+            )
+            for task in r.task_graph
+        ) and (r.task_graph.is_cancelled())
+        if should_terminate:
+            msg = f"[{stime}] Task graph '{r.task_graph.name}' was cancelled and simulator has processed all released/ scheduled tasks. Terminating it since it has no more placements to provide."
+            self._logger.error(msg)
+            return erdos_scheduler_pb2.GetPlacementsResponse(
+                success=True,
+                message=msg,
+                terminate=True,
+            )
+        elif r.task_graph.is_cancelled() and not should_terminate:
+            msg = f"[{stime}] Task graph '{r.task_graph.name}' was cancelled but simulator is still processing some released/ scheduled tasks. Will provide placements."
+            self._logger.error(msg)
+        else:
+            msg = f"[{stime}] Task graph '{r.task_graph.name}' is actively running. Will provide placements."
+            self._logger.info(msg)
+
+        with self._lock:
+            sim_placements = self._simulator.get_current_placements_for_task_graph(
+                r.task_graph.name
+            )
+
         placements = []
-        clip_at = -1
-        for index, placement in enumerate(self._placements[request.id]):
-            if placement.placement_time <= request_timestamp:
-                clip_at = index
-                # Mark the Task as RUNNING.
-                placement.task.start(request_timestamp)
+        for placement in sim_placements:
+            if placement.task.state != TaskState.RUNNING:
+                self._logger.debug(f"[{stime}] Skipping placement: {placement}")
+                continue
 
-                # resources = placement.execution_strategy.resources
-                placements.append(
-                    erdos_scheduler_pb2.Placement(
-                        worker_id=placement.worker_id,
-                        application_id=request.id,
-                        task_id=placement.task.stage_id,
-                        cores=1,
-                    )
-                )
-        self._placements[request.id] = self._placements[request.id][clip_at + 1 :]
-        self._logger.info(
-            "Constructed %s placements at time %s for application with ID %s.",
-            len(placements),
-            request.timestamp,
-            request.id,
-        )
+            worker_id = (
+                self.__get_worker_id()
+                if placement.placement_type == Placement.PlacementType.PLACE_TASK
+                else "None"
+            )
+            task_id = r.spark_task_id(placement.task.name)
+            cores = (
+                sum(x for _, x in placement.execution_strategy.resources.resources)
+                if placement.placement_type == Placement.PlacementType.PLACE_TASK
+                else 0
+            )
+
+            if placement.placement_type not in (Placement.PlacementType.PLACE_TASK,):
+                raise NotImplementedError
+
+            placements.append(
+                {
+                    "worker_id": worker_id,
+                    "application_id": request.id,
+                    "task_id": task_id,
+                    "cores": cores,
+                },
+            )
+            
+        msg = f"[{stime}] Returning the following placements {placements} for task graph '{request.id}'."
+        self._logger.info(msg)
         return erdos_scheduler_pb2.GetPlacementsResponse(
             success=True,
+            message=msg,
             placements=placements,
-            message=f"Constructed {len(placements)} "
-            f"placements at time {request.timestamp}.",
         )
 
-    # Function to pop tasks from queue based on actual completion time
-    async def PopTasksBasedOnTime(self):
-        while True:
-            if not self._tasks_marked_for_completion.empty():
-                # Get the top item from the priority queue
-                top_item = self._tasks_marked_for_completion._queue[0][1]
+    async def NotifyTaskCompletion(self, request, context):
+        stime = self.__stime()
 
-                # Check if top item's timestamp is reached or passed by current time
-                current_time = time.time()
-                if top_item.timestamp <= current_time:
-                    # Pop the top item
-                    popped_item = self._tasks_marked_for_completion.get()
-                    self._logger.info(
-                        "Removing tasks from pending completion queue: %s at time: %s",
-                        popped_item.task,
-                        current_time,
-                    )
+        # Check if the task graph is registered
+        if request.application_id not in self._registered_applications:
+            msg = f"[{stime}] Task graph with id '{request.id}' is not registered or does not exist"
+            self._logger.error(msg)
+            return erdos_scheduler_pb2.NotifyTaskCompletionResponse(
+                success=False,
+                message=msg,
+            )
 
-                    # Mark the Task as completed.
-                    # Also release the task from the scheduler service
-                    popped_item.task.update_remaining_time(EventTime.zero())
-                    popped_item.task.finish(
-                        EventTime(round(current_time), EventTime.Unit.S)
-                    )
+        r = self._registered_applications[request.application_id]
+        task = r.task_graph.get_task(r.canonical_task_id(request.task_id))
+        if task is None:
+            msg = f"[{stime}] Task '{request.task_id}' does not exist in the task graph '{r.task_graph.name}'"
+            self._logger.error(msg)
+            return erdos_scheduler_pb2.NotifyTaskCompletionResponse(
+                success=False,
+                message=msg,
+            )
 
-                    # Run the scheduler since the Workload has changed.
-                    await self.run_scheduler()
+        if task.state != TaskState.RUNNING:
+            msg = f"[{stime}] Received task completion notification for task '{request.task_id}' (mapped to '{r.canonical_task_id(request.task_id)}') of '{r.task_graph.name}' but it is not running"
+            self._logger.error(msg)
+            return erdos_scheduler_pb2.NotifyTaskCompletionResponse(
+                success=False,
+                message=msg,
+            )
 
-                else:
-                    # If the top item's timestamp hasn't been reached yet,
-                    # sleep for a short duration
-                    await asyncio.sleep(0.1)  # TODO: Can adjust value, curr=0.1s
-            else:
-                # If the queue is empty, sleep for a short duration
-                await asyncio.sleep(0.1)  # TODO: Can adjust value, curr=0.1s
+        # HACK: The worker pool doesn't step every tick (probably should). So, the task.remaining_time is not accurate. We compute actual_task_completion then by getting the runtime from the profile,
+        actual_task_completion_time = (
+            task.start_time + task.slowest_execution_strategy.runtime
+        )
+
+        with self._lock:
+            # NOTE: Although the actual_task_completion_time works for task completion notifications that arrive early, it is
+            # inaccurate for task completion notifications that occur past that time. Thus, a max of the current and actual completion time
+            # is taken to ensure that the task is marked completed at the correct time.
+            task_finished_event = Event(
+                event_type=EventType.TASK_FINISHED,
+                time=max(actual_task_completion_time, self.__stime()),
+                task=task,
+            )
+            self._simulator._event_queue.add_event(task_finished_event)
+            self._logger.info(
+                f"[{stime}] Adding event {task_finished_event} to the simulator's event queue"
+            )
+            if actual_task_completion_time < self.__stime():
+                self._logger.error(
+                    f"[{stime}] Task '{request.task_id}' of task graph '{r.task_graph.name}' had exceeded its runtime by {self.__stime() - actual_task_completion_time}")
+
+            scheduler_start_event = Event(
+                event_type=EventType.SCHEDULER_START,
+                time=max(
+                    actual_task_completion_time.to(EventTime.Unit.US),
+                    self.__stime(),
+                ),
+            )
+            self._simulator._event_queue.add_event(scheduler_start_event)
+            self._logger.info(
+                f"[{stime}] Added event {scheduler_start_event} to the simulator's event queue"
+            )
+
+        msg = f"[{stime}] Successfully processed completion of task '{request.task_id}' of task graph '{r.task_graph.name}'"
+        self._logger.info(msg)
+        return erdos_scheduler_pb2.NotifyTaskCompletionResponse(
+            success=True,
+            message=msg,
+        )
+
+    async def Shutdown(self, request, context):
+        self._received_shutdown = True
+        return erdos_scheduler_pb2.Empty()
+
+    async def _tick_simulator(self):
+        while not self._shutting_down:
+            with self._lock:
+                if self._simulator is not None:
+                    stime = self.__stime()
+                    # self._logger.debug(f"[{stime}] Simulator tick")
+                    self._simulator.tick(until=stime)
+            # else:
+            #     print("Simulator instance is None")
+            await asyncio.sleep(1)
+
+    def __stime(self) -> EventTime:
+        """
+        Time as viewed by the service. Starts when a framework is registered
+        and ends when it is deregistered.
+        """
+        if self._initialization_time is None:
+            return EventTime.invalid()
+        ts = int(time.time())
+        # NOTE: The service runs in the US time unit for better compatibility with the simulator.
+        # The simulator uses an abstract unit of time, and it is all relative.
+        ts = EventTime(ts, EventTime.Unit.US)
+        return ts - self._initialization_time
+
+    def __framework_registered(self):
+        return self._simulator is not None
+
+    def __worker_registered(self):
+        return (
+            self.__framework_registered() and len(self.__get_worker_pool().workers) > 0
+        )
+
+    def __get_worker_pool(self):
+        # Simulator maintains only one worker pool, so this should be fine
+        return next(iter(self._simulator._worker_pools.worker_pools))
+
+    def __get_worker(self):
+        return self.__get_worker_pool().workers[0]
+
+    def __get_worker_id(self):
+        # We return the name here because we register the worker id from
+        # Spark as the name of the worker in the worker pool
+        return self.__get_worker().name
+
+    def __can_accomodate_task_graph(self, job_graph: JobGraph):
+        worker_resources = self.__get_worker().resources
+        for job in job_graph:
+            for strat in job.execution_strategies:
+                for resource, quantity in strat.resources.resources:
+                    if worker_resources.get_total_quantity(resource) < quantity:
+                        return False
+        return True
 
 
-async def serve():
-    """Serves the ERDOS Scheduling RPC Server."""
-    # Initialize the server.
-    server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=FLAGS.max_workers))
-    erdos_scheduler_pb2_grpc.add_SchedulerServiceServicer_to_server(
-        SchedulerServiceServicer(), server
-    )
-
-    # Start the server.
-    server.add_insecure_port(f"[::]:{FLAGS.port}")
+async def serve(server):
     await server.start()
-    print("Initialized ERDOS Scheduling RPC Server on port", FLAGS.port)
+    print("Initialized ERDOS RPC Service on port", FLAGS.port)
     await server.wait_for_termination()
 
 
-def main(argv):
-    # Create an asyncio event loop
+def main(_argv):
     loop = asyncio.get_event_loop()
 
-    # Run the event loop until serve() completes
+    server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=FLAGS.max_workers))
+    servicer = Servicer(server)
+    erdos_scheduler_pb2_grpc.add_SchedulerServiceServicer_to_server(servicer, server)
+    server.add_insecure_port(f"[::]:{FLAGS.port}")
+
+    # Schedule the periodic tick_simulator task
+    loop.create_task(servicer._tick_simulator())
+
     try:
-        loop.run_until_complete(serve())
+        loop.run_until_complete(serve(server))
+    except KeyboardInterrupt:
+        print("Terminated ERDOS RPC Service")
     finally:
         loop.close()
 

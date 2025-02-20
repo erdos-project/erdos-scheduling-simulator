@@ -385,6 +385,18 @@ class Simulator(object):
         self.scheduler_invocations: list[Scheduler] = []
         self.task_graphs: dict[str, TaskGraph] = {}
 
+    def update_stats(self, csv_reading: str):
+        assert (
+            csv_reading[1] == "LOG_STATS"
+        ), f"The event {csv_reading[1]} was not of type LOG_STATS."
+        self.finished_tasks = int(csv_reading[2])
+        self.dropped_tasks = int(csv_reading[3])
+        self.missed_deadlines = int(csv_reading[4])
+        self.finished_task_graphs = int(csv_reading[5])
+        self.dropped_taskgraphs = int(csv_reading[6])
+        self.missed_taskgraphs = int(csv_reading[7])
+        self.goodput_taskgraphs = self.finished_task_graphs - self.missed_taskgraphs
+
     def update_finish(self, csv_reading: str):
         """Updates the values of the Simulator based on the SIMULATOR_END event from
         CSV.
@@ -396,10 +408,10 @@ class Simulator(object):
             csv_reading[1] == "SIMULATOR_END"
         ), f"The event {csv_reading[1]} was not of type SIMULATOR_END."
         self.end_time = int(csv_reading[0])
-        self.finished_tasks = int(csv_reading[2])
-        self.dropped_tasks = int(csv_reading[3])
-        self.missed_deadlines = int(csv_reading[4])
-        self.finished_task_graphs = int(csv_reading[5])
-        self.dropped_taskgraphs = int(csv_reading[6])
-        self.missed_taskgraphs = int(csv_reading[7])
-        self.goodput_taskgraphs = self.finished_task_graphs - self.missed_taskgraphs
+        # self.finished_tasks = int(csv_reading[2])
+        # self.dropped_tasks = int(csv_reading[3])
+        # self.missed_deadlines = int(csv_reading[4])
+        # self.finished_task_graphs = int(csv_reading[5])
+        # self.dropped_taskgraphs = int(csv_reading[6])
+        # self.missed_taskgraphs = int(csv_reading[7])
+        # self.goodput_taskgraphs = self.finished_task_graphs - self.missed_taskgraphs

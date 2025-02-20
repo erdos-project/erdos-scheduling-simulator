@@ -5,7 +5,7 @@ import sys
 from enum import Enum
 from functools import total_ordering
 from operator import attrgetter, itemgetter
-from typing import Mapping, Optional, Sequence
+from typing import Mapping, Optional, Sequence, Callable, Dict, List
 
 import absl  # noqa: F401
 
@@ -43,6 +43,7 @@ class EventType(Enum):
     SCHEDULER_FINISHED = 12  # Signifies the end of the scheduler loop.
     SIMULATOR_END = 13  # Signify the end of the simulator loop.
     LOG_UTILIZATION = 14  # Ask the simulator to log worker pool utilization.
+    LOG_STATS = 15  # Log simulator statistics
 
     def __lt__(self, other) -> bool:
         # This method is used to order events in the event queue. We prioritize
@@ -223,6 +224,9 @@ class EventQueue(object):
     def __len__(self) -> int:
         return len(self._event_queue)
 
+    def __str__(self) -> str:
+        return str(self._event_queue)
+
 
 class Simulator(object):
     """A `Simulator` simulates the execution of the different tasks in the
@@ -251,7 +255,7 @@ class Simulator(object):
         self,
         worker_pools: WorkerPools,
         scheduler: BaseScheduler,
-        workload_loader: BaseWorkloadLoader,
+        workload_loader: BaseWorkloadLoader = None,
         loop_timeout: EventTime = EventTime(time=sys.maxsize, unit=EventTime.Unit.US),
         scheduler_frequency: EventTime = EventTime(time=-1, unit=EventTime.Unit.US),
         _flags: Optional["absl.flags"] = None,
@@ -259,7 +263,7 @@ class Simulator(object):
         if not isinstance(scheduler, BaseScheduler):
             raise ValueError("Scheduler must implement the BaseScheduler interface.")
 
-        if not isinstance(workload_loader, BaseWorkloadLoader):
+        if workload_loader and not isinstance(workload_loader, BaseWorkloadLoader):
             raise ValueError(
                 "WorkloadLoader must implement the BaseWorkloadLoader interface."
             )
@@ -337,9 +341,13 @@ class Simulator(object):
         self.__log_utilization(self._simulator_time)
 
         # Internal data.
-        self._last_scheduler_start_time = self._simulator_time
+        self._last_scheduler_start_time = EventTime.invalid()
         self._next_scheduler_event = None
         self._last_scheduler_placements: Optional[Placements] = None
+
+        # Stores current placements for tasks of a task graph
+        # task_graph => {task_id => placement}
+        self._current_task_graph_placements: Dict[str, Dict[str, Placement]] = {}
 
         # A Cache from the TaskID to a future Placement event in the EventQueue.
         # The Simulator uses this bookkeeping to revoke / invalidate decisions made
@@ -372,6 +380,14 @@ class Simulator(object):
         self._finished_task_graphs = 0
         self._missed_task_graph_deadlines = 0
 
+        # Is the simulator orchestrated?
+        self._orchestrated = _flags.orchestrated
+
+        # Minimum duration by which to push task placements
+        self._min_placement_push_duration = EventTime(
+            _flags.min_placement_push_duration, EventTime.Unit.US
+        )
+
         # Initialize the event queue.
         # To make the system continue working the loop, we add three events:
         # - SIMULATOR_START: A notional event start the simulator and log into the CSV.
@@ -391,16 +407,20 @@ class Simulator(object):
             sim_start_event,
         )
 
+        if self._orchestrated:
+            return
+
         # Second, create the UPDATE_WORKLOAD event to retrieve the latest Workload.
-        upate_workload_event = Event(
-            event_type=EventType.UPDATE_WORKLOAD, time=self._simulator_time
-        )
-        self._event_queue.add_event(upate_workload_event)
-        self._logger.info(
-            "[%s] Added %s to the event queue.",
-            self._simulator_time.time,
-            upate_workload_event,
-        )
+        if self._workload_loader:
+            upate_workload_event = Event(
+                event_type=EventType.UPDATE_WORKLOAD, time=self._simulator_time
+            )
+            self._event_queue.add_event(upate_workload_event)
+            self._logger.info(
+                "[%s] Added %s to the event queue.",
+                self._simulator_time.time,
+                upate_workload_event,
+            )
 
         # Third, create the SCHEDULER_START event to invoke the scheduler.
         sched_start_event = Event(
@@ -465,19 +485,15 @@ class Simulator(object):
                     )
 
     def simulate(self) -> None:
-        """Run the simulator loop.
+        """Run the simulator loop to fixpoint.
 
         This loop requires the `Workload` to be populated with the `TaskGraph`s whose
         execution is to be simulated using the Scheduler.
         """
-        # Run the simulator loop.
-        while True:
-            time_until_next_event = self._event_queue.peek().time - self._simulator_time
 
-            # If there are any running tasks, step through the execution of the
-            # Simulator until the closest remaining time.
+        def f():
+            time_until_next_event = self.__time_until_next_event()
             running_tasks = self._worker_pools.get_placed_tasks()
-
             if len(running_tasks) > 0:
                 # There are running tasks, figure out the minimum remaining
                 # time across all the tasks.
@@ -496,20 +512,68 @@ class Simulator(object):
                 # the next event in the queue, step all workers until the
                 # completion of that task, otherwise, handle the next event.
                 if min_task_remaining_time < time_until_next_event:
-                    self.__step(step_size=min_task_remaining_time)
+                    step_size = min_task_remaining_time
                 else:
-                    # NOTE: We step here so that all the Tasks that are going
-                    # to finish as a result of this step have their TASK_FINISHED
-                    # events processed first before any future placement occurs
-                    # that is decided prior.
-                    self.__step(step_size=time_until_next_event)
-                    if self.__handle_event(self._event_queue.next()):
-                        break
+                    step_size = time_until_next_event
             else:
-                # Step until the next event is supposed to be executed.
-                self.__step(step_size=time_until_next_event)
-                if self.__handle_event(self._event_queue.next()):
-                    break
+                step_size = time_until_next_event
+            return None if time_until_next_event.is_invalid() else step_size
+
+        self.__simulate_f(should_step=f)
+
+    def tick(self, until: EventTime) -> None:
+        """Tick the simulator until the specified time"""
+
+        def f():
+            time_until_next_event = self.__time_until_next_event()
+
+            if (
+                not time_until_next_event.is_invalid()
+                and (time_until_next_event + self._simulator_time) <= until
+            ):
+                return time_until_next_event
+
+            return None
+
+        self.__simulate_f(should_step=f)
+
+    def __simulate_f(self, should_step: Callable[None, Optional[EventTime]]) -> None:
+        """Steps the simulator while a predicate is satisfied.
+
+        This method continuously advances the simulation by calling the
+        provided `should_step` function, which determines the size of each
+        simulation step. The simulation continues until `should_step` returns
+        None, indicating that stepping should stop.
+
+        Args:
+            should_step (Callable[[EventTime], bool]):
+                A predicate function that determines the next step size for the simulation.
+                - If the function returns an EventTime value, the simulator steps by that amount.
+                - If the function returns None, the simulation stops.
+        """
+        while True:
+            step_size = should_step()
+            if not step_size:
+                break
+            self.__step(step_size=step_size)
+            if self._event_queue.peek() and self.__handle_event(
+                self._event_queue.next()
+            ):
+                break
+
+    def get_current_placements_for_task_graph(
+        self, task_graph_name: str
+    ) -> List[Placement]:
+        if task_graph_name not in self._current_task_graph_placements:
+            self._logger.warning(f"Cannot recognize task graph '{task_graph_name}'")
+            return []
+        return list(self._current_task_graph_placements[task_graph_name].values())
+
+    def __time_until_next_event(self) -> EventTime:
+        if self._event_queue.peek():
+            return self._event_queue.peek().time - self._simulator_time
+        else:
+            return EventTime.invalid()
 
     def __handle_scheduler_start(self, event: Event) -> None:
         """Handle the SCHEDULER_START event. The method invokes the scheduler, and adds
@@ -518,6 +582,10 @@ class Simulator(object):
         Args:
             event (`Event`): The event to handle.
         """
+
+        if self._last_scheduler_start_time == event.time:
+            return
+
         # Log the required CSV information.
         currently_placed_tasks = self._worker_pools.get_placed_tasks()
         schedulable_tasks = self._workload.get_schedulable_tasks(
@@ -669,6 +737,9 @@ class Simulator(object):
                         task=cancelled_task,
                     )
                 )
+                self._current_task_graph_placements[placement.task.task_graph][
+                    placement.task.id
+                ] = placement
 
             if task_graph.is_cancelled():
                 released_tasks_from_new_task_graph = (
@@ -921,6 +992,10 @@ class Simulator(object):
                 )
             )
 
+        # NOP if there are no previous placements
+        if self._last_scheduler_placements is None:
+            return
+
         num_placed = count_placed_tasks(self._last_scheduler_placements)
         num_unplaced = count_placed_tasks(self._last_scheduler_placements) - num_placed
         scheduler_runtime = event.time - self._last_scheduler_start_time
@@ -1027,18 +1102,19 @@ class Simulator(object):
         # Reset the available tasks and the last task placement.
         self._last_scheduler_placements = None
 
-        # The scheduler has finished its execution, insert an event for the next
-        # invocation of the scheduler.
-        next_sched_event = self.__get_next_scheduler_event(
-            event,
-            self._scheduler_frequency,
-            self._last_scheduler_start_time,
-            self._loop_timeout,
-        )
-        self._event_queue.add_event(next_sched_event)
-        self._logger.info(
-            "[%s] Added %s to the event queue.", event.time.time, next_sched_event
-        )
+        if not self._orchestrated:
+            # The scheduler has finished its execution, insert an event for the next
+            # invocation of the scheduler.
+            next_sched_event = self.__get_next_scheduler_event(
+                event,
+                self._scheduler_frequency,
+                self._last_scheduler_start_time,
+                self._loop_timeout,
+            )
+            self._event_queue.add_event(next_sched_event)
+            self._logger.info(
+                "[%s] Added %s to the event queue.", event.time.time, next_sched_event
+            )
 
         # Now that all the tasks are placed, ask the simulator to log the resource
         # utilization and quit later, if requested.
@@ -1066,6 +1142,7 @@ class Simulator(object):
             f"{event.task.timestamp},{event.task.id},{event.task.task_graph},"
             f"{event.task.slowest_execution_strategy.runtime.time}"
         )
+        self.log_stats(event.time)
 
         # If the task already had a placement, we remove the placement from our queue.
         if event.task.id in self._future_placement_events:
@@ -1149,8 +1226,13 @@ class Simulator(object):
         task_placed_at_worker_pool = self._worker_pools.get_worker_pool(
             event.task.worker_pool_id
         )
+
         task_placed_at_worker_pool.remove_task(current_time=event.time, task=event.task)
-        event.task.finish()
+
+        # Remove the task from it's task graph's current placements
+        del self._current_task_graph_placements[event.task.task_graph][event.task.id]
+
+        event.task.finish(event.time)
 
         # Log the TASK_FINISHED event into the CSV.
         self._finished_tasks += 1
@@ -1170,13 +1252,21 @@ class Simulator(object):
                 if task_graph.deadline > event.time
                 else event.time - task_graph.deadline
             )
+
+            # Remove task graph from current task graph placements map
+            del self._current_task_graph_placements[event.task.task_graph]
+
             self._csv_logger.debug(
                 f"{event.time.time},TASK_GRAPH_FINISHED,{task_graph.name},"
                 f"{task_graph.deadline.to(EventTime.Unit.US).time},"
                 f"{tardiness.to(EventTime.Unit.US).time}"
             )
+
             if task_graph.deadline < event.time:
                 self._missed_task_graph_deadlines += 1
+
+            self.log_stats(event.time)
+
             self._logger.info(
                 "[%s] Finished the TaskGraph %s with a deadline %s at the "
                 "completion of the task %s with a tardiness of %s.",
@@ -1306,6 +1396,72 @@ class Simulator(object):
         ), "Inconsistency in future placements."
         task_graph = workload.get_task_graph(task.task_graph)
         assert task_graph is not None, "Inconsistency in Task placement and Workload."
+        
+        # Subroutine to handle avoid automatic re-placement of tasks in the next timestep
+        # if they were unable to start either due to (i) parent task not finished or 
+        # (ii) worker not ready. The sub-tree rooted at the task is unscheduled and will
+        # be placed again in the next run of the scheduler.
+        def unschedule_subtree_rooted_at_task(task):
+            # Find all dependent tasks rooted from given task to unschedule
+            def subtree_tasks_to_unschedule(task):
+                tasks_to_unschedule = [task]
+                for child_task in task_graph.get_children(task):
+                    tasks_to_unschedule.extend(subtree_tasks_to_unschedule(child_task))
+                return tasks_to_unschedule
+
+            tasks_to_unschedule = subtree_tasks_to_unschedule(task)
+            self._logger.info("[%s] Going to unschedule tasks rooted from %s. "
+                              "List of tasks that will be unscheduled are: %s",
+                              event.time.time,
+                              task,
+                              tasks_to_unschedule)
+            for unschedule_task in tasks_to_unschedule:
+                if unschedule_task.id in self._future_placement_events:
+                    future_placement_event = self._future_placement_events[
+                        unschedule_task.id
+                        ]
+                    if future_placement_event.time > event.time:
+                        # Delete future event from event_queue and from future_placement_events
+                        self._event_queue.remove_event(future_placement_event)
+                        del self._future_placement_events[unschedule_task.id]
+                        msg = (
+                            f"[{event.time.time}] Retrieved future placement event {future_placement_event} "
+                            f"for task {unschedule_task} and removed it."
+                        )
+                        self._logger.info(msg)
+                    elif future_placement_event.time == event.time:
+                        # Cannot delete from event_queue, as this event is likely being processed
+                        del self._future_placement_events[unschedule_task.id]
+                        msg = (
+                            f"[{event.time.time}] Removed future placement event {future_placement_event} "
+                            f"for task {unschedule_task} at the same time."
+                        )
+                        self._logger.info(msg)
+                    else:
+                        msg = (
+                            f"[{event.time.time}] Future placement event {future_placement_event} for task "
+                            f"{unschedule_task} is in the past."
+                        )
+                        self._logger.warning(msg)
+                
+                # Unschedule the task
+                if unschedule_task.state == TaskState.SCHEDULED:
+                    unschedule_task.unschedule(event.time)
+                    self._csv_logger.debug(
+                        f"{event.time.time},TASK_UNSCHEDULED,{unschedule_task.name},{unschedule_task.timestamp},"
+                        f"{unschedule_task.id},{unschedule_task.task_graph}"
+                    )
+                    msg = (
+                        f"[{event.time.time}] Finished unscheduling of task {unschedule_task}."
+                    )
+                    self._logger.info(msg)
+                else:
+                    msg = (
+                        f"[{event.time.time}] Task {unschedule_task} was not in SCHEDULED state and was in "
+                        f"{unschedule_task.state} state. Skip unscheduling."
+                    )
+                    self._logger.info(msg)
+        
         if not task.is_ready_to_run(task_graph):
             if task.state == TaskState.CANCELLED or task_graph.is_cancelled():
                 # The Task was cancelled. Consume the event.
@@ -1330,32 +1486,20 @@ class Simulator(object):
                 return
             else:
                 # If the Task is not ready to run and wasn't cancelled,
-                # find the next possible time to try executing the task.
-                parent_completion_time = max(
-                    parent.remaining_time for parent in task_graph.get_parents(task)
-                )
-                next_placement_time = event.time + max(
-                    parent_completion_time, EventTime(1, EventTime.Unit.US)
-                )
-                next_placement_event = Event(
-                    event_type=event.event_type,
-                    time=next_placement_time,
-                    task=event.task,
-                    placement=event.placement,
-                )
-                self._future_placement_events[task.id] = next_placement_event
-                self._event_queue.add_event(next_placement_event)
+                # unschedule the task and its subtree.                
                 self._logger.info(
-                    "[%s] The Task %s was not ready to run, and has been pushed for "
-                    "later placement at %s.",
+                    "[%s] The Task %s was not ready to run. The task along with its "
+                    "sub-tree will be unscheduled.",
                     event.time.to(EventTime.Unit.US).time,
                     task,
-                    next_placement_time,
                 )
                 self._csv_logger.debug(
                     f"{event.time.time},TASK_NOT_READY,{task.name},{task.timestamp},"
                     f"{task.id},{event.placement.worker_pool_id}"
                 )
+                
+                # Unschedule the task and its subtree rooted at this task.
+                unschedule_subtree_rooted_at_task(task)
                 return
         # Initialize the task at the given placement time, and place it on
         # the WorkerPool.
@@ -1363,6 +1507,7 @@ class Simulator(object):
         assert (
             worker_pool is not None
         ), f"No WorkerPool found with ID: {event.placement.worker_pool_id}."
+
         success = worker_pool.place_task(
             task,
             execution_strategy=event.placement.execution_strategy,
@@ -1387,27 +1532,27 @@ class Simulator(object):
                 "[%s] Placed %s on %s.", event.time.time, task, worker_pool
             )
             del self._future_placement_events[task.id]
+            self._current_task_graph_placements[task.task_graph][
+                task.id
+            ] = event.placement
         else:
-            next_placement_time = event.time + EventTime(1, EventTime.Unit.US)
-            next_placement_event = Event(
-                event_type=event.event_type,
-                time=next_placement_time,
-                task=event.task,
-                placement=event.placement,
-            )
-            self._event_queue.add_event(next_placement_event)
-            self._future_placement_events[task.id] = next_placement_event
+            # If the placement was not successful, send the sub-tree of the taskgraph 
+            # rooted at this task back to its previous state. It allows the scheduler
+            # to re-schedule in its next run.
             self._logger.warning(
-                "[%s] Task %s cannot be placed on worker %s, pushing placement to %s.",
+                "[%s] Task %s couldn't be placed on worker %s. The task along with its "
+                "sub-tree will be unscheduled.",
                 event.time.time,
                 task,
-                worker_pool,
-                next_placement_time,
+                event.placement.worker_pool_id,
             )
             self._csv_logger.debug(
                 f"{event.time.time},WORKER_NOT_READY,{task.name},{task.timestamp},"
                 f"{task.id},{event.placement.worker_pool_id}"
             )
+            
+            # Unschedule the task and its subtree rooted at this task.
+            unschedule_subtree_rooted_at_task(task)
 
     def __handle_task_migration(self, event: Event) -> None:
         """Handles the TASK_MIGRATION event. This event must be followed by a
@@ -1503,6 +1648,9 @@ class Simulator(object):
             raise ValueError(
                 f"__handle_update_workload called with event of type {event.type}."
             )
+        if not self._workload_loader:
+            raise ValueError("UPDATE_WORKLOAD event enqueued without workload_loader")
+
         updated_workload = self._workload_loader.get_next_workload(
             current_time=self._simulator_time
         )
@@ -1525,6 +1673,16 @@ class Simulator(object):
 
             # Release the Tasks that have become available.
             releasable_tasks = self._workload.get_releasable_tasks()
+
+            # Ignore non-source tasks, they get auto-released when the parent finishes
+            def is_source_task(task):
+                task_graph = self._workload.get_task_graph(task.task_graph)
+                return task_graph.is_source_task(task)
+
+            releasable_tasks = [
+                task for task in releasable_tasks if is_source_task(task)
+            ]
+
             self._logger.info(
                 "[%s] The WorkloadLoader %s has %s TaskGraphs that released %s tasks.",
                 self._simulator_time.to(EventTime.Unit.US).time,
@@ -1539,19 +1697,36 @@ class Simulator(object):
                 len(releasable_tasks),
             )
 
-            # Add the TaskGraphRelease events into the system.
+            # Add task graph entry in self._current_task_graph_placements to
+            # track its task placements
+            #
+            # In addition to newly added task graphs, self._workload also
+            # contains all previously released task graphs.
+            #
+            # So, we guard the addition of the entry on two conditions:
+            # (1) The task graph doesn't have an entry (we don't want to
+            #     nuke an existing one)
+            # (2) The task graph is not complete (we only keep the entry
+            #     alive while the task graph is running to avoid a memory
+            #     leak)
             for task_graph_name, task_graph in self._workload.task_graphs.items():
-                event = Event(
-                    event_type=EventType.TASK_GRAPH_RELEASE,
-                    time=task_graph.release_time,
-                    task_graph=task_graph_name,
-                )
-                self._event_queue.add_event(event)
-                self._logger.info(
-                    "[%s] Added %s to the event queue.",
-                    self._simulator_time.to(EventTime.Unit.US).time,
-                    event,
-                )
+                if (
+                    task_graph_name not in self._current_task_graph_placements
+                    and not task_graph.is_complete()
+                ):
+                    self._current_task_graph_placements[task_graph_name] = {}
+
+                    event = Event(
+                        event_type=EventType.TASK_GRAPH_RELEASE,
+                        time=task_graph.release_time,
+                        task_graph=task_graph_name,
+                    )
+                    self._event_queue.add_event(event)
+                    self._logger.info(
+                        "[%s] Added %s to the event queue.",
+                        self._simulator_time.to(EventTime.Unit.US).time,
+                        event,
+                    )
 
             max_release_time = self._simulator_time
             for task in releasable_tasks:
@@ -1577,7 +1752,8 @@ class Simulator(object):
                     else self._simulator_time + self._workload_update_interval
                 ),
             )
-            self._event_queue.add_event(next_update_event)
+            # TODO(elton): Handle this properly
+            # self._event_queue.add_event(next_update_event)
             self._logger.info(
                 "[%s] Added %s to the event queue.",
                 self._simulator_time.time,
@@ -1657,17 +1833,16 @@ class Simulator(object):
             self.__handle_scheduler_finish(event)
         elif event.event_type == EventType.SIMULATOR_END:
             # End of the simulator loop.
+            self.log_stats(event.time)
             self._csv_logger.debug(
-                f"{event.time.time},SIMULATOR_END,{self._finished_tasks},"
-                f"{self._cancelled_tasks},{self._missed_task_deadlines},"
-                f"{self._finished_task_graphs},"
-                f"{len(self._workload.get_cancelled_task_graphs())},"
-                f"{self._missed_task_graph_deadlines}"
+                f"{event.time.time},SIMULATOR_END",
             )
             self._logger.info("[%s] Ending the simulator loop.", event.time.time)
             return True
         elif event.event_type == EventType.LOG_UTILIZATION:
             self.__log_utilization(event.time)
+        elif event.event_type == EventType.LOG_STATS:
+            self.log_stats(event.time)
         else:
             raise ValueError(f"[{event.time}] Retrieved event of unknown type: {event}")
         return False
@@ -1680,7 +1855,9 @@ class Simulator(object):
                 the clock (in us).
         """
         if step_size < EventTime.zero():
-            raise ValueError(f"Simulator cannot step backwards {step_size}")
+            raise ValueError(
+                f"[{self._simulator_time}] Simulator cannot step backwards {step_size}"
+            )
 
         # Step the simulator for the required steps and construct TASK_FINISHED events
         # for any tasks that were able to complete their execution.
@@ -1707,13 +1884,14 @@ class Simulator(object):
             self._simulator_time.time,
             [event.task.unique_name for event in task_finished_events],
         )
-        for task_finished_event in task_finished_events:
-            self._event_queue.add_event(task_finished_event)
-            self._logger.info(
-                "[%s] Added %s to the event queue.",
-                self._simulator_time.time,
-                task_finished_event,
-            )
+        if not self._orchestrated:
+            for task_finished_event in task_finished_events:
+                self._event_queue.add_event(task_finished_event)
+                self._logger.info(
+                    "[%s] Added %s to the event queue.",
+                    self._simulator_time.time,
+                    task_finished_event,
+                )
 
     def __get_next_scheduler_event(
         self,
@@ -2006,8 +2184,17 @@ class Simulator(object):
                 f"Received no Placements object from the Scheduler at {event.time}.",
             )
 
-        # Calculate the time at which the placements need to be applied.
         placement_time = event.time + placements.runtime
+
+        for placement in placements:
+            # If the placement is in the past, update it to match
+            # `placement_time`
+            # This scenario happens when the `scheduler_runtime` is non-zero.
+            if placement._placement_time and placement._placement_time < placement_time:
+                self._logger.warning(
+                    f"[{self._simulator_time}] Placement is in the past. Updating placement time from {placement._placement_time} to {placement_time}"
+                )
+                placement._placement_time = placement_time
 
         # Save the placements until the placement time arrives.
         self._last_scheduler_placements = placements
@@ -2038,3 +2225,12 @@ class Simulator(object):
                     f"{worker_pool_resources.get_allocated_quantity(resource)},"
                     f"{worker_pool_resources.get_available_quantity(resource)}"
                 )
+
+    def log_stats(self, sim_time: EventTime):
+        self._csv_logger.debug(
+            f"{sim_time.time},LOG_STATS,{self._finished_tasks},"
+            f"{self._cancelled_tasks},{self._missed_task_deadlines},"
+            f"{self._finished_task_graphs},"
+            f"{len(self._workload.get_cancelled_task_graphs())},"
+            f"{self._missed_task_graph_deadlines}"
+        )

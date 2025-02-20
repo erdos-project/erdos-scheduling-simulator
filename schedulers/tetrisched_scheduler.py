@@ -601,11 +601,9 @@ class TetriSchedScheduler(BaseScheduler):
         # Construct the STRL expression.
         scheduler_start_time = time.time()
         if len(tasks_to_be_scheduled) > 0 and any(
-            # If there is a Task belonging to a TaskGraph that hasn't been previously
-            # considered for scheduling and belongs to a TaskGraph that hasn't been
-            # cancelled, then we run the scheduler.
+            # If there is a Task belonging to a TaskGraph that hasn't
+            # been cancelled, then we run the scheduler.
             task.state != TaskState.SCHEDULED
-            and task.task_graph not in self._previously_considered_task_graphs
             and task.task_graph not in cancelled_task_graphs
             for task in tasks_to_be_scheduled
         ):

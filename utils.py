@@ -93,24 +93,28 @@ class EventTime:
         return self.time * self.unit.to(unit), unit
 
     def fuzz(
-        self, variance: Tuple[int, int], bounds: Tuple[int, int] = (0, sys.maxsize)
+            self, variance: Tuple[int, int], bounds: Tuple[int, int] = (0, sys.maxsize), rng: random.Random = None
     ) -> "EventTime":
         """Fuzz the time according to the provided `variance` and within the bounds.
 
         Args:
             variance (`Tuple[int, int]`): The (minimum, maximum) % variance to fuzz by.
             bounds (`Tuple[int, int]`): The (minimum, maximum) bounds to fuzz within.
+            rng (random.Random): The random number generator to use.  Defaults to an internal RNG if none is specified.
 
         Returns:
             The fuzzed time according to the given variance.
         """
+        if rng is None:
+            rng = type(self)._rng
+
         min_variance, max_variance = variance
         min_bound, max_bound = bounds
         fuzzed_time = max(
             min_bound,
             min(
                 max_bound,
-                type(self)._rng.uniform(
+                rng.uniform(
                     self.time * abs(min_variance) / 100.0,
                     self.time * abs(max_variance) / 100.0,
                 ),

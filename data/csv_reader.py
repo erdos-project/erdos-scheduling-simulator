@@ -63,6 +63,11 @@ class CSVReader(object):
                         )
                     elif reading[1] == "UPDATE_WORKLOAD":
                         simulator.total_tasks += int(reading[2])
+                    elif reading[1] == "LOG_STATS":
+                        assert (
+                            simulator is not None
+                        ), "No SIMULATOR_START found for a corresponding SIMULATOR_END."
+                        simulator.update_stats(reading)
                     elif reading[1] == "SIMULATOR_END":
                         assert (
                             simulator is not None
